@@ -1,8 +1,8 @@
-from setuptools import setup, find_packages
+from setuptools import setup
 from glob import glob
 import os
 
-package_name = 'robot_data_subscriber'
+package_name = 'data_collector'
 
 setup(
     name=package_name,
@@ -21,7 +21,7 @@ setup(
     license='Apache License 2.0',
     entry_points={
         'console_scripts': [
-            'robot_data_subscriber = robot_data_subscriber.subscriber_node:main',
+            'data_collector = data_collector.subscriber_node:main',
         ],
     },
 )

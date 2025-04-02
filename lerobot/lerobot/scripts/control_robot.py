@@ -255,10 +255,10 @@ def record(
         should_create_ros = teleop_step_node is None
         if should_create_ros:
             import rclpy
-            from robot_data_subscriber.subscriber_node import RobotDataSubscriber
+            from data_collector.subscriber_node import RobotDataSubscriber
             rclpy.init()
             teleop_step_node = RobotDataSubscriber()
-
+ 
     # Execute a few seconds without recording to:
     # 1. teleoperate the robot to move it in starting position if no policy provided,
     # 2. give times to the robot devices to connect and start synchronizing,
