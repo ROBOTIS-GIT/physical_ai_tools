@@ -33,7 +33,7 @@ pip install .
 ```
 ## Record LeRobot datasets
 
-### 1. Please, make sure you've logged in using a 'write-access token' generated from the Hugging Face settings:
+### 1. Please, make sure you've logged in using a 'write-access token' generated from the [Hugging Face settings](https://huggingface.co/settings/tokens):
 ```bash
 huggingface-cli login --token ${HUGGINGFACE_TOKEN} --add-to-git-credential
 ```
