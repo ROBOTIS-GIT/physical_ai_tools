@@ -1,6 +1,7 @@
-from setuptools import setup
 from glob import glob
 import os
+
+from setuptools import setup
 
 package_name = 'data_collector'
 
@@ -21,4 +22,3 @@ setup(
         ],
     },
 )
-

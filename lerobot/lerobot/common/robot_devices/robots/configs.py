@@ -485,7 +485,7 @@ class NozaRobotConfig(ManipulatorRobotConfig):
                 height=480,
             ),
             "cam_wrist_2": OpenCVCameraConfig(
-                camera_index=6,
+                camera_index=8,
                 fps=30,
                 width=640,
                 height=480,
