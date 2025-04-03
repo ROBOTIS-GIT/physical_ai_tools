@@ -6,12 +6,12 @@ This repository offers an interface for developing physical AI applications usin
 ### 1. Download our source code.:
 ```bash
 cd ~/your_work_space/src
-git clone https://github.com/ROBOTIS-GIT/open_platform_ai.git
+git clone git@github.com:ROBOTIS-GIT/physical_ai_tools.git
 ```
 
 ### 2. Install 🤗 LeRobot.:
 ```bash
-cd ~/your_work_space/src/open_source_ai/lerobot
+cd ~/your_work_space/src/physical_ai_tools/lerobot
 pip install -e .
 ```
 
@@ -28,23 +28,33 @@ source install/setup.bash
 
 ### 5. To make the package available as a Python module in your current environment, navigate to the package directory and install it using pip.
 ```bash
-cd ~/your_work_space/src/open_source_ai/robot_data_subscriber
+cd ~/your_work_space/src/physical_ai_tools/robot_data_subscriber
 pip install .
 ```
 ## Record LeRobot datasets
 
-### 1. To start the node that subscribes to joint state data, use the following ros2 launch command. 
+### 1. Please, make sure you've logged in using a 'write-access token' generated from the Hugging Face settings:
 ```bash
-ros2 launch robot_data_subscriber robot_data_subscriber.launch.py 
+huggingface-cli login --token ${HUGGINGFACE_TOKEN} --add-to-git-credential
+```
+ - Store your Hugging Face repository name in a variable.
+   ```bash
+   HF_USER=$(huggingface-cli whoami | head -n 1)
+   echo $HF_USER
+   ```
+
+### 2. To start the node that subscribes to joint state data, use the following ros2 launch command. 
+```bash
+ros2 launch robot_data_subscriber robot_data_subscriber.launch.py
 ```
 
-### 2. Navigate to the lerobot directory and run the following command to start recording data for your Hugging Face dataset.
+### 3. Navigate to the lerobot directory and run the following command to start recording data for your Hugging Face dataset.
 ```bash
-cd ~/your_work_space/src/open_source_ai/lerobot
+cd ~/your_work_space/src/physical_ai_tools/lerobot
 ```
 
 ```bash
-cd ~/your_work_space/src/open_source_ai/lerobot
+cd ~/your_work_space/src/physical_ai_tools/lerobot
 python lerobot/scripts/control_robot.py \
   --robot.type=noza \
   --control.type=record \

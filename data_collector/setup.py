@@ -15,13 +15,9 @@ setup(
     ],
     install_requires=['setuptools'],
     zip_safe=True,
-    maintainer='Seongwoo Kim',
-    maintainer_email='kimsw@robotis.com',
-    description='Open Platform AI ROS 2 subscriber',
-    license='Apache License 2.0',
     entry_points={
         'console_scripts': [
-            'data_collector = data_collector.subscriber_node:main',
+            'data_collector = data_collector.topic_to_data:main',
         ],
     },
 )
