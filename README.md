@@ -157,4 +157,4 @@ To create your own dataset, you only need to modify the following five options:
 - **`--control.num_episodes`**  
   Total number of episodes to record for the dataset.
 
-These parameters help define the structure and timing of your dataset recording sessions. Adjust them according to the complexity and length of your task.
+Of course, you can modify other parameters as needed to better suit your use case.
