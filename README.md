@@ -45,7 +45,7 @@ huggingface-cli login --token ${HUGGINGFACE_TOKEN} --add-to-git-credential
    echo $HF_USER
    ```
 
-### 3. You need to check the index of your cameras to include image datas. 
+### 2. You need to check the index of your cameras to include image datas. 
 ```bash
 cd ~/your_work_space/src/physical_ai_tools/lerobot
 python lerobot/common/robot_devices/cameras/opencv.py \
@@ -79,14 +79,40 @@ camera_01_frame_000000.png
 camera_01_frame_000047.png
 ```
 
+### Once you've identified the correct camera indexes for your system (e.g., using tools like `cheese` or `v4l2-ctl`), update the camera index values in the `"noza"` robot configuration located in: 
+/lerobot/common/robot_devices/robots/configs.py 
 ```bash
-cd ~/your_work_space/src/physical_ai_tools/lerobot
-python lerobot/common/robot_devices/cameras/opencv.py \
-    --images-dir outputs/images_from_opencv_cameras
-```
-### 3. Start the node that subscribes to joint state data, use the following ros2 launch command. 
-```bash
-ros2 launch data_collector data_collector.launch.py
+Modify the `camera_index` fields under the `"noza"` section like so:
+
+```python
+@RobotConfig.register_subclass("noza")
+@dataclass
+class NozaRobotConfig(ManipulatorRobotConfig):
+    [...]
+    cameras: dict[str, CameraConfig] = field(
+        default_factory=lambda: {
+            "cam_head": OpenCVCameraConfig(
+                camera_index=0,
+                fps=30,
+                width=640,
+                height=480,
+            ),
+            "cam_wrist_1": OpenCVCameraConfig(
+                camera_index=1,
+                fps=30,
+                width=640,
+                height=480,
+            ),
+            "cam_wrist_2": OpenCVCameraConfig(
+                camera_index=2,
+                fps=30,
+                width=640,
+                height=480,
+            ),
+        }
+    )
+
+    mock: bool = False
 ```
 
 ### 3. Navigate to the lerobot directory and run the following command to start recording data for your Hugging Face dataset.

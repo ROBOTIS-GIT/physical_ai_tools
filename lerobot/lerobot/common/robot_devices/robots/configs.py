@@ -472,13 +472,19 @@ class NozaRobotConfig(ManipulatorRobotConfig):
 
     cameras: dict[str, CameraConfig] = field(
         default_factory=lambda: {
-            "cam_1": OpenCVCameraConfig(
+            "cam_head": OpenCVCameraConfig(
                 camera_index=4,
                 fps=30,
                 width=640,
                 height=480,
             ),
-            "cam_2": OpenCVCameraConfig(
+            "cam_wrist_1": OpenCVCameraConfig(
+                camera_index=6,
+                fps=30,
+                width=640,
+                height=480,
+            ),
+            "cam_wrist_2": OpenCVCameraConfig(
                 camera_index=6,
                 fps=30,
                 width=640,
