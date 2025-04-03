@@ -79,7 +79,7 @@ camera_01_frame_000000.png
 camera_01_frame_000047.png
 ```
 
-### Once you've identified the correct camera indexes for your system (e.g., using tools like `cheese` or `v4l2-ctl`), update the camera index values in the `"noza"` robot configuration located in: 
+Once you've identified the correct camera indexes for your system (e.g., using tools like `cheese` or `v4l2-ctl`), update the camera index values in the `"noza"` robot configuration located in: 
 /lerobot/common/robot_devices/robots/configs.py 
 ```bash
 Modify the `camera_index` fields under the `"noza"` section like so:
@@ -114,6 +114,7 @@ class NozaRobotConfig(ManipulatorRobotConfig):
 
     mock: bool = False
 ```
+🎉 All set — now you’re ready to create your dataset!
 
 ### 3. Navigate to the lerobot directory and run the following command to start recording data for your Hugging Face dataset.
 ```bash
