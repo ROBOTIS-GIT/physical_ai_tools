@@ -171,3 +171,4 @@ Of course, you can modify other parameters as needed to better suit your use cas
 ---
 
 🎉 All set — now you’re ready to create your dataset!
+📺 Need a walkthrough? Check out this [video tutorial on YouTube](https://www.youtube.com/watch?v=n_Ljp_xuFEM) to see the full process of recording a dataset with LeRobot.
