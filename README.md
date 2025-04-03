@@ -28,9 +28,11 @@ source install/setup.bash
 
 ### 5. To make the package available as a Python module in your current environment, navigate to the package directory and install it using pip.
 ```bash
-cd ~/your_work_space/src/physical_ai_tools/robot_data_subscriber
+cd ~/your_work_space/src/physical_ai_tools/data_collector
 pip install .
 ```
+
+
 ## Record LeRobot datasets
 
 ### 1. Please, make sure you've logged in using a 'write-access token' generated from the [Hugging Face settings](https://huggingface.co/settings/tokens):
@@ -43,9 +45,48 @@ huggingface-cli login --token ${HUGGINGFACE_TOKEN} --add-to-git-credential
    echo $HF_USER
    ```
 
-### 2. To start the node that subscribes to joint state data, use the following ros2 launch command. 
+### 3. You need to check the index of your cameras to include image datas. 
 ```bash
-ros2 launch robot_data_subscriber robot_data_subscriber.launch.py
+cd ~/your_work_space/src/physical_ai_tools/lerobot
+python lerobot/common/robot_devices/cameras/opencv.py \
+    --images-dir outputs/images_from_opencv_cameras
+```
+The output will look something like this if you have two cameras connected:
+```bash
+Linux detected. Finding available camera indices through scanning '/dev/video*' ports
+[...]
+Camera found at index 0
+Camera found at index 1
+Camera found at index 2
+[...]
+Connecting cameras
+OpenCVCamera(0, fps=30.0, width=1920.0, height=1080.0, color_mode=rgb)
+OpenCVCamera(1, fps=24.0, width=1920.0, height=1080.0, color_mode=rgb)
+OpenCVCamera(2, fps=24.0, width=1920.0, height=1080.0, color_mode=rgb)
+Saving images to outputs/images_from_opencv_cameras
+Frame: 0000	Latency (ms): 39.52
+[...]
+Frame: 0046	Latency (ms): 40.07
+Images have been saved to outputs/images_from_opencv_cameras
+```
+Check the saved images in ``outputs/images_from_opencv_cameras`` to identify which camera index corresponds to which physical camera(e.g. 0 for camera_00):
+```bash
+camera_00_frame_000000.png
+[...]
+camera_00_frame_000047.png
+camera_01_frame_000000.png
+[...]
+camera_01_frame_000047.png
+```
+
+```bash
+cd ~/your_work_space/src/physical_ai_tools/lerobot
+python lerobot/common/robot_devices/cameras/opencv.py \
+    --images-dir outputs/images_from_opencv_cameras
+```
+### 3. Start the node that subscribes to joint state data, use the following ros2 launch command. 
+```bash
+ros2 launch data_collector data_collector.launch.py
 ```
 
 ### 3. Navigate to the lerobot directory and run the following command to start recording data for your Hugging Face dataset.
