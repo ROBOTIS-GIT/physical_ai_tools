@@ -1,3 +1,4 @@
+
 from launch import LaunchDescription
 from launch_ros.actions import Node
 from ament_index_python.packages import get_package_share_directory
@@ -10,7 +11,7 @@ def load_yaml(path):
 
 def generate_launch_description():
     config_dir = get_package_share_directory('data_collector')
-    robot_params = load_yaml(os.path.join(config_dir, 'config', 'robot_config.yaml'))
+    robot_params = load_yaml(os.path.join(config_dir, 'config', 'joint_order.yaml'))
 
     return LaunchDescription([
         Node(

@@ -13,7 +13,7 @@ git clone git@github.com:ROBOTIS-GIT/physical_ai_tools.git
 ### 2. Install 🤗 LeRobot
 ```bash
 cd ~/your_workspace/src/physical_ai_tools/lerobot
-pip install -e .
+pip install --no-binary=av -e .
 ```
 
 > **NOTE:** If you encounter build errors, you may need to install additional dependencies (`cmake`, `build-essential`, and `ffmpeg libs`). On Linux, run:
