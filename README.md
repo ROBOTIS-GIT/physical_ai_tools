@@ -120,7 +120,7 @@ class NozaRobotConfig(ManipulatorRobotConfig):
 ```bash
 cd ~/your_work_space/src/physical_ai_tools/lerobot
 ```
-
+Then, run the following command to start recording data for your Hugging Face dataset:
 ```bash
 cd ~/your_work_space/src/physical_ai_tools/lerobot
 python lerobot/scripts/control_robot.py \
@@ -130,17 +130,23 @@ python lerobot/scripts/control_robot.py \
   --control.fps=30 \
   --control.repo_id=${HF_USER}/noza_test \
   --control.tags='["tutorial"]' \
-  --control.warmup_time_s=5 \
   --control.episode_time_s=20 \
   --control.reset_time_s=10 \
   --control.num_episodes=2 \
   --control.push_to_hub=true \
   --control.use_ros=true
 ```
+💡 Make sure to replace ${HF_USER} with your actual Hugging Face username.
 
 ### 🔧 Key Parameters to Customize
 
-To create your own dataset, you only need to modify the following three options:
+To create your own dataset, you only need to modify the following five options:
+
+- **`--control.repo_id`**  
+  The Hugging Face dataset repository ID in the format `<username>/<dataset_name>`. This is where your dataset will be saved and optionally pushed to the Hugging Face Hub.
+
+- **`--control.single_task`**  
+  The name of the task you're performing (e.g., "pick and place objects").
 
 - **`--control.episode_time_s`**  
   Duration (in seconds) to record each episode.

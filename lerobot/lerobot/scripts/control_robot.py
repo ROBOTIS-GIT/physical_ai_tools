@@ -255,7 +255,7 @@ def record(
         should_create_ros = teleop_step_node is None
         if should_create_ros:
             import rclpy
-            from data_collector.subscriber_node import RobotDataSubscriber
+            from data_collector.topic_to_data import RobotDataSubscriber
             rclpy.init()
             teleop_step_node = RobotDataSubscriber()
  
