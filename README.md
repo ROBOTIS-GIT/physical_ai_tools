@@ -86,7 +86,7 @@ camera_01_frame_000000.png
 Once identified, update the camera indexes in the `"noza"` robot configuration file:
 
 ```
-lerobot/common/robot_devices/robots/configs.py
+cd lerobot/common/robot_devices/robots/configs.py
 ```
 
 Modify it like so:
@@ -98,19 +98,19 @@ class NozaRobotConfig(ManipulatorRobotConfig):
     cameras: dict[str, CameraConfig] = field(
         default_factory=lambda: {
             "cam_head": OpenCVCameraConfig(
-                camera_index=0,
+                camera_index=0,  # To be changed
                 fps=30,
                 width=640,
                 height=480,
             ),
             "cam_wrist_1": OpenCVCameraConfig(
-                camera_index=1,
+                camera_index=1,  # To be changed
                 fps=30,
                 width=640,
                 height=480,
             ),
             "cam_wrist_2": OpenCVCameraConfig(
-                camera_index=2,
+                camera_index=2,  # To be changed
                 fps=30,
                 width=640,
                 height=480,

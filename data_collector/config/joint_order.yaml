@@ -1,77 +1,65 @@
-# robot_data_subscriber:
-#   ros__parameters:
-#     joint_order_follower_r_hand:
-#         - right_thumb_1_joint
-#         - right_thumb_2_joint
-#         - right_index_1_joint
-#         - right_middle_1_joint
-#         - right_ring_1_joint
-#         - right_little_1_joint
-#     joint_order_follower_l_hand:
-#         - left_thumb_1_joint
-#         - left_thumb_2_joint
-#         - left_index_1_joint
-#         - left_middle_1_joint
-#         - left_ring_1_joint
-#         - left_little_1_joint
-#     joint_order_follower_r_arm:
-#         - arm_r_joint1
-#         - arm_r_joint2
-#         - arm_r_joint3
-#         - arm_r_joint4
-#         - arm_r_joint5
-#         - arm_r_joint6
-#         - arm_r_joint7
-#     joint_order_follower_l_arm:
-#         - arm_l_joint1
-#         - arm_l_joint2
-#         - arm_l_joint3
-#         - arm_l_joint4
-#         - arm_l_joint5
-#         - arm_l_joint6
-#         - arm_l_joint7
-#     joint_order_leader_r_hand:
-#         - right_thumb_1_joint
-#         - right_thumb_2_joint
-#         - right_index_1_joint
-#         - right_middle_1_joint
-#         - right_ring_1_joint
-#         - right_little_1_joint
-#     joint_order_leader_l_hand:
-#         - left_thumb_1_joint
-#         - left_thumb_2_joint
-#         - left_index_1_joint
-#         - left_middle_1_joint
-#         - left_ring_1_joint
-#         - left_little_1_joint
-#     joint_order_leader_r_arm:
-#         - arm_r_joint1
-#         - arm_r_joint2
-#         - arm_r_joint3
-#         - arm_r_joint4
-#         - arm_r_joint5
-#         - arm_r_joint6
-#         - arm_r_joint7
-#     joint_order_leader_l_arm:
-#         - arm_l_joint1
-#         - arm_l_joint2
-#         - arm_l_joint3
-#         - arm_l_joint4
-#         - arm_l_joint5
-#         - arm_l_joint6
-#         - arm_l_joint7
-
-data_collector:
+robot_data_subscriber:
   ros__parameters:
-    expected_joint_order_follower:
-      - joint1
-      - joint2
-      - joint3
-      - joint4
-      - gripper_left_joint
-    expected_joint_order_leader:
-      - joint1
-      - joint2
-      - joint3
-      - joint4
-      - gripper_left_joint
+    joint_order_follower:
+        - arm_r_joint1
+        - arm_r_joint2
+        - arm_r_joint3
+        - arm_r_joint4
+        - arm_r_joint5
+        - arm_r_joint6
+        - arm_r_joint7
+        - arm_l_joint1
+        - arm_l_joint2
+        - arm_l_joint3
+        - arm_l_joint4
+        - arm_l_joint5
+        - arm_l_joint6
+        - arm_l_joint7
+        - neck_joint1
+        - neck_joint2
+        - linear_joint
+    joint_order_leader_r_hand:
+        - right_little_1_joint
+        - right_ring_1_joint
+        - right_middle_1_joint
+        - right_index_1_joint
+        - right_thumb_2_joint
+        - right_thumb_1_joint  
+    joint_order_leader_l_hand:
+        - left_little_1_joint
+        - left_ring_1_joint
+        - left_middle_1_joint
+        - left_index_1_joint
+        - left_thumb_2_joint
+        - left_thumb_1_joint
+    joint_order_leader_r_arm:
+        - arm_r_joint1
+        - arm_r_joint2
+        - arm_r_joint3
+        - arm_r_joint4
+        - arm_r_joint5
+        - arm_r_joint6
+        - arm_r_joint7
+    joint_order_leader_l_arm:
+        - arm_l_joint1
+        - arm_l_joint2
+        - arm_l_joint3
+        - arm_l_joint4
+        - arm_l_joint5
+        - arm_l_joint6
+        - arm_l_joint7
+
+# data_collector:
+#   ros__parameters:
+#     expected_joint_order_follower:
+#       - joint1
+#       - joint2
+#       - joint3
+#       - joint4
+#       - gripper_left_joint
+#     expected_joint_order_leader:
+#       - joint1
+#       - joint2
+#       - joint3
+#       - joint4
+#       - gripper_left_joint
