@@ -5,8 +5,8 @@ import rclpy
 from rclpy.node import Node
 from sensor_msgs.msg import JointState
 from std_msgs.msg import Int32MultiArray
-from trajectory_msgs.msg import JointTrajectory
 import torch
+from trajectory_msgs.msg import JointTrajectory
 
 
 class RobotDataSubscriber(Node):
@@ -67,8 +67,16 @@ class RobotDataSubscriber(Node):
             '/joint_states'
         )
 
-        self.leader_hand_right = Subscriber(self, JointTrajectory, '/leader/joint_trajectory_right_hand/joint_trajectory')
-        self.leader_hand_left = Subscriber(self, JointTrajectory, '/leader/joint_trajectory_left/joint_trajectory')
+        self.leader_hand_right = Subscriber(
+            self,
+            JointTrajectory,
+            '/leader/joint_trajectory_right_hand/joint_trajectory'
+        )
+        self.leader_hand_left = Subscriber(
+            self,
+            JointTrajectory,
+            '/leader/joint_trajectory_left/joint_trajectory'
+        )
         self.leader_arm_right = Subscriber(
             self, JointTrajectory,
             '/leader/joint_trajectory_right/joint_trajectory'
@@ -78,7 +86,11 @@ class RobotDataSubscriber(Node):
             JointTrajectory,
             '/leader/joint_trajectory_left/joint_trajectory'
         )
-        self.leader_neck = Subscriber(self, JointTrajectory, '/leader/neck_controller/joint_trajectory')
+        self.leader_neck = Subscriber(
+            self,
+            JointTrajectory,
+            '/leader/neck_controller/joint_trajectory'
+        )
         self.leader_linear = Subscriber(
             self,
             JointTrajectory,
@@ -101,7 +113,7 @@ class RobotDataSubscriber(Node):
             slop=0.05
         )
         self.sync.registerCallback(self.synced_callback)
-        
+
         self.latest_observation = None
         self.latest_action = None
 
@@ -133,17 +145,41 @@ class RobotDataSubscriber(Node):
             )
             obs_tensor = torch.tensor(obs_pos, dtype=torch.float32)
 
-            r_hand_pos_map = dict(zip(leader_hand_right_msg.joint_names, leader_hand_right_msg.points[0].positions))
-            ordered_leader_r_hand = [r_hand_pos_map[name] for name in self.joint_order_leader_r_hand]
+            r_hand_pos_map = dict(zip(
+                leader_hand_right_msg.joint_names,
+                leader_hand_right_msg.points[0].positions
+            ))
+            ordered_leader_r_hand = [
+                r_hand_pos_map[name]
+                for name in self.joint_order_leader_r_hand
+            ]
 
-            l_hand_pos_map = dict(zip(leader_hand_left_msg.joint_names, leader_hand_left_msg.points[0].positions))
-            ordered_leader_l_hand = [l_hand_pos_map[name] for name in self.joint_order_leader_l_hand]
+            l_hand_pos_map = dict(zip(
+                leader_hand_left_msg.joint_names,
+                leader_hand_left_msg.points[0].positions
+            ))
+            ordered_leader_l_hand = [
+                l_hand_pos_map[name]
+                for name in self.joint_order_leader_l_hand
+            ]
 
-            r_arm_pos_map = dict(zip(leader_arm_right_msg.joint_names, leader_arm_right_msg.points[0].positions))
-            ordered_leader_r_arm = [r_arm_pos_map[name] for name in self.joint_order_leader_r_arm]
+            r_arm_pos_map = dict(zip(
+                leader_arm_right_msg.joint_names,
+                leader_arm_right_msg.points[0].positions
+            ))
+            ordered_leader_r_arm = [
+                r_arm_pos_map[name] for
+                name in self.joint_order_leader_r_arm
+            ]
 
-            l_arm_pos_map = dict(zip(leader_arm_left_msg.joint_names, leader_arm_left_msg.points[0].positions))
-            ordered_leader_l_arm = [l_arm_pos_map[name] for name in self.joint_order_leader_l_arm]
+            l_arm_pos_map = dict(zip(
+                leader_arm_left_msg.joint_names,
+                leader_arm_left_msg.points[0].positions
+            ))
+            ordered_leader_l_arm = [
+                l_arm_pos_map[name]
+                for name in self.joint_order_leader_l_arm
+            ]
 
             act_pos = (
                 ordered_leader_r_hand +
@@ -178,7 +214,6 @@ def main(args=None):
 
 if __name__ == '__main__':
     main()
-
 
 # import rclpy
 # from rclpy.node import Node
