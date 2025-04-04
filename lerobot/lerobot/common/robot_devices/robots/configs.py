@@ -272,14 +272,14 @@ class OMXRobotConfig(ManipulatorRobotConfig):
     leader_arms: dict[str, MotorsBusConfig] = field(
         default_factory=lambda: {
             "main": DynamixelMotorsBusConfig(
-                port="/dev/ttyUSB0",
+                port="/dev/ttyACM0",
                 motors={
                     # name: (index, model)
-                    "shoulder_pan": (11, "xm430-w350"),
-                    "shoulder_lift": (12, "xm430-w350"),
-                    "elbow_flex": (13, "xm430-w350"),
-                    "wrist_flex": (14, "xm430-w350"),
-                    "gripper": (15, "xm430-w350"),
+                    "shoulder_pan": (1, "xm430-w350"),
+                    "shoulder_lift": (2, "xm430-w350"),
+                    "elbow_flex": (3, "xm430-w350"),
+                    "wrist_flex": (4, "xm430-w350"),
+                    "gripper": (5, "xm430-w350"),
                 },
             ),
         }
@@ -332,17 +332,28 @@ class NozaRobotConfig(ManipulatorRobotConfig):
 
     leader_arms: dict[str, MotorsBusConfig] = field(
         default_factory=lambda: {
-            "left": DynamixelMotorsBusConfig(
+            "hand_right": DynamixelMotorsBusConfig(
+                port="/dev/ttyleader_right",
+                motors={
+                    # name: (index, model)
+                    "thumb_1": [1, "xm430-w350"],
+                    "thumb_2": [2, "xm430-w350"],
+                    "index": [3, "xm430-w350"],
+                    "middle": [4, "xm430-w350"],
+                    "ring": [5, "xm430-w350"],
+                    "little": [6, "xm430-w350"],
+                },
+            ),
+            "hand_left": DynamixelMotorsBusConfig(
                 port="/dev/ttyleader_left",
                 motors={
                     # name: (index, model)
-                    "waist": [1, "xm430-w350"],
-                    "shoulder": [2, "xm430-w350"],
-                    "shoulder_shadow": [3, "xm430-w350"],
-                    "elbow": [4, "xm430-w350"],
-                    "elbow_shadow": [5, "xm430-w350"],
-                    "forearm_roll": [6, "xm430-w350"],
-                    "wrist_angle": [7, "xm430-w350"]
+                    "thumb_1": [1, "xm430-w350"],
+                    "thumb_2": [2, "xm430-w350"],
+                    "index": [3, "xm430-w350"],
+                    "middle": [4, "xm430-w350"],
+                    "ring": [5, "xm430-w350"],
+                    "little": [6, "xm430-w350"],
                 },
             ),
             "right": DynamixelMotorsBusConfig(
@@ -358,28 +369,17 @@ class NozaRobotConfig(ManipulatorRobotConfig):
                     "wrist_angle": [7, "xm430-w350"],
                 },
             ),
-            "hand_left": DynamixelMotorsBusConfig(
+            "left": DynamixelMotorsBusConfig(
                 port="/dev/ttyleader_left",
                 motors={
                     # name: (index, model)
-                    "thumb_1": [1, "xm430-w350"],
-                    "thumb_2": [2, "xm430-w350"],
-                    "index": [3, "xm430-w350"],
-                    "middle": [4, "xm430-w350"],
-                    "ring": [5, "xm430-w350"],
-                    "little": [6, "xm430-w350"],
-                },
-            ),
-            "hand_right": DynamixelMotorsBusConfig(
-                port="/dev/ttyleader_right",
-                motors={
-                    # name: (index, model)
-                    "thumb_1": [1, "xm430-w350"],
-                    "thumb_2": [2, "xm430-w350"],
-                    "index": [3, "xm430-w350"],
-                    "middle": [4, "xm430-w350"],
-                    "ring": [5, "xm430-w350"],
-                    "little": [6, "xm430-w350"],
+                    "waist": [1, "xm430-w350"],
+                    "shoulder": [2, "xm430-w350"],
+                    "shoulder_shadow": [3, "xm430-w350"],
+                    "elbow": [4, "xm430-w350"],
+                    "elbow_shadow": [5, "xm430-w350"],
+                    "forearm_roll": [6, "xm430-w350"],
+                    "wrist_angle": [7, "xm430-w350"]
                 },
             ),
             "neck": DynamixelMotorsBusConfig(
@@ -402,17 +402,28 @@ class NozaRobotConfig(ManipulatorRobotConfig):
 
     follower_arms: dict[str, MotorsBusConfig] = field(
         default_factory=lambda: {
-            "left": DynamixelMotorsBusConfig(
+            "hand_right": DynamixelMotorsBusConfig(
+                port="/dev/ttyttyfollower_right",
+                motors={
+                    # name: (index, model)
+                    "thumb_1": [1, "xm430-w350"],
+                    "thumb_2": [2, "xm430-w350"],
+                    "index": [3, "xm430-w350"],
+                    "middle": [4, "xm430-w350"],
+                    "ring": [5, "xm430-w350"],
+                    "little": [6, "xm430-w350"],
+                },
+            ),
+            "hand_left": DynamixelMotorsBusConfig(
                 port="/dev/ttyfollower_left",
                 motors={
                     # name: (index, model)
-                    "waist": [1, "xm430-w350"],
-                    "shoulder": [2, "xm430-w350"],
-                    "shoulder_shadow": [3, "xm430-w350"],
-                    "elbow": [4, "xm430-w350"],
-                    "elbow_shadow": [5, "xm430-w350"],
-                    "forearm_roll": [6, "xm430-w350"],
-                    "wrist_angle": [7, "xm430-w350"]
+                    "thumb_1": [1, "xm430-w350"],
+                    "thumb_2": [2, "xm430-w350"],
+                    "index": [3, "xm430-w350"],
+                    "middle": [4, "xm430-w350"],
+                    "ring": [5, "xm430-w350"],
+                    "little": [6, "xm430-w350"],
                 },
             ),
             "right": DynamixelMotorsBusConfig(
@@ -428,28 +439,17 @@ class NozaRobotConfig(ManipulatorRobotConfig):
                     "wrist_angle": [7, "xm430-w350"],
                 },
             ),
-            "hand_left": DynamixelMotorsBusConfig(
+            "left": DynamixelMotorsBusConfig(
                 port="/dev/ttyfollower_left",
                 motors={
                     # name: (index, model)
-                    "thumb_1": [1, "xm430-w350"],
-                    "thumb_2": [2, "xm430-w350"],
-                    "index": [3, "xm430-w350"],
-                    "middle": [4, "xm430-w350"],
-                    "ring": [5, "xm430-w350"],
-                    "little": [6, "xm430-w350"],
-                },
-            ),
-            "hand_right": DynamixelMotorsBusConfig(
-                port="/dev/ttyttyfollower_right",
-                motors={
-                    # name: (index, model)
-                    "thumb_1": [1, "xm430-w350"],
-                    "thumb_2": [2, "xm430-w350"],
-                    "index": [3, "xm430-w350"],
-                    "middle": [4, "xm430-w350"],
-                    "ring": [5, "xm430-w350"],
-                    "little": [6, "xm430-w350"],
+                    "waist": [1, "xm430-w350"],
+                    "shoulder": [2, "xm430-w350"],
+                    "shoulder_shadow": [3, "xm430-w350"],
+                    "elbow": [4, "xm430-w350"],
+                    "elbow_shadow": [5, "xm430-w350"],
+                    "forearm_roll": [6, "xm430-w350"],
+                    "wrist_angle": [7, "xm430-w350"]
                 },
             ),
             "neck": DynamixelMotorsBusConfig(
