@@ -9,9 +9,9 @@ import torch
 from trajectory_msgs.msg import JointTrajectory
 
 
-class RobotDataSubscriber(Node):
+class DataCollertor(Node):
     def __init__(self):
-        super().__init__('robot_data_subscriber')
+        super().__init__('data_collector')
 
         self.declare_parameter(
             'joint_order_follower', [
@@ -205,7 +205,7 @@ class RobotDataSubscriber(Node):
 
 def main(args=None):
     rclpy.init(args=args)
-    node = RobotDataSubscriber()
+    node = DataCollertor()
     rclpy.spin(node)
     node.destroy_node()
     rclpy.shutdown()

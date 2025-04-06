@@ -255,9 +255,9 @@ def record(
         should_create_ros = teleop_step_node is None
         if should_create_ros:
             import rclpy
-            from data_collector.topic_to_data import RobotDataSubscriber
+            from data_collector.topic_to_data import DataCollertor
             rclpy.init()
-            teleop_step_node = RobotDataSubscriber()
+            teleop_step_node = DataCollertor()
  
     # Execute a few seconds without recording to:
     # 1. teleoperate the robot to move it in starting position if no policy provided,

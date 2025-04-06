@@ -1,4 +1,4 @@
-robot_data_subscriber:
+data_collector:
   ros__parameters:
     joint_order_follower:
         - arm_r_joint1
