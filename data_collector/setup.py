@@ -7,13 +7,14 @@ from setuptools import setup
 package_name = 'data_collector'
 authors_info = [
     ('Seongwoo Kim', 'kimsw@robotis.com'),
+    ('Hyungyu Kim', 'kimhg@robotis.com'),
 ]
 authors = ', '.join(author for author, _ in authors_info)
 author_emails = ', '.join(email for _, email in authors_info)
 
 setup(
     name=package_name,
-    version='0.1.0',
+    version='0.2.0',
     packages=find_packages(exclude=['test']),
     data_files=[
         ('share/ament_index/resource_index/packages', ['resource/' + package_name]),
