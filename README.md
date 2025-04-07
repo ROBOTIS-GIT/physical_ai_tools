@@ -20,12 +20,15 @@ pip install --no-binary=av -e .
 `sudo apt-get install cmake build-essential python-dev pkg-config libavformat-dev libavcodec-dev libavdevice-dev libavutil-dev libswscale-dev libswresample-dev libavfilter-dev pkg-config`. For other systems, see: [Compiling PyAV](https://pyav.org/docs/develop/overview/installation.html#bring-your-own-ffmpeg)
 
 If you're using a Docker container, you may need to add the `--break-system-packages` option when installing with `pip`.
+```bash
+pip install --no-binary=av -e . --break-system-packages
+```
 
 ### 3. Build the Workspace
 Navigate to your ROS 2 workspace directory and build the package using `colcon`:
 ```bash
 cd ~/${WORKSPACE}
-colcon build --symlink-install
+colcon build --symlink-install --packages-select physical_ai_tools
 ```
 
 ### 4. Source the Workspace
