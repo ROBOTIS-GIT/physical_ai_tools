@@ -1,58 +1,155 @@
 # physical_ai_tools
-This repository offers an interface for developing physical AI applications using LeRobot
+
+This repository offers an interface for developing physical AI applications using LeRobot.
 
 ## Installation
 
-### 1. Download our source code.:
+### 1. Clone the Source Code
 ```bash
-cd ~/your_work_space/src
-git clone https://github.com/ROBOTIS-GIT/open_platform_ai.git
+cd ~/${WORKSPACE}/src
+git clone git@github.com:ROBOTIS-GIT/physical_ai_tools.git
 ```
 
-### 2. Install 🤗 LeRobot.:
+### 2. Install 🤗 LeRobot
 ```bash
-cd ~/your_work_space/src/open_source_ai/lerobot
-pip install -e .
+cd ~/${WORKSPACE}/src/physical_ai_tools/lerobot
+pip install --no-binary=av -e .
 ```
 
-### 3. Navigate to your ROS 2 workspace directory and build the package using colcon.
+> **NOTE:** If you encounter build errors, you may need to install additional dependencies (`cmake`, `build-essential`, and `ffmpeg libs`). On Linux, run:
+`sudo apt-get install cmake build-essential python-dev pkg-config libavformat-dev libavcodec-dev libavdevice-dev libavutil-dev libswscale-dev libswresample-dev libavfilter-dev pkg-config`. For other systems, see: [Compiling PyAV](https://pyav.org/docs/develop/overview/installation.html#bring-your-own-ffmpeg)
+
+If you're using a Docker container, you may need to add the `--break-system-packages` option when installing with `pip`.
 ```bash
-cd ~/your_work_space
-colcon build --symlink-install
+pip install --no-binary=av -e . --break-system-packages
 ```
 
-### 4. After the build completes successfully, don't forget to source the setup script before running any nodes.:
+### 3. Build the Workspace
+Navigate to your ROS 2 workspace directory and build the package using `colcon`:
 ```bash
-source install/setup.bash
+cd ~/${WORKSPACE}
+colcon build --symlink-install --packages-select physical_ai_tools
 ```
 
-### 5. To make the package available as a Python module in your current environment, navigate to the package directory and install it using pip.
+### 4. Source the Workspace
+After the build completes successfully, source the setup script:
 ```bash
-cd ~/your_work_space/src/open_source_ai/robot_data_subscriber
+source ~/${WORKSPACE}/install/setup.bash
+```
+
+### 5. Install the Data Collector Package
+Make the package available as a Python module in your current environment:
+```bash
+cd ~/${WORKSPACE}/src/physical_ai_tools/data_collector
 pip install .
 ```
-## Record LeRobot datasets
 
-### 1. To start the node that subscribes to joint state data, use the following ros2 launch command. 
+## Record LeRobot Datasets
+
+### 1. Authenticate with Hugging Face
+Make sure you've logged in using a **write-access token** generated from your [Hugging Face settings](https://huggingface.co/settings/tokens):
 ```bash
-ros2 launch robot_data_subscriber robot_data_subscriber.launch.py 
+huggingface-cli login --token ${HUGGINGFACE_TOKEN} --add-to-git-credential
 ```
 
-### 2. Navigate to the lerobot directory and run the following command to start recording data for your Hugging Face dataset.
+Store your Hugging Face username in a variable:
 ```bash
-cd ~/your_work_space/src/open_source_ai/lerobot
+HF_USER=$(huggingface-cli whoami | head -n 1)
+echo $HF_USER
 ```
 
+---
+
+### 2. Check Your Camera Indexes
+
+To include image data, check which camera indexes are available on your system:
 ```bash
-cd ~/your_work_space/src/open_source_ai/lerobot
+cd ~/${WORKSPACE}/src/physical_ai_tools/lerobot
+```
+```bash
+python lerobot/common/robot_devices/cameras/opencv.py \
+    --images-dir outputs/images_from_opencv_cameras
+```
+
+Example output:
+
+```text
+Linux detected. Finding available camera indices through scanning '/dev/video*' ports
+Camera found at index 0
+Camera found at index 1
+Camera found at index 2
+...
+Saving images to outputs/images_from_opencv_cameras
+```
+
+Check the saved images in `outputs/images_from_opencv_cameras` to determine which index corresponds to which physical camera:
+```text
+camera_00_frame_000000.png
+camera_01_frame_000000.png
+...
+```
+
+Once identified, update the camera indexes in the `"ffw"` robot configuration file:
+
+```
+cd lerobot/common/robot_devices/robots/configs.py
+```
+
+Modify it like so:
+```python
+@RobotConfig.register_subclass("ffw")
+@dataclass
+class FFWRobotConfig(ManipulatorRobotConfig):
+    [...]
+    cameras: dict[str, CameraConfig] = field(
+        default_factory=lambda: {
+            "cam_head": OpenCVCameraConfig(
+                camera_index=0,  # To be changed
+                fps=30,
+                width=640,
+                height=480,
+            ),
+            "cam_wrist_1": OpenCVCameraConfig(
+                camera_index=1,  # To be changed
+                fps=30,
+                width=640,
+                height=480,
+            ),
+            "cam_wrist_2": OpenCVCameraConfig(
+                camera_index=2,  # To be changed
+                fps=30,
+                width=640,
+                height=480,
+            ),
+        }
+    )
+
+    mock: bool = False
+```
+
+---
+
+### 3. Record Your Dataset
+
+Launch the ROS 2 data collector node.
+```bash
+ros2 launch data_collector data_collector.launch.py
+```
+
+Open a new terminal, and navigate to the `lerobot` directory:
+```bash
+cd ~/${WORKSPACE}/src/physical_ai_tools/lerobot
+```
+
+Run the following command to start recording your Hugging Face dataset:
+```bash
 python lerobot/scripts/control_robot.py \
-  --robot.type=noza \
+  --robot.type=ffw \
   --control.type=record \
   --control.single_task="pick and place objects" \
   --control.fps=30 \
-  --control.repo_id=${HF_USER}/noza_test \
+  --control.repo_id=${HF_USER}/ffw_test \
   --control.tags='["tutorial"]' \
-  --control.warmup_time_s=5 \
   --control.episode_time_s=20 \
   --control.reset_time_s=10 \
   --control.num_episodes=2 \
@@ -60,9 +157,19 @@ python lerobot/scripts/control_robot.py \
   --control.use_ros=true
 ```
 
+💡 Make sure to replace `${HF_USER}` with your actual Hugging Face username.
+
+---
+
 ### 🔧 Key Parameters to Customize
 
-To create your own dataset, you only need to modify the following three options:
+To create your own dataset, you only need to modify the following five options:
+
+- **`--control.repo_id`**  
+  The Hugging Face dataset repository ID in the format `<username>/<dataset_name>`. This is where your dataset will be saved and optionally pushed to the Hugging Face Hub.
+
+- **`--control.single_task`**  
+  The name of the task you're performing (e.g., "pick and place objects").
 
 - **`--control.episode_time_s`**  
   Duration (in seconds) to record each episode.
@@ -73,4 +180,22 @@ To create your own dataset, you only need to modify the following three options:
 - **`--control.num_episodes`**  
   Total number of episodes to record for the dataset.
 
-These parameters help define the structure and timing of your dataset recording sessions. Adjust them according to the complexity and length of your task.
+Of course, you can modify other parameters as needed to better suit your use case.
+
+---
+🎉 All set — now you’re ready to create your dataset!
+
+📺 Need a walkthrough? Check out this [video tutorial on YouTube](https://www.youtube.com/watch?v=n_Ljp_xuFEM) to see the full process of recording a dataset with LeRobot.
+
+### 4. Visualize Your Dataset
+
+You can also view your recorded dataset through a local web server. This is useful for quickly checking the collected data.
+
+Run the following command:
+
+```bash
+python lerobot/scripts/visualize_dataset_html.py \
+  --repo-id ${HF_USER}/ffw_test
+```
+
+🖥️ This will start a local web server and open your dataset in a browser-friendly format.

@@ -263,7 +263,7 @@ def control_loop(
                 observation = robot.capture_observation_cam()
                 if policy is not None:
                     pred_action = predict_action(observation, policy, device, use_amp)
-                    
+
                 if observation is None or action is None:
                     continue
             else:
@@ -279,7 +279,7 @@ def control_loop(
         if dataset is not None:
             frame = {**observation, **action}
             dataset.add_frame(frame)
-        
+
         # @@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@
         # if display_cameras and not is_headless():
         #     image_keys = [key for key in observation if "image" in key]

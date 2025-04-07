@@ -272,14 +272,14 @@ class OMXRobotConfig(ManipulatorRobotConfig):
     leader_arms: dict[str, MotorsBusConfig] = field(
         default_factory=lambda: {
             "main": DynamixelMotorsBusConfig(
-                port="/dev/ttyUSB0",
+                port="/dev/ttyACM0",
                 motors={
                     # name: (index, model)
-                    "shoulder_pan": (11, "xm430-w350"),
-                    "shoulder_lift": (12, "xm430-w350"),
-                    "elbow_flex": (13, "xm430-w350"),
-                    "wrist_flex": (14, "xm430-w350"),
-                    "gripper": (15, "xm430-w350"),
+                    "shoulder_pan": (1, "xm430-w350"),
+                    "shoulder_lift": (2, "xm430-w350"),
+                    "elbow_flex": (3, "xm430-w350"),
+                    "wrist_flex": (4, "xm430-w350"),
+                    "gripper": (5, "xm430-w350"),
                 },
             ),
         }
@@ -321,10 +321,10 @@ class OMXRobotConfig(ManipulatorRobotConfig):
     mock: bool = False
 
 
-@RobotConfig.register_subclass("noza")
+@RobotConfig.register_subclass("ffw")
 @dataclass
-class NozaRobotConfig(ManipulatorRobotConfig):
-    calibration_dir: str = "/home/ai/robotis_ws/src/lerobot_package/.cache/calibration/noza"
+class FFWRobotConfig(ManipulatorRobotConfig):
+    calibration_dir: str = "/home/ai/robotis_ws/src/lerobot_package/.cache/calibration/ffw"
     # `max_relative_target` limits the magnitude of the relative positional target vector for safety purposes.
     # Set this to a positive scalar to have the same value for all motors, or a list that is the same length as
     # the number of motors in your follower arms.
@@ -332,30 +332,16 @@ class NozaRobotConfig(ManipulatorRobotConfig):
 
     leader_arms: dict[str, MotorsBusConfig] = field(
         default_factory=lambda: {
-            "left": DynamixelMotorsBusConfig(
-                port="/dev/ttyleader_left",
-                motors={
-                    # name: (index, model)
-                    "waist": [1, "xm430-w350"],
-                    "shoulder": [2, "xm430-w350"],
-                    "shoulder_shadow": [3, "xm430-w350"],
-                    "elbow": [4, "xm430-w350"],
-                    "elbow_shadow": [5, "xm430-w350"],
-                    "forearm_roll": [6, "xm430-w350"],
-                    "wrist_angle": [7, "xm430-w350"]
-                },
-            ),
-            "right": DynamixelMotorsBusConfig(
+            "hand_right": DynamixelMotorsBusConfig(
                 port="/dev/ttyleader_right",
                 motors={
                     # name: (index, model)
-                    "waist": [1, "xm430-w350"],
-                    "shoulder": [2, "xm430-w350"],
-                    "shoulder_shadow": [3, "xm430-w350"],
-                    "elbow": [4, "xm430-w350"],
-                    "elbow_shadow": [5, "xm430-w350"],
-                    "forearm_roll": [6, "xm430-w350"],
-                    "wrist_angle": [7, "xm430-w350"],
+                    "thumb_1": [1, "xm430-w350"],
+                    "thumb_2": [2, "xm430-w350"],
+                    "index": [3, "xm430-w350"],
+                    "middle": [4, "xm430-w350"],
+                    "ring": [5, "xm430-w350"],
+                    "little": [6, "xm430-w350"],
                 },
             ),
             "hand_left": DynamixelMotorsBusConfig(
@@ -370,16 +356,30 @@ class NozaRobotConfig(ManipulatorRobotConfig):
                     "little": [6, "xm430-w350"],
                 },
             ),
-            "hand_right": DynamixelMotorsBusConfig(
+            "arm_right": DynamixelMotorsBusConfig(
                 port="/dev/ttyleader_right",
                 motors={
                     # name: (index, model)
-                    "thumb_1": [1, "xm430-w350"],
-                    "thumb_2": [2, "xm430-w350"],
-                    "index": [3, "xm430-w350"],
-                    "middle": [4, "xm430-w350"],
-                    "ring": [5, "xm430-w350"],
-                    "little": [6, "xm430-w350"],
+                    "waist": [1, "xm430-w350"],
+                    "shoulder": [2, "xm430-w350"],
+                    "shoulder_shadow": [3, "xm430-w350"],
+                    "elbow": [4, "xm430-w350"],
+                    "elbow_shadow": [5, "xm430-w350"],
+                    "forearm_roll": [6, "xm430-w350"],
+                    "wrist_angle": [7, "xm430-w350"],
+                },
+            ),
+            "arm_left": DynamixelMotorsBusConfig(
+                port="/dev/ttyleader_left",
+                motors={
+                    # name: (index, model)
+                    "waist": [1, "xm430-w350"],
+                    "shoulder": [2, "xm430-w350"],
+                    "shoulder_shadow": [3, "xm430-w350"],
+                    "elbow": [4, "xm430-w350"],
+                    "elbow_shadow": [5, "xm430-w350"],
+                    "forearm_roll": [6, "xm430-w350"],
+                    "wrist_angle": [7, "xm430-w350"]
                 },
             ),
             "neck": DynamixelMotorsBusConfig(
@@ -402,30 +402,16 @@ class NozaRobotConfig(ManipulatorRobotConfig):
 
     follower_arms: dict[str, MotorsBusConfig] = field(
         default_factory=lambda: {
-            "left": DynamixelMotorsBusConfig(
-                port="/dev/ttyfollower_left",
-                motors={
-                    # name: (index, model)
-                    "waist": [1, "xm430-w350"],
-                    "shoulder": [2, "xm430-w350"],
-                    "shoulder_shadow": [3, "xm430-w350"],
-                    "elbow": [4, "xm430-w350"],
-                    "elbow_shadow": [5, "xm430-w350"],
-                    "forearm_roll": [6, "xm430-w350"],
-                    "wrist_angle": [7, "xm430-w350"]
-                },
-            ),
-            "right": DynamixelMotorsBusConfig(
+            "hand_right": DynamixelMotorsBusConfig(
                 port="/dev/ttyfollower_right",
                 motors={
                     # name: (index, model)
-                    "waist": [1, "xm430-w350"],
-                    "shoulder": [2, "xm430-w350"],
-                    "shoulder_shadow": [3, "xm430-w350"],
-                    "elbow": [4, "xm430-w350"],
-                    "elbow_shadow": [5, "xm430-w350"],
-                    "forearm_roll": [6, "xm430-w350"],
-                    "wrist_angle": [7, "xm430-w350"],
+                    "thumb_1": [1, "xm430-w350"],
+                    "thumb_2": [2, "xm430-w350"],
+                    "index": [3, "xm430-w350"],
+                    "middle": [4, "xm430-w350"],
+                    "ring": [5, "xm430-w350"],
+                    "little": [6, "xm430-w350"],
                 },
             ),
             "hand_left": DynamixelMotorsBusConfig(
@@ -440,16 +426,30 @@ class NozaRobotConfig(ManipulatorRobotConfig):
                     "little": [6, "xm430-w350"],
                 },
             ),
-            "hand_right": DynamixelMotorsBusConfig(
-                port="/dev/ttyttyfollower_right",
+            "arm_right": DynamixelMotorsBusConfig(
+                port="/dev/ttyfollower_right",
                 motors={
                     # name: (index, model)
-                    "thumb_1": [1, "xm430-w350"],
-                    "thumb_2": [2, "xm430-w350"],
-                    "index": [3, "xm430-w350"],
-                    "middle": [4, "xm430-w350"],
-                    "ring": [5, "xm430-w350"],
-                    "little": [6, "xm430-w350"],
+                    "waist": [1, "xm430-w350"],
+                    "shoulder": [2, "xm430-w350"],
+                    "shoulder_shadow": [3, "xm430-w350"],
+                    "elbow": [4, "xm430-w350"],
+                    "elbow_shadow": [5, "xm430-w350"],
+                    "forearm_roll": [6, "xm430-w350"],
+                    "wrist_angle": [7, "xm430-w350"],
+                },
+            ),
+            "arm_left": DynamixelMotorsBusConfig(
+                port="/dev/ttyfollower_left",
+                motors={
+                    # name: (index, model)
+                    "waist": [1, "xm430-w350"],
+                    "shoulder": [2, "xm430-w350"],
+                    "shoulder_shadow": [3, "xm430-w350"],
+                    "elbow": [4, "xm430-w350"],
+                    "elbow_shadow": [5, "xm430-w350"],
+                    "forearm_roll": [6, "xm430-w350"],
+                    "wrist_angle": [7, "xm430-w350"]
                 },
             ),
             "neck": DynamixelMotorsBusConfig(
@@ -472,14 +472,20 @@ class NozaRobotConfig(ManipulatorRobotConfig):
 
     cameras: dict[str, CameraConfig] = field(
         default_factory=lambda: {
-            "cam_1": OpenCVCameraConfig(
+            "cam_head": OpenCVCameraConfig(
                 camera_index=4,
                 fps=30,
                 width=640,
                 height=480,
             ),
-            "cam_2": OpenCVCameraConfig(
+            "cam_wrist_1": OpenCVCameraConfig(
                 camera_index=6,
+                fps=30,
+                width=640,
+                height=480,
+            ),
+            "cam_wrist_2": OpenCVCameraConfig(
+                camera_index=8,
                 fps=30,
                 width=640,
                 height=480,
