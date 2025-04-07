@@ -27,7 +27,7 @@ import torch
 from trajectory_msgs.msg import JointTrajectory
 
 
-class DataCollertor(Node):
+class DataCollector(Node):
     def __init__(self):
         super().__init__('data_collector')
 
@@ -67,8 +67,6 @@ class DataCollertor(Node):
             ]
         )
 
-        self.joint_order_follower_r_hand = self.get_parameter('joint_order_follower_r_hand').value
-        self.joint_order_follower_l_hand = self.get_parameter('joint_order_follower_l_hand').value
         self.joint_order_follower = self.get_parameter('joint_order_follower').value
 
         self.joint_order_leader_r_hand = self.get_parameter('joint_order_leader_r_hand').value
@@ -223,7 +221,7 @@ class DataCollertor(Node):
 
 def main(args=None):
     rclpy.init(args=args)
-    node = DataCollertor()
+    node = DataCollector()
     rclpy.spin(node)
     node.destroy_node()
     rclpy.shutdown()

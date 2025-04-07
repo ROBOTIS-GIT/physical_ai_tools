@@ -356,7 +356,7 @@ class NozaRobotConfig(ManipulatorRobotConfig):
                     "little": [6, "xm430-w350"],
                 },
             ),
-            "right": DynamixelMotorsBusConfig(
+            "arm_right": DynamixelMotorsBusConfig(
                 port="/dev/ttyleader_right",
                 motors={
                     # name: (index, model)
@@ -369,7 +369,7 @@ class NozaRobotConfig(ManipulatorRobotConfig):
                     "wrist_angle": [7, "xm430-w350"],
                 },
             ),
-            "left": DynamixelMotorsBusConfig(
+            "arm_left": DynamixelMotorsBusConfig(
                 port="/dev/ttyleader_left",
                 motors={
                     # name: (index, model)
@@ -426,7 +426,7 @@ class NozaRobotConfig(ManipulatorRobotConfig):
                     "little": [6, "xm430-w350"],
                 },
             ),
-            "right": DynamixelMotorsBusConfig(
+            "arm_right": DynamixelMotorsBusConfig(
                 port="/dev/ttyfollower_right",
                 motors={
                     # name: (index, model)
@@ -439,7 +439,7 @@ class NozaRobotConfig(ManipulatorRobotConfig):
                     "wrist_angle": [7, "xm430-w350"],
                 },
             ),
-            "left": DynamixelMotorsBusConfig(
+            "arm_left": DynamixelMotorsBusConfig(
                 port="/dev/ttyfollower_left",
                 motors={
                     # name: (index, model)
