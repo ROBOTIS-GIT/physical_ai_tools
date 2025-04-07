@@ -403,7 +403,7 @@ class NozaRobotConfig(ManipulatorRobotConfig):
     follower_arms: dict[str, MotorsBusConfig] = field(
         default_factory=lambda: {
             "hand_right": DynamixelMotorsBusConfig(
-                port="/dev/ttyttyfollower_right",
+                port="/dev/ttyfollower_right",
                 motors={
                     # name: (index, model)
                     "thumb_1": [1, "xm430-w350"],
