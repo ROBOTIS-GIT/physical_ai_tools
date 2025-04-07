@@ -16,7 +16,6 @@
 #
 # Author: Seongwoo Kim, Hyungyu Kim
 
-from builtin_interfaces.msg import Time
 import rclpy
 from rclpy.node import Node
 
@@ -39,11 +38,9 @@ class TrajectoryStamper(Node):
 
         for key in self.topics:
             stamped_topic = f'/leader/{key}_with_timestamp'
-            time_topic = f'/leader/{key}_timestamp'
 
             self.pub_dict[key] = {
                 'trajectory': self.create_publisher(JointTrajectory, stamped_topic, 10),
-                'timestamp': self.create_publisher(Time, time_topic, 10)
             }
 
             self.create_subscription(
@@ -58,11 +55,6 @@ class TrajectoryStamper(Node):
 
         msg.header.stamp = now
         self.pub_dict[key]['trajectory'].publish(msg)
-
-        time_msg = Time()
-        time_msg.sec = now.sec
-        time_msg.nanosec = now.nanosec
-        self.pub_dict[key]['timestamp'].publish(time_msg)
 
 
 def main(args=None):
