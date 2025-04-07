@@ -6,13 +6,13 @@ This repository offers an interface for developing physical AI applications usin
 
 ### 1. Clone the Source Code
 ```bash
-cd /workspace/ffw_ws/src
+cd ~/${WORKSPACE}/src
 git clone git@github.com:ROBOTIS-GIT/physical_ai_tools.git
 ```
 
 ### 2. Install 🤗 LeRobot
 ```bash
-cd /workspace/ffw_ws/src/physical_ai_tools/lerobot
+cd ~/${WORKSPACE}/src/physical_ai_tools/lerobot
 pip install --no-binary=av -e .
 ```
 
@@ -24,20 +24,20 @@ If you're using a Docker container, you may need to add the `--break-system-pack
 ### 3. Build the Workspace
 Navigate to your ROS 2 workspace directory and build the package using `colcon`:
 ```bash
-cd /workspace/ffw_ws
+cd ~/${WORKSPACE}
 colcon build --symlink-install
 ```
 
 ### 4. Source the Workspace
 After the build completes successfully, source the setup script:
 ```bash
-source /workspace/ffw_ws/install/setup.bash
+source ~/${WORKSPACE}/install/setup.bash
 ```
 
 ### 5. Install the Data Collector Package
 Make the package available as a Python module in your current environment:
 ```bash
-cd /workspace/ffw_ws/src/physical_ai_tools/data_collector
+cd ~/${WORKSPACE}/src/physical_ai_tools/data_collector
 pip install .
 ```
 
@@ -63,7 +63,7 @@ echo $HF_USER
 
 To include image data, check which camera indexes are available on your system:
 ```bash
-cd /workspace/ffw_ws/src/physical_ai_tools/lerobot
+cd ~/${WORKSPACE}/src/physical_ai_tools/lerobot
 ```
 ```bash
 python lerobot/common/robot_devices/cameras/opencv.py \
@@ -137,7 +137,7 @@ ros2 launch data_collector data_collector.launch.py
 
 Open a new terminal, and navigate to the `lerobot` directory:
 ```bash
-cd /workspace/ffw_ws/src/physical_ai_tools/lerobot
+cd ~/${WORKSPACE}/src/physical_ai_tools/lerobot
 ```
 
 Run the following command to start recording your Hugging Face dataset:
