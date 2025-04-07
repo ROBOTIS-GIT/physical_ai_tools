@@ -6,36 +6,38 @@ This repository offers an interface for developing physical AI applications usin
 
 ### 1. Clone the Source Code
 ```bash
-cd ~/your_workspace/src
+cd /workspace/ffw_ws/src
 git clone git@github.com:ROBOTIS-GIT/physical_ai_tools.git
 ```
 
 ### 2. Install 🤗 LeRobot
 ```bash
-cd ~/your_workspace/src/physical_ai_tools/lerobot
+cd /workspace/ffw_ws/src/physical_ai_tools/lerobot
 pip install --no-binary=av -e .
 ```
 
 > **NOTE:** If you encounter build errors, you may need to install additional dependencies (`cmake`, `build-essential`, and `ffmpeg libs`). On Linux, run:
 `sudo apt-get install cmake build-essential python-dev pkg-config libavformat-dev libavcodec-dev libavdevice-dev libavutil-dev libswscale-dev libswresample-dev libavfilter-dev pkg-config`. For other systems, see: [Compiling PyAV](https://pyav.org/docs/develop/overview/installation.html#bring-your-own-ffmpeg)
 
+If you're using a Docker container, you may need to add the `--break-system-packages` option when installing with `pip`.
+
 ### 3. Build the Workspace
 Navigate to your ROS 2 workspace directory and build the package using `colcon`:
 ```bash
-cd ~/your_workspace
+cd /workspace/ffw_ws
 colcon build --symlink-install
 ```
 
 ### 4. Source the Workspace
 After the build completes successfully, source the setup script:
 ```bash
-source install/setup.bash
+source /workspace/ffw_ws/install/setup.bash
 ```
 
 ### 5. Install the Data Collector Package
 Make the package available as a Python module in your current environment:
 ```bash
-cd ~/your_workspace/src/physical_ai_tools/data_collector
+cd /workspace/ffw_ws/src/physical_ai_tools/data_collector
 pip install .
 ```
 
@@ -61,12 +63,15 @@ echo $HF_USER
 
 To include image data, check which camera indexes are available on your system:
 ```bash
-cd ~/your_workspace/src/physical_ai_tools/lerobot
+cd /workspace/ffw_ws/src/physical_ai_tools/lerobot
+```
+```bash
 python lerobot/common/robot_devices/cameras/opencv.py \
     --images-dir outputs/images_from_opencv_cameras
 ```
 
 Example output:
+
 ```text
 Linux detected. Finding available camera indices through scanning '/dev/video*' ports
 Camera found at index 0
@@ -125,14 +130,14 @@ class NozaRobotConfig(ManipulatorRobotConfig):
 
 ### 3. Record Your Dataset
 
-Activate data_collector node.
+Launch the ROS 2 data collector node.
 ```bash
 ros2 launch data_collector data_collector.launch.py
 ```
 
 Open a new terminal, and navigate to the `lerobot` directory:
 ```bash
-cd ~/your_workspace/src/physical_ai_tools/lerobot
+cd /workspace/ffw_ws/src/physical_ai_tools/lerobot
 ```
 
 Run the following command to start recording your Hugging Face dataset:
