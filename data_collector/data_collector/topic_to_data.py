@@ -121,7 +121,6 @@ class DataCollector(Node):
         self.latest_observation = None
         self.latest_action = None
 
-
     def synced_callback(
         self,
         follower_hand_right_msg: Int32MultiArray,
@@ -191,7 +190,7 @@ class DataCollector(Node):
                 ordered_leader_l_arm
             )
             act_tensor = torch.tensor(act_pos, dtype=torch.float32)
-            self.get_logger().info(f"Follower JointState: {follower_msg.name}")
+            self.get_logger().info(f'Follower JointState: {follower_msg.name}DataCollector')
 
             self.latest_observation = {'observation.state': obs_tensor}
             self.latest_action = {'action': act_tensor}

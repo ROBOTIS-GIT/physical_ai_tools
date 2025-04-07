@@ -16,11 +16,10 @@
 #
 # Author: Seongwoo Kim, Hyungyu Kim
 
+from builtin_interfaces.msg import Time
 import rclpy
 from rclpy.node import Node
-from rclpy.clock import Clock
 
-from builtin_interfaces.msg import Time
 from trajectory_msgs.msg import JointTrajectory
 
 
@@ -64,6 +63,7 @@ class TrajectoryStamper(Node):
         time_msg.sec = now.sec
         time_msg.nanosec = now.nanosec
         self.pub_dict[key]['timestamp'].publish(time_msg)
+
 
 def main(args=None):
     rclpy.init(args=args)
