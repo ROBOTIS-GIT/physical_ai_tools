@@ -43,16 +43,16 @@ class DataCollector(Node):
         )
         self.declare_parameter(
             'joint_order_leader_r_hand', [
-                'right_thumb_1_joint', 'right_thumb_2_joint',
-                'right_index_1_joint', 'right_middle_1_joint',
-                'right_ring_1_joint', 'right_little_1_joint',
+                'right_little_1_joint', 'right_ring_1_joint',
+                'right_middle_1_joint', 'right_index_1_joint',
+                'right_thumb_2_joint', 'right_thumb_1_joint',
             ]
         )
         self.declare_parameter(
             'joint_order_leader_l_hand', [
-                'left_thumb_1_joint', 'left_thumb_2_joint',
-                'left_index_1_joint', 'left_middle_1_joint',
-                'left_ring_1_joint', 'left_little_1_joint',
+                'left_little_1_joint', 'left_ring_1_joint',
+                'left_middle_1_joint', 'left_index_1_joint',
+                'left_thumb_2_joint', 'left_thumb_1_joint',
             ]
         )
         self.declare_parameter(

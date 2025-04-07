@@ -6,13 +6,13 @@ This repository offers an interface for developing physical AI applications usin
 
 ### 1. Clone the Source Code
 ```bash
-cd ~/${WORKSPACE}/src
+cd /workspace/ffw_ws/src
 git clone git@github.com:ROBOTIS-GIT/physical_ai_tools.git
 ```
 
 ### 2. Install 🤗 LeRobot
 ```bash
-cd ~/${WORKSPACE}/src/physical_ai_tools/lerobot
+cd /workspace/ffw_ws/src/physical_ai_tools/lerobot
 pip install --no-binary=av -e .
 ```
 
@@ -27,24 +27,22 @@ pip install --no-binary=av -e . --break-system-packages
 ### 3. Build the Workspace
 Navigate to your ROS 2 workspace directory and build the package using `colcon`:
 ```bash
-cd ~/${WORKSPACE}
+cd /workspace/ffw_ws
 colcon build --symlink-install --packages-select physical_ai_tools
 ```
 
 ### 4. Source the Workspace
 After the build completes successfully, source the setup script:
 ```bash
-source ~/${WORKSPACE}/install/setup.bash
+source /workspace/ffw_ws/install/setup.bash
 ```
 
 ### 5. Install the Data Collector Package
 Make the package available as a Python module in your current environment:
 ```bash
-cd ~/${WORKSPACE}/src/physical_ai_tools/data_collector
+cd /workspace/ffw_ws/src/physical_ai_tools/data_collector
 pip install .
 ```
-
----
 
 ## Record LeRobot Datasets
 
@@ -66,7 +64,7 @@ echo $HF_USER
 
 To include image data, check which camera indexes are available on your system:
 ```bash
-cd ~/${WORKSPACE}/src/physical_ai_tools/lerobot
+cd /workspace/ffw_ws/src/physical_ai_tools/lerobot
 ```
 ```bash
 python lerobot/common/robot_devices/cameras/opencv.py \
@@ -91,7 +89,7 @@ camera_01_frame_000000.png
 ...
 ```
 
-Once identified, update the camera indexes in the `"noza"` robot configuration file:
+Once identified, update the camera indexes in the `"humanoid"` robot configuration file:
 
 ```
 cd lerobot/common/robot_devices/robots/configs.py
@@ -99,9 +97,9 @@ cd lerobot/common/robot_devices/robots/configs.py
 
 Modify it like so:
 ```python
-@RobotConfig.register_subclass("noza")
+@RobotConfig.register_subclass("humanoid")
 @dataclass
-class NozaRobotConfig(ManipulatorRobotConfig):
+class HumanoidRobotConfig(ManipulatorRobotConfig):
     [...]
     cameras: dict[str, CameraConfig] = field(
         default_factory=lambda: {
@@ -140,17 +138,17 @@ ros2 launch data_collector data_collector.launch.py
 
 Open a new terminal, and navigate to the `lerobot` directory:
 ```bash
-cd ~/${WORKSPACE}/src/physical_ai_tools/lerobot
+cd /workspace/ffw_ws/src/physical_ai_tools/lerobot
 ```
 
 Run the following command to start recording your Hugging Face dataset:
 ```bash
 python lerobot/scripts/control_robot.py \
-  --robot.type=noza \
+  --robot.type=humanoid \
   --control.type=record \
   --control.single_task="pick and place objects" \
   --control.fps=30 \
-  --control.repo_id=${HF_USER}/noza_test \
+  --control.repo_id=${HF_USER}/humanoid_test \
   --control.tags='["tutorial"]' \
   --control.episode_time_s=20 \
   --control.reset_time_s=10 \
@@ -197,7 +195,7 @@ Run the following command:
 
 ```bash
 python lerobot/scripts/visualize_dataset_html.py \
-  --repo-id ${HF_USER}/noza_test
+  --repo-id ${HF_USER}/humanoid_test
 ```
 
 🖥️ This will start a local web server and open your dataset in a browser-friendly format.
