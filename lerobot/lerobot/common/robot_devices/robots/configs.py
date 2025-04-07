@@ -321,10 +321,10 @@ class OMXRobotConfig(ManipulatorRobotConfig):
     mock: bool = False
 
 
-@RobotConfig.register_subclass("humanoid")
+@RobotConfig.register_subclass("ffw")
 @dataclass
-class HumanoidRobotConfig(ManipulatorRobotConfig):
-    calibration_dir: str = "/home/ai/robotis_ws/src/lerobot_package/.cache/calibration/humanoid"
+class FFWRobotConfig(ManipulatorRobotConfig):
+    calibration_dir: str = "/home/ai/robotis_ws/src/lerobot_package/.cache/calibration/ffw"
     # `max_relative_target` limits the magnitude of the relative positional target vector for safety purposes.
     # Set this to a positive scalar to have the same value for all motors, or a list that is the same length as
     # the number of motors in your follower arms.

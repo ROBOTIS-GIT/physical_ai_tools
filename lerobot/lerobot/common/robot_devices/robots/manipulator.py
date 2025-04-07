@@ -251,7 +251,7 @@ class ManipulatorRobot:
         if self.robot_type in ["koch"]:
             self.set_koch_robot_preset()
             pass
-        elif self.robot_type in ["omx", "humanoid"]:
+        elif self.robot_type in ["omx", "ffw"]:
             pass
         elif self.robot_type == "aloha":
             self.set_aloha_robot_preset()

@@ -4,7 +4,7 @@ from lerobot.common.robot_devices.robots.configs import (
     AlohaRobotConfig,
     OMXRobotConfig,
     KochRobotConfig,
-    HumanoidRobotConfig,
+    FFWRobotConfig,
     ManipulatorRobotConfig,
     MossRobotConfig,
     RobotConfig,
@@ -40,8 +40,8 @@ def make_robot_config(robot_type: str, **kwargs) -> RobotConfig:
         return KochRobotConfig(**kwargs)
     elif robot_type == "omx":
         return OMXRobotConfig(**kwargs)
-    elif robot_type == "humanoid":
-        return HumanoidRobotConfig(**kwargs)
+    elif robot_type == "ffw":
+        return FFWRobotConfig(**kwargs)
     elif robot_type == "moss":
         return MossRobotConfig(**kwargs)
     elif robot_type == "so100":
