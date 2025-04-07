@@ -28,6 +28,7 @@ from trajectory_msgs.msg import JointTrajectory
 
 
 class DataCollector(Node):
+
     def __init__(self):
         super().__init__('data_collector')
 

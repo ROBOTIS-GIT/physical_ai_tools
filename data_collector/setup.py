@@ -1,6 +1,8 @@
 from glob import glob
+
 from setuptools import find_packages
 from setuptools import setup
+
 
 package_name = 'data_collector'
 authors_info = [
