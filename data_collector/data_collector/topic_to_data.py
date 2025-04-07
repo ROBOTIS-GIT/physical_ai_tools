@@ -122,10 +122,11 @@ class DataCollector(Node):
                 self.leader_arm_right,
                 self.leader_arm_left,
                 self.leader_neck,
-                self.leader_linear
+                self.leader_linear,
             ],
             queue_size=10,
-            slop=0.05
+            slop=0.05,
+            allow_headerless=True
         )
         self.sync.registerCallback(self.synced_callback)
 
