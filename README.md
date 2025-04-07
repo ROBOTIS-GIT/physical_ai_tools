@@ -125,7 +125,12 @@ class NozaRobotConfig(ManipulatorRobotConfig):
 
 ### 3. Record Your Dataset
 
-Navigate to the `lerobot` directory:
+Activate data_collector node.
+```bash
+ros2 launch data_collector data_collector.launch.py
+```
+
+Open a new terminal, and navigate to the `lerobot` directory:
 ```bash
 cd ~/your_workspace/src/physical_ai_tools/lerobot
 ```
