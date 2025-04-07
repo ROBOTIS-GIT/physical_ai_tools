@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 #
-# Copyright 2024 ROBOTIS CO., LTD.
+# Copyright 2025 ROBOTIS CO., LTD.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -42,5 +42,11 @@ def generate_launch_description():
             parameters=[
                 robot_params['data_collector']['ros__parameters'],
             ]
+        ),
+        Node(
+            package='data_collector',
+            executable='trajectory_stamper',
+            name='trajectory_stamper',
+            output='screen'
         )
     ])
