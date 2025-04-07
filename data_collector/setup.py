@@ -40,6 +40,7 @@ setup(
     entry_points={
         'console_scripts': [
             'data_collector = data_collector.topic_to_data:main',
+            'trajectory_stamper = data_collector.trajectory_stamper:main',
         ],
     },
 )

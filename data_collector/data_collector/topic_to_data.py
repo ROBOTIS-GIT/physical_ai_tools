@@ -33,12 +33,11 @@ class DataCollector(Node):
         super().__init__('data_collector')
 
         self.declare_parameter(
-            'joint_order_follower', [
+           'joint_order_follower', [
                 'arm_r_joint1', 'arm_r_joint2', 'arm_r_joint3',
                 'arm_r_joint4', 'arm_r_joint5', 'arm_r_joint6', 'arm_r_joint7',
                 'arm_l_joint1', 'arm_l_joint2', 'arm_l_joint3',
-                'arm_l_joint4', 'arm_l_joint5', 'arm_l_joint6', 'arm_l_joint7',
-                'neck_joint1', 'neck_joint2', 'linear_joint'
+                'arm_l_joint4', 'arm_l_joint5', 'arm_l_joint6', 'arm_l_joint7'
             ]
         )
         self.declare_parameter(
@@ -86,31 +85,21 @@ class DataCollector(Node):
         self.leader_hand_right = Subscriber(
             self,
             JointTrajectory,
-            '/leader/joint_trajectory_right_hand/joint_trajectory'
+            '/leader/right_hand_with_timestamp'
         )
         self.leader_hand_left = Subscriber(
             self,
             JointTrajectory,
-            '/leader/joint_trajectory_left/joint_trajectory'
+            '/leader/left_hand_with_timestamp'
         )
         self.leader_arm_right = Subscriber(
             self, JointTrajectory,
-            '/leader/joint_trajectory_right/joint_trajectory'
+            '/leader/right_arm_with_timestamp'
         )
         self.leader_arm_left = Subscriber(
             self,
             JointTrajectory,
-            '/leader/joint_trajectory_left/joint_trajectory'
-        )
-        self.leader_neck = Subscriber(
-            self,
-            JointTrajectory,
-            '/leader/neck_controller/joint_trajectory'
-        )
-        self.leader_linear = Subscriber(
-            self,
-            JointTrajectory,
-            '/leader/body_controller/joint_trajectory'
+            '/leader/left_arm_with_timestamp'
         )
 
         self.sync = ApproximateTimeSynchronizer(
@@ -121,18 +110,17 @@ class DataCollector(Node):
                 self.leader_hand_right,
                 self.leader_hand_left,
                 self.leader_arm_right,
-                self.leader_arm_left,
-                self.leader_neck,
-                self.leader_linear,
+                self.leader_arm_left
             ],
-            queue_size=10,
-            slop=0.05,
+            queue_size=100,
+            slop=0.5,
             allow_headerless=True
         )
         self.sync.registerCallback(self.synced_callback)
 
         self.latest_observation = None
         self.latest_action = None
+
 
     def synced_callback(
         self,
@@ -142,9 +130,7 @@ class DataCollector(Node):
         leader_hand_right_msg: JointTrajectory,
         leader_hand_left_msg: JointTrajectory,
         leader_arm_right_msg: JointTrajectory,
-        leader_arm_left_msg: JointTrajectory,
-        leader_neck_msg: JointTrajectory,
-        leader_linear_msg: JointTrajectory
+        leader_arm_left_msg: JointTrajectory
     ):
         try:
             follower_pos_map = dict(zip(
@@ -202,11 +188,10 @@ class DataCollector(Node):
                 ordered_leader_r_hand +
                 ordered_leader_l_hand +
                 ordered_leader_r_arm +
-                ordered_leader_l_arm +
-                list(leader_neck_msg.points[0].positions) +
-                list(leader_linear_msg.points[0].positions)
+                ordered_leader_l_arm
             )
             act_tensor = torch.tensor(act_pos, dtype=torch.float32)
+            self.get_logger().info(f"Follower JointState: {follower_msg.name}")
 
             self.latest_observation = {'observation.state': obs_tensor}
             self.latest_action = {'action': act_tensor}

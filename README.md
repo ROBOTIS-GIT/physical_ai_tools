@@ -154,7 +154,8 @@ python lerobot/scripts/control_robot.py \
   --control.reset_time_s=10 \
   --control.num_episodes=2 \
   --control.push_to_hub=true \
-  --control.use_ros=true
+  --control.use_ros=true  \
+  --control.play_sounds=false
 ```
 
 💡 Make sure to replace `${HF_USER}` with your actual Hugging Face username.

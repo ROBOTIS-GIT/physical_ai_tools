@@ -218,7 +218,7 @@ class KochRobotConfig(ManipulatorRobotConfig):
             ),
         }
     )
-    
+
     follower_arms: dict[str, MotorsBusConfig] = field(
         default_factory=lambda: {
             "main": DynamixelMotorsBusConfig(
@@ -234,7 +234,7 @@ class KochRobotConfig(ManipulatorRobotConfig):
             ),
         }
     )
-    
+
     cameras: dict[str, CameraConfig] = field(
         default_factory=lambda: {
             "cam_1": OpenCVCameraConfig(
@@ -382,21 +382,6 @@ class FFWRobotConfig(ManipulatorRobotConfig):
                     "wrist_angle": [7, "xm430-w350"]
                 },
             ),
-            "neck": DynamixelMotorsBusConfig(
-                port="/dev/ttyleader_neck",
-                motors={
-                    # name: (index, model)
-                    "neck_1": [1, "xm430-w350"],
-                    "neck_2": [2, "xm430-w350"],
-                },
-            ),
-            "body": DynamixelMotorsBusConfig(
-                port="/dev/ttyleader_body",
-                motors={
-                    # name: (index, model)
-                    "linear": [1, "xm430-w350"],
-                },
-            ),
         }
     )
 
@@ -450,21 +435,6 @@ class FFWRobotConfig(ManipulatorRobotConfig):
                     "elbow_shadow": [5, "xm430-w350"],
                     "forearm_roll": [6, "xm430-w350"],
                     "wrist_angle": [7, "xm430-w350"]
-                },
-            ),
-            "neck": DynamixelMotorsBusConfig(
-                port="/dev/ttyfollower_neck",
-                motors={
-                    # name: (index, model)
-                    "neck_1": [1, "xm430-w350"],
-                    "neck_2": [2, "xm430-w350"],
-                },
-            ),
-            "body": DynamixelMotorsBusConfig(
-                port="/dev/ttyfollower_body",
-                motors={
-                    # name: (index, model)
-                    "linear": [1, "xm430-w350"],
                 },
             ),
         }

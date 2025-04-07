@@ -42,5 +42,11 @@ def generate_launch_description():
             parameters=[
                 robot_params['data_collector']['ros__parameters'],
             ]
+        ),
+        Node(
+            package='data_collector',
+            executable='trajectory_stamper',
+            name='trajectory_stamper',
+            output='screen'
         )
     ])
