@@ -172,7 +172,19 @@ To create your own dataset, you only need to modify the following five options:
 Of course, you can modify other parameters as needed to better suit your use case.
 
 ---
-
 🎉 All set — now you’re ready to create your dataset!
 
 📺 Need a walkthrough? Check out this [video tutorial on YouTube](https://www.youtube.com/watch?v=n_Ljp_xuFEM) to see the full process of recording a dataset with LeRobot.
+
+### 4. Visualize Your Dataset
+
+You can also view your recorded dataset through a local web server. This is useful for quickly checking the collected data.
+
+Run the following command:
+
+```bash
+python lerobot/scripts/visualize_dataset_html.py \
+  --repo-id ${HF_USER}/noza_test
+```
+
+🖥️ This will start a local web server and open your dataset in a browser-friendly format.
