@@ -260,16 +260,18 @@ def control_loop(
                 import rclpy
                 rclpy.spin_once(teleop_step_node, timeout_sec=0.05)
                 observation, _ = teleop_step_node.get_latest_data()
-                observation = robot.capture_observation_cam()
+                observation = robot.teleop_step_cam(observation)
+                if observation is None:
+                    continue
                 if policy is not None:
                     pred_action = predict_action(observation, policy, device, use_amp)
+                    action = robot.pred_to_action(pred_action)
+                    action = {"action": action}
 
-                if observation is None or action is None:
-                    continue
             else:
                 observation = robot.capture_observation()
 
-                if policy is not None:
+                if teleop_step_node is None and policy is not None:
                     pred_action = predict_action(observation, policy, device, use_amp)
                     # Action can eventually be clipped using `max_relative_target`,
                     # so action actually sent is saved in the dataset.

@@ -243,12 +243,6 @@ class KochRobotConfig(ManipulatorRobotConfig):
                 width=640,
                 height=480,
             ),
-            "cam_2": OpenCVCameraConfig(
-                camera_index=6,
-                fps=30,
-                width=640,
-                height=480,
-            ),
         }
     )
 
@@ -305,12 +299,6 @@ class OMXRobotConfig(ManipulatorRobotConfig):
         default_factory=lambda: {
             "cam_1": OpenCVCameraConfig(
                 camera_index=4,
-                fps=30,
-                width=640,
-                height=480,
-            ),
-            "cam_2": OpenCVCameraConfig(
-                camera_index=6,
                 fps=30,
                 width=640,
                 height=480,

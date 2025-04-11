@@ -48,5 +48,5 @@ def generate_launch_description():
             executable='trajectory_stamper',
             name='trajectory_stamper',
             output='screen'
-        )
+        ),
     ])
