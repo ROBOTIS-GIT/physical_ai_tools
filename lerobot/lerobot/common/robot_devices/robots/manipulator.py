@@ -604,7 +604,6 @@ class ManipulatorRobot:
         to_idx = 0
         action_sent = []
         for name in self.follower_arms:
-            print("!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!", name)
             # Get goal position of each follower arm by splitting the action vector
             to_idx += len(self.follower_arms[name].motor_names)
             goal_pos = action[from_idx:to_idx]
@@ -627,7 +626,6 @@ class ManipulatorRobot:
         return torch.cat(action_sent)
     
     def pred_to_action(self, action: torch.Tensor) -> torch.Tensor:
-
         from_idx = 0
         to_idx = 0
         action_sent = []

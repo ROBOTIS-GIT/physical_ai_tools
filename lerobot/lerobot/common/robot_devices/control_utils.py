@@ -187,6 +187,8 @@ def record_episode(
     use_amp,
     fps,
     teleop_step_node=None,
+    observation_node=None,
+    action_trajectory_node=None,
 ):
     control_loop(
         robot=robot,
@@ -199,7 +201,9 @@ def record_episode(
         use_amp=use_amp,
         fps=fps,
         teleoperate=policy is None,
-        teleop_step_node=teleop_step_node
+        teleop_step_node=teleop_step_node,
+        observation_node=observation_node,
+        action_trajectory_node=action_trajectory_node
     )
 
 
@@ -216,10 +220,12 @@ def control_loop(
     use_amp: bool | None = None,
     fps: int | None = None,
     teleop_step_node=None,
+    observation_node=None,
+    action_trajectory_node=None,
 ):
     # TODO(rcadene): Add option to record logs
-    if teleop_step_node is not None:
-        print(teleop_step_node)
+    if teleop_step_node is not None or observation_node is not None:
+        pass
     else:
         if not robot.is_connected:
             robot.connect()
@@ -255,28 +261,26 @@ def control_loop(
         elif teleoperate:
             observation, action = robot.teleop_step(record_data=True)
 
-        else:
-            if teleop_step_node is not None:
+        elif policy is not None:
+            if observation_node is not None:
                 import rclpy
-                rclpy.spin_once(teleop_step_node, timeout_sec=0.05)
-                observation, _ = teleop_step_node.get_latest_data()
+                rclpy.spin_once(observation_node, timeout_sec=0.05)
+                observation = observation_node.get_latest_data()
                 observation = robot.teleop_step_cam(observation)
                 if observation is None:
                     continue
-                if policy is not None:
-                    pred_action = predict_action(observation, policy, device, use_amp)
-                    action = robot.pred_to_action(pred_action)
-                    action = {"action": action}
+                pred_action = predict_action(observation, policy, device, use_amp)
+                action_tensor = robot.pred_to_action(pred_action)
+                action_trajectory_node.publish_action(action_tensor)
+                action = {"action": action_tensor}
 
             else:
                 observation = robot.capture_observation()
-
-                if teleop_step_node is None and policy is not None:
-                    pred_action = predict_action(observation, policy, device, use_amp)
-                    # Action can eventually be clipped using `max_relative_target`,
-                    # so action actually sent is saved in the dataset.
-                    action = robot.send_action(pred_action)
-                    action = {"action": action}
+                pred_action = predict_action(observation, policy, device, use_amp)
+                # Action can eventually be clipped using `max_relative_target`,
+                # so action actually sent is saved in the dataset.
+                action = robot.send_action(pred_action)
+                action = {"action": action}
 
         if dataset is not None:
             frame = {**observation, **action}

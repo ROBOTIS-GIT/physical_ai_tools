@@ -1,0 +1,8 @@
+policy_to_trajectory:
+  ros__parameters:
+    expected_joint_order_follower:
+      - joint1
+      - joint2
+      - joint3
+      - joint4
+      - gripper_left_joint
