@@ -7,7 +7,7 @@ This repository offers an interface for developing physical AI applications usin
 ### 1. Clone the Source Code
 ```bash
 cd ~/${WORKSPACE}/src
-git clone git@github.com:ROBOTIS-GIT/physical_ai_tools.git --recursive
+git clone https://github.com/ROBOTIS-GIT/physical_ai_tools.git --recursive
 ```
 
 ### 2. Install 🤗 LeRobot
