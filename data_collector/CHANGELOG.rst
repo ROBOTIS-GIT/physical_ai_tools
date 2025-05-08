@@ -2,6 +2,10 @@
 Changelog for package data_collector
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
+0.3.1 (2025-05-08)
+------------------
+* None
+
 0.3.0 (2025-04-25)
 ------------------
 * Unified multiple launch files into a single configurable launch file for better usability
