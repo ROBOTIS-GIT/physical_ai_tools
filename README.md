@@ -63,36 +63,35 @@ echo $HF_USER
 
 ---
 
-### 2. Check Your Camera Indexes
+### 2. Check Your Camera Serial Numbers
 
-To include image data, check which camera indexes are available on your system:
+To include image data, check serial numbers of your cameras:
 ```bash
-cd ~/${WORKSPACE}/src/physical_ai_tools/lerobot
+rs-enumerate-devices --compact
 ```
-```bash
-python lerobot/common/robot_devices/cameras/opencv.py \
-    --images-dir outputs/images_from_opencv_cameras
-```
-
 Example output:
 
 ```text
-Linux detected. Finding available camera indices through scanning '/dev/video*' ports
-Camera found at index 0
-Camera found at index 1
-Camera found at index 2
-...
-Saving images to outputs/images_from_opencv_cameras
+Device Name                   Serial Number       Firmware Version
+Intel RealSense D435I         111111111111        5.16.0.1
+Device info: 
+    Name                          : 	Intel RealSense D435I
+    Serial Number                 : 	111111111111
+    Firmware Version              : 	5.16.0.1
+    Recommended Firmware Version  : 	5.16.0.1
+    Physical Port                 : 	/sys/devices/pci0000:00/0000:00:14.0/usb2/2-6/2-6.1/2-6.1:1.0/video4linux/video0
+    Debug Op Code                 : 	15
+    Advanced Mode                 : 	YES
+    Product Id                    : 	0B3A
+    Camera Locked                 : 	YES
+    Usb Type Descriptor           : 	3.2
+    Product Line                  : 	D400
+    Asic Serial Number            : 	001623050773
+    Firmware Update Id            : 	001623050773
+    Dfu Device Path               : 	
 ```
 
-Check the saved images in `outputs/images_from_opencv_cameras` to determine which index corresponds to which physical camera:
-```text
-camera_00_frame_000000.png
-camera_01_frame_000000.png
-...
-```
-
-Once identified, update the camera indexes in the `"ffw"` robot configuration file:
+Once identified, update the camera serial numbers in the `"ffw"` robot configuration file:
 
 ```
 cd lerobot/common/robot_devices/robots/configs.py
@@ -106,20 +105,20 @@ class FFWRobotConfig(ManipulatorRobotConfig):
     [...]
     cameras: dict[str, CameraConfig] = field(
         default_factory=lambda: {
-            "cam_head": OpenCVCameraConfig(
-                camera_index=0,  # To be changed
+            "cam_head": IntelRealSenseCameraConfig(
+                serial_number='111111111111',  # To be chanaged
                 fps=30,
                 width=640,
                 height=480,
             ),
-            "cam_wrist_1": OpenCVCameraConfig(
-                camera_index=1,  # To be changed
+            "cam_wrist_1": IntelRealSenseCameraConfig(
+                serial_number='222222222222',  # To be chanaged
                 fps=30,
                 width=640,
                 height=480,
             ),
-            "cam_wrist_2": OpenCVCameraConfig(
-                camera_index=2,  # To be changed
+            "cam_wrist_2": IntelRealSenseCameraConfig(
+                serial_number='333333333333',  # To be chanaged
                 fps=30,
                 width=640,
                 height=480,
@@ -134,15 +133,7 @@ class FFWRobotConfig(ManipulatorRobotConfig):
 
 ### 3. Record Your Dataset
 
-Launch the ROS 2 data collector node.
-```bash
-# For OpenManipulator-X
-ros2 launch data_collector data_collector.launch.py mode:=omx
-# For AI Worker
-ros2 launch data_collector data_collector.launch.py mode:=worker
-```
-
-Open a new terminal, and navigate to the `lerobot` directory:
+Open a terminal, and navigate to the `lerobot` directory:
 ```bash
 cd ~/${WORKSPACE}/src/physical_ai_tools/lerobot
 ```
@@ -156,6 +147,7 @@ python lerobot/scripts/control_robot.py \
   --control.fps=30 \
   --control.repo_id=${HF_USER}/ffw_test \
   --control.tags='["tutorial"]' \
+  --control.warmup_time_s=5 \
   --control.episode_time_s=20 \
   --control.reset_time_s=10 \
   --control.num_episodes=2 \
@@ -232,16 +224,7 @@ huggingface-cli upload ${HF_USER}/act_ffw_test \
 
 ## Evaluation
 
-### 1. Launch the ROS 2 action_to_trajectory and topic_to_observation nodes.:
-
-```bash
-# For OpenManipulator-X
-ros2 launch policy_to_trajectory policy_to_trajectory.launch.py mode:=omx
-# For AI Worker
-ros2 launch policy_to_trajectory policy_to_trajectory.launch.py mode:=worker
-```
-
-### 2. Evaluate your policy
+### 1. Evaluate your policy
 
 You can evaluate the policy on the robot using the `record` mode, which allows you to visualize the evaluation later on.
 
@@ -253,6 +236,7 @@ python lerobot/scripts/control_robot.py \
   --control.fps=30 \
   --control.repo_id=${HF_USER}/eval_ffw_test \
   --control.tags='["tutorial"]' \
+  --control.warmup_time_s=5 \
   --control.episode_time_s=20 \
   --control.reset_time_s=10 \
   --control.num_episodes=2 \
@@ -262,7 +246,7 @@ python lerobot/scripts/control_robot.py \
   --control.play_sounds=false
 ```
 
-### 3. Visualize Evaluation
+### 2. Visualize Evaluation
 
 You can then visualize the evaluation results using the following command:
 

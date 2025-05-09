@@ -24,7 +24,12 @@ from rclpy.node import Node
 
 from sensor_msgs.msg import JointState
 
+import os
+os.environ["TORCH_CUDA_ARCH_LIST"] = "8.0;9.0"
+os.environ["PYTORCH_CUDA_ALLOC_CONF"] = "max_split_size_mb:512"
+
 import torch
+print(f"CUDA available: {torch.cuda.is_available()}")
 
 
 class DataCollector(Node):

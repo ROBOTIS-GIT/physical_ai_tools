@@ -22,6 +22,8 @@ from message_filters import ApproximateTimeSynchronizer, Subscriber
 import rclpy
 from rclpy.node import Node
 from sensor_msgs.msg import JointState
+import os
+
 import torch
 from trajectory_msgs.msg import JointTrajectory
 
