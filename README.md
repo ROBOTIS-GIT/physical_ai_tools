@@ -106,19 +106,19 @@ class FFWRobotConfig(ManipulatorRobotConfig):
     cameras: dict[str, CameraConfig] = field(
         default_factory=lambda: {
             "cam_head": IntelRealSenseCameraConfig(
-                serial_number='111111111111',  # To be chanaged
+                serial_number='111111111111',  # To be changed
                 fps=30,
                 width=640,
                 height=480,
             ),
             "cam_wrist_1": IntelRealSenseCameraConfig(
-                serial_number='222222222222',  # To be chanaged
+                serial_number='222222222222',  # To be changed
                 fps=30,
                 width=640,
                 height=480,
             ),
             "cam_wrist_2": IntelRealSenseCameraConfig(
-                serial_number='333333333333',  # To be chanaged
+                serial_number='333333333333',  # To be changed
                 fps=30,
                 width=640,
                 height=480,
