@@ -80,15 +80,6 @@ def generate_launch_description():
 
         Node(
             package='data_collector',
-            executable='data_collector',
-            name='data_collector',
-            output='screen',
-            parameters=[robot_params_normal['data_collector']['ros__parameters']],
-            condition=IfCondition(EqualsSubstitution(mode, 'worker'))
-        ),
-
-        Node(
-            package='data_collector',
             executable='trajectory_stamper',
             name='trajectory_stamper',
             output='screen',
