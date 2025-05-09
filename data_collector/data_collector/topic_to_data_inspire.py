@@ -23,7 +23,6 @@ import rclpy
 from rclpy.node import Node
 from sensor_msgs.msg import JointState
 from std_msgs.msg import Int32MultiArray
-
 import torch
 from trajectory_msgs.msg import JointTrajectory
 
