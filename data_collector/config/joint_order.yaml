@@ -1,37 +1,98 @@
 data_collector:
   ros__parameters:
-    joint_order_follower:
-        - arm_r_joint1
-        - arm_r_joint2
-        - arm_r_joint3
-        - arm_r_joint4
-        - arm_r_joint5
-        - arm_r_joint6
-        - arm_r_joint7
-        - r_rh_r1_joint
-        - arm_l_joint1
-        - arm_l_joint2
-        - arm_l_joint3
-        - arm_l_joint4
-        - arm_l_joint5
-        - arm_l_joint6
-        - arm_l_joint7
-        - l_rh_r1_joint
-    joint_order_leader_r_arm:
-        - arm_r_joint1
-        - arm_r_joint2
-        - arm_r_joint3
-        - arm_r_joint4
-        - arm_r_joint5
-        - arm_r_joint6
-        - arm_r_joint7
-        - r_rh_r1_joint
-    joint_order_leader_l_arm:
-        - arm_l_joint1
-        - arm_l_joint2
-        - arm_l_joint3
-        - arm_l_joint4
-        - arm_l_joint5
-        - arm_l_joint6
-        - arm_l_joint7
-        - l_rh_r1_joint
+    ffw_1_0:
+        camera_topic:
+            - "head_image_topic_name:/realSense/Color/image_raw"
+            - "right_wrist_image_topic_name:/realSense/Color/image_raw"
+            - "left_wrist_image_topic_name:/realSense/Color/image_raw"
+
+        joint_topic:
+            - "follow_joint_topic_name:/ffw/follower/joint_states"
+            - "leader_left_joint_topic_name:/ffw/leader/left_joint_states"
+            - "leader_right_joint_topic_name:/ffw/leader/right_arm_with_timestamp"
+
+        observation:
+            - "state"
+            - "cam_head"
+            - "cam_wrist_left"
+            - "cam_wrist_right"
+
+        joint_list:
+            - follower
+            - leader_left
+            - leader_right
+
+        joint_order:
+            follower:
+                - r_joint1
+                - r_joint2
+                - r_joint3
+                - r_joint4
+                - r_joint5
+                - r_joint6
+                - r_joint7
+                - r_rh_r1_joint
+                - l_joint1
+                - l_joint2
+                - l_joint3
+                - l_joint4
+                - l_joint5
+                - l_joint6
+                - l_joint7
+                - l_rh_r1_joint
+            leader_left:
+                - l_joint1
+                - l_joint2
+                - l_joint3
+                - l_joint4
+                - l_joint5
+                - l_joint6
+                - l_joint7
+                - l_rh_r1_joint
+            leader_right:
+                - r_joint1
+                - r_joint2
+                - r_joint3
+                - r_joint4
+                - r_joint5
+                - r_joint6
+                - r_joint7
+                - r_rh_r1_joint
+
+    om_y:
+        camera_topic:
+            - "wrist_image_topic_name:/realSense/Color/image_raw"
+
+        joint_topic:
+            - "follow_joint_topic_name:/follower/joint_states"
+            - "leader_joint_topic_name:/leader/left_arm_with_timestamp"
+
+        observation:
+            - "state"
+            - "cam_head"
+            - "cam_wrist_1"
+            - "cam_wrist_2"
+
+        joint_list:
+            - follower
+            - leader
+
+        joint_order:
+            follower:
+                - joint1
+                - joint2
+                - joint3
+                - joint4
+                - joint5
+                - joint6
+                - gripper
+            leader:
+                - joint1
+                - joint2
+                - joint3
+                - joint4
+                - joint5
+                - joint6
+                - gripper
+
+
