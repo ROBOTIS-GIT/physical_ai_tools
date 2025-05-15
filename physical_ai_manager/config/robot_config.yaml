@@ -7,7 +7,7 @@ physical_ai_manager:
         - cam_wrist_right:/camera/cam_wrist_right/color/image_rect_raw/compressed
 
       joint_sub_topic_list:
-        - follower_state:/joint_states
+        - follower:/joint_states
         - leader_left:/leader/left_arm_with_timestamp
         - leader_right:/leader/right_arm_with_timestamp
 
@@ -274,7 +274,7 @@ physical_ai_manager:
         - cam_wrist:/realSense/Color/image_raw/compressed
 
       joint_sub_topic_list:
-        - follower_state:/follower/joint_states
+        - follower:/follower/joint_states
         - leader_joint:/leader/left_arm_with_timestamp
 
       joint_pub_topic_list:
