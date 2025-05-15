@@ -1,18 +1,20 @@
 <?xml version="1.0"?>
 <?xml-model href="http://download.ros.org/schema/package_format3.xsd" schematypens="http://www.w3.org/2001/XMLSchema"?>
 <package format="3">
-  <name>policy_to_trajectory</name>
+  <name>physical_ai_manager</name>
   <version>0.4.0</version>
   <description>
-    Convert predicted action to topics containing joint positions
+    ROS 2 package for Open Platform AI Kit integration
   </description>
   <maintainer email="pyo@robotis.com">Pyo</maintainer>
   <license>Apache 2.0</license>
-  <author email="kimsw@robotis.com">Seongwoo Kim</author>
+  <author email="kdy@robotis.com">Dongyun Kim</author>
   <depend>rclpy</depend>
-  <depend>trajectory_msgs</depend>
-  <depend>builtin_interfaces</depend>
   <depend>std_msgs</depend>
+  <depend>sensor_msgs</depend>
+  <depend>message_filters</depend>
+  <depend>cv_bridge</depend>
+  <depend>trajectory_msgs</depend>
   <export>
     <build_type>ament_python</build_type>
   </export>
