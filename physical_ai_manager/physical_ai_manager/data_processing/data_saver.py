@@ -33,7 +33,7 @@ class DataSaver:
             save_path,
             task_instruction,
             save_fps=30,
-            warmup_time_s=10,
+            reset_time_s=10,
             episode_time_s=60,
             reset_time_s=10,
             num_episodes=50,
@@ -49,7 +49,7 @@ class DataSaver:
             single_task=task_instruction,
             root=save_path,
             fps=save_fps,
-            warmup_time_s=warmup_time_s,
+            reset_time_s=reset_time_s,
             episode_time_s=episode_time_s,
             reset_time_s=reset_time_s,
             num_episodes=num_episodes,
@@ -64,7 +64,8 @@ class DataSaver:
         self._task_instruction = task_instruction
         self._record_episode_count = 0
         self._start_time_s = 0
-        self._warmup = False
+        self._reset = False
+        self.status = 'start'
 
     def record(
             self,
@@ -76,7 +77,7 @@ class DataSaver:
         if self._start_time_s == 0:
             self._start_time_s = time.perf_counter()
 
-        if self._check_warmup_time():
+        if self._check_reset_time():
             return
 
         if not self._check_lerobot_dataset(images, joint_list):
@@ -87,10 +88,14 @@ class DataSaver:
             frame[f'observation.images.{camera_name}'] = image
             
 
-        frame['observation.state'] = state
-        frame['action'] = action
+        frame['observation.state'] = state['follower']
+        action_list = []
+        action_list.append(action['leader_right'])
+        action_list.append(action['leader_left'])
+        frame['action'] = action_list
         frame['task'] = self._task_instruction
-        self._lerobot_dataset.add_frame_without_save_image(frame)
+        # self._lerobot_dataset.add_frame_without_save_image(frame)
+        self._lerobot_dataset.add_frame(frame)
 
         timestamp = time.perf_counter() - self._start_time_s
         if timestamp > self._record_config.episode_time_s:
@@ -100,7 +105,7 @@ class DataSaver:
         self._lerobot_dataset.save_episode()
         self._record_episode_count += 1
         self._start_time_s = 0
-        self._warmup = True
+        self._reset = True
 
     def clear(self):
         self._lerobot_dataset.clear_episode_buffer()
@@ -138,11 +143,11 @@ class DataSaver:
             use_videos=True
         )
 
-    def _check_warmup_time(self):
-        if self._warmup:
+    def _check_reset_time(self):
+        if self._reset:
             timestamp = time.perf_counter() - self._start_time_s
-            if timestamp > self._record_config.warmup_time_s:
-                self._warmup = False
+            if timestamp > self._record_config.reset_time_s:
+                self._reset = False
                 self._start_time_s = time.perf_counter()
                 return False
             else:
@@ -151,9 +156,11 @@ class DataSaver:
 
     def _check_dataset_exists(self, repo_id, root):
         # Local dataset check
+        print("ROOT: ", root)
         if os.path.exists(root):
+            print("CHECK11")
             return True
-
+        print("CHECK12")
         # Huggingface dataset check
         url = f"https://huggingface.co/api/datasets/{repo_id}"
         response = requests.get(url)
@@ -170,16 +177,19 @@ class DataSaver:
                 if self._check_dataset_exists(
                         self._record_config.repo_id,
                         self._record_config.root):
-
+                    print("CHECK1")
                     self._lerobot_dataset = LeRobotDatasetWrapper(
                         self._record_config.repo_id,
                         self._record_config.root
                     )
+                    print("CHECK2")
                 else:
+                    print("CHECK3")
                     self._create_dataset(
                         self._record_config.repo_id,
                         images, joint_list)
+                    print("CHECK4")
             return True
         except Exception as e:
-            self.get_logger().error(f'Error checking lerobot dataset: {e}')
+            print(f'Error checking lerobot dataset: {e}')
             return False

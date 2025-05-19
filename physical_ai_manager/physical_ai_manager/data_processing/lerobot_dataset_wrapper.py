@@ -16,13 +16,31 @@
 #
 # Author: Dongyun Kim
 
+import threading
+
 from lerobot.common.datasets.lerobot_dataset import LeRobotDataset
 from lerobot.common.datasets.utils import validate_frame
+import numpy as np
 import torch
+from physical_ai_manager.utils.video_utils import FFmpegBufferEncoder
 
 class LeRobotDatasetWrapper(LeRobotDataset):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
+        
+        self.encoder = FFmpegBufferEncoder(
+            fps=30,
+            chunk_size=50,
+            preset="ultrafast",
+            crf=28
+        )
+        self.video_save_path = "/home/dongyun/ros2_ws/src"
+        
+        self.encoding_thread = threading.Thread(
+            target=self.encoder.encode_video, 
+            args=(self.video_save_path,)
+        )
+
 
     def add_frame_without_save_image(self, frame: dict) -> None:
         # Convert torch to numpy if needed
@@ -49,3 +67,12 @@ class LeRobotDatasetWrapper(LeRobotDataset):
                 self.episode_buffer[key].append(frame[key])
 
         self.episode_buffer["size"] += 1
+        
+    def create_video(
+            self,
+            image_buffer: list[np.ndarray]):
+
+        self.encoding_thread.start()
+
+    def check_video_encoding_completed(self) -> bool:
+        return self.encoder.get_encoding_status()
