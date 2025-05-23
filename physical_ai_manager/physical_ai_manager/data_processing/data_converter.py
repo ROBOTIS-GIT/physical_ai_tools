@@ -32,7 +32,6 @@ class DataConverter:
         self._joint_converter = None  # Joint data converter
 
     def compressed_image2cvmat(self, msg: CompressedImage) -> np.ndarray:
-
         try:
             cv_image = self._image_converter.compressed_imgmsg_to_cv2(msg)
             return cv_image
@@ -50,6 +49,7 @@ class DataConverter:
                 msg.joint_names,
                 msg.points[0].positions
             ))
+
             ordered_positions = [
                 joint_pos_map[name]
                 for name in joint_order
@@ -107,4 +107,5 @@ class DataConverter:
                 joint_msg.joint_names = value
                 joint_msg.points.append(JointTrajectoryPoint(positions=reorder_action))
                 joint_trajectory_msgs[key] = joint_msg
+
         return joint_trajectory_msgs

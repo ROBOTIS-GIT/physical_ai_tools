@@ -35,29 +35,10 @@ from physical_ai_manager.timer.timer_manager import TimerManager
 
 class PhysicalAIManager(Node):
     # Define operation modes (constants taken from Communicator)
-    MODE_COLLECTION = Communicator.MODE_COLLECTION
-    MODE_INFERENCE = Communicator.MODE_INFERENCE
 
     def __init__(self):
         super().__init__('physical_ai_manager')
 
-        self.get_ros_params()
-
-        # Initialize latest data storage
-        self.latest_observation = {}
-        self.latest_action = {}
-
-        # Initialize observation manager
-        self.communicator = Communicator(
-            node=self,
-            operation_mode=self.operation_mode,
-            params=self.params
-        )
-
-        # Initialize ROS2 Communication Manager
-        self.communicator.init_subscribers()
-        self.communicator.init_publishers()
-        
         # Create service
         self.recording_cmd_service = self.create_service(
             SendRecordingCommand,
@@ -65,43 +46,52 @@ class PhysicalAIManager(Node):
             self.user_interaction_callback
         )
 
+        self.communicator = None
+        self.timer_manager = None
+        self.data_converter = None
+        self.data_collection_config = None
+        self.params = None
+        self.joint_order = None
+        self.total_joint_order = None
+        self.default_save_root_path = Path.home() / '.cache/huggingface/lerobot'
+        
+    def init_robot_control_parameters_from_user_task(
+            self,
+            robot_type,
+            operation_mode,
+            timer_frequency):
+        self.get_ros_params(robot_type)
+
+        # Initialize observation manager
+        self.communicator = Communicator(
+            node=self,
+            operation_mode=operation_mode,
+            params=self.params
+        )
+
         # Create data_collection_timer for periodic data collection with specified frequency
         self.timer_manager = TimerManager(
             node=self)
 
         self.timer_manager.set_timer(
-            timer_name='data_collection',
-            timer_frequency=self.data_collection_timer_frequency,
+            timer_name=operation_mode,
+            timer_frequency=timer_frequency,
             callback_function=self.data_collection_timer_callback
-        )
-        self.timer_manager.set_timer(
-            timer_name='data_inference',
-            timer_frequency=self.data_inference_timer_frequency,
-            callback_function=self.data_inference_timer_callback
         )
 
         self.data_converter = DataConverter()
         self.data_collection_config = None
+    
+    def clear_robot_control_parameters(self):
+        self.communicator = None
+        self.timer_manager = None
+        self.data_converter = None
+        self.data_collection_config = None
+        self.params = None
+        self.joint_order = None
+        self.total_joint_order = None
 
-        self.get_logger().info('PhysicalAIManager initialization completed')
-
-    def get_ros_params(self):
-        # Declare and get robot type and operation mode parameters
-        self.declare_parameter('robot_type', 'ai_worker')
-        self.declare_parameter('operation_mode', self.MODE_COLLECTION)
-        self.declare_parameter('data_collection_timer_frequency', 30.0)  # Hz
-        self.declare_parameter('data_inference_timer_frequency', 30.0)  # Hz
-
-        self.robot_type = self.get_parameter('robot_type').value
-        self.operation_mode = self.get_parameter('operation_mode').value
-        self.data_collection_timer_frequency = self.get_parameter('data_collection_timer_frequency').value
-        self.data_inference_timer_frequency = self.get_parameter('data_inference_timer_frequency').value
-
-        self.get_logger().info(f'Robot type: {self.robot_type}')
-        self.get_logger().info(f'Operation mode: {self.operation_mode}')
-        self.get_logger().info(f'Data collection timer frequency: {self.data_collection_timer_frequency} Hz')
-        self.get_logger().info(f'Data inference timer frequency: {self.data_inference_timer_frequency} Hz')
-
+    def get_ros_params(self, robot_type):
         # Define parameter names to load
         param_names = [
             'camera_topic_list',
@@ -114,7 +104,7 @@ class PhysicalAIManager(Node):
         # Declare parameters
         declare_parameters(
             node=self,
-            robot_type=self.robot_type,
+            robot_type=robot_type,
             param_names=param_names,
             default_value=['']
         )
@@ -122,125 +112,143 @@ class PhysicalAIManager(Node):
         # Load parameters
         self.params = load_parameters(
             node=self,
-            robot_type=self.robot_type,
+            robot_type=robot_type,
             param_names=param_names
         )
 
-        self.collect_joint_order_list = [
-            f'collect_joint_order.{joint_name}' for joint_name in self.params['joint_list']
-        ]
-
-        self.inference_joint_order_list = [
-            f'inference_joint_order.{joint_name}' for joint_name in self.params['joint_list']
+        self.joint_order_list = [
+            f'joint_order.{joint_name}' for joint_name in self.params['joint_list']
         ]
 
         declare_parameters(
             node=self,
-            robot_type=self.robot_type,
-            param_names=self.collect_joint_order_list,
+            robot_type=robot_type,
+            param_names=self.joint_order_list,
             default_value=['']
         )
 
-        declare_parameters(
+        self.joint_order = load_parameters(
             node=self,
-            robot_type=self.robot_type,
-            param_names=self.inference_joint_order_list,
-            default_value=['']
+            robot_type=robot_type,
+            param_names=self.joint_order_list
         )
 
-        self.collect_joint_order_param = load_parameters(
-            node=self,
-            robot_type=self.robot_type,
-            param_names=self.collect_joint_order_list
-        )
+        self.total_joint_order = []
+        for joint_list in self.joint_order.values():
+            self.total_joint_order.extend(joint_list)
 
-        self.inference_joint_order_param = load_parameters(
-            node=self,
-            robot_type=self.robot_type,
-            param_names=self.inference_joint_order_list
-        )
         # Log loaded parameters
         log_parameters(self, self.params)
-        log_parameters(self, self.collect_joint_order_param)
-        log_parameters(self, self.inference_joint_order_param)
+        log_parameters(self, self.joint_order)
 
     def update_latest_data(self):
         image_data = {}
-        follower_data = {}
-        leader_data = {}
+        follower_data = []
+        leader_data = []
 
         image_msgs, follower_msgs, leader_msgs = self.communicator.get_latest_data()
-        if image_msgs is None or follower_msgs is None:
-            return None, None, None
 
         for key, value in image_msgs.items():
-            image_data[key] = self.data_converter.compressed_image2cvmat(value)
-            
+            image_data[key] = cv2.cvtColor(
+                self.data_converter.compressed_image2cvmat(value),
+                cv2.COLOR_BGR2RGB)
+
         for key, value in follower_msgs.items():
-            # self.get_logger().info(f'follower_msgs[key]: {key}, {self.collect_joint_order_param}')
             if value is not None:
-                follower_data[key] = self.data_converter.joint_state2tensor_array(
-                    value, self.collect_joint_order_param[f'collect_joint_order.{key}'])
-                
+                follower_data.extend(self.data_converter.joint_state2tensor_array(
+                    value, self.total_joint_order))
+
         for key, value in leader_msgs.items():
-            leader_data[key] = self.data_converter.joint_trajectory2tensor_array(
-                value, self.collect_joint_order_param[f'collect_joint_order.{key}'])
+            leader_data.extend(self.data_converter.joint_trajectory2tensor_array(
+                value, self.joint_order[f'joint_order.{key}']))
 
         return image_data, follower_data, leader_data
 
     def send_action(self, action):
         joint_msgs = self.data_converter.tensor_array2joint_trajectory(
             action,
-            self.inference_joint_order_param)
+            self.total_joint_order)
         self.communicator.send_action(joint_msgs)
-        
 
     def data_collection_timer_callback(self):
+        import time
         if self.data_saver.status == 'stop':
             self.get_logger().info('Recording stopped')
-            self.status
             return
+
+        start_time = time.perf_counter()
         camera_data, follower_data, leader_data = self.update_latest_data()
-        
-        self.get_logger().info(f'follower_data: {follower_data}')
-        self.get_logger().info(f'leader_data: {leader_data}')
+
+        if len(camera_data) != len(self.params['camera_topic_list']):
+            return
 
         if camera_data and follower_data and leader_data:
-            self.data_saver.record(
+            record_completed = self.data_saver.record(
                 images=camera_data,
                 state=follower_data,
                 action=leader_data,
-                joint_list=self.collect_joint_order_param[
-                    'collect_joint_order.follower'])
+                joint_list=self.total_joint_order)
+
+            if record_completed:
+                self.get_logger().info('Recording stopped')
+                self.timer_manager.stop(timer_name=self.operation_mode)
+                return
+
+            end_time = time.perf_counter()
+            fps = round(1 / (end_time - start_time), 1)
+            self.get_logger().info(f'Record FPS: {fps}')
         else:
             self.get_logger().info('No data to save')
-    def data_inference_timer_callback(self):
+
+    def inference_timer_callback(self):
         camera_data, follower_data, _ = self.update_latest_data()
 
-        if camera_data is not None and follower_data is not None:
+        if camera_data and follower_data:
             self.latest_camera_data = camera_data
             self.latest_joint_data = follower_data
-            
-            
+
     def user_interaction_callback(self, request, response):
-        if request.command == SendRecordingCommand.Request.START:
+        robot_type = request.robot_type
+        repo_id = request.repo_id
+        task_instruction = request.task_instruction
+        
+        timer_frequency = request.frequency
+        episode_time = request.episode_time
+        episode_num = request.episode_num
+        warmup_time = request.warmup_time
+        reset_time = request.reset_time
+        
+        save_path = self.default_save_root_path / repo_id
+        self.get_logger().info(f'Save path: {save_path}')
+            
+        if request.command == SendRecordingCommand.Request.START_RECORD:
             self.get_logger().info('Starting recording with task: ' + request.task_name)
-            self.data_saver = DataSaver(
-                repo_id='ROBOTIS/aiworker_wholebody5',
-                save_path=Path('/home/dongyun/.cache/huggingface/lerobot/ROBOTIS/aiworker_wholebody5'),
-                task_instruction='TEST'
+            self.operation_mode = 'collection'
+            self.init_robot_control_parameters_from_user_task(
+                robot_type,
+                self.operation_mode,
+                timer_frequency
             )
 
-            self.timer_manager.start(timer_name='data_collection')
+            self.data_saver = DataSaver(
+                repo_id=repo_id,
+                save_fps=timer_frequency,
+                save_path=save_path,
+                task_instruction=task_instruction
+            )
+
+            self.timer_manager.start(timer_name=self.operation_mode)
             response.success = True
             response.message = "Recording started"
+
         elif request.command == SendRecordingCommand.Request.STOP:
             self.get_logger().info('Stopping recording')
-            self.timer_manager.stop(timer_name='data_collection')
-            self.data_saver.status = 'stop'
+            if self.timer_manager is not None:
+                self.timer_manager.stop(timer_name=self.operation_mode)
+                self.data_saver.record_stop()
             response.success = True
             response.message = "Recording stopped"
-        # 다른 명령 처리
+
         return response
 
 

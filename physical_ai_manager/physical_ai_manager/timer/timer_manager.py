@@ -36,7 +36,7 @@ class TimerManager:
         if self._timer[timer_name] is not None:
             self._timer[timer_name].destroy()
             self._timer[timer_name] = None
-            
+
     def stop_all(self):
         for timer_name in self._timer:
             self.stop(timer_name)
@@ -45,4 +45,3 @@ class TimerManager:
         self._timer[timer_name] = None
         self._timer_frequency[timer_name] = timer_frequency
         self._timer_callback[timer_name] = callback_function
-    

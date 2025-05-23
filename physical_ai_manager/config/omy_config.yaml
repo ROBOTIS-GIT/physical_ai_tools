@@ -1,0 +1,57 @@
+physical_ai_manager:
+  ros__parameters:
+    om_y:
+      camera_topic_list:
+        - cam_wrist:/camera/cam_wrist/color/image_rect_raw/compressed
+
+      joint_sub_topic_list:
+        - follower:/follower/joint_states
+        - leader:/leader/left_arm_with_timestamp
+
+      joint_pub_topic_list:
+        - follower:/follower/joint_position_controller/commands
+
+      observation_list:
+        - state
+        - cam_wrist
+
+      joint_list:
+        - follower
+        - leader
+
+      inference_joint_order:
+        follower:
+          - joint1
+          - joint2
+          - joint3
+          - joint4
+          - joint5
+          - joint6
+          - gripper
+        leader:
+          - joint1
+          - joint2
+          - joint3
+          - joint4
+          - joint5
+          - joint6
+          - gripper
+
+      collect_joint_order:
+        follower:
+          - joint1
+          - joint2
+          - joint3
+          - joint4
+          - joint5
+          - joint6
+          - gripper
+        leader:
+          - joint1
+          - joint2
+          - joint3
+          - joint4
+          - joint5
+          - joint6
+          - gripper
+        

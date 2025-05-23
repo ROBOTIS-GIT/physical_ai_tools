@@ -19,11 +19,13 @@
 import os
 import time
 import requests
-from pathlib import Path
 
+from huggingface_hub import snapshot_download
 from lerobot.common.datasets.utils import DEFAULT_FEATURES
 from lerobot.common.robot_devices.control_configs import RecordControlConfig
+import numpy as np
 from physical_ai_manager.data_processing.lerobot_dataset_wrapper import LeRobotDatasetWrapper
+
 
 class DataSaver:
 
@@ -32,17 +34,17 @@ class DataSaver:
             repo_id,
             save_path,
             task_instruction,
+            use_image_buffer=True,
             save_fps=30,
             reset_time_s=10,
-            episode_time_s=60,
-            reset_time_s=10,
-            num_episodes=50,
+            episode_time_s=10,
+            num_episodes=3,
             video=True,
             push_to_hub=False,
             private=False,
             resume=False,
-            num_image_writer_processes=1,
-            num_image_writer_threads_per_camera=3):
+            num_image_writer_processes=12,
+            num_image_writer_threads_per_camera=4):
 
         self._record_config = RecordControlConfig(
             repo_id=repo_id,
@@ -51,7 +53,6 @@ class DataSaver:
             fps=save_fps,
             reset_time_s=reset_time_s,
             episode_time_s=episode_time_s,
-            reset_time_s=reset_time_s,
             num_episodes=num_episodes,
             video=video,
             push_to_hub=push_to_hub,
@@ -64,8 +65,8 @@ class DataSaver:
         self._task_instruction = task_instruction
         self._record_episode_count = 0
         self._start_time_s = 0
-        self._reset = False
         self.status = 'start'
+        self.use_image_buffer = use_image_buffer
 
     def record(
             self,
@@ -73,43 +74,101 @@ class DataSaver:
             state,
             action,
             joint_list):
-
         if self._start_time_s == 0:
             self._start_time_s = time.perf_counter()
 
-        if self._check_reset_time():
-            return
-
         if not self._check_lerobot_dataset(images, joint_list):
-            return
+            return True
+
+        if self._record_episode_count >= self._record_config.num_episodes:
+            if self._lerobot_dataset.check_video_encoding_completed():
+                self.upload_dataset('ai_worker', private=False)
+                return True
+            return False
+
+        if self._check_reset_time():
+            return False
 
         frame = {}
         for camera_name, image in images.items():
             frame[f'observation.images.{camera_name}'] = image
-            
-
-        frame['observation.state'] = state['follower']
-        action_list = []
-        action_list.append(action['leader_right'])
-        action_list.append(action['leader_left'])
-        frame['action'] = action_list
+        frame['observation.state'] = np.array(state)
+        frame['action'] = np.array(action)
         frame['task'] = self._task_instruction
-        # self._lerobot_dataset.add_frame_without_save_image(frame)
-        self._lerobot_dataset.add_frame(frame)
+
+        if self.use_image_buffer:
+            self._lerobot_dataset.add_frame_without_write_image(frame)
+        else:
+            self._lerobot_dataset.add_frame(frame)
 
         timestamp = time.perf_counter() - self._start_time_s
         if timestamp > self._record_config.episode_time_s:
             self.save()
 
+        return False
+
     def save(self):
-        self._lerobot_dataset.save_episode()
+        if self.use_image_buffer:
+            self._lerobot_dataset.save_episode_without_write_image()
+        else:
+            self._lerobot_dataset.save_episode()
+
+        self._lerobot_dataset.episode_buffer = None
         self._record_episode_count += 1
         self._start_time_s = 0
-        self._reset = True
+        self.status = 'reset'
 
-    def clear(self):
-        self._lerobot_dataset.clear_episode_buffer()
-        
+    def record_stop(self):
+        self.status = 'stop'
+        self._lerobot_dataset.episode_buffer = None
+        self._start_time_s = 0
+
+    def _check_reset_time(self):
+        if self.status == 'reset':
+            timestamp = time.perf_counter() - self._start_time_s
+            if timestamp > self._record_config.reset_time_s:
+                self.status = 'start'
+                self._start_time_s = time.perf_counter()
+                return False
+            else:
+                return True
+        return False
+
+    def _check_dataset_exists(self, repo_id, root):
+        # Local dataset check
+        if os.path.exists(root):
+            return True
+        # Huggingface dataset check
+        url = f"https://huggingface.co/api/datasets/{repo_id}"
+        response = requests.get(url)
+        url_exist_code = 200
+
+        if response.status_code == url_exist_code:
+            print(f'Dataset {repo_id} exists on Huggingface, downloading...')
+            self.download_dataset(repo_id)
+            return True
+
+        return False
+
+    def _check_lerobot_dataset(self, images, joint_list):
+        try:
+            if self._lerobot_dataset is None:
+                if self._check_dataset_exists(
+                        self._record_config.repo_id,
+                        self._record_config.root):
+                    self._lerobot_dataset = LeRobotDatasetWrapper(
+                        self._record_config.repo_id,
+                        self._record_config.root
+                    )
+                else:
+                    self._create_dataset(
+                        self._record_config.repo_id,
+                        images, joint_list)
+            return True
+        except Exception as e:
+            print(f'Error checking lerobot dataset: {e}')
+            return False
+
     def _create_dataset(
             self,
             repo_id,
@@ -143,53 +202,20 @@ class DataSaver:
             use_videos=True
         )
 
-    def _check_reset_time(self):
-        if self._reset:
-            timestamp = time.perf_counter() - self._start_time_s
-            if timestamp > self._record_config.reset_time_s:
-                self._reset = False
-                self._start_time_s = time.perf_counter()
-                return False
-            else:
-                return True
-        return False
+        if not self.use_image_buffer:
+            self._lerobot_dataset.start_image_writer(
+                    num_processes=self._record_config.num_image_writer_processes,
+                    num_threads=self._record_config.num_image_writer_threads_per_camera *
+                    len(images),
+                )
 
-    def _check_dataset_exists(self, repo_id, root):
-        # Local dataset check
-        print("ROOT: ", root)
-        if os.path.exists(root):
-            print("CHECK11")
-            return True
-        print("CHECK12")
-        # Huggingface dataset check
-        url = f"https://huggingface.co/api/datasets/{repo_id}"
-        response = requests.get(url)
-        url_exist_code = 200
+    def upload_dataset(self, robot_type, private=False):
+        tags = [robot_type]
+        self._lerobot_dataset.push_to_hub(tags=tags, private=private)
 
-        if response.status_code == url_exist_code:
-            return True
-
-        return False
-
-    def _check_lerobot_dataset(self, images, joint_list):
-        try:
-            if self._lerobot_dataset is None:
-                if self._check_dataset_exists(
-                        self._record_config.repo_id,
-                        self._record_config.root):
-                    print("CHECK1")
-                    self._lerobot_dataset = LeRobotDatasetWrapper(
-                        self._record_config.repo_id,
-                        self._record_config.root
-                    )
-                    print("CHECK2")
-                else:
-                    print("CHECK3")
-                    self._create_dataset(
-                        self._record_config.repo_id,
-                        images, joint_list)
-                    print("CHECK4")
-            return True
-        except Exception as e:
-            print(f'Error checking lerobot dataset: {e}')
-            return False
+    def download_dataset(self, repo_id):
+        snapshot_download(
+            repo_id,
+            repo_type="dataset",
+            local_dir=self._record_config.root,
+        )
