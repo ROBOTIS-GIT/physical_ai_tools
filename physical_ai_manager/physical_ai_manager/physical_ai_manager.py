@@ -26,7 +26,7 @@ from physical_ai_manager.utils.parameter_utils import (
     load_parameters,
     log_parameters,
 )
-from physical_ai_manager.data_processing.data_saver import DataSaver
+from physical_ai_manager.data_processing.data_manager import DataManager
 import rclpy
 from rclpy.node import Node
 from physical_ai_interfaces.srv import SendRecordingCommand
@@ -141,28 +141,53 @@ class PhysicalAIManager(Node):
         log_parameters(self, self.params)
         log_parameters(self, self.joint_order)
 
-    def update_latest_data(self):
-        image_data = {}
-        follower_data = []
-        leader_data = []
+    def update_latest_data(
+            self,
+            camera_data: dict,
+            follower_data: list,
+            leader_data: list) -> bool:
 
         image_msgs, follower_msgs, leader_msgs = self.communicator.get_latest_data()
+        
+        if image_msgs is not None and follower_msgs is not None:
+            for key, value in image_msgs.items():
+                camera_data[key] = cv2.cvtColor(
+                    self.data_converter.compressed_image2cvmat(value),
+                    cv2.COLOR_BGR2RGB)
 
-        for key, value in image_msgs.items():
-            image_data[key] = cv2.cvtColor(
-                self.data_converter.compressed_image2cvmat(value),
-                cv2.COLOR_BGR2RGB)
+            for key, value in follower_msgs.items():
+                if value is not None:
+                    follower_data.extend(self.data_converter.joint_state2tensor_array(
+                        value, self.total_joint_order))
 
-        for key, value in follower_msgs.items():
-            if value is not None:
-                follower_data.extend(self.data_converter.joint_state2tensor_array(
-                    value, self.total_joint_order))
+            if self.operation_mode == 'collection':
+                if leader_msgs is not None:
+                    for key, value in leader_msgs.items():
+                        leader_data.extend(self.data_converter.joint_trajectory2tensor_array(
+                            value, self.joint_order[f'joint_order.{key}']))
+                else:
+                    self.get_logger().error('Leader topic is not found')
+                    return False
+        else:
+            self.get_logger().error('Camera or Follower topic is not found')
+            return False
 
-        for key, value in leader_msgs.items():
-            leader_data.extend(self.data_converter.joint_trajectory2tensor_array(
-                value, self.joint_order[f'joint_order.{key}']))
+        if len(camera_data) != len(self.params['camera_topic_list']):
+            self.get_logger().error(
+                f'Camera data length does not match the number of camera topics: {len(camera_data)} != {len(self.params["camera_topic_list"])}')
+            return False
+        
+        if len(self.total_joint_order) != len(follower_data):
+            self.get_logger().error(
+                'Follower data length does not match the number of joints')
+            return False
+        
+        if len(self.total_joint_order) != len(leader_data):
+            self.get_logger().error(
+                'Leader data length does not match the number of joints')
+            return False
 
-        return image_data, follower_data, leader_data
+        return True
 
     def send_action(self, action):
         joint_msgs = self.data_converter.tensor_array2joint_trajectory(
@@ -171,34 +196,34 @@ class PhysicalAIManager(Node):
         self.communicator.send_action(joint_msgs)
 
     def data_collection_timer_callback(self):
-        import time
-        if self.data_saver.status == 'stop':
+        camera_data = {}
+        follower_data = []
+        leader_data = []
+
+        if not self.update_latest_data(
+            camera_data,
+            follower_data,
+            leader_data):
+            return
+
+        if not self.data_manager.check_lerobot_dataset(
+                camera_data,
+                self.total_joint_order):
+            self.get_logger().info(
+                'Invalid Repository Folder, Please check the repository folder')
+            self.timer_manager.stop(timer_name=self.operation_mode)
+            return
+
+        record_completed = self.data_manager.record(
+            images=camera_data,
+            state=follower_data,
+            action=leader_data)
+
+        if record_completed:
             self.get_logger().info('Recording stopped')
+            self.timer_manager.stop(timer_name=self.operation_mode)
             return
 
-        start_time = time.perf_counter()
-        camera_data, follower_data, leader_data = self.update_latest_data()
-
-        if len(camera_data) != len(self.params['camera_topic_list']):
-            return
-
-        if camera_data and follower_data and leader_data:
-            record_completed = self.data_saver.record(
-                images=camera_data,
-                state=follower_data,
-                action=leader_data,
-                joint_list=self.total_joint_order)
-
-            if record_completed:
-                self.get_logger().info('Recording stopped')
-                self.timer_manager.stop(timer_name=self.operation_mode)
-                return
-
-            end_time = time.perf_counter()
-            fps = round(1 / (end_time - start_time), 1)
-            self.get_logger().info(f'Record FPS: {fps}')
-        else:
-            self.get_logger().info('No data to save')
 
     def inference_timer_callback(self):
         camera_data, follower_data, _ = self.update_latest_data()
@@ -217,10 +242,13 @@ class PhysicalAIManager(Node):
         episode_num = request.episode_num
         warmup_time = request.warmup_time
         reset_time = request.reset_time
-        
+        push_to_hub = request.push_to_hub
+        private_mode = request.private_mode
+        use_image_buffer = request.use_image_buffer
+
         save_path = self.default_save_root_path / repo_id
         self.get_logger().info(f'Save path: {save_path}')
-            
+
         if request.command == SendRecordingCommand.Request.START_RECORD:
             self.get_logger().info('Starting recording with task: ' + request.task_name)
             self.operation_mode = 'collection'
@@ -230,12 +258,19 @@ class PhysicalAIManager(Node):
                 timer_frequency
             )
 
-            self.data_saver = DataSaver(
+            self.data_manager = DataManager(
                 repo_id=repo_id,
-                save_fps=timer_frequency,
                 save_path=save_path,
-                task_instruction=task_instruction
-            )
+                task_instruction=task_instruction,
+                tags=['ROBOTIS', robot_type],
+                use_image_buffer=use_image_buffer,
+                save_fps=timer_frequency,
+                reset_time_s=reset_time,
+                episode_time_s=episode_time,
+                warmup_time_s=warmup_time,
+                num_episodes=episode_num,
+                push_to_hub=push_to_hub,
+                private=private_mode)
 
             self.timer_manager.start(timer_name=self.operation_mode)
             response.success = True
@@ -245,7 +280,7 @@ class PhysicalAIManager(Node):
             self.get_logger().info('Stopping recording')
             if self.timer_manager is not None:
                 self.timer_manager.stop(timer_name=self.operation_mode)
-                self.data_saver.record_stop()
+                self.data_manager.record_stop()
             response.success = True
             response.message = "Recording stopped"
 

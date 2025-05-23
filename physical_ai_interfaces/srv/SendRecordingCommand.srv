@@ -12,6 +12,9 @@ uint8 episode_time
 uint8 episode_num
 uint8 warmup_time
 uint8 reset_time
+bool push_to_hub
+bool private_mode
+bool use_image_buffer
 
 # command
 uint8 NONE = 0

@@ -27,24 +27,25 @@ import numpy as np
 from physical_ai_manager.data_processing.lerobot_dataset_wrapper import LeRobotDatasetWrapper
 
 
-class DataSaver:
+class DataManager:
 
     def __init__(
             self,
             repo_id,
             save_path,
             task_instruction,
+            tags=['ROBOTIS'],
             use_image_buffer=True,
             save_fps=30,
             reset_time_s=10,
             episode_time_s=10,
+            warmup_time_s=10,
             num_episodes=3,
             video=True,
             push_to_hub=False,
             private=False,
-            resume=False,
-            num_image_writer_processes=12,
-            num_image_writer_threads_per_camera=4):
+            num_image_writer_processes=4,
+            num_image_writer_threads_per_camera=1):
 
         self._record_config = RecordControlConfig(
             repo_id=repo_id,
@@ -59,51 +60,60 @@ class DataSaver:
             private=private,
             num_image_writer_processes=num_image_writer_processes,
             num_image_writer_threads_per_camera=num_image_writer_threads_per_camera,
+            warmup_time_s=warmup_time_s,
+            tags=tags
         )
 
         self._lerobot_dataset = None
         self._task_instruction = task_instruction
         self._record_episode_count = 0
         self._start_time_s = 0
-        self.status = 'start'
+        self.status = 'warmup'
         self.use_image_buffer = use_image_buffer
 
     def record(
             self,
             images,
             state,
-            action,
-            joint_list):
-        if self._start_time_s == 0:
-            self._start_time_s = time.perf_counter()
-
-        if not self._check_lerobot_dataset(images, joint_list):
-            return True
+            action):
 
         if self._record_episode_count >= self._record_config.num_episodes:
             if self._lerobot_dataset.check_video_encoding_completed():
-                self.upload_dataset('ai_worker', private=False)
+                if self._record_config.push_to_hub:
+                    self.upload_dataset(self._record_config.tags, private=False)
                 return True
-            return False
 
-        if self._check_reset_time():
-            return False
+        if self._start_time_s == 0:
+            self._start_time_s = time.perf_counter()
+        
+        if self.status == 'warmup':
+            if not self._check_time(self._record_config.warmup_time_s, 'run'):
+                return False
 
-        frame = {}
-        for camera_name, image in images.items():
-            frame[f'observation.images.{camera_name}'] = image
-        frame['observation.state'] = np.array(state)
-        frame['action'] = np.array(action)
-        frame['task'] = self._task_instruction
+        elif self.status == 'run':
+            if not self._check_time(self._record_config.episode_time_s, 'save'):
+                frame = {}
+                for camera_name, image in images.items():
+                    frame[f'observation.images.{camera_name}'] = image
+                frame['observation.state'] = np.array(state)
+                frame['action'] = np.array(action)
+                frame['task'] = self._task_instruction
 
-        if self.use_image_buffer:
-            self._lerobot_dataset.add_frame_without_write_image(frame)
-        else:
-            self._lerobot_dataset.add_frame(frame)
+                if self.use_image_buffer:
+                    self._lerobot_dataset.add_frame_without_write_image(frame)
+                else:
+                    self._lerobot_dataset.add_frame(frame)
 
-        timestamp = time.perf_counter() - self._start_time_s
-        if timestamp > self._record_config.episode_time_s:
+        elif self.status == 'save':
             self.save()
+            if self._lerobot_dataset.check_video_encoding_completed():
+                self.status = 'reset'
+                self._start_time_s = 0
+            return False
+
+        elif self.status == 'reset':
+            if not self._check_time(self._record_config.reset_time_s, 'run'):
+                return False
 
         return False
 
@@ -119,20 +129,17 @@ class DataSaver:
         self.status = 'reset'
 
     def record_stop(self):
-        self.status = 'stop'
         self._lerobot_dataset.episode_buffer = None
         self._start_time_s = 0
+        self.status = 'stop'
 
-    def _check_reset_time(self):
-        if self.status == 'reset':
-            timestamp = time.perf_counter() - self._start_time_s
-            if timestamp > self._record_config.reset_time_s:
-                self.status = 'start'
-                self._start_time_s = time.perf_counter()
-                return False
-            else:
-                return True
-        return False
+    def _check_time(self, limit_time, next_status):
+        if time.perf_counter() - self._start_time_s > limit_time:
+            self.status = next_status
+            self._start_time_s = 0
+            return True
+        else:
+            return False
 
     def _check_dataset_exists(self, repo_id, root):
         # Local dataset check
@@ -150,7 +157,7 @@ class DataSaver:
 
         return False
 
-    def _check_lerobot_dataset(self, images, joint_list):
+    def check_lerobot_dataset(self, images, joint_list):
         try:
             if self._lerobot_dataset is None:
                 if self._check_dataset_exists(
@@ -161,9 +168,17 @@ class DataSaver:
                         self._record_config.root
                     )
                 else:
-                    self._create_dataset(
+                    self._lerobot_dataset = self._create_dataset(
                         self._record_config.repo_id,
                         images, joint_list)
+
+                if not self.use_image_buffer:
+                    self._lerobot_dataset.start_image_writer(
+                            num_processes=self._record_config.num_image_writer_processes,
+                            num_threads=self._record_config.num_image_writer_threads_per_camera *
+                            len(images),
+                        )
+
             return True
         except Exception as e:
             print(f'Error checking lerobot dataset: {e}')
@@ -195,22 +210,14 @@ class DataSaver:
             'shape': (len(joint_list),)
         }
 
-        self._lerobot_dataset = LeRobotDatasetWrapper.create(
-            repo_id=repo_id,
-            fps=self._record_config.fps,
-            features=features,
-            use_videos=True
-        )
+        return LeRobotDatasetWrapper.create(
+                repo_id=repo_id,
+                fps=self._record_config.fps,
+                features=features,
+                use_videos=True
+            )
 
-        if not self.use_image_buffer:
-            self._lerobot_dataset.start_image_writer(
-                    num_processes=self._record_config.num_image_writer_processes,
-                    num_threads=self._record_config.num_image_writer_threads_per_camera *
-                    len(images),
-                )
-
-    def upload_dataset(self, robot_type, private=False):
-        tags = [robot_type]
+    def upload_dataset(self, tags, private=False):
         self._lerobot_dataset.push_to_hub(tags=tags, private=private)
 
     def download_dataset(self, repo_id):

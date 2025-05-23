@@ -37,6 +37,7 @@ class LeRobotDatasetWrapper(LeRobotDataset):
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
+        self.encoders = {}
 
     def add_frame_without_write_image(self, frame: dict) -> None:
         validate_frame(frame, self.features)
@@ -58,7 +59,6 @@ class LeRobotDatasetWrapper(LeRobotDataset):
                 self.episode_buffer[key].append(frame[key])
 
         self.episode_buffer["size"] += 1
-        self.encoders = {}
 
     def save_episode_without_write_image(self):
         episode_buffer = self.episode_buffer
@@ -94,7 +94,6 @@ class LeRobotDatasetWrapper(LeRobotDataset):
         self._save_episode_table(episode_buffer, episode_index)
         ep_stats = self.compute_episode_stats_buffer(episode_buffer, self.features)
 
-        # Video Encoder 추가
         video_paths = {}
         video_count = 0
         for key, ep in self.episode_buffer.items():
@@ -150,6 +149,8 @@ class LeRobotDatasetWrapper(LeRobotDataset):
             self,
             image_buffer: list[np.ndarray],
             save_path: str):
+        if not hasattr(self, 'encoders') or self.encoders is None:
+           self.encoders = {}
         self.encoders[save_path] = FFmpegBufferEncoder(
                 fps=30,
                 chunk_size=50,
@@ -166,10 +167,11 @@ class LeRobotDatasetWrapper(LeRobotDataset):
         encoding_thread.start()
 
     def check_video_encoding_completed(self) -> bool:
-        for encoder in self.encoders.values():
-            if not encoder.encoding_completed:
-                return False
-        self.encoders = {}
+        if self.encoders:
+            for encoder in self.encoders.values():
+                if not encoder.encoding_completed:
+                    return False
+            self.encoders = {}
         return True
 
     def compute_episode_stats_buffer(self, episode_buffer, features):
