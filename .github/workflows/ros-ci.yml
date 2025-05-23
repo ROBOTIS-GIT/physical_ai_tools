@@ -55,6 +55,4 @@ jobs:
           target-ros2-distro: ${{ matrix.ros_distribution }}
           vcs-repo-file-url: ""
           package-name: |
-            data_collector
-            policy_to_trajectory
-            physical_ai_manager
+            physical_ai_server
