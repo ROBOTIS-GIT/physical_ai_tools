@@ -19,25 +19,25 @@
 import cv2
 from pathlib import Path
 
-from physical_ai_manager.communication.communicator import Communicator
-from physical_ai_manager.data_processing.data_converter import DataConverter
-from physical_ai_manager.utils.parameter_utils import (
+from physical_ai_server.communication.communicator import Communicator
+from physical_ai_server.data_processing.data_converter import DataConverter
+from physical_ai_server.utils.parameter_utils import (
     declare_parameters,
     load_parameters,
     log_parameters,
 )
-from physical_ai_manager.data_processing.data_manager import DataManager
+from physical_ai_server.data_processing.data_manager import DataManager
 import rclpy
 from rclpy.node import Node
 from physical_ai_interfaces.srv import SendRecordingCommand
-from physical_ai_manager.timer.timer_manager import TimerManager
+from physical_ai_server.timer.timer_manager import TimerManager
 
 
-class PhysicalAIManager(Node):
+class PhysicalAIServer(Node):
     # Define operation modes (constants taken from Communicator)
 
     def __init__(self):
-        super().__init__('physical_ai_manager')
+        super().__init__('physical_ai_server')
 
         # Create service
         self.recording_cmd_service = self.create_service(
@@ -276,7 +276,7 @@ class PhysicalAIManager(Node):
 
 def main(args=None):
     rclpy.init(args=args)
-    node = PhysicalAIManager()
+    node = PhysicalAIServer()
     rclpy.spin(node)
     node.destroy_node()
     rclpy.shutdown()

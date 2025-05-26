@@ -1,4 +1,4 @@
-physical_ai_manager:
+physical_ai_server:
   ros__parameters:
     ai_worker_with_inspired:
       camera_topic_list:

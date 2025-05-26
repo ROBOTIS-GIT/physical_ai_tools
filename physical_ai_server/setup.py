@@ -4,7 +4,7 @@ from setuptools import find_packages
 from setuptools import setup
 
 
-package_name = 'physical_ai_manager'
+package_name = 'physical_ai_server'
 authors_info = [
     ('Dongyun Kim', 'kdy@robotis.com')
 ]
@@ -39,7 +39,7 @@ setup(
     tests_require=['pytest'],
     entry_points={
         'console_scripts': [
-            'physical_ai_manager = physical_ai_manager.physical_ai_manager:main',
+            'physical_ai_server = physical_ai_server.physical_ai_server:main',
         ],
     },
 )

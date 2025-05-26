@@ -30,7 +30,7 @@ from lerobot.common.datasets.utils import (
     write_info
 )
 import numpy as np
-from physical_ai_manager.utils.video_utils import FFmpegBufferEncoder
+from physical_ai_server.utils.video_utils import FFmpegBufferEncoder
 
 
 class LeRobotDatasetWrapper(LeRobotDataset):

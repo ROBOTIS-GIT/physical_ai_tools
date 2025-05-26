@@ -24,7 +24,7 @@ from huggingface_hub import snapshot_download
 from lerobot.common.datasets.utils import DEFAULT_FEATURES
 from lerobot.common.robot_devices.control_configs import RecordControlConfig
 import numpy as np
-from physical_ai_manager.data_processing.lerobot_dataset_wrapper import LeRobotDatasetWrapper
+from physical_ai_server.data_processing.lerobot_dataset_wrapper import LeRobotDatasetWrapper
 
 
 class DataManager:

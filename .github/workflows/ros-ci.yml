@@ -57,4 +57,4 @@ jobs:
           package-name: |
             data_collector
             policy_to_trajectory
-            physical_ai_manager
+            physical_ai_server

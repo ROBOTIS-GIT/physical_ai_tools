@@ -1,15 +1,15 @@
-physical_ai_manager:
+physical_ai_server:
   ros__parameters:
-    om_x:
+    om_y:
       camera_topic_list:
-        - wrist_image_topic_name:/realSense/Color/image_raw/compressed
+        - cam_wrist:/camera/cam_wrist/color/image_rect_raw/compressed
 
       joint_sub_topic_list:
         - follower:/follower/joint_states
         - leader:/leader/left_arm_with_timestamp
-      
+
       joint_pub_topic_list:
-        - follower_joint_pub:/follower/joint_position_controller/commands
+        - follower:/follower/joint_position_controller/commands
 
       observation_list:
         - state
@@ -25,12 +25,16 @@ physical_ai_manager:
           - joint2
           - joint3
           - joint4
+          - joint5
+          - joint6
           - gripper
         leader:
           - joint1
           - joint2
           - joint3
           - joint4
+          - joint5
+          - joint6
           - gripper
 
       collect_joint_order:
@@ -39,10 +43,15 @@ physical_ai_manager:
           - joint2
           - joint3
           - joint4
+          - joint5
+          - joint6
           - gripper
         leader:
           - joint1
           - joint2
           - joint3
           - joint4
+          - joint5
+          - joint6
           - gripper
+        

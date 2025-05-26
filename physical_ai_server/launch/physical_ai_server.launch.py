@@ -26,8 +26,8 @@ from launch_ros.actions import Node
 
 
 def generate_launch_description():
-    # Find package share directory for the physical_ai_manager package
-    pkg_dir = get_package_share_directory('physical_ai_manager')
+    # Find package share directory for the physical_ai_server package
+    pkg_dir = get_package_share_directory('physical_ai_server')
 
     # Launch arguments
     config_file = LaunchConfiguration(
@@ -41,11 +41,11 @@ def generate_launch_description():
         description='Path to the robot configuration YAML file'
     )
 
-    # Create node action for the physical_ai_manager node
-    physical_ai_manager = Node(
-        package='physical_ai_manager',
-        executable='physical_ai_manager',
-        name='physical_ai_manager',
+    # Create node action for the physical_ai_server node
+    physical_ai_server = Node(
+        package='physical_ai_server',
+        executable='physical_ai_server',
+        name='physical_ai_server',
         output='screen',
         parameters=[
             config_file
@@ -55,5 +55,5 @@ def generate_launch_description():
     # Return launch description
     return LaunchDescription([
         declare_config_file_arg,
-        physical_ai_manager
+        physical_ai_server
     ])
