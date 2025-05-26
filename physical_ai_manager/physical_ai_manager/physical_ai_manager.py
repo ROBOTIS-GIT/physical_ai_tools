@@ -233,44 +233,31 @@ class PhysicalAIManager(Node):
             self.latest_joint_data = follower_data
 
     def user_interaction_callback(self, request, response):
-        robot_type = request.robot_type
-        repo_id = request.repo_id
-        task_instruction = request.task_instruction
-        
-        timer_frequency = request.frequency
-        episode_time = request.episode_time
-        episode_num = request.episode_num
-        warmup_time = request.warmup_time
-        reset_time = request.reset_time
-        push_to_hub = request.push_to_hub
-        private_mode = request.private_mode
-        use_image_buffer = request.use_image_buffer
-
-        save_path = self.default_save_root_path / repo_id
+        save_path = self.default_save_root_path / request.repo_id
         self.get_logger().info(f'Save path: {save_path}')
 
         if request.command == SendRecordingCommand.Request.START_RECORD:
             self.get_logger().info('Starting recording with task: ' + request.task_name)
             self.operation_mode = 'collection'
             self.init_robot_control_parameters_from_user_task(
-                robot_type,
+                request.robot_type,
                 self.operation_mode,
-                timer_frequency
+                request.frequency
             )
 
             self.data_manager = DataManager(
-                repo_id=repo_id,
+                repo_id=request.repo_id,
                 save_path=save_path,
-                task_instruction=task_instruction,
-                tags=['ROBOTIS', robot_type],
-                use_image_buffer=use_image_buffer,
-                save_fps=timer_frequency,
-                reset_time_s=reset_time,
-                episode_time_s=episode_time,
-                warmup_time_s=warmup_time,
-                num_episodes=episode_num,
-                push_to_hub=push_to_hub,
-                private=private_mode)
+                task_instruction=request.task_instruction,
+                tags=['ROBOTIS', request.robot_type],
+                use_image_buffer=request.use_image_buffer,
+                save_fps=request.frequency,
+                reset_time_s=request.reset_time,
+                episode_time_s=request.episode_time,
+                warmup_time_s=request.warmup_time,
+                num_episodes=request.episode_num,
+                push_to_hub=request.push_to_hub,
+                private=request.private_mode)
 
             self.timer_manager.start(timer_name=self.operation_mode)
             response.success = True
