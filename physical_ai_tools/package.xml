@@ -1,0 +1,22 @@
+<?xml version="1.0"?>
+<?xml-model href="http://download.ros.org/schema/package_format3.xsd" schematypens="http://www.w3.org/2001/XMLSchema"?>
+<package format="3">
+  <name>physical_ai_tools</name>
+  <version>0.5.0</version>
+  <description>
+    physical_ai_tools meta ROS 2 package
+  </description>
+  <maintainer email="pyo@robotis.com">Pyo</maintainer>
+  <license>Apache 2.0</license>
+  <url type="repository">https://github.com/ROBOTIS-GIT/physical_ai_tools</url>
+  <author email="kimsw@robotis.com">Seongwoo Kim</author>
+  <author email="kimhg@robotis.com">Hyungyu Kim</author>
+  <author email="kdy@robotis.com">Dongyun Kim</author>
+  <author email="wwj@robotis.com">Woojin Wie</author>
+  <author email="pkw@robotis.com">Kiwoong Park</author>
+  <buildtool_depend>ament_cmake</buildtool_depend>
+  <exec_depend>physical_ai_server</exec_depend>
+  <export>
+    <build_type>ament_cmake</build_type>
+  </export>
+</package>

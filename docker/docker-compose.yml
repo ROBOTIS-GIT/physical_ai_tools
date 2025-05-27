@@ -1,0 +1,9 @@
+services:
+  physical_ai_manager:
+    build:
+      context: ../physical_ai_manager
+      dockerfile: Dockerfile
+    container_name: physical_ai_manager
+    ports:
+      - 80:80
+    restart: unless-stopped
