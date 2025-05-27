@@ -1,7 +1,7 @@
 # Physical AI Tools
 
-This repository offers an interface for developing physical AI applications using LeRobot and ROS 2. For detailed usage instructions, please refer to the e-manual below.
-  - [ROBOTIS e-Manual for AI Worker](https://ai.robotis.com/)
+This repository offers an interface for developing physical AI applications using LeRobot and ROS 2. For detailed usage instructions, please refer to the documentation below.
+  - [Documentation for AI Worker](https://ai.robotis.com/)
 
 To learn more about the ROS 2 packages for the AI Worker, visit:
   - [AI Worker ROS 2 Packages](https://github.com/ROBOTIS-GIT/ai_worker)
