@@ -95,8 +95,7 @@ class PhysicalAIServer(Node):
         # Define parameter names to load
         param_names = [
             'camera_topic_list',
-            'joint_sub_topic_list',
-            'joint_pub_topic_list',
+            'joint_topic_list',
             'observation_list',
             'joint_list'
         ]

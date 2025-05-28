@@ -6,32 +6,24 @@ physical_ai_server:
         - cam_head
 
       camera_topic_list:
-        - cam_head:/zed/zed_node/left/image_rect_color/compressed
+        - cam_head:/camera_head/camera_head/color/image_rect_raw/compressed
 
-      joint_sub_topic_list:
+      joint_topic_list:
         - follower:/joint_states
-        - leader_left_arm:/leader/left_arm_with_timestamp
-        - leader_right_arm:/leader/right_arm_with_timestamp
+        - leader_left:/leader/joint_trajectory_command_broadcaster_left/joint_trajectory
+        - leader_right:/leader/joint_trajectory_command_broadcaster_right/joint_trajectory
         - leader_left_hand:/leader/left_hand_with_timestamp
         - leader_right_hand:/leader/right_hand_with_timestamp
-      
-      joint_pub_topic_list:
-        - leader_right_arm:/leader/joint_trajectory_command_broadcaster_right_arm/joint_trajectory
-        - leader_left_arm:/leader/joint_trajectory_command_broadcaster_left_arm/joint_trajectory
-        - leader_left_hand:/leader/joint_trajectory_command_broadcaster_right_hand/joint_trajectory
-        - leader_right_hand:/leader/joint_trajectory_command_broadcaster_left_hand/joint_trajectory
-
-      joint_pub_topic_list:
-        - leader_left_arm:/leader/joint_trajectory_command_broadcaster_right_arm/joint_trajectory
-        - leader_right_arm:/leader/joint_trajectory_command_broadcaster_left_arm/joint_trajectory
-        - leader_left_hand:/leader/joint_trajectory_command_broadcaster_right_hand/joint_trajectory
-        - leader_right_hand:/leader/joint_trajectory_command_broadcaster_left_hand/joint_trajectory
+        - leader_head:/leader/joystick_controller_left/joint_trajectory
+        - leader_lift:/leader/joystick_controller_right/joint_trajectory
 
       joint_list:
         - leader_right_arm
         - leader_left_arm 
         - leader_right_hand
         - leader_left_hand
+        - leader_head
+        - leader_lift
 
       joint_order:
         leader_right_arm:
@@ -64,3 +56,8 @@ physical_ai_server:
           - left_index_1_joint
           - left_thumb_2_joint
           - left_thumb_1_joint
+        leader_head:
+          - head_joint1
+          - head_joint2
+        leader_lift:
+          - lift_joint

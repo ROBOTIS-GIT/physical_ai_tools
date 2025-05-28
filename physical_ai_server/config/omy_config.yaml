@@ -8,12 +8,9 @@ physical_ai_server:
       camera_topic_list:
         - cam_wrist:/camera/cam_wrist/color/image_rect_raw/compressed
 
-      joint_sub_topic_list:
+      joint_topic_list:
         - follower:/joint_states
         - leader:/leader/arm_with_timestamp
-
-      joint_pub_topic_list:
-        - leader:/leader/joint_trajectory_command_broadcaster/joint_trajectory
 
       joint_list:
         - leader
