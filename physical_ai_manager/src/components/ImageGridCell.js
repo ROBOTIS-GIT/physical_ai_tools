@@ -49,7 +49,7 @@ export default function ImageGridCell({
       {topic && topic.trim() !== '' ? (
         <img
           id={`img-stream-${idx}`}
-          src={`http://${rosHost}/stream?topic=${topic}`}
+          src={`http://${rosHost}/stream?quality=30&default_transport=compressed&topic=${topic}`}
           alt={topic}
           style={{ width: '100%', height: '100%', objectFit: 'cover', borderRadius: '20px' }}
           onClick={(e) => e.stopPropagation()}
