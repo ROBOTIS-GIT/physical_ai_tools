@@ -15,7 +15,7 @@
 // Author: Kiwoong Park
 
 import React, { useState } from 'react';
-import './ImageGrid.css';
+import clsx from 'clsx';
 import ImageGridCell from './ImageGridCell';
 
 const layout = [{ aspect: '16/9' }, { aspect: '16/9' }, { aspect: '16/9' }];
@@ -33,44 +33,34 @@ function TopicSelectModal({ topicList, onSelect, onClose }) {
 
   return (
     <div
-      className="modal-backdrop"
-      style={{
-        position: 'fixed',
-        top: 0,
-        left: 0,
-        width: '100vw',
-        height: '100vh',
-        background: 'rgba(0,0,0,0.2)',
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'center',
-        zIndex: 1000,
-      }}
+      className={clsx(
+        'fixed',
+        'top-0',
+        'left-0',
+        'w-screen',
+        'h-screen',
+        'bg-black',
+        'bg-opacity-20',
+        'flex',
+        'items-center',
+        'justify-center',
+        'z-50'
+      )}
     >
-      <div
-        className="modal"
-        style={{ background: '#fff', borderRadius: 12, padding: 32, minWidth: 420 }}
-      >
-        <h3 style={{ marginBottom: 30, fontSize: 40 }}>Select Image Topic</h3>
-        <ul style={{ listStyle: 'none', padding: 0, margin: 0 }}>
+      <div className="bg-white rounded-xl p-8 min-w-[420px]">
+        <h3 className="mb-8 text-4xl">Select Image Topic</h3>
+        <ul className="list-none p-0 m-0">
           {topicList.map((topic) => (
             <li
               key={topic}
-              style={{
-                margin: '8px 0',
-                cursor: 'pointer',
-                padding: 12,
-                borderRadius: 6,
-                fontSize: 20,
-                background:
-                  selected === topic
-                    ? 'rgba(21, 101, 192, 0.92)'
-                    : hovered === topic
-                    ? '#90caf9'
-                    : '#eee',
-                color: selected === topic ? '#fff' : '#000',
-                transition: 'background 0.2s',
-              }}
+              className={clsx(
+                'my-2 cursor-pointer p-3 rounded-md text-xl transition-colors duration-200',
+                {
+                  'bg-blue-700 text-white': selected === topic,
+                  'bg-blue-200': hovered === topic && selected !== topic,
+                  'bg-gray-200': hovered !== topic && selected !== topic,
+                }
+              )}
               onMouseEnter={() => setHovered(topic)}
               onMouseLeave={() => setHovered(null)}
               onClick={() => {
@@ -83,17 +73,7 @@ function TopicSelectModal({ topicList, onSelect, onClose }) {
           ))}
         </ul>
         <button
-          style={{
-            marginTop: 20,
-            width: '30%',
-            minHeight: 50,
-            fontSize: 30,
-            fontWeight: 500,
-            fontFamily: 'Pretendard Variable',
-            borderRadius: 8,
-            border: '0px solid',
-            boxShadow: '0 2px 6px rgba(0, 0, 0, 0.15);',
-          }}
+          className="mt-5 w-1/3 min-h-[50px] text-3xl font-medium rounded-lg border-0 shadow-md"
           onClick={onClose}
         >
           Close
@@ -132,40 +112,34 @@ export default function ImageGrid({ topics, setTopics, rosHost }) {
     setTopics(topics.map((t, i) => (i === idx ? null : t)));
   };
 
-  // Fixed 3 Horizontal (Vertical-Horizontal-Vertical)
-  const gridStyle = {
-    display: 'flex',
-    flexDirection: 'row',
-    justifyContent: 'center',
-    alignItems: 'flex-start',
-    gap: '2vw',
-    width: '100%',
-    height: '100%',
-  };
-  const cellWrapperStyle = {
-    flex: '1 1 0',
-    minWidth: 0,
-    minHeight: 0,
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-  };
-  const cellStyle = {};
-
   return (
-    <div style={{ width: '100%', height: '100%', overflow: 'hidden' }}>
+    <div className="w-full h-full overflow-hidden">
       <div
-        className="image-grid"
-        style={{ ...gridStyle, maxWidth: '100%', maxHeight: '100%', overflow: 'hidden' }}
+        className={clsx(
+          'flex',
+          'flex-row',
+          'justify-center',
+          'items-center',
+          'gap-[0.5vw]',
+          'w-full',
+          'h-full',
+          'max-w-full',
+          'max-h-full',
+          'overflow-hidden'
+        )}
       >
         {layout.map((cell, idx) => (
           <div
             key={idx}
-            className="cell-wrapper"
-            style={{
-              ...cellWrapperStyle,
-              flex: idx === 1 ? '3 1 0' : '1 1 0',
-            }}
+            className={clsx(
+              'min-w-0',
+              'min-h-0',
+              'flex',
+              'items-center',
+              'justify-center',
+              'relative',
+              { 'flex-[7_1_0]': idx === 1, 'flex-[3_1_0]': idx !== 1 }
+            )}
           >
             <ImageGridCell
               topic={topics[idx]}
@@ -174,9 +148,23 @@ export default function ImageGrid({ topics, setTopics, rosHost }) {
               rosHost={rosHost}
               onClose={handleCellClose}
               onPlusClick={handlePlusClick}
-              style={cellStyle}
             />
-            <div className="img-label">{topics[idx] || ''}</div>
+            <div
+              className={clsx(
+                'absolute',
+                'bottom-2',
+                'left-2',
+                'text-xs',
+                'text-white',
+                'bg-black',
+                'bg-opacity-50',
+                'px-2',
+                'py-1',
+                'rounded'
+              )}
+            >
+              {topics[idx] || ''}
+            </div>
           </div>
         ))}
         {modalOpen && (

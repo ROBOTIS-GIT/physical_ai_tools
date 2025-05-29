@@ -15,7 +15,7 @@
 // Author: Kiwoong Park
 
 import React, { useState, useEffect, useRef } from 'react';
-import './TaskSelector.css';
+import clsx from 'clsx';
 
 export default function TaskSelector({ onTaskSelect, yamlContent }) {
   const [isOpen, setIsOpen] = useState(false);
@@ -26,8 +26,8 @@ export default function TaskSelector({ onTaskSelect, yamlContent }) {
   useEffect(() => {
     // Get top-level categories from YAML
     const fetchTasks = () => {
-      console.log('yamlContent 타입:', typeof yamlContent);
-      console.log('yamlContent 값:', yamlContent);
+      console.log('yamlContent Type:', typeof yamlContent);
+      console.log('yamlContent Value:', yamlContent);
 
       if (yamlContent) {
         try {
@@ -85,10 +85,13 @@ export default function TaskSelector({ onTaskSelect, yamlContent }) {
   };
 
   return (
-    <div className="task-selector-container" ref={dropdownRef}>
-      <div className="task-selector-controls">
+    <div className="mb-6 relative" ref={dropdownRef}>
+      <div className="flex flex-col gap-2.5">
         <button
-          className="task-selector-button"
+          className={clsx(
+            'w-38 h-10 text-lg cursor-pointer bg-white border border-gray-300 rounded',
+            'disabled:cursor-not-allowed disabled:bg-gray-100'
+          )}
           onClick={() => setIsOpen(!isOpen)}
           disabled={tasks.length === 0}
         >
@@ -97,16 +100,38 @@ export default function TaskSelector({ onTaskSelect, yamlContent }) {
       </div>
 
       {isOpen && (
-        <div className="task-selector-dropdown">
+        <div
+          className={clsx(
+            'absolute',
+            'mt-1',
+            'bg-white',
+            'border',
+            'border-gray-300',
+            'rounded-lg',
+            'shadow-lg',
+            'z-50',
+            'max-h-75',
+            'overflow-y-auto'
+          )}
+        >
           {tasks.map((task, index) => (
-            <div key={index} className="task-selector-item" onClick={() => handleTaskClick(task)}>
+            <div
+              key={index}
+              className={clsx(
+                'py-2.5 px-4 cursor-pointer border-b border-gray-200',
+                'last:border-b-0 hover:bg-gray-100'
+              )}
+              onClick={() => handleTaskClick(task)}
+            >
               {task}
             </div>
           ))}
         </div>
       )}
 
-      {selectedTask && <div className="selected-task">{selectedTask}</div>}
+      {selectedTask && (
+        <div className="mt-2.5 bg-gray-200 rounded-lg py-2 px-4 text-lg">{selectedTask}</div>
+      )}
     </div>
   );
 }

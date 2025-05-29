@@ -15,35 +15,30 @@
 // Author: Kiwoong Park
 
 import React from 'react';
+import clsx from 'clsx';
 
 export default function EpisodeStatus() {
   return (
     <div
-      style={{
-        height: '100%',
-        width: '300px',
-        textAlign: 'center',
-        display: 'flex',
-        flexDirection: 'column',
-        alignItems: 'center',
-        borderRadius: 16,
-        border: '0px solid transparent',
-        padding: 16,
-        boxSizing: 'border-box',
-        boxShadow: 'rgba(0, 0, 0, 0.06) 0px 2px 8px',
-      }}
+      className={clsx(
+        'h-full',
+        'w-full',
+        'max-w-xs',
+        'text-center',
+        'flex',
+        'flex-col',
+        'items-center',
+        'rounded-xl',
+        'border',
+        'p-2',
+        'box-border',
+        'shadow-md'
+      )}
     >
-      <div style={{ fontSize: 32, marginBottom: 16, justifyContent: 'flex-start' }}>Episode</div>
-      <div
-        style={{
-          background: '#ededed',
-          borderRadius: 12,
-          padding: '16px 32px',
-          fontSize: 24,
-          fontWeight: 'bold',
-        }}
-      >
-        <span style={{ fontWeight: 700 }}>14</span> / <span style={{ color: '#555' }}>150</span>
+      <div className="mb-1 justify-start text-2xl">Episode</div>
+      <div className="h-3"></div>
+      <div className="w-full bg-gray-200 rounded-lg py-1.5 px-3 text-3xl font-bold">
+        <span className="font-bold">14</span> / <span className="text-gray-600">150</span>
       </div>
     </div>
   );

@@ -16,7 +16,7 @@
 
 import React, { useState, useEffect } from 'react';
 import yaml from 'js-yaml';
-import './YamlEditor.css';
+import clsx from 'clsx';
 
 function YamlEditor({ onYamlLoad }) {
   const [fileContent, setFileContent] = useState(() => {
@@ -170,14 +170,25 @@ function YamlEditor({ onYamlLoad }) {
 
     const lines = editableContent.split('\n');
     return (
-      <div className="yaml-editor-preview">
+      <div
+        className={clsx(
+          'absolute',
+          'top-0',
+          'left-0',
+          'w-full',
+          'h-full',
+          'm-0',
+          'p-4',
+          'font-mono'
+        )}
+      >
         {lines.map((line, index) => (
-          <div key={index} className={errorLine === index + 1 ? 'yaml-editor-error-line' : ''}>
+          <div key={index} className={errorLine === index + 1 ? 'bg-red-200 block w-full' : ''}>
             {line}
           </div>
         ))}
         {errorLine && (
-          <div className="yaml-editor-error-message">
+          <div className="sticky bottom-0 bg-red-100 p-2 border-t border-red-500 text-xs">
             Error (line {errorLine}): {errorMessage}
           </div>
         )}
@@ -186,60 +197,70 @@ function YamlEditor({ onYamlLoad }) {
   };
 
   return (
-    <div className="yaml-editor-container">
-      <div className="yaml-editor-title">Load Configuration File</div>
-      <input
-        type="file"
-        accept=".yaml,.yml"
-        onChange={handleFileSelect}
-        className="yaml-editor-file-input"
-      />
+    <div className="mt-10 w-full">
+      <div className="mb-4 text-3xl font-semibold">Load Configuration File</div>
+      <input type="file" accept=".yaml,.yml" onChange={handleFileSelect} className="text-base" />
       {fileContent && (
-        <div className="yaml-editor-content">
-          <div className="yaml-editor-header">
+        <div className="mt-5 text-base">
+          <div className="flex justify-between items-center mb-2.5">
             <h3>File Content:</h3>
-            <div className="yaml-editor-buttons">
+            <div className="flex gap-2">
               {isEditing ? (
                 <>
                   <button
                     onClick={handleCancel}
-                    className="yaml-editor-button yaml-editor-button-cancel"
+                    className="py-2 px-4 text-sm text-white border-none rounded cursor-pointer bg-gray-500"
                   >
                     Cancel
                   </button>
                   <button
                     onClick={handleApply}
-                    className="yaml-editor-button yaml-editor-button-apply"
+                    className="py-2 px-4 text-sm text-white border-none rounded cursor-pointer bg-green-500"
                   >
                     Apply
                   </button>
                 </>
               ) : (
-                <button
-                  onClick={() => setIsEditing(true)}
-                  className="yaml-editor-button yaml-editor-button-edit"
-                >
-                  Edit
-                </button>
+                <>
+                  <button
+                    onClick={() => setIsEditing(true)}
+                    className="py-2 px-4 text-sm text-white border-none rounded cursor-pointer bg-blue-500"
+                  >
+                    Edit
+                  </button>
+                  <button
+                    onClick={handleDownload}
+                    className="py-2 px-4 text-sm text-white border-none rounded cursor-pointer bg-orange-500"
+                  >
+                    Download
+                  </button>
+                </>
               )}
-              <button
-                onClick={handleDownload}
-                className="yaml-editor-button yaml-editor-button-download"
-              >
-                Download
-              </button>
             </div>
           </div>
-          <div className="yaml-editor-textarea-container">
+          <div className="w-full h-[500px] border border-gray-300 rounded-lg bg-gray-100 relative">
             {isEditing ? (
               <textarea
                 value={editableContent}
-                onChange={(e) => {
-                  setEditableContent(e.target.value);
-                  setErrorLine(null); // Reset error display when editing
-                  setErrorMessage('');
-                }}
-                className="yaml-editor-textarea"
+                onChange={(e) => setEditableContent(e.target.value)}
+                className={clsx(
+                  'absolute',
+                  'top-0',
+                  'left-0',
+                  'w-full',
+                  'h-full',
+                  'font-mono',
+                  'text-sm',
+                  'p-4',
+                  'bg-transparent',
+                  'border-none',
+                  'outline-none',
+                  'resize-none',
+                  'box-border',
+                  'whitespace-pre',
+                  'leading-relaxed',
+                  'overflow-auto'
+                )}
               />
             ) : (
               renderYamlWithLineNumbers()

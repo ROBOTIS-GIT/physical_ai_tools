@@ -15,6 +15,7 @@
 // Author: Kiwoong Park
 
 import React, { useEffect, useState } from 'react';
+import clsx from 'clsx';
 import ROSLIB from 'roslib';
 
 export default function RosTopicSubscriber({ rosbridgeUrl, topicName, messageType }) {
@@ -46,37 +47,24 @@ export default function RosTopicSubscriber({ rosbridgeUrl, topicName, messageTyp
   }, [rosbridgeUrl, topicName, messageType]);
 
   return (
-    <div
-      style={{
-        background: '#fff',
-        borderRadius: 16,
-        boxShadow: '0 2px 8px rgba(0,0,0,0.06)',
-        padding: 20,
-        minWidth: 260,
-        margin: 16,
-      }}
-    >
-      <div style={{ fontWeight: 600, marginBottom: 8 }}>ROS Topic Subscribe</div>
-      <div style={{ fontSize: 14, color: connected ? '#1a7f37' : '#c00', marginBottom: 8 }}>
+    <div className="bg-white rounded-lg shadow-md p-6 w-full max-w-md">
+      <h3 className="text-lg font-semibold mb-4">ROS Topic Subscriber</h3>
+      <div
+        className={clsx('text-sm mb-2', {
+          'text-green-700': connected,
+          'text-red-600': !connected,
+        })}
+      >
         {connected ? 'Connected' : 'Disconnected'}
       </div>
-      <div style={{ fontSize: 13, color: '#333', wordBreak: 'break-all' }}>
+      <div className="text-xs text-gray-800 break-all">
         <b>Topic:</b> {topicName}
         <br />
         <b>Type:</b> {messageType}
         <br />
         <b>Latest:</b>
         <br />
-        <pre
-          style={{
-            fontSize: 12,
-            background: '#f7f7f7',
-            padding: 8,
-            borderRadius: 8,
-            maxHeight: 200,
-            overflow: 'auto',
-          }}
-        >
+        <pre className="text-xs bg-gray-100 p-2 rounded-lg max-h-50 overflow-auto">
           {message ? JSON.stringify(message, null, 2) : '(no data)'}
         </pre>
       </div>

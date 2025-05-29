@@ -14,52 +14,10 @@
 //
 // Author: Kiwoong Park
 
-import React from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
+import clsx from 'clsx';
 import ProgressBar from './ProgressBar';
 import { MdPlayArrow, MdStop, MdReplay, MdSkipNext, MdCheck } from 'react-icons/md';
-
-const panelStyle = {
-  height: 200,
-  background: '#bdbdbd',
-  borderRadius: 27,
-  margin: 30,
-  padding: 14,
-  display: 'flex',
-  flexDirection: 'row',
-  alignItems: 'center',
-  gap: 8,
-  boxShadow: 'rgba(0, 0, 0, 0.1) 0px 2px 8px',
-};
-
-const buttonStyle = {
-  fontSize: '40px',
-  fontFamily: 'Pretendard Variable',
-  fontWeight: 800,
-  height: '100%',
-  flexGrow: 1,
-  minWidth: 60,
-  borderRadius: 20,
-  border: 'none',
-  background: '#ededed',
-  cursor: 'pointer',
-  marginRight: 8,
-  display: 'flex',
-  alignItems: 'center',
-  justifyContent: 'center',
-  flexDirection: 'column',
-  gap: 4,
-};
-
-const iconWrapperStyle = {
-  background: '#ffffffbb',
-  borderRadius: '50%',
-  width: 56,
-  height: 56,
-  display: 'flex',
-  alignItems: 'center',
-  justifyContent: 'center',
-  marginBottom: 4,
-};
 
 const buttons = [
   { label: 'Start', icon: MdPlayArrow, color: '#1976d2' },
@@ -69,43 +27,129 @@ const buttons = [
   { label: 'Finish', icon: MdCheck, color: '#388e3c' },
 ];
 
-export default function ControlPanel() {
-  const icon_size = 40;
+export default function ControlPanel({ onCommand }) {
+  const icon_size = 70;
+  const [hovered, setHovered] = useState(null);
+  const [pressed, setPressed] = useState(null);
+  const [started, setStarted] = useState(false);
+  const startedRef = useRef(started);
+
+  useEffect(() => {
+    startedRef.current = started;
+  }, [started]);
+
+  const handleCommand = useCallback(
+    (label) => {
+      if (onCommand) onCommand(label);
+      console.log(label + ' command executed');
+      if (label === 'Start') setStarted(true);
+      if (label === 'Stop') setStarted(false);
+    },
+    [onCommand]
+  );
+
+  useEffect(() => {
+    const handleKeyDown = (e) => {
+      if (e.key === 'ArrowLeft') {
+        handleCommand('Retry');
+      } else if (e.key === 'ArrowRight') {
+        handleCommand('Next');
+      } else if (e.key === ' ' || e.key === 'Spacebar' || e.code === 'Space') {
+        if (!startedRef.current) {
+          handleCommand('Start');
+        } else {
+          handleCommand('Stop');
+        }
+      } else if ((e.ctrlKey || e.metaKey) && (e.key === 'c' || e.key === 'C')) {
+        handleCommand('Finish');
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [handleCommand]);
+
   return (
-    <div className="control-panel-fixed" style={panelStyle}>
-      <div
-        style={{
-          display: 'flex',
-          flex: 2,
-          alignItems: 'center',
-          width: '100%',
-          height: '100%',
-          gap: 16,
-        }}
-      >
-        {buttons.map(({ label, icon: Icon, color }) => (
-          <button key={label} style={buttonStyle}>
-            <span style={iconWrapperStyle}>
-              <Icon size={icon_size} color={color} />
-            </span>
-            {label}
-          </button>
-        ))}
+    <div
+      className={clsx(
+        'h-56',
+        'bg-gray-300',
+        'rounded-3xl',
+        'mx-8',
+        'my-4',
+        'p-4',
+        'flex',
+        'flex-row',
+        'items-center',
+        'gap-2',
+        'shadow-lg'
+      )}
+    >
+      <div className="flex flex-[2] items-center w-full h-full gap-4">
+        {buttons.map(({ label, icon: Icon, color }) => {
+          return (
+            <button
+              key={label}
+              className={clsx(
+                'text-4xl',
+                'font-extrabold',
+                'h-full',
+                'flex-grow',
+                'min-w-16',
+                'rounded-2xl',
+                'border-none',
+                'cursor-pointer',
+                'mr-2',
+                'flex',
+                'items-center',
+                'justify-center',
+                'flex-col',
+                'gap-1',
+                {
+                  'bg-gray-300': pressed === label,
+                  'bg-gray-200': hovered === label && pressed !== label,
+                  'bg-gray-100': hovered !== label && pressed !== label,
+                }
+              )}
+              style={{ fontFamily: 'Pretendard Variable' }}
+              tabIndex={0}
+              onClick={() => handleCommand(label)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') {
+                  handleCommand(label);
+                }
+                if (e.key === ' ') {
+                  e.preventDefault();
+                }
+              }}
+              onMouseEnter={() => setHovered(label)}
+              onMouseLeave={() => {
+                setHovered(null);
+                setPressed(null);
+              }}
+              onMouseDown={() => setPressed(label)}
+              onMouseUp={() => setPressed(null)}
+            >
+              <span
+                className={clsx(
+                  'bg-transparent',
+                  'rounded-full',
+                  'w-20',
+                  'h-20',
+                  'flex',
+                  'items-center',
+                  'justify-center',
+                  'mb-1'
+                )}
+              >
+                <Icon size={icon_size} color={color} />
+              </span>
+              {label}
+            </button>
+          );
+        })}
       </div>
-      <div
-        style={{
-          display: 'flex',
-          flex: 1,
-          flexDirection: 'column',
-          justifyContent: 'center',
-          alignItems: 'center',
-          width: '100%',
-          gap: 30,
-        }}
-      >
-        <div style={{ flex: 1, minWidth: 0, fontSize: 33, textAlign: 'center' }}>
-          Please prepare next episode
-        </div>
+      <div className="flex flex-1 flex-col justify-center items-center w-full gap-8">
+        <div className="flex-1 min-w-0 text-3xl text-center">Please prepare next episode</div>
         <ProgressBar percent={60} />
       </div>
     </div>
