@@ -69,7 +69,7 @@ class Communicator:
         self.leader_topic_msgs = {}
 
         self.init_subscribers()
-        self.init_publishers()
+        # self.init_publishers()
 
     def _get_enabled_sources_for_mode(self, mode: str) -> Set[str]:
         enabled_sources = set()
@@ -90,8 +90,8 @@ class Communicator:
             if 'leader' in name.lower():
                 self.joint_publishers[name] = self.node.create_publisher(
                     JointTrajectory,
-                    topic=topic_name,
-                    qos_profile=100
+                    topic_name,
+                    100
                 )
                 self.node.get_logger().info(f'Initialized joint publisher: {name} -> {topic_name}')
 

@@ -23,7 +23,7 @@ setup(
     ],
     install_requires=['setuptools', 'physical_ai_interfaces'],
     zip_safe=True,
-    author=authors_info,
+    author=authors,
     author_email=author_emails,
     maintainer='Pyo',
     maintainer_email='pyo@robotis.com',
