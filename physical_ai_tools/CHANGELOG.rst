@@ -2,6 +2,12 @@
 Changelog for package physical_ai_tools
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
+0.5.1 (2025-05-29)
+------------------
+* Added quality and transport parameters to image streaming URL
+* Added a Docker setup for physical AI server
+* Contributors: Kiwoong Park
+
 0.5.0 (2025-05-20)
 ------------------
 * Added a web UI for physical AI data collection
