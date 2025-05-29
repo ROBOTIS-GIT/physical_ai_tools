@@ -49,8 +49,8 @@ class Communicator:
 
         # Parse topic lists for more convenient access
         self.camera_topics = parse_topic_list_with_names(self.params['camera_topic_list'])
-        self.joint_sub_topics = parse_topic_list_with_names(self.params['joint_sub_topic_list'])
-        self.joint_pub_topics = parse_topic_list_with_names(self.params['joint_pub_topic_list'])
+        self.joint_topics = parse_topic_list_with_names(self.params['joint_topic_list'])
+
         # Determine which sources to enable based on operation mode
         self.enabled_sources = self._get_enabled_sources_for_mode(self.operation_mode)
 
@@ -60,17 +60,16 @@ class Communicator:
         # Initialize joint publishers
         self.joint_publishers = {}
 
-        # Initialize latest data storage
-        self.latest_observation = None
-        self.latest_action = None
-
         # Log topic information
         node.get_logger().info(f'Parsed camera topics: {self.camera_topics}')
-        node.get_logger().info(f'Parsed joint topics: {self.joint_sub_topics}')
+        node.get_logger().info(f'Parsed joint topics: {self.joint_topics}')
 
         self.camera_topic_msgs = {}
         self.follower_topic_msgs = {}
         self.leader_topic_msgs = {}
+
+        self.init_subscribers()
+        self.init_publishers()
 
     def _get_enabled_sources_for_mode(self, mode: str) -> Set[str]:
         enabled_sources = set()
@@ -87,13 +86,14 @@ class Communicator:
         return enabled_sources
 
     def init_publishers(self):
-        for name, topic_name in self.joint_pub_topics.items():
-            self.joint_publishers[name] = self.node.create_publisher(
-                JointTrajectory,
-                topic=topic_name,
-                qos_profile=100
-            )
-            self.node.get_logger().info(f'Initialized joint publisher: {name} -> {topic_name}')
+        for name, topic_name in self.joint_topics.items():
+            if 'leader' in name.lower():
+                self.joint_publishers[name] = self.node.create_publisher(
+                    JointTrajectory,
+                    topic=topic_name,
+                    qos_profile=100
+                )
+                self.node.get_logger().info(f'Initialized joint publisher: {name} -> {topic_name}')
 
     def init_subscribers(self):
         # Initialize camera subscribers if defined
@@ -105,10 +105,10 @@ class Communicator:
                 msg_type=CompressedImage,
                 callback=partial(self._camera_callback, name)
             )
-            self.node.get_logger().debug(f'Camera subscriber: {name} -> {topic}')
+            self.node.get_logger().info(f'Camera subscriber: {name} -> {topic}')
 
         # Initialize joint subscribers with appropriate message types and callbacks
-        for name, topic in self.joint_sub_topics.items():
+        for name, topic in self.joint_topics.items():
             # Determine category and message type based on name patterns
             if 'follower' in name.lower():
                 category = self.SOURCE_FOLLOWER
@@ -132,8 +132,8 @@ class Communicator:
                 msg_type=msg_type,
                 callback=callback
             )
-            self.joint_sub_topics[name] = msg_type()
-            self.node.get_logger().debug(
+            self.joint_topics[name] = msg_type()
+            self.node.get_logger().info(
                 f'Joint subscriber: {name} -> {topic} ({msg_type.__name__})')
 
     def _camera_callback(self, name: str, msg: CompressedImage) -> None:
@@ -141,13 +141,9 @@ class Communicator:
 
     def _follower_callback(self, name: str, msg: JointState) -> None:
         self.follower_topic_msgs[name] = msg
-        self.node.get_logger().debug(
-            f'Processed follower observation with {len(msg.position)} joints')
 
     def _leader_callback(self, name: str, msg: JointTrajectory) -> None:
         self.leader_topic_msgs[name] = msg
-        self.node.get_logger().debug(
-            f'Processed leader observation with {len(msg.joint_names)} joints')
 
     def get_latest_data(self) -> Optional[Tuple[Dict, Dict, Dict]]:
         if not (self.camera_topic_msgs or self.follower_topic_msgs or self.leader_topic_msgs):

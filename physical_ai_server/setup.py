@@ -13,7 +13,7 @@ author_emails = ', '.join(email for _, email in authors_info)
 
 setup(
     name=package_name,
-    version='0.5.0',
+    version='0.5.1',
     packages=find_packages(),
     data_files=[
         ('share/ament_index/resource_index/packages', ['resource/' + package_name]),
@@ -21,7 +21,7 @@ setup(
         ('share/' + package_name + '/launch', glob('launch/*.launch.py')),
         ('share/' + package_name + '/config', glob('config/*.yaml')),
     ],
-    install_requires=['setuptools'],
+    install_requires=['setuptools', 'physical_ai_interfaces'],
     zip_safe=True,
     author=authors_info,
     author_email=author_emails,
