@@ -70,19 +70,42 @@ export function useRosServiceCaller(rosbridgeUrl) {
 
   const sendRecordCommand = useCallback(
     (command, task_info) => {
+      let command_enum;
+      switch (command) {
+        case 'none':
+          command_enum = 0;
+          break;
+        case 'start_record':
+          command_enum = 1;
+          break;
+        case 'start_inference':
+          command_enum = 2;
+          break;
+        case 'stop':
+          command_enum = 3;
+          break;
+        case 'next':
+          command_enum = 4;
+          break;
+        case 'rerecord':
+          command_enum = 5;
+          break;
+        case 'terminate_all':
+          command_enum = 6;
+      }
       callService('recording/command', 'physical_ai_interfaces/srv/SendRecordingCommand', {
-        command: command,
-        task_name: task_info.taskName,
-        robot_type: task_info.robotType,
-        frequency: task_info.fps,
-        task_instruction: task_info.taskInstruction,
-        repo_id: task_info.repoId,
-        use_image_buffer: true,
-        reset_time: task_info.resetTime,
-        episode_time: task_info.episodeTime,
-        episode_num: task_info.numEpisodes,
-        push_to_hub: task_info.pushToHub,
-        private_mode: false,
+        command: Number(command_enum),
+        task_name: String(task_info.taskName),
+        robot_type: String(task_info.robotType),
+        frequency: Number(task_info.fps),
+        task_instruction: String(task_info.taskInstruction),
+        repo_id: String(task_info.repoId),
+        use_image_buffer: Boolean(task_info.useImageBuffer),
+        reset_time: Number(task_info.resetTime),
+        episode_time: Number(task_info.episodeTime),
+        episode_num: Number(task_info.numEpisodes),
+        push_to_hub: Boolean(task_info.pushToHub),
+        private_mode: Boolean(task_info.privateMode),
       });
     },
     [callService]

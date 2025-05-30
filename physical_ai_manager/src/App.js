@@ -91,19 +91,19 @@ function HomePage({ topics, setTopics, rosHost, yamlContent }) {
     try {
       if (cmd === 'Start') {
         console.log('Calling sendRecordCommand with start');
-        sendRecordCommand('start', info);
+        sendRecordCommand('start_record', info);
       } else if (cmd === 'Stop') {
         console.log('Calling sendRecordCommand with stop');
         sendRecordCommand('stop', info);
       } else if (cmd === 'Retry') {
         console.log('Calling sendRecordCommand with retry');
-        sendRecordCommand('retry', info);
+        sendRecordCommand('rerecord', info);
       } else if (cmd === 'Next') {
         console.log('Calling sendRecordCommand with next');
         sendRecordCommand('next', info);
       } else if (cmd === 'Finish') {
         console.log('Calling sendRecordCommand with finish');
-        sendRecordCommand('finish', info);
+        sendRecordCommand('terminate_all', info);
       }
     } catch (error) {
       console.error('Error handling control command:', error);

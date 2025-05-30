@@ -2,7 +2,7 @@
 
 # Get the directory where the script is located
 SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
-CONTAINER_NAME="physical_ai_manager"
+CONTAINER_NAME="physical_ai_server"
 
 # Function to display help
 show_help() {
@@ -22,7 +22,7 @@ show_help() {
 
 # Function to start the container
 start_container() {
-    docker compose -f "$SCRIPT_DIR/docker-compose.yml" up -d --build physical_ai_manager
+    docker compose -f "$SCRIPT_DIR/docker-compose.yml" up -d --build
 }
 
 # Function to enter the container
