@@ -19,9 +19,11 @@ import YamlEditor from '../components/YamlEditor';
 import RosTopicList from '../components/RosTopicList';
 import RosTopicSubscriber from '../components/RosTopicSubscriber';
 import RosServiceCaller from '../components/RosServiceCaller';
+import { FileTransfer } from '../components/FileTransfer';
 
 export default function SettingPage({ rosHost, setRosHost, yamlContent, setYamlContent }) {
   const rosbridgeUrl = `ws://${rosHost.split(':')[0]}:9090`;
+  const serverUrl = `http://${rosHost.split(':')[0]}:8000`;
 
   return (
     <div className="w-full h-full flex items-start justify-center text-xl flex-row gap-8">
@@ -34,8 +36,12 @@ export default function SettingPage({ rosHost, setRosHost, yamlContent, setYamlC
           <br />
           (This value is automatically determined based on window.location.hostname)
         </div>
-        <div className="mt-10 w-3/5">
+        {/* <div className="mt-10 w-3/5">
           <YamlEditor onYamlLoad={setYamlContent} />
+        </div> */}
+        <div className="mt-10 w-3/5">
+          <div className="mb-6 text-3xl font-semibold">파일 전송</div>
+          <FileTransfer serverUrl={serverUrl} />
         </div>
       </div>
       <div className="flex flex-col items-stretch">

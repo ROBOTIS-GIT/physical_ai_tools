@@ -16,7 +16,7 @@
 
 import React, { useState, useEffect } from 'react';
 import clsx from 'clsx';
-import { MdHome } from 'react-icons/md';
+import { MdHome, MdSettings } from 'react-icons/md';
 import './App.css';
 import HomePage from './pages/HomePage';
 import SettingPage from './pages/SettingPage';
@@ -73,6 +73,34 @@ function App() {
         >
           <MdHome size={32} className="mb-1.5" />
           <span className="mt-1 text-sm">Home</span>
+        </button>
+        <button
+          className={clsx(
+            'flex',
+            'flex-col',
+            'items-center',
+            'bg-gray-100',
+            'rounded-2xl',
+            'border-none',
+            'py-5',
+            'px-4',
+            'mb-3',
+            'text-base',
+            'text-gray-800',
+            'cursor-pointer',
+            'transition-colors',
+            'duration-150',
+            'outline-none',
+            'min-w-20',
+            {
+              'hover:bg-gray-300 active:bg-gray-400': page !== 'setting',
+              'bg-gray-300': page === 'setting',
+            }
+          )}
+          onClick={() => setPage('setting')}
+        >
+          <MdSettings size={32} className="mb-1.5" />
+          <span className="mt-1 text-sm">Setting</span>
         </button>
       </aside>
       <main className="flex-1 flex flex-col h-screen min-h-0">
