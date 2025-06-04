@@ -167,6 +167,10 @@ class LeRobotDatasetWrapper(LeRobotDataset):
         encoding_thread.start()
 
     def check_video_encoding_completed(self) -> bool:
+        if not hasattr(self, 'encoders') or self.encoders is None:
+            self.encoders = {}
+            return True
+
         if self.encoders:
             for encoder in self.encoders.values():
                 if not encoder.encoding_completed:

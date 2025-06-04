@@ -11,6 +11,10 @@ Changelog for package physical_ai_server
 * Added Save, Load, Upload, and Download functionality for data management.
 * Contributors: Dongyun Kim
 
+0.5.2 (2025-05-29)
+------------------
+* None
+
 0.5.1 (2025-05-29)
 ------------------
 * None
