@@ -17,7 +17,7 @@
 import { useRef, useEffect, useState, useCallback } from 'react';
 import ROSLIB from 'roslib';
 
-export function useRosTaskStatus(rosbridgeUrl, topicName = '/task_status') {
+export function useRosTaskStatus(rosbridgeUrl, topicName = '/task/status') {
   const rosRef = useRef(null);
   const topicRef = useRef(null);
 
