@@ -44,6 +44,7 @@ export default function HomePage({ topics, setTopics, rosHost }) {
     taskStatus,
     taskInfo,
     connected: taskStatusConnected,
+    resetTaskToIdle,
   } = useRosTaskStatus(rosbridgeUrl, '/task/status');
 
   // Start with default values and update with data from topic
@@ -92,6 +93,11 @@ export default function HomePage({ topics, setTopics, rosHost }) {
       } else if (result && result.success) {
         toast.success(`Command [${cmd}] executed successfully`);
         console.log(`Command '${cmd}' executed successfully`);
+
+        // Reset task status to idle for Stop and Finish commands
+        if (cmd === 'Stop' || cmd === 'Finish') {
+          resetTaskToIdle();
+        }
       }
     } catch (error) {
       console.error('Error handling control command:', error);

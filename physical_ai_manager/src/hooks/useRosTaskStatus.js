@@ -35,7 +35,7 @@ export function useRosTaskStatus(rosbridgeUrl, topicName = '/task/status') {
   });
 
   const [taskInfo, setTaskInfo] = useState({
-    taskName: 'ai_worker_task_abcd_12345',
+    taskName: 'ai_worker_test_task',
     robotType: 'ai_worker',
     taskType: 'record',
     taskInstruction: 'pick and place objects',
@@ -180,6 +180,23 @@ export function useRosTaskStatus(rosbridgeUrl, topicName = '/task/status') {
     return phaseNames[phase] || 'UNKNOWN';
   }, []);
 
+  // Function to manually update task status (for stop/finish commands)
+  const updateTaskStatus = useCallback((updates) => {
+    setTaskStatus((prevStatus) => ({
+      ...prevStatus,
+      ...updates,
+    }));
+  }, []);
+
+  // Function to reset task to initial state
+  const resetTaskToIdle = useCallback(() => {
+    setTaskStatus((prevStatus) => ({
+      ...prevStatus,
+      running: false,
+      phase: 0,
+    }));
+  }, []);
+
   return {
     taskStatus,
     taskInfo,
@@ -187,5 +204,7 @@ export function useRosTaskStatus(rosbridgeUrl, topicName = '/task/status') {
     subscribeToTaskStatus,
     cleanup,
     getPhaseName,
+    updateTaskStatus,
+    resetTaskToIdle,
   };
 }

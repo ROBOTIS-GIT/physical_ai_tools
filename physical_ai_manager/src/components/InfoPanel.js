@@ -165,6 +165,30 @@ const InfoPanel = ({ info, onChange, disabled = false }) => {
     }
   );
 
+  const classSelect = clsx(
+    'text-sm',
+    'w-full',
+    'h-8',
+    'px-2',
+    'border',
+    'border-gray-300',
+    'rounded-md',
+    'focus:outline-none',
+    'focus:ring-2',
+    'focus:ring-blue-500',
+    'focus:border-transparent',
+    {
+      'bg-gray-100 cursor-not-allowed': !isEditable,
+      'bg-white': isEditable,
+    }
+  );
+
+  // Task type options
+  const taskTypeOptions = [
+    { value: 'record', label: 'Record' },
+    { value: 'inference', label: 'Inference' },
+  ];
+
   const classCheckbox = clsx(
     'w-4',
     'h-4',
@@ -228,13 +252,21 @@ const InfoPanel = ({ info, onChange, disabled = false }) => {
 
       <div className={clsx('flex', 'items-center', 'mb-2.5')}>
         <span className={classLabel}>Task Type</span>
-        <input
-          className={classTextInput}
-          type="text"
+        <select
+          className={classSelect}
           value={info.taskType || ''}
           onChange={(e) => handleChange('taskType', e.target.value)}
           disabled={!isEditable}
-        />
+        >
+          <option value="" disabled>
+            Select task type...
+          </option>
+          {taskTypeOptions.map((option) => (
+            <option key={option.value} value={option.value}>
+              {option.label}
+            </option>
+          ))}
+        </select>
       </div>
 
       <div className={clsx('flex', 'items-start', 'mb-2.5')}>
