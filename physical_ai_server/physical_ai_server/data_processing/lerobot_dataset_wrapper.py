@@ -17,6 +17,11 @@
 # Author: Dongyun Kim
 
 import threading
+import sys
+
+dev_lerobot_path = '/root/ros2_ws/src/physical_ai_tools/lerobot'
+if dev_lerobot_path not in sys.path:
+    sys.path.insert(0, dev_lerobot_path)
 
 from lerobot.common.datasets.compute_stats import (
     get_feature_stats
@@ -30,7 +35,9 @@ from lerobot.common.datasets.utils import (
     write_info
 )
 import numpy as np
-from physical_ai_server.utils.video_utils import FFmpegBufferEncoder
+from physical_ai_server.utils.video_utils import (
+    FFmpegBufferEncoder,
+    JetsonGPUEncoder)
 
 
 class LeRobotDatasetWrapper(LeRobotDataset):
@@ -100,7 +107,7 @@ class LeRobotDatasetWrapper(LeRobotDataset):
             if 'observation.images' in key:
                 video_path = self.root / self.meta.get_video_file_path(episode_index, key)
                 video_paths[key] = str(video_path)
-                self.create_video(ep, video_path)
+                self._create_video(ep, video_path)
                 video_count += 1
                 video_info = {
                     'video.height': self.features[key]['shape'][0],
@@ -145,20 +152,29 @@ class LeRobotDatasetWrapper(LeRobotDataset):
         write_episode(episode_dict, self.meta.root)
         write_episode_stats(episode_index, episode_stats, self.meta.root)
 
-    def create_video(
+    def _create_video(
             self,
             image_buffer: list[np.ndarray],
             save_path: str):
         if not hasattr(self, 'encoders') or self.encoders is None:
             self.encoders = {}
-        self.encoders[save_path] = FFmpegBufferEncoder(
-                fps=30,
-                chunk_size=50,
-                preset='ultrafast',
-                crf=28,
-                pix_fmt='yuv420p',
-                vcodec='libx264'
-            )
+
+        if self._check_nvenc_availability():
+            print("Using NVIDIA NVENC encoder for video encoding.")
+            self.encoders[save_path] = JetsonGPUEncoder(
+                    vcodec='hevc_nvenc',
+                    fps=30,
+                    qp=25
+                )
+        else:
+            self.encoders[save_path] = FFmpegBufferEncoder(
+                    fps=30,
+                    chunk_size=50,
+                    preset='ultrafast',
+                    crf=28,
+                    pix_fmt='yuv420p',
+                    vcodec='libx264'
+                )
         self.encoders[save_path].set_buffer(image_buffer)
         encoding_thread = threading.Thread(
             target=self.encoders[save_path].encode_video,
@@ -205,3 +221,32 @@ class LeRobotDatasetWrapper(LeRobotDataset):
                         v / 255.0, axis=0) for k, v in ep_stats[key].items()
                 }
         return ep_stats
+    
+    def _check_nvenc_availability(self) -> bool:
+        import subprocess
+        try:
+            result = subprocess.run(
+                ['ffmpeg', '-encoders'],
+                capture_output=True,
+                text=True,
+                check=False
+            )
+
+            if result.returncode != 0:
+                print(f"Failed to execute ffmpeg. Stderr: {result.stderr}")
+                return False
+
+            if ('h264_nvenc' in result.stdout or
+                'hevc_nvenc' in result.stdout or
+                'av1_nvenc' in result.stdout):
+                print("NVIDIA NVENC encoder is available.")
+                return True
+            else:
+                return False
+
+        except FileNotFoundError:
+            print("ffmpeg is not installed on the system or not in PATH.")
+            return False
+        except Exception as e:
+            print(f"Unknown error occurred: {e}")
+            return False

@@ -19,11 +19,13 @@
 from pathlib import Path
 
 import cv2
-from physical_ai_interfaces.srv import SendRecordingCommand
+from physical_ai_interfaces.msg import TaskInfo
+from physical_ai_interfaces.srv import SendCommand
 from physical_ai_server.communication.communicator import Communicator
 from physical_ai_server.data_processing.data_converter import DataConverter
 from physical_ai_server.data_processing.data_manager import DataManager
 from physical_ai_server.timer.timer_manager import TimerManager
+from physical_ai_server.inference.inference_manager import InferenceManager
 from physical_ai_server.utils.parameter_utils import (
     declare_parameters,
     load_parameters,
@@ -42,7 +44,7 @@ class PhysicalAIServer(Node):
 
         # Create service
         self.recording_cmd_service = self.create_service(
-            SendRecordingCommand,
+            SendCommand,
             'recording/command',
             self.user_interaction_callback
         )
@@ -59,25 +61,30 @@ class PhysicalAIServer(Node):
     def init_robot_control_parameters_from_user_task(
             self,
             robot_type,
-            operation_mode,
             timer_frequency):
         self.get_ros_params(robot_type)
 
         # Initialize observation manager
         self.communicator = Communicator(
             node=self,
-            operation_mode=operation_mode,
+            operation_mode=self.operation_mode,
             params=self.params
         )
 
         # Create data_collection_timer for periodic data collection with specified frequency
         self.timer_manager = TimerManager(
             node=self)
+        
+        # Determine which callback function to use based on the operation mode
+        if self.operation_mode == 'inference':
+            callback_function = self.inference_timer_callback
+        else:
+            callback_function = self.data_collection_timer_callback
 
         self.timer_manager.set_timer(
-            timer_name=operation_mode,
+            timer_name=self.operation_mode,
             timer_frequency=timer_frequency,
-            callback_function=self.data_collection_timer_callback
+            callback_function=callback_function
         )
 
         self.data_converter = DataConverter()
@@ -171,7 +178,13 @@ class PhysicalAIServer(Node):
         else:
             self.get_logger().error('Camera or Follower topic is not found')
             return False
-
+        self.get_logger().info(
+            f'{len(camera_data)} camera data received, ' +
+            f'{len(self.params['camera_topic_list'])} cameras'
+        )
+        for camera_topic_name in self.params['camera_topic_list']:
+            self.get_logger().info(
+                f'Camera topic {camera_topic_name} not found in received data')
         if len(camera_data) != len(self.params['camera_topic_list']):
             self.get_logger().error(
                 'Camera data length does not match the number of cameras')
@@ -219,56 +232,118 @@ class PhysicalAIServer(Node):
             state=follower_data,
             action=leader_data)
 
+        current_status = self.data_manager.get_current_record_status()
+
         if record_completed:
             self.get_logger().info('Recording stopped')
             self.timer_manager.stop(timer_name=self.operation_mode)
             return
 
     def inference_timer_callback(self):
-        camera_data, follower_data, _ = self.update_latest_data()
+        camera_data = {}
+        follower_data = []
+        leader_data = []
 
-        if camera_data and follower_data:
-            self.latest_camera_data = camera_data
-            self.latest_joint_data = follower_data
+        if not self.update_latest_data(
+                camera_data,
+                follower_data,
+                leader_data):
+            return
+
+        # TODO: Implement inference logic here
+        # inference_manager = InferenceManager(
+        #     policy_type="pi0",
+        #     policy_path="/home/elicer/.cache/huggingface/hub/models--Dongkkka--pi0_model_ffw/snapshots/5bff9c085a1c4ee3634eee49fa463f329b93c170/pretrained_model",
+        #     device="cuda"
+        # )
+        # image = np.zeros((480, 640, 3), dtype=np.uint8)
+        # images = {
+        #     "cam_head": image,
+        #     "cam_wrist_1": image,
+        #     "cam_wrist_2": image,
+        # }
+        # state = np.array(follower_data, dtype=np.float32)
+
+        # state = np.zeros(16, dtype=np.float32)
+
+        # action = inference_manager.predict(
+        #     images=images,
+        #     state=state,
+        #     task_instruction="Sample task"
+        # )
+
+        # print(action)
+
+        if self.save_inference:
+            if not self.data_manager.check_lerobot_dataset(
+                    camera_data,
+                    self.total_joint_order):
+                self.get_logger().info(
+                    'Invalid Repository Folder, Please check the repository folder')
+                self.timer_manager.stop(timer_name=self.operation_mode)
+                return
+
+            record_completed = self.data_manager.record(
+                images=camera_data,
+                state=follower_data,
+                action=leader_data)
+
+            if record_completed:
+                self.get_logger().info('Recording stopped')
+                self.timer_manager.stop(timer_name=self.operation_mode)
+                return
 
     def user_interaction_callback(self, request, response):
-        save_path = self.default_save_root_path / request.repo_id
-        self.get_logger().info(f'Save path: {save_path}')
-
-        if request.command == SendRecordingCommand.Request.START_RECORD:
-            self.get_logger().info('Starting recording with task: ' + request.task_name)
+        if request.command == SendCommand.Request.START_RECORD:
+            task_info = request.task_info
+            self.get_logger().info(
+                'Starting recording with task: ' + task_info.task_name)
+            self.get_logger().info(
+                'Robot Type: ' + task_info.robot_type)
             self.operation_mode = 'collection'
+
             self.init_robot_control_parameters_from_user_task(
-                request.robot_type,
-                self.operation_mode,
-                request.frequency
+                task_info.robot_type,
+                task_info.fps
             )
 
             self.data_manager = DataManager(
-                repo_id=request.repo_id,
-                save_path=save_path,
-                task_instruction=request.task_instruction,
-                tags=['ROBOTIS', request.robot_type],
-                use_image_buffer=request.use_image_buffer,
-                save_fps=request.frequency,
-                reset_time_s=request.reset_time,
-                episode_time_s=request.episode_time,
-                warmup_time_s=request.warmup_time,
-                num_episodes=request.episode_num,
-                push_to_hub=request.push_to_hub,
-                private=request.private_mode)
+                save_root_path=self.default_save_root_path,
+                task_info=task_info)
 
             self.timer_manager.start(timer_name=self.operation_mode)
             response.success = True
             response.message = 'Recording started'
 
-        elif request.command == SendRecordingCommand.Request.STOP:
+        elif request.command == SendCommand.Request.STOP:
             self.get_logger().info('Stopping recording')
-            if self.timer_manager is not None:
-                self.timer_manager.stop(timer_name=self.operation_mode)
-                self.data_manager.record_stop()
+            self.data_manager.record_stop()
             response.success = True
             response.message = 'Recording stopped'
+
+        elif request.command == SendCommand.Request.MOVE_TO_NEXT:
+            self.get_logger().info('Moving to next episode')
+            self.data_manager.record_early_save()
+            response.success = True
+            response.message = 'Moved to next episode'  
+
+        elif request.command == SendCommand.Request.TERMINATE_ALL:
+            self.get_logger().info('Terminating all operations')
+            self.data_manager.record_terminate()
+            response.success = True
+            response.message = 'All operations terminated'
+
+        elif request.command == SendCommand.Request.START_INFERENCE:
+            self.get_logger().info('Starting inference')
+            self.operation_mode = 'inference'
+            self.init_robot_control_parameters_from_user_task(
+                task_info.robot_type,
+                task_info.fps
+            )
+            self.timer_manager.start(timer_name=self.operation_mode)
+            response.success = True
+            response.message = 'Inference started'
+
         return response
 
 

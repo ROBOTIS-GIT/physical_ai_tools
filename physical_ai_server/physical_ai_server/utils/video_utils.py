@@ -34,6 +34,7 @@ class VideoBufferEncoder:
         pix_fmt: str = 'yuv420p',
         g: Optional[int] = 2,
         crf: Optional[int] = 23,
+        qp: Optional[int] = None,
         fast_decode: int = 0,
     ):
         self.buffer = []
@@ -42,6 +43,7 @@ class VideoBufferEncoder:
         self.pix_fmt = pix_fmt
         self.g = g
         self.crf = crf
+        self.qp = qp
         self.fast_decode = fast_decode
 
     def set_buffer(self, frames: List[np.ndarray]) -> None:
@@ -61,13 +63,9 @@ class FFmpegBufferEncoder(VideoBufferEncoder):
         *args,
         chunk_size: int = 100,
         preset: str = 'medium',
-        crf: Optional[int] = 23,
         clear_after_encode: bool = True,
         **kwargs
     ):
-
-        # Override default crf with the one provided in the constructor arguments
-        kwargs['crf'] = crf
         super().__init__(*args, **kwargs)
         self.process = None
         self.chunk_size = chunk_size
@@ -114,7 +112,7 @@ class FFmpegBufferEncoder(VideoBufferEncoder):
                     status['file_size_kb'] = status['file_size'] / 1024
 
                 if self.total_frames_encoded > 0:
-                    status['fps'] = self.total_frames_encoded / status['encoding_time']
+                    status['encoding_fps'] = self.total_frames_encoded / status['encoding_time']
 
         return status
 
@@ -155,16 +153,19 @@ class FFmpegBufferEncoder(VideoBufferEncoder):
         if self.g is not None:
             cmd.extend(['-g', str(self.g)])
 
-        if self.crf is not None:
-            cmd.extend(['-crf', str(self.crf)])
+        if 'nvenc' in self.vcodec:
+            if self.qp is not None:
+                cmd.extend(['-qp', str(self.qp)])
+        else:
+            if self.crf is not None:
+                cmd.extend(['-crf', str(self.crf)])
+            if self.fast_decode:
+                if self.vcodec == 'libsvtav1':
+                    cmd.extend(['-svtav1-params', f'fast-decode={self.fast_decode}'])
+                else:
+                    cmd.extend(['-tune', 'fastdecode'])
 
-        if self.fast_decode:
-            if self.vcodec == 'libsvtav1':
-                cmd.extend(['-svtav1-params', f'fast-decode={self.fast_decode}'])
-            else:
-                cmd.extend(['-tune', 'fastdecode'])
-
-        cmd.extend(['-loglevel', 'warning'])  # Use warning level for more verbose logs
+        cmd.extend(['-loglevel', 'warning'])
         cmd.extend(['-y'])
         cmd.append(str(video_path))
 
@@ -175,14 +176,12 @@ class FFmpegBufferEncoder(VideoBufferEncoder):
                 stdin=subprocess.PIPE,
                 stdout=subprocess.PIPE,
                 stderr=subprocess.PIPE,
-                bufsize=10**8  # Large buffer size
+                bufsize=10**8
             )
-            # Process frames in chunks to avoid buffer overflow
             for i in range(0, total_frames, self.chunk_size):
                 self.current_chunk = i // self.chunk_size + 1
                 chunk = self.buffer[i:i+self.chunk_size]
 
-                # Send each frame in the chunk to FFmpeg
                 for j, frame in enumerate(chunk):
                     try:
                         self.process.stdin.write(frame.tobytes())
@@ -193,13 +192,11 @@ class FFmpegBufferEncoder(VideoBufferEncoder):
                         raise RuntimeError(
                             f'Error in FFmpeg stream processing: {stderr_output}') from e
 
-                # Flush after each chunk
                 self.process.stdin.flush()
                 self.total_chunks_encoded += 1
 
-            # Close input pipe and wait for process to complete
             self.process.stdin.close()
-            self.process.wait(timeout=60)  # Increased timeout for large videos
+            self.process.wait(timeout=60)
 
             stderr = self.process.stderr.read().decode()
             if self.process.returncode != 0:
@@ -211,7 +208,6 @@ class FFmpegBufferEncoder(VideoBufferEncoder):
                 self.is_encoding = False
                 raise OSError(f'Video encoding did not work. File not found: {video_path}')
 
-            # Update encoding status
             self.is_encoding = False
             self.encoding_completed = True
             self.encoding_finished_at = time.time()
@@ -221,10 +217,24 @@ class FFmpegBufferEncoder(VideoBufferEncoder):
             self.is_encoding = False
             self.encoding_completed = False
             if self.process:
-                # Force terminate process if running
                 self.process.kill()
             raise
         finally:
-            # Clean up buffer if configured to do so
             if self.clear_after_encode:
                 self.clear_buffer()
+
+
+class JetsonGPUEncoder(FFmpegBufferEncoder):
+    def __init__(self, *args, **kwargs):
+        # Set default codec to h264_nvenc for Jetson
+        kwargs.setdefault('vcodec', 'h264_nvenc')
+        # Set a default QP value if none is provided (28 is a reasonable default, similar to CRF 23)
+        kwargs.setdefault('qp', 28)
+        # NVENC presets are different, 'p5' (medium) is a good default
+        kwargs.setdefault('preset', 'p5')
+        
+        # Remove crf if it was passed, as it's not used by nvenc
+        kwargs.pop('crf', None)
+
+        super().__init__(*args, **kwargs)
+        print(f"Jetson GPU Encoder initialized with codec: {self.vcodec}")

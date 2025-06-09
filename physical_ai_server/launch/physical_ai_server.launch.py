@@ -17,43 +17,37 @@
 # Author: Dongyun Kim
 
 import os
+import glob
 
 from ament_index_python.packages import get_package_share_directory
 from launch import LaunchDescription
-from launch.actions import DeclareLaunchArgument
-from launch.substitutions import LaunchConfiguration
 from launch_ros.actions import Node
 
 
 def generate_launch_description():
     # Find package share directory for the physical_ai_server package
     pkg_dir = get_package_share_directory('physical_ai_server')
+    
+    # Get all YAML config files from the config directory
+    config_dir = os.path.join(pkg_dir, 'config')
+    config_files = glob.glob(os.path.join(config_dir, '*.yaml'))
+    
+    # Sort config files for consistent ordering
+    config_files.sort()
+    
+    # Print found config files for debugging
+    print(f"Loading config files: {config_files}")
 
-    # Launch arguments
-    config_file = LaunchConfiguration(
-        'config_file',
-        default=os.path.join(pkg_dir, 'config', 'ai_worker_config.yaml')
-    )
-
-    declare_config_file_arg = DeclareLaunchArgument(
-        'config_file',
-        default_value=os.path.join(pkg_dir, 'config', 'ai_worker_config.yaml'),
-        description='Path to the robot configuration YAML file'
-    )
-
-    # Create node action for the physical_ai_server node
+    # Create node action for the physical_ai_server node with all config files
     physical_ai_server = Node(
         package='physical_ai_server',
         executable='physical_ai_server',
         name='physical_ai_server',
         output='screen',
-        parameters=[
-            config_file
-        ]
+        parameters=config_files
     )
 
     # Return launch description
     return LaunchDescription([
-        declare_config_file_arg,
         physical_ai_server
     ])

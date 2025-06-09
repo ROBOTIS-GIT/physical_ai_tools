@@ -20,56 +20,41 @@ import os
 import time
 
 from huggingface_hub import snapshot_download
+
+import sys
+
+dev_lerobot_path = '/root/ros2_ws/src/physical_ai_tools/lerobot'
+if dev_lerobot_path not in sys.path:
+    sys.path.insert(0, dev_lerobot_path)
 from lerobot.common.datasets.utils import DEFAULT_FEATURES
 from lerobot.common.robot_devices.control_configs import RecordControlConfig
 import numpy as np
 from physical_ai_server.data_processing.lerobot_dataset_wrapper import LeRobotDatasetWrapper
+from physical_ai_server.data_processing.storage_checker import StorageChecker
+from physical_ai_interfaces.msg import TaskInfo
+from physical_ai_interfaces.msg import TaskStatus
 import requests
 
 
 class DataManager:
+    RECORDING = False
+    RECORD_COMPLETED = True
 
     def __init__(
             self,
-            repo_id,
-            save_path,
-            task_instruction,
-            tags=['ROBOTIS'],
-            use_image_buffer=True,
-            save_fps=30,
-            reset_time_s=10,
-            episode_time_s=10,
-            warmup_time_s=10,
-            num_episodes=3,
-            video=True,
-            push_to_hub=False,
-            private=False,
-            num_image_writer_processes=4,
+            save_root_path,
+            task_info,
+            num_image_writer_processes=1,
             num_image_writer_threads_per_camera=1):
 
-        self._record_config = RecordControlConfig(
-            repo_id=repo_id,
-            single_task=task_instruction,
-            root=save_path,
-            fps=save_fps,
-            reset_time_s=reset_time_s,
-            episode_time_s=episode_time_s,
-            num_episodes=num_episodes,
-            video=video,
-            push_to_hub=push_to_hub,
-            private=private,
-            num_image_writer_processes=num_image_writer_processes,
-            num_image_writer_threads_per_camera=num_image_writer_threads_per_camera,
-            warmup_time_s=warmup_time_s,
-            tags=tags
-        )
-
+        self._save_repo_name = f'{task_info.repo_id}/{task_info.robot_type}_{task_info.task_name}'
+        self._save_path = save_root_path / self._save_repo_name
+        print('Save Path : ',self._save_path)
+        self._task_info = task_info
         self._lerobot_dataset = None
-        self._task_instruction = task_instruction
         self._record_episode_count = 0
         self._start_time_s = 0
-        self.status = 'warmup'
-        self.use_image_buffer = use_image_buffer
+        self._status = 'warmup'
 
     def record(
             self,
@@ -77,65 +62,104 @@ class DataManager:
             state,
             action):
 
-        if self._record_episode_count >= self._record_config.num_episodes:
+        if ((self._record_episode_count >= self._task_info.num_episodes) or 
+            (self._status == 'terminate')):
             if self._lerobot_dataset.check_video_encoding_completed():
-                if self._record_config.push_to_hub:
-                    self.upload_dataset(self._record_config.tags, private=False)
-                return True
+                if (self._task_info.push_to_hub and
+                    self._record_episode_count > 0):
+                    self._upload_dataset(
+                        self._task_info.tags,
+                        self._task_info.private)
+                return self.RECORD_COMPLETED
+
+        if self._status == 'stop':
+            return self.RECORDING
 
         if self._start_time_s == 0:
             self._start_time_s = time.perf_counter()
 
-        if self.status == 'warmup':
-            if not self._check_time(self._record_config.warmup_time_s, 'run'):
-                return False
+        if self._status == 'warmup':
+            if not self._check_time(self._task_info.warmup_time_s, 'run'):
+                return self.RECORDING
 
-        elif self.status == 'run':
-            if not self._check_time(self._record_config.episode_time_s, 'save'):
+        elif self._status == 'run':
+            if not self._check_time(self._task_info.episode_time_s, 'save'):
                 frame = {}
                 for camera_name, image in images.items():
                     frame[f'observation.images.{camera_name}'] = image
                 frame['observation.state'] = np.array(state)
                 frame['action'] = np.array(action)
-                frame['task'] = self._task_instruction
+                frame['task'] = self._task_info.single_task
 
-                if self.use_image_buffer:
+                if self._task_info.use_image_buffer:
                     self._lerobot_dataset.add_frame_without_write_image(frame)
                 else:
                     self._lerobot_dataset.add_frame(frame)
 
-        elif self.status == 'save':
+        elif self._status == 'save':
             self.save()
             if self._lerobot_dataset.check_video_encoding_completed():
-                self.status = 'reset'
+                self._status = 'reset'
                 self._start_time_s = 0
-            return False
+            return self.RECORDING
 
-        elif self.status == 'reset':
-            if not self._check_time(self._record_config.reset_time_s, 'run'):
-                return False
+        elif self._status == 'reset':
+            if not self._check_time(self._task_info.reset_time_s, 'run'):
+                return self.RECORDING
 
-        return False
+        return self.RECORDING
 
     def save(self):
-        if self.use_image_buffer:
+        if self._task_info.use_image_buffer:
             self._lerobot_dataset.save_episode_without_write_image()
         else:
             self._lerobot_dataset.save_episode()
 
-        self._lerobot_dataset.episode_buffer = None
+        self._episode_reset()
         self._record_episode_count += 1
-        self._start_time_s = 0
-        self.status = 'reset'
+        self._status = 'reset'
+
+    def record_early_save(self):
+        if self._lerobot_dataset.episode_buffer is not None:
+            self._status = 'save'
 
     def record_stop(self):
+        self._episode_reset()
+        self._status = 'stop'
+
+    def record_terminate(self):
+        self._status = 'terminate'
+
+    def get_current_record_status(self):
+        current_status = TaskStatus()
+        current_status.task_info = self._task_info
+        current_status.proceed_time = self._proceed_time
+        current_status.current_episode_number = self._record_episode_count
+        total_storage, used_storage = StorageChecker.get_storage_gb("/")
+        current_status.used_storage_size = used_storage
+        current_status.total_storage_size = total_storage
+
+        if self._status == 'warmup':
+            current_status.phase = TaskStatus.WARMING_UP
+            current_status.total_time = self._task_info.warmup_time_s
+        elif self._status == 'run':
+            current_status.phase = TaskStatus.RECORDING
+            current_status.total_time = self._task_info.episode_time_s
+        elif self._status == 'reset':
+            current_status.phase = TaskStatus.RESETTING
+            current_status.total_time = self._task_info.reset_time_s
+
+        return current_status
+
+    def _episode_reset(self):
         self._lerobot_dataset.episode_buffer = None
         self._start_time_s = 0
-        self.status = 'stop'
+        
 
     def _check_time(self, limit_time, next_status):
-        if time.perf_counter() - self._start_time_s > limit_time:
-            self.status = next_status
+        self._proceed_time = time.perf_counter() - self._start_time_s
+        if self._proceed_time > limit_time:
+            self._status = next_status
             self._start_time_s = 0
             return True
         else:
@@ -152,7 +176,7 @@ class DataManager:
 
         if response.status_code == url_exist_code:
             print(f'Dataset {repo_id} exists on Huggingface, downloading...')
-            self.download_dataset(repo_id)
+            self._download_dataset(repo_id)
             return True
 
         return False
@@ -161,21 +185,21 @@ class DataManager:
         try:
             if self._lerobot_dataset is None:
                 if self._check_dataset_exists(
-                        self._record_config.repo_id,
-                        self._record_config.root):
+                        self._save_repo_name,
+                        self._save_path):
                     self._lerobot_dataset = LeRobotDatasetWrapper(
-                        self._record_config.repo_id,
-                        self._record_config.root
+                        self._save_repo_name,
+                        self._save_path
                     )
                 else:
                     self._lerobot_dataset = self._create_dataset(
-                        self._record_config.repo_id,
+                        self._save_repo_name,
                         images, joint_list)
 
-                if not self.use_image_buffer:
+                if not self._task_info.use_image_buffer:
                     self._lerobot_dataset.start_image_writer(
-                            num_processes=self._record_config.num_image_writer_processes,
-                            num_threads=self._record_config.num_image_writer_threads_per_camera *
+                            num_processes=self._task_info.num_image_writer_processes,
+                            num_threads=self._task_info.num_image_writer_threads_per_camera *
                             len(images),
                         )
 
@@ -212,17 +236,17 @@ class DataManager:
 
         return LeRobotDatasetWrapper.create(
                 repo_id=repo_id,
-                fps=self._record_config.fps,
+                fps=self._task_info.fps,
                 features=features,
                 use_videos=True
             )
 
-    def upload_dataset(self, tags, private=False):
+    def _upload_dataset(self, tags, private=False):
         self._lerobot_dataset.push_to_hub(tags=tags, private=private)
 
-    def download_dataset(self, repo_id):
+    def _download_dataset(self, repo_id):
         snapshot_download(
             repo_id,
             repo_type='dataset',
-            local_dir=self._record_config.root,
+            local_dir=self._save_path,
         )

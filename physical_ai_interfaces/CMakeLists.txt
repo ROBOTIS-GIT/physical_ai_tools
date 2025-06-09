@@ -5,8 +5,10 @@ find_package(ament_cmake REQUIRED)
 find_package(rosidl_default_generators REQUIRED)
 
 rosidl_generate_interfaces(${PROJECT_NAME}
-  "msg/RecordingStatus.msg"
-  "srv/SendRecordingCommand.srv"
+  "msg/TaskInfo.msg"
+  "msg/TaskStatus.msg"
+  "srv/GetImageTopicList.srv"
+  "srv/SendCommand.srv"
 )
 
 install(
