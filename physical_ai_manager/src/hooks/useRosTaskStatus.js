@@ -24,7 +24,7 @@ export function useRosTaskStatus(rosbridgeUrl, topicName = '/task/status') {
   const [taskStatus, setTaskStatus] = useState({
     taskName: 'idle',
     running: false,
-    phase: 4, // STOPED
+    phase: 0, // NONE
     progress: 0,
     totalTime: 0,
     proceedTime: 0,
