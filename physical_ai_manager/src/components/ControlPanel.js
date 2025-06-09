@@ -27,7 +27,16 @@ const buttons = [
   { label: 'Finish', icon: MdCheck, color: '#388e3c' },
 ];
 
-export default function ControlPanel({ onCommand }) {
+const phaseGuideMessages = {
+  0: '📍 Waiting to start',
+  1: '🔥 Warmup in progress',
+  2: '🏠 Reset in progress',
+  3: '🔴 Recording in progress',
+  4: '◼️ Task Stopped',
+  5: '⚡ Inference in progress',
+};
+
+export default function ControlPanel({ onCommand, episodeStatus }) {
   const icon_size = 70;
   const [hovered, setHovered] = useState(null);
   const [pressed, setPressed] = useState(null);
@@ -37,6 +46,37 @@ export default function ControlPanel({ onCommand }) {
   useEffect(() => {
     startedRef.current = started;
   }, [started]);
+
+  // Check if button should be enabled based on phase
+  const isButtonEnabled = useCallback(
+    (label) => {
+      const phase = episodeStatus?.phase;
+
+      let isNone = phase == 0;
+      let isStopped = phase == 4;
+
+      switch (label) {
+        case 'Start':
+          // Start button disabled when task is running or when running flag is true
+          return (isNone || isStopped) && !episodeStatus?.running;
+        case 'Stop':
+          // Stop button enabled only when task is running
+          return !(isNone || isStopped);
+        case 'Retry':
+          // Retry button enabled only when task is stopped
+          return !isNone;
+        case 'Next':
+          // Next button enabled only when task is stopped
+          return !isNone;
+        case 'Finish':
+          // Finish button enabled only when task is stopped
+          return !isNone;
+        default:
+          return false;
+      }
+    },
+    [episodeStatus]
+  );
 
   const handleCommand = useCallback(
     (label) => {
@@ -50,98 +90,134 @@ export default function ControlPanel({ onCommand }) {
 
   useEffect(() => {
     const handleKeyDown = (e) => {
-      if (e.key === 'ArrowLeft') {
+      if (e.key === 'ArrowLeft' && isButtonEnabled('Retry')) {
         handleCommand('Retry');
-      } else if (e.key === 'ArrowRight') {
+      } else if (e.key === 'ArrowRight' && isButtonEnabled('Next')) {
         handleCommand('Next');
       } else if (e.key === ' ' || e.key === 'Spacebar' || e.code === 'Space') {
-        if (!startedRef.current) {
+        if (!startedRef.current && isButtonEnabled('Start')) {
           handleCommand('Start');
-        } else {
+        } else if (startedRef.current && isButtonEnabled('Stop')) {
           handleCommand('Stop');
         }
-      } else if ((e.ctrlKey || e.metaKey) && (e.key === 'c' || e.key === 'C')) {
+      } else if (
+        (e.ctrlKey || e.metaKey) &&
+        (e.key === 'c' || e.key === 'C') &&
+        isButtonEnabled('Finish')
+      ) {
         handleCommand('Finish');
       }
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [handleCommand]);
+  }, [handleCommand, !isButtonEnabled]);
+
+  const classControlPanelBody = clsx(
+    'h-56',
+    'bg-gray-300',
+    'rounded-3xl',
+    'mx-8',
+    'mt-2',
+    'mb-4',
+    'p-4',
+    'flex',
+    'flex-row',
+    'items-center',
+    'gap-2',
+    'shadow-lg'
+  );
+
+  const classControlPanelButtons = (label, isDisabled) =>
+    clsx(
+      'text-4xl',
+      'font-extrabold',
+      'h-full',
+      'flex-grow',
+      'min-w-16',
+      'rounded-2xl',
+      'border-none',
+      'cursor-pointer',
+      'mr-2',
+      'flex',
+      'items-center',
+      'justify-center',
+      'flex-col',
+      'gap-1',
+      'bg-gray-100',
+      'transition-all',
+      'duration-200',
+      {
+        'bg-gray-300': pressed === label && !isDisabled,
+        'bg-gray-200': hovered === label && pressed !== label && !isDisabled,
+        'opacity-30': isDisabled,
+        'cursor-not-allowed': isDisabled,
+        'bg-gray-50': isDisabled,
+      }
+    );
+
+  const classControlPanelButtonIcon = clsx(
+    'bg-transparent',
+    'rounded-full',
+    'w-20',
+    'h-20',
+    'flex',
+    'items-center',
+    'justify-center',
+    'mb-1'
+  );
+
+  const handleButtonKeyDown = (e, label, isDisabled) => {
+    if (isDisabled) return;
+    if (e.key === 'Enter') {
+      handleCommand(label);
+    }
+    if (e.key === ' ') {
+      e.preventDefault();
+    }
+  };
+
+  const handleMouseEnter = (label, isDisabled) => {
+    if (!isDisabled) {
+      setHovered(label);
+    }
+  };
+
+  const handleMouseLeave = () => {
+    setHovered(null);
+    setPressed(null);
+  };
+
+  const handleMouseDown = (label, isDisabled) => {
+    if (!isDisabled) {
+      setPressed(label);
+    }
+  };
+
+  const handleMouseUp = () => {
+    setPressed(null);
+  };
 
   return (
-    <div
-      className={clsx(
-        'h-56',
-        'bg-gray-300',
-        'rounded-3xl',
-        'mx-8',
-        'my-4',
-        'p-4',
-        'flex',
-        'flex-row',
-        'items-center',
-        'gap-2',
-        'shadow-lg'
-      )}
-    >
+    <div className={classControlPanelBody}>
       <div className="flex flex-[2] items-center w-full h-full gap-4">
         {buttons.map(({ label, icon: Icon, color }) => {
+          const isDisabled = !isButtonEnabled(label);
           return (
             <button
               key={label}
-              className={clsx(
-                'text-4xl',
-                'font-extrabold',
-                'h-full',
-                'flex-grow',
-                'min-w-16',
-                'rounded-2xl',
-                'border-none',
-                'cursor-pointer',
-                'mr-2',
-                'flex',
-                'items-center',
-                'justify-center',
-                'flex-col',
-                'gap-1',
-                {
-                  'bg-gray-300': pressed === label,
-                  'bg-gray-200': hovered === label && pressed !== label,
-                  'bg-gray-100': hovered !== label && pressed !== label,
-                }
-              )}
+              className={classControlPanelButtons(label, isDisabled)}
               style={{ fontFamily: 'Pretendard Variable' }}
-              tabIndex={0}
-              onClick={() => handleCommand(label)}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter') {
-                  handleCommand(label);
-                }
-                if (e.key === ' ') {
-                  e.preventDefault();
-                }
-              }}
-              onMouseEnter={() => setHovered(label)}
-              onMouseLeave={() => {
-                setHovered(null);
-                setPressed(null);
-              }}
-              onMouseDown={() => setPressed(label)}
-              onMouseUp={() => setPressed(null)}
+              tabIndex={isDisabled ? -1 : 0}
+              onClick={() => !isDisabled && handleCommand(label)}
+              onKeyDown={(e) => handleButtonKeyDown(e, label, isDisabled)}
+              onMouseEnter={() => handleMouseEnter(label, isDisabled)}
+              onMouseLeave={handleMouseLeave}
+              onMouseDown={() => handleMouseDown(label, isDisabled)}
+              onMouseUp={handleMouseUp}
+              disabled={isDisabled}
             >
-              <span
-                className={clsx(
-                  'bg-transparent',
-                  'rounded-full',
-                  'w-20',
-                  'h-20',
-                  'flex',
-                  'items-center',
-                  'justify-center',
-                  'mb-1'
-                )}
-              >
-                <Icon size={icon_size} color={color} />
+              <span className={classControlPanelButtonIcon}>
+                <Icon size={icon_size} color={isDisabled ? '#9ca3af' : color} />
               </span>
               {label}
             </button>
@@ -149,8 +225,10 @@ export default function ControlPanel({ onCommand }) {
         })}
       </div>
       <div className="flex flex-1 flex-col justify-center items-center w-full gap-8">
-        <div className="flex-1 min-w-0 text-3xl text-center">Please prepare next episode</div>
-        <ProgressBar percent={60} />
+        <div className="flex-1 min-w-0 text-3xl text-center">
+          {phaseGuideMessages[episodeStatus?.phase]}
+        </div>
+        <ProgressBar percent={episodeStatus?.progress} />
       </div>
     </div>
   );

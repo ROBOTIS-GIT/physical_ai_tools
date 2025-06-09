@@ -18,6 +18,40 @@ import React from 'react';
 import clsx from 'clsx';
 import { MdClose } from 'react-icons/md';
 
+const classImageGridCell = (topic) =>
+  clsx(
+    'relative',
+    'bg-gray-100',
+    'rounded-3xl',
+    'flex',
+    'items-center',
+    'justify-center',
+    'transition-all',
+    'duration-300',
+    'w-full',
+    {
+      'border-2 border-dashed border-gray-300 hover:border-gray-400': !topic,
+      'bg-white': topic,
+    }
+  );
+
+const classImageGridCellButton = clsx(
+  'absolute',
+  'top-2',
+  'right-2',
+  'w-8',
+  'h-8',
+  'bg-black',
+  'bg-opacity-50',
+  'text-white',
+  'rounded-full',
+  'flex',
+  'items-center',
+  'justify-center',
+  'hover:bg-opacity-70',
+  'z-10'
+);
+
 export default function ImageGridCell({
   topic,
   aspect,
@@ -29,42 +63,13 @@ export default function ImageGridCell({
 }) {
   return (
     <div
-      className={clsx(
-        'relative',
-        'bg-gray-100',
-        'rounded-3xl',
-        'flex',
-        'items-center',
-        'justify-center',
-        'transition-all',
-        'duration-300',
-        'w-full',
-        {
-          'border-2 border-dashed border-gray-300 hover:border-gray-400': !topic,
-          'bg-white': topic,
-        }
-      )}
+      className={classImageGridCell(topic)}
       onClick={!topic ? () => onPlusClick(idx) : undefined}
       style={{ cursor: !topic ? 'pointer' : 'default', aspectRatio: aspect, ...style }}
     >
       {topic && topic.trim() !== '' && (
         <button
-          className={clsx(
-            'absolute',
-            'top-2',
-            'right-2',
-            'w-8',
-            'h-8',
-            'bg-black',
-            'bg-opacity-50',
-            'text-white',
-            'rounded-full',
-            'flex',
-            'items-center',
-            'justify-center',
-            'hover:bg-opacity-70',
-            'z-10'
-          )}
+          className={classImageGridCellButton}
           onClick={(e) => {
             e.stopPropagation();
             const img = document.querySelector(`#img-stream-${idx}`);

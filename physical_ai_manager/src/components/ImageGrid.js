@@ -14,77 +14,24 @@
 //
 // Author: Kiwoong Park
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import clsx from 'clsx';
+import toast from 'react-hot-toast';
 import ImageGridCell from './ImageGridCell';
+import ImageTopicSelectModal from './ImageTopicSelectModal';
+import { useRosServiceCaller } from '../hooks/useRosServiceCaller';
 
 const layout = [{ aspect: '16/9' }, { aspect: '16/9' }, { aspect: '16/9' }];
-
-const topicList = [
-  '/camera_left/camera_left/color/image_rect_raw',
-  '/camera_right/camera_right/color/image_rect_raw',
-  '/zed/zed_node/rgb/image_rect_color',
-];
-
-function TopicSelectModal({ topicList, onSelect, onClose }) {
-  const [hovered, setHovered] = useState(null);
-  const [selected, setSelected] = useState(null);
-
-  return (
-    <div
-      className={clsx(
-        'fixed',
-        'top-0',
-        'left-0',
-        'w-screen',
-        'h-screen',
-        'bg-black',
-        'bg-opacity-20',
-        'flex',
-        'items-center',
-        'justify-center',
-        'z-50'
-      )}
-    >
-      <div className="bg-white rounded-xl p-8 min-w-[420px]">
-        <h3 className="mb-8 text-4xl">Select Image Topic</h3>
-        <ul className="list-none p-0 m-0">
-          {topicList.map((topic) => (
-            <li
-              key={topic}
-              className={clsx(
-                'my-2 cursor-pointer p-3 rounded-md text-xl transition-colors duration-200',
-                {
-                  'bg-blue-700 text-white': selected === topic,
-                  'bg-blue-200': hovered === topic && selected !== topic,
-                  'bg-gray-200': hovered !== topic && selected !== topic,
-                }
-              )}
-              onMouseEnter={() => setHovered(topic)}
-              onMouseLeave={() => setHovered(null)}
-              onClick={() => {
-                setSelected(topic);
-                onSelect(topic);
-              }}
-            >
-              {topic}
-            </li>
-          ))}
-        </ul>
-        <button
-          className="mt-5 w-1/3 min-h-[50px] text-3xl font-medium rounded-lg border-0 shadow-md"
-          onClick={onClose}
-        >
-          Close
-        </button>
-      </div>
-    </div>
-  );
-}
 
 export default function ImageGrid({ topics, setTopics, rosHost }) {
   const [modalOpen, setModalOpen] = React.useState(false);
   const [selectedIdx, setSelectedIdx] = React.useState(null);
+  const [topicList, setTopicList] = useState([]);
+  const [isLoadingTopics, setIsLoadingTopics] = useState(false);
+  const [topicListError, setTopicListError] = useState(null);
+
+  const rosbridgeUrl = `ws://${rosHost.split(':')[0]}:9090`;
+  const { getImageTopicList } = useRosServiceCaller(rosbridgeUrl);
 
   // Adjust the length of the topics array
   React.useEffect(() => {
@@ -94,9 +41,64 @@ export default function ImageGrid({ topics, setTopics, rosHost }) {
     // eslint-disable-next-line
   }, []);
 
+  // Fetch image topic list on component mount
+  useEffect(() => {
+    const fetchTopicList = async () => {
+      setIsLoadingTopics(true);
+      setTopicListError(null);
+      try {
+        const result = await getImageTopicList();
+        if (result && result.success) {
+          setTopicList(result.image_topic_list || []);
+          setTopicListError(null);
+          toast.success(`Loaded ${result.image_topic_list?.length || 0} image topics`);
+        } else {
+          console.error('Failed to get image topic list:', result?.message);
+          const errorMsg = result?.message || 'Unknown error occurred';
+          setTopicListError(`Service error: ${errorMsg}`);
+          setTopicList([]);
+          toast.error(`Failed to load image topics: ${errorMsg}`);
+        }
+      } catch (error) {
+        console.error('Error fetching image topic list:', error);
+        setTopicListError('Failed to load image topic list');
+        setTopicList([]);
+        toast.error('Failed to load image topic list');
+      } finally {
+        setIsLoadingTopics(false);
+      }
+    };
+
+    fetchTopicList();
+  }, [getImageTopicList]);
+
   const handlePlusClick = (idx) => {
     setSelectedIdx(idx);
     setModalOpen(true);
+  };
+
+  const handleRefreshTopics = async () => {
+    setIsLoadingTopics(true);
+    setTopicListError(null);
+    try {
+      const result = await getImageTopicList();
+      if (result && result.success) {
+        setTopicList(result.image_topic_list || []);
+        setTopicListError(null);
+        toast.success(`Refreshed: ${result.image_topic_list?.length || 0} image topics`);
+      } else {
+        const errorMsg = result?.message || 'Unknown error occurred';
+        setTopicListError(`Service error: ${errorMsg}`);
+        setTopicList([]);
+        toast.error(`Failed to refresh topics: ${errorMsg}`);
+      }
+    } catch (error) {
+      setTopicListError('Failed to load image topic list');
+      setTopicList([]);
+      toast.error('Failed to refresh image topics');
+    } finally {
+      setIsLoadingTopics(false);
+    }
   };
 
   const handleTopicSelect = (topic) => {
@@ -111,35 +113,43 @@ export default function ImageGrid({ topics, setTopics, rosHost }) {
     setTopics(topics.map((t, i) => (i === idx ? null : t)));
   };
 
+  const classImageGridArea = clsx(
+    'flex',
+    'flex-row',
+    'justify-center',
+    'items-center',
+    'gap-[0.5vw]',
+    'w-full',
+    'h-full',
+    'max-w-full',
+    'max-h-full',
+    'overflow-hidden'
+  );
+
+  const classImageGridCell = (idx) =>
+    clsx('min-w-0', 'min-h-0', 'flex', 'items-center', 'justify-center', 'relative', {
+      'flex-[7_1_0]': idx === 1,
+      'flex-[3_1_0]': idx !== 1,
+    });
+
+  const classTopicLabel = clsx(
+    'absolute',
+    'bottom-2',
+    'left-2',
+    'text-xs',
+    'text-white',
+    'bg-black',
+    'bg-opacity-50',
+    'px-2',
+    'py-1',
+    'rounded'
+  );
+
   return (
     <div className="w-full h-full overflow-hidden">
-      <div
-        className={clsx(
-          'flex',
-          'flex-row',
-          'justify-center',
-          'items-center',
-          'gap-[0.5vw]',
-          'w-full',
-          'h-full',
-          'max-w-full',
-          'max-h-full',
-          'overflow-hidden'
-        )}
-      >
+      <div className={classImageGridArea}>
         {layout.map((cell, idx) => (
-          <div
-            key={idx}
-            className={clsx(
-              'min-w-0',
-              'min-h-0',
-              'flex',
-              'items-center',
-              'justify-center',
-              'relative',
-              { 'flex-[7_1_0]': idx === 1, 'flex-[3_1_0]': idx !== 1 }
-            )}
-          >
+          <div key={idx} className={classImageGridCell(idx)}>
             <ImageGridCell
               topic={topics[idx]}
               aspect={cell.aspect}
@@ -148,29 +158,17 @@ export default function ImageGrid({ topics, setTopics, rosHost }) {
               onClose={handleCellClose}
               onPlusClick={handlePlusClick}
             />
-            <div
-              className={clsx(
-                'absolute',
-                'bottom-2',
-                'left-2',
-                'text-xs',
-                'text-white',
-                'bg-black',
-                'bg-opacity-50',
-                'px-2',
-                'py-1',
-                'rounded'
-              )}
-            >
-              {topics[idx] || ''}
-            </div>
+            <div className={classTopicLabel}>{topics[idx] || ''}</div>
           </div>
         ))}
         {modalOpen && (
-          <TopicSelectModal
+          <ImageTopicSelectModal
             topicList={topicList}
             onSelect={handleTopicSelect}
             onClose={() => setModalOpen(false)}
+            isLoading={isLoadingTopics}
+            onRefresh={handleRefreshTopics}
+            errorMessage={topicListError}
           />
         )}
       </div>
