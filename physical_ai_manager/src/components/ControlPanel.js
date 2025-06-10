@@ -331,8 +331,8 @@ export default function ControlPanel({ onCommand, episodeStatus }) {
           );
         })}
       </div>
-      <div className="flex flex-1 flex-col justify-center items-center w-full gap-8">
-        <div className="flex-1 min-w-0 text-3xl text-center">
+      <div className="w-full h-full rounded-2xl flex flex-1 flex-col justify-center items-center gap-8">
+        <div className="flex min-w-0 text-3xl text-center">
           {phaseGuideMessages[episodeStatus?.phase]}
         </div>
         <ProgressBar percent={episodeStatus?.progress} />

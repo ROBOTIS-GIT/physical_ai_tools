@@ -161,7 +161,7 @@ export function useRosServiceCaller(rosbridgeUrl) {
   const getImageTopicList = useCallback(async () => {
     try {
       const result = await callService(
-        '/get_image_topic_list',
+        '/image/get_available_list',
         'physical_ai_interfaces/srv/GetImageTopicList',
         {}
       );
