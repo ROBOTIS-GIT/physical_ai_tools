@@ -20,13 +20,44 @@ import ProgressBar from './ProgressBar';
 import { MdPlayArrow, MdStop, MdReplay, MdSkipNext, MdCheck } from 'react-icons/md';
 import CompactStorageStatus from './CompactStorageStatus';
 import StorageStatus from './StorageStatus';
+import Tooltip from './Tooltip';
 
 const buttons = [
-  { label: 'Start', icon: MdPlayArrow, color: '#1976d2' },
-  { label: 'Stop', icon: MdStop, color: '#d32f2f' },
-  { label: 'Retry', icon: MdReplay, color: '#fbc02d' },
-  { label: 'Next', icon: MdSkipNext, color: '#388e3c' },
-  { label: 'Finish', icon: MdCheck, color: '#388e3c' },
+  {
+    label: 'Start',
+    icon: MdPlayArrow,
+    color: '#1976d2',
+    description: 'Start recording task',
+    shortcut: 'Space',
+  },
+  {
+    label: 'Stop',
+    icon: MdStop,
+    color: '#d32f2f',
+    description: 'Stop current task',
+    shortcut: 'Space',
+  },
+  {
+    label: 'Retry',
+    icon: MdReplay,
+    color: '#fbc02d',
+    description: 'Retry current episode',
+    shortcut: '←',
+  },
+  {
+    label: 'Next',
+    icon: MdSkipNext,
+    color: '#388e3c',
+    description: 'Move to next episode',
+    shortcut: '→',
+  },
+  {
+    label: 'Finish',
+    icon: MdCheck,
+    color: '#388e3c',
+    description: 'Finish and save task',
+    shortcut: 'Ctrl+C',
+  },
 ];
 
 const phaseGuideMessages = {
@@ -85,34 +116,83 @@ export default function ControlPanel({ onCommand, episodeStatus }) {
       if (onCommand) onCommand(label);
       console.log(label + ' command executed');
       if (label === 'Start') setStarted(true);
-      if (label === 'Stop') setStarted(false);
+      if (label === 'Stop' || label === 'Finish') setStarted(false);
     },
     [onCommand]
   );
 
-  useEffect(() => {
-    const handleKeyDown = (e) => {
+  // Helper function to get button label from keyboard event
+  const getButtonFromKey = useCallback(
+    (e) => {
       if (e.key === 'ArrowLeft' && isButtonEnabled('Retry')) {
-        handleCommand('Retry');
+        return 'Retry';
       } else if (e.key === 'ArrowRight' && isButtonEnabled('Next')) {
-        handleCommand('Next');
+        return 'Next';
       } else if (e.key === ' ' || e.key === 'Spacebar' || e.code === 'Space') {
-        if (!startedRef.current && isButtonEnabled('Start')) {
-          handleCommand('Start');
-        } else if (startedRef.current && isButtonEnabled('Stop')) {
-          handleCommand('Stop');
+        if (isButtonEnabled('Start')) {
+          return 'Start';
+        } else if (isButtonEnabled('Stop')) {
+          return 'Stop';
         }
       } else if (
         (e.ctrlKey || e.metaKey) &&
         (e.key === 'c' || e.key === 'C') &&
         isButtonEnabled('Finish')
       ) {
-        handleCommand('Finish');
+        return 'Finish';
+      }
+      return null;
+    },
+    [isButtonEnabled]
+  );
+
+  // Add keyboard press visual feedback
+  const handleKeyboardPress = useCallback((buttonLabel) => {
+    if (buttonLabel) {
+      setPressed(buttonLabel);
+    }
+  }, []);
+
+  // Add keyboard release visual feedback
+  const handleKeyboardRelease = useCallback(() => {
+    setPressed(null);
+  }, []);
+
+  useEffect(() => {
+    const handleKeyDown = (e) => {
+      // Ignore repeated keydown events when holding the key
+      if (e.repeat) return;
+
+      const buttonLabel = getButtonFromKey(e);
+      if (buttonLabel) {
+        handleKeyboardPress(buttonLabel);
       }
     };
+
+    const handleKeyUp = (e) => {
+      // Always release pressed state on keyup
+      handleKeyboardRelease();
+
+      // Get the button label and execute the command
+      const buttonLabel = getButtonFromKey(e);
+      if (buttonLabel) {
+        handleCommand(buttonLabel);
+      }
+    };
+
     window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [handleCommand, !isButtonEnabled]);
+    window.addEventListener('keyup', handleKeyUp);
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown);
+      window.removeEventListener('keyup', handleKeyUp);
+    };
+  }, [
+    handleCommand,
+    isButtonEnabled,
+    getButtonFromKey,
+    handleKeyboardPress,
+    handleKeyboardRelease,
+  ]);
 
   const classControlPanelBody = clsx(
     'h-56',
@@ -133,6 +213,7 @@ export default function ControlPanel({ onCommand, episodeStatus }) {
     clsx(
       'text-4xl',
       'font-extrabold',
+      'w-full',
       'h-full',
       'flex-grow',
       'min-w-16',
@@ -168,13 +249,17 @@ export default function ControlPanel({ onCommand, episodeStatus }) {
     'mb-1'
   );
 
-  const handleButtonKeyDown = (e, label, isDisabled) => {
+  const handleButtonKeyUp = (e, label, isDisabled) => {
     if (isDisabled) return;
     if (e.key === 'Enter') {
       handleCommand(label);
     }
+  };
+
+  const handleButtonKeyDown = (e, label, isDisabled) => {
+    if (isDisabled) return;
     if (e.key === ' ') {
-      e.preventDefault();
+      e.preventDefault(); // Prevent scrolling
     }
   };
 
@@ -202,27 +287,47 @@ export default function ControlPanel({ onCommand, episodeStatus }) {
   return (
     <div className={classControlPanelBody}>
       <div className="flex flex-[2] items-center w-full h-full gap-4">
-        {buttons.map(({ label, icon: Icon, color }) => {
+        {buttons.map(({ label, icon: Icon, color, description, shortcut }) => {
           const isDisabled = !isButtonEnabled(label);
+
+          const tooltipContent = (
+            <div className="text-center">
+              <div className="font-semibold">{description}</div>
+              {!isDisabled && (
+                <div className="text-xs mt-1 text-gray-300">
+                  Press <span className="font-mono bg-gray-700 px-1 rounded">{shortcut}</span>
+                </div>
+              )}
+              {isDisabled && <div className="text-xs mt-1 text-red-300">Currently disabled</div>}
+            </div>
+          );
+
           return (
-            <button
+            <Tooltip
               key={label}
-              className={classControlPanelButtons(label, isDisabled)}
-              style={{ fontFamily: 'Pretendard Variable' }}
-              tabIndex={isDisabled ? -1 : 0}
-              onClick={() => !isDisabled && handleCommand(label)}
-              onKeyDown={(e) => handleButtonKeyDown(e, label, isDisabled)}
-              onMouseEnter={() => handleMouseEnter(label, isDisabled)}
-              onMouseLeave={handleMouseLeave}
-              onMouseDown={() => handleMouseDown(label, isDisabled)}
-              onMouseUp={handleMouseUp}
-              disabled={isDisabled}
+              content={tooltipContent}
+              disabled={false}
+              className="whitespace-normal max-w-48"
             >
-              <span className={classControlPanelButtonIcon}>
-                <Icon size={icon_size} color={isDisabled ? '#9ca3af' : color} />
-              </span>
-              {label}
-            </button>
+              <button
+                className={classControlPanelButtons(label, isDisabled)}
+                style={{ fontFamily: 'Pretendard Variable' }}
+                tabIndex={isDisabled ? -1 : 0}
+                onClick={() => !isDisabled && handleCommand(label)}
+                onKeyUp={(e) => handleButtonKeyUp(e, label, isDisabled)}
+                onKeyDown={(e) => handleButtonKeyDown(e, label, isDisabled)}
+                onMouseEnter={() => handleMouseEnter(label, isDisabled)}
+                onMouseLeave={handleMouseLeave}
+                onMouseDown={() => handleMouseDown(label, isDisabled)}
+                onMouseUp={handleMouseUp}
+                disabled={isDisabled}
+              >
+                <span className={classControlPanelButtonIcon}>
+                  <Icon size={icon_size} color={isDisabled ? '#9ca3af' : color} />
+                </span>
+                {label}
+              </button>
+            </Tooltip>
           );
         })}
       </div>

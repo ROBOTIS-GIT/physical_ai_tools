@@ -45,12 +45,6 @@ export default function SettingPage({ rosHost, setRosHost, yamlContent, setYamlC
           topicName="/chatter"
           messageType="std_msgs/String"
         />
-        <RosServiceCaller
-          rosbridgeUrl={rosbridgeUrl}
-          serviceName="/gui/set_page"
-          serviceType="gaemi_interfaces/srv/SetGUIPage"
-          requestFields={{ page_name: '', option: '' }}
-        />
       </div>
     </div>
   );

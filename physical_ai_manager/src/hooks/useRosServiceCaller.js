@@ -83,22 +83,6 @@ export function useRosServiceCaller(rosbridgeUrl) {
     [getRosConnection]
   );
 
-  const setGuiPage = useCallback(
-    async (pageName, option) => {
-      console.log('setGuiPage called with:', pageName, option);
-      try {
-        await callService('/gui/set_page', 'gaemi_interfaces/srv/SetGUIPage', {
-          page_name: pageName,
-          option: option,
-        });
-      } catch (error) {
-        console.error('setGuiPage failed:', error);
-        throw error;
-      }
-    },
-    [callService]
-  );
-
   const sendRecordCommand = useCallback(
     async (command, task_info, model_path = '') => {
       try {
@@ -188,5 +172,5 @@ export function useRosServiceCaller(rosbridgeUrl) {
     }
   }, [callService]);
 
-  return { callService, setGuiPage, sendRecordCommand, getImageTopicList };
+  return { callService, sendRecordCommand, getImageTopicList };
 }

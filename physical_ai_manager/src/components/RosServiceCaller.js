@@ -109,17 +109,8 @@ const RosServiceCaller = forwardRef(function RosServiceCaller(
     }
   };
 
-  const setGuiPage = (pageName, option) => {
-    console.log('RosServiceCaller setGuiPage called with:', pageName, option);
-    callService('/gui/set_page', 'gaemi_interfaces/srv/SetGUIPage', {
-      page_name: pageName,
-      option: option,
-    });
-  };
-
   useImperativeHandle(ref, () => ({
     callService,
-    setGuiPage,
   }));
 
   return (
