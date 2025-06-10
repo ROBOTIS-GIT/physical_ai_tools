@@ -18,6 +18,8 @@ import React, { useState, useEffect, useRef, useCallback } from 'react';
 import clsx from 'clsx';
 import ProgressBar from './ProgressBar';
 import { MdPlayArrow, MdStop, MdReplay, MdSkipNext, MdCheck } from 'react-icons/md';
+import CompactStorageStatus from './CompactStorageStatus';
+import StorageStatus from './StorageStatus';
 
 const buttons = [
   { label: 'Start', icon: MdPlayArrow, color: '#1976d2' },
@@ -230,6 +232,10 @@ export default function ControlPanel({ onCommand, episodeStatus }) {
         </div>
         <ProgressBar percent={episodeStatus?.progress} />
       </div>
+      <StorageStatus
+        totalCapacity={episodeStatus?.totalStorageSize * 1024 * 1024 * 1024 || 0}
+        usedCapacity={episodeStatus?.usedStorageSize * 1024 * 1024 * 1024 || 0}
+      />
     </div>
   );
 }

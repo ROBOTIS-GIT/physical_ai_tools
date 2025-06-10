@@ -222,9 +222,7 @@ const InfoPanel = ({ info, onChange, disabled = false }) => {
         ) : (
           <div className="leading-tight">
             <div>🔒 Read only</div>
-            <div className="text-xs mt-1 opacity-80">
-              (task is running or robot is not connected)
-            </div>
+            <div className="text-xs mt-1 opacity-80">task is running or robot is not connected</div>
           </div>
         )}
       </div>

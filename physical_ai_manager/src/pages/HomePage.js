@@ -72,8 +72,10 @@ export default function HomePage({ topics, setTopics, rosHost }) {
 
   const handleControlCommand = async (cmd) => {
     console.log('Control command received:', cmd);
+    let result;
+
     try {
-      let result;
+      // Execute the appropriate command
       if (cmd === 'Start') {
         result = await sendRecordCommand('start_record', info);
       } else if (cmd === 'Stop') {
@@ -84,13 +86,19 @@ export default function HomePage({ topics, setTopics, rosHost }) {
         result = await sendRecordCommand('next', info);
       } else if (cmd === 'Finish') {
         result = await sendRecordCommand('finish', info);
+      } else {
+        console.warn(`Unknown command: ${cmd}`);
+        toast.warning(`Unknown command: ${cmd}`);
+        return;
       }
 
       console.log('Service call result:', result);
+
       // Handle service response
-      if (result && !result.success) {
+      if (result && result.success === false) {
         toast.error(`Command failed: ${result.message || 'Unknown error'}`);
-      } else if (result && result.success) {
+        console.error(`Command '${cmd}' failed:`, result.message);
+      } else if (result && result.success === true) {
         toast.success(`Command [${cmd}] executed successfully`);
         console.log(`Command '${cmd}' executed successfully`);
 
@@ -98,10 +106,30 @@ export default function HomePage({ topics, setTopics, rosHost }) {
         if (cmd === 'Stop' || cmd === 'Finish') {
           resetTaskToIdle();
         }
+      } else {
+        // Handle case where result is undefined or doesn't have success field
+        console.warn(`Unexpected result format for command '${cmd}':`, result);
+        toast.warning(`Command [${cmd}] completed with uncertain status`);
       }
     } catch (error) {
       console.error('Error handling control command:', error);
-      toast.error(`Failed to execute command [${cmd}]: ${error.message || error}`);
+
+      // Show more specific error messages
+      let errorMessage = error.message || error.toString();
+      if (
+        errorMessage.includes('ROS connection failed') ||
+        errorMessage.includes('ROS connection timeout') ||
+        errorMessage.includes('WebSocket')
+      ) {
+        toast.error(`🔌 ROS connection failed: rosbridge server is not running (${rosHost})`);
+      } else if (errorMessage.includes('timeout')) {
+        toast.error(`⏰ Command execution timeout [${cmd}]: Server did not respond`);
+      } else {
+        toast.error(`❌ Command execution failed [${cmd}]: ${errorMessage}`);
+      }
+
+      // Continue execution even after error - don't block UI
+      console.log(`Continuing after error in command '${cmd}'`);
     }
   };
 
