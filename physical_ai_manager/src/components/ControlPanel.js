@@ -349,11 +349,16 @@ export default function ControlPanel({ onCommand, episodeStatus, taskInfo }) {
           );
         })}
       </div>
-      <div className="w-full h-full rounded-2xl flex flex-1 flex-col justify-center items-center gap-8">
+      <div className="w-full h-full rounded-2xl flex flex-1 flex-col justify-center items-center gap-2">
         <div className="flex min-w-0 text-3xl text-center">
           {phaseGuideMessages[episodeStatus?.phase]}
         </div>
-        <ProgressBar percent={episodeStatus?.progress} />
+        <div className="w-full flex flex-col items-center gap-1">
+          <div className="flex px-5 w-full justify-end min-w-0 text-xl text-gray-700 font-bold">
+            {episodeStatus?.proceedTime} / {episodeStatus?.totalTime} (s)
+          </div>
+          <ProgressBar percent={episodeStatus?.progress} />
+        </div>
       </div>
       <div className="w-[250px] h-full p-1">
         <EpisodeStatus
