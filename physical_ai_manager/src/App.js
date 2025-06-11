@@ -16,17 +16,27 @@
 
 import React, { useState, useEffect } from 'react';
 import clsx from 'clsx';
-import { MdHome } from 'react-icons/md';
+import { MdHome, MdVideocam } from 'react-icons/md';
 import { Toaster } from 'react-hot-toast';
+import toast from 'react-hot-toast';
 import './App.css';
 import HomePage from './pages/HomePage';
+import RecordPage from './pages/RecordPage';
 import SettingPage from './pages/SettingPage';
+import { useRosTaskStatus } from './hooks/useRosTaskStatus';
+
+let debug = false;
 
 function App() {
   const defaultRosHost = window.location.hostname + ':8080';
   const [page, setPage] = useState('home');
   const [topics, setTopics] = useState([null, null, null, null]);
   const [rosHost, setRosHost] = useState(defaultRosHost);
+  const [currentRobotType, setCurrentRobotType] = useState('');
+
+  // Subscribe to task status from ROS topic (always active)
+  const rosbridgeUrl = `ws://${rosHost.split(':')[0]}:9090`;
+  const { taskStatus, taskInfo } = useRosTaskStatus(rosbridgeUrl, '/task/status');
 
   // Load YAML content from local storage
   const [yamlContent, setYamlContent] = useState(() => {
@@ -39,10 +49,38 @@ function App() {
     }
   });
 
-  // Debug log for yamlContent
-  useEffect(() => {
-    console.log('App.js - yamlContent state:', yamlContent);
-  }, [yamlContent]);
+  // Check conditions for Record page navigation
+  const handleRecordPageNavigation = () => {
+    if (debug) {
+      console.log('handleRecordPageNavigation');
+      setPage('record');
+      return;
+    }
+
+    // Allow navigation if task is in progress
+    if (taskStatus && taskStatus.phase > 0) {
+      console.log(
+        'Task in progress (phase:',
+        taskStatus.phase,
+        '), allowing navigation to Record page'
+      );
+      setPage('record');
+      return;
+    }
+
+    // Block navigation if robot type is not set
+    if (!currentRobotType || currentRobotType.trim() === '') {
+      toast.error('Please select a robot type first in the Home page', {
+        duration: 4000,
+      });
+      console.log('Robot type not set, blocking navigation to Record page');
+      return;
+    }
+
+    // Allow navigation if conditions are met
+    console.log('Robot type set, allowing navigation to Record page');
+    setPage('record');
+  };
 
   return (
     <div className="flex h-screen w-screen">
@@ -75,6 +113,34 @@ function App() {
           <MdHome size={32} className="mb-1.5" />
           <span className="mt-1 text-sm">Home</span>
         </button>
+        <button
+          className={clsx(
+            'flex',
+            'flex-col',
+            'items-center',
+            'bg-gray-100',
+            'rounded-2xl',
+            'border-none',
+            'py-5',
+            'px-4',
+            'mb-3',
+            'text-base',
+            'text-gray-800',
+            'cursor-pointer',
+            'transition-colors',
+            'duration-150',
+            'outline-none',
+            'min-w-20',
+            {
+              'hover:bg-gray-300 active:bg-gray-400': page !== 'record',
+              'bg-gray-300': page === 'record',
+            }
+          )}
+          onClick={handleRecordPageNavigation}
+        >
+          <MdVideocam size={32} className="mb-1.5" />
+          <span className="mt-1 text-sm">Record</span>
+        </button>
       </aside>
       <main className="flex-1 flex flex-col h-screen min-h-0">
         {page === 'home' ? (
@@ -82,7 +148,18 @@ function App() {
             topics={topics}
             setTopics={setTopics}
             rosHost={rosHost}
+            currentRobotType={currentRobotType}
+            setCurrentRobotType={setCurrentRobotType}
+            taskStatus={taskStatus}
+          />
+        ) : page === 'record' ? (
+          <RecordPage
+            topics={topics}
+            setTopics={setTopics}
+            rosHost={rosHost}
             yamlContent={yamlContent}
+            taskStatus={taskStatus}
+            taskInfo={taskInfo}
           />
         ) : (
           <SettingPage

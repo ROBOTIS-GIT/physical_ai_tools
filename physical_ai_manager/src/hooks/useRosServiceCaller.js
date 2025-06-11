@@ -168,9 +168,40 @@ export function useRosServiceCaller(rosbridgeUrl) {
       return result;
     } catch (error) {
       console.error('Failed to get image topic list:', error);
-      throw error;
+      throw new Error(`${error.message || error}`);
     }
   }, [callService]);
 
-  return { callService, sendRecordCommand, getImageTopicList };
+  const getRobotTypeList = useCallback(async () => {
+    try {
+      const result = await callService(
+        '/get_robot_types',
+        'physical_ai_interfaces/srv/GetRobotTypeList',
+        {}
+      );
+      return result;
+    } catch (error) {
+      console.error('Failed to get robot type list:', error);
+      throw new Error(`${error.message || error}`);
+    }
+  }, [callService]);
+
+  const setRobotType = useCallback(
+    async (robot_type) => {
+      try {
+        const result = await callService(
+          '/set_robot_type',
+          'physical_ai_interfaces/srv/SetRobotType',
+          { robot_type: robot_type }
+        );
+        return result;
+      } catch (error) {
+        console.error('Failed to set robot type:', error);
+        throw new Error(`${error.message || error}`);
+      }
+    },
+    [callService]
+  );
+
+  return { callService, sendRecordCommand, getImageTopicList, getRobotTypeList, setRobotType };
 }

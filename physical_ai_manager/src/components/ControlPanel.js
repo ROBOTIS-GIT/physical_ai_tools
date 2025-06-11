@@ -354,7 +354,7 @@ export default function ControlPanel({ onCommand, episodeStatus, taskInfo }) {
           {phaseGuideMessages[episodeStatus?.phase]}
         </div>
         <div className="w-full flex flex-col items-center gap-1">
-          <div className="flex px-5 w-full justify-end min-w-0 text-xl text-gray-700 font-bold">
+          <div className="flex px-10 w-full justify-end text-xl text-gray-700 font-bold">
             {episodeStatus?.proceedTime} / {episodeStatus?.totalTime} (s)
           </div>
           <ProgressBar percent={episodeStatus?.progress} />

@@ -16,231 +16,236 @@
 
 import React, { useState, useEffect } from 'react';
 import clsx from 'clsx';
-import { MdKeyboardDoubleArrowLeft, MdKeyboardDoubleArrowRight } from 'react-icons/md';
-import toast, { useToasterStore } from 'react-hot-toast';
-import ImageGrid from '../components/ImageGrid';
-import ControlPanel from '../components/ControlPanel';
-import InfoPanel from '../components/InfoPanel';
+import toast from 'react-hot-toast';
 import { useRosServiceCaller } from '../hooks/useRosServiceCaller';
-import { useRosTaskStatus } from '../hooks/useRosTaskStatus';
 
-export default function HomePage({ topics, setTopics, rosHost }) {
+export default function HomePage({ rosHost, currentRobotType, setCurrentRobotType, taskStatus }) {
   const rosbridgeUrl = `ws://${rosHost.split(':')[0]}:9090`;
+  const { getRobotTypeList, setRobotType } = useRosServiceCaller(rosbridgeUrl);
 
-  // Toast limit implementation using useToasterStore
-  const { toasts } = useToasterStore();
-  const TOAST_LIMIT = 3;
+  const [robotTypes, setRobotTypes] = useState([]);
+  const [selectedRobotType, setSelectedRobotType] = useState(currentRobotType || '');
+  const [loading, setLoading] = useState(false);
+  const [fetching, setFetching] = useState(false);
 
-  useEffect(() => {
-    toasts
-      .filter((t) => t.visible) // Only consider visible toasts
-      .filter((_, i) => i >= TOAST_LIMIT) // Is toast index over limit?
-      .forEach((t) => toast.dismiss(t.id)); // Dismiss – Use toast.remove(t.id) for no exit animation
-  }, [toasts]);
-
-  // Subscribe to task status (includes task info) from ROS topic
-  const {
-    taskStatus,
-    taskInfo,
-    connected: taskStatusConnected,
-    resetTaskToIdle,
-  } = useRosTaskStatus(rosbridgeUrl, '/task/status');
-
-  // Start with default values and update with data from topic
-  const [info, setInfo] = useState(taskInfo);
-
-  // Update info state when taskInfo changes
-  useEffect(() => {
-    if (taskInfo) {
-      setInfo(taskInfo);
-    }
-  }, [taskInfo]);
-
-  const [episodeStatus, setEpisodeStatus] = useState(taskStatus);
-
-  // Update episodeStatus when taskStatus changes
-  useEffect(() => {
-    if (taskStatus) {
-      setEpisodeStatus(taskStatus);
-    }
-  }, [taskStatus]);
-
-  const [isRightPanelCollapsed, setIsRightPanelCollapsed] = useState(false);
-
-  const { sendRecordCommand } = useRosServiceCaller(rosbridgeUrl);
-
-  const handleControlCommand = async (cmd) => {
-    console.log('Control command received:', cmd);
-    let result;
-
+  // Fetch robot type list
+  const fetchRobotTypes = async () => {
+    setFetching(true);
     try {
-      // Execute the appropriate command
-      if (cmd === 'Start') {
-        result = await sendRecordCommand('start_record', info);
-      } else if (cmd === 'Stop') {
-        result = await sendRecordCommand('stop', info);
-      } else if (cmd === 'Retry') {
-        result = await sendRecordCommand('rerecord', info);
-      } else if (cmd === 'Next') {
-        result = await sendRecordCommand('next', info);
-      } else if (cmd === 'Finish') {
-        result = await sendRecordCommand('finish', info);
-      } else {
-        console.warn(`Unknown command: ${cmd}`);
-        toast.warning(`Unknown command: ${cmd}`);
-        return;
-      }
+      const result = await getRobotTypeList();
+      console.log('Robot types received:', result);
 
-      console.log('Service call result:', result);
-
-      // Handle service response
-      if (result && result.success === false) {
-        toast.error(`Command failed: ${result.message || 'Unknown error'}`);
-        console.error(`Command '${cmd}' failed:`, result.message);
-      } else if (result && result.success === true) {
-        toast.success(`Command [${cmd}] executed successfully`);
-        console.log(`Command '${cmd}' executed successfully`);
-
-        // Reset task status to idle for Stop and Finish commands
-        if (cmd === 'Stop' || cmd === 'Finish') {
-          resetTaskToIdle();
+      if (result && result.robot_types) {
+        setRobotTypes(result.robot_types);
+        // Update current robot type (assuming first item is current)
+        if (result.current_robot_type) {
+          setCurrentRobotType(result.current_robot_type);
+          setSelectedRobotType(result.current_robot_type);
+        } else if (result.robot_types.length > 0) {
+          setCurrentRobotType(result.robot_types[0]);
+          setSelectedRobotType(result.robot_types[0]);
         }
+        toast.success('Robot types loaded successfully');
       } else {
-        // Handle case where result is undefined or doesn't have success field
-        console.warn(`Unexpected result format for command '${cmd}':`, result);
-        toast.warning(`Command [${cmd}] completed with uncertain status`);
+        toast.error('Failed to get robot types: Invalid response');
       }
     } catch (error) {
-      console.error('Error handling control command:', error);
-
-      // Show more specific error messages
-      let errorMessage = error.message || error.toString();
-      if (
-        errorMessage.includes('ROS connection failed') ||
-        errorMessage.includes('ROS connection timeout') ||
-        errorMessage.includes('WebSocket')
-      ) {
-        toast.error(`🔌 ROS connection failed: rosbridge server is not running (${rosHost})`);
-      } else if (errorMessage.includes('timeout')) {
-        toast.error(`⏰ Command execution timeout [${cmd}]: Server did not respond`);
-      } else {
-        toast.error(`❌ Command execution failed [${cmd}]: ${errorMessage}`);
-      }
-
-      // Continue execution even after error - don't block UI
-      console.log(`Continuing after error in command '${cmd}'`);
+      console.error('Error fetching robot types:', error);
+      toast.error(`Failed to get robot types: ${error.message}`);
+    } finally {
+      setFetching(false);
     }
   };
 
-  const classMainContainer = 'h-full flex flex-col overflow-hidden';
-  const classContentsArea = 'flex-1 flex min-h-0 pt-0 px-0 justify-center items-start';
+  // Set robot type
+  const handleSetRobotType = async () => {
+    if (!selectedRobotType) {
+      toast.error('Please select a robot type');
+      return;
+    }
 
-  const classImageGridContainer = clsx(
-    'transition-all',
-    'duration-300',
-    'ease-in-out',
+    if (selectedRobotType === currentRobotType) {
+      toast.warning('Robot type is already set to this value');
+      return;
+    }
+
+    // Prevent changing robot type while task is in progress
+    if (taskStatus && taskStatus.phase > 0) {
+      toast.error('Cannot change robot type while task is in progress', {
+        duration: 4000,
+      });
+      return;
+    }
+
+    setLoading(true);
+    try {
+      const result = await setRobotType(selectedRobotType);
+      console.log('Set robot type result:', result);
+
+      if (result && result.success) {
+        setCurrentRobotType(selectedRobotType);
+        toast.success(`Robot type set to: ${selectedRobotType}`);
+      } else {
+        toast.error(`Failed to set robot type: ${result.message || 'Unknown error'}`);
+      }
+    } catch (error) {
+      console.error('Error setting robot type:', error);
+      toast.error(`Failed to set robot type: ${error.message}`);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Fetch robot types when component mounts
+  useEffect(() => {
+    fetchRobotTypes();
+  }, []);
+
+  // Sync selectedRobotType when currentRobotType changes
+  useEffect(() => {
+    if (currentRobotType && currentRobotType !== selectedRobotType) {
+      setSelectedRobotType(currentRobotType);
+    }
+  }, [currentRobotType]);
+
+  const classContainer = clsx(
+    'w-full',
+    'h-full',
     'flex',
     'items-center',
     'justify-center',
-    'min-h-0',
-    'h-full',
-    'overflow-hidden',
-    'm-2',
-    {
-      'flex-[12]': isRightPanelCollapsed,
-      'flex-[10]': !isRightPanelCollapsed,
-    }
+    'pt-10'
   );
 
-  const classRightPanelArea = clsx(
-    'h-full',
-    'w-full',
-    'transition-all',
-    'duration-300',
-    'ease-in-out',
-    'relative',
-    'overflow-scroll',
-    {
-      'flex-[0_0_40px]': isRightPanelCollapsed,
-      'flex-[1]': !isRightPanelCollapsed,
-      'min-w-[60px]': isRightPanelCollapsed,
-      'min-w-[400px]': !isRightPanelCollapsed,
-      'max-w-[60px]': isRightPanelCollapsed,
-      'max-w-[400px]': !isRightPanelCollapsed,
-    }
-  );
-
-  const classHideButton = clsx(
-    'absolute',
-    'top-3',
+  const classCard = clsx(
     'bg-white',
     'border',
-    'border-gray-300',
-    'rounded-full',
-    'w-12',
-    'h-12',
-    'flex',
-    'items-center',
-    'justify-center',
-    'shadow-md',
-    'hover:bg-gray-50',
-    'transition-all',
-    'duration-200',
-    'z-10',
-    {
-      'left-2': isRightPanelCollapsed,
-      'left-[10px]': !isRightPanelCollapsed,
-    }
+    'border-gray-200',
+    'rounded-2xl',
+    'shadow-lg',
+    'p-8',
+    'w-full',
+    'max-w-md'
   );
 
-  const classRightPanel = clsx(
-    'h-full',
-    'flex',
-    'flex-col',
-    'items-center',
-    'overflow-hidden',
-    'transition-opacity',
-    'duration-300',
-    'overflow-scroll',
-    {
-      'opacity-0': isRightPanelCollapsed,
-      'opacity-100': !isRightPanelCollapsed,
-      'pointer-events-none': isRightPanelCollapsed,
-      'pointer-events-auto': !isRightPanelCollapsed,
-    }
+  const classTitle = clsx('text-2xl', 'font-bold', 'text-gray-800', 'mb-6', 'text-center');
+
+  const classLabel = clsx('text-sm', 'font-medium', 'text-gray-700', 'mb-2', 'block');
+
+  const classSelect = clsx(
+    'w-full',
+    'px-3',
+    'py-2',
+    'border',
+    'border-gray-300',
+    'rounded-md',
+    'focus:outline-none',
+    'focus:ring-2',
+    'focus:ring-blue-500',
+    'focus:border-transparent',
+    'mb-4'
+  );
+
+  const classButton = clsx(
+    'w-full',
+    'px-4',
+    'py-2',
+    'bg-blue-500',
+    'text-white',
+    'rounded-md',
+    'font-medium',
+    'transition-colors',
+    'hover:bg-blue-600',
+    'disabled:bg-gray-400',
+    'disabled:cursor-not-allowed',
+    'mb-3'
+  );
+
+  const classRefreshButton = clsx(
+    'w-full',
+    'px-4',
+    'py-2',
+    'bg-gray-500',
+    'text-white',
+    'rounded-md',
+    'font-medium',
+    'transition-colors',
+    'hover:bg-gray-600',
+    'disabled:bg-gray-400',
+    'disabled:cursor-not-allowed'
+  );
+
+  const classCurrentType = clsx(
+    'text-sm',
+    'text-gray-600',
+    'bg-gray-100',
+    'px-3',
+    'py-2',
+    'rounded-md',
+    'text-center',
+    'mb-4'
   );
 
   return (
-    <div className={classMainContainer}>
-      <div className={classContentsArea}>
-        <div className={classImageGridContainer}>
-          <ImageGrid topics={topics} setTopics={setTopics} rosHost={rosHost} />
-        </div>
-        <div className={classRightPanelArea}>
-          <button
-            onClick={() => setIsRightPanelCollapsed(!isRightPanelCollapsed)}
-            className={classHideButton}
-            title="Hide"
-          >
-            <span className="text-gray-600 text-3xl transition-transform duration-200">
-              {isRightPanelCollapsed ? (
-                <MdKeyboardDoubleArrowLeft />
-              ) : (
-                <MdKeyboardDoubleArrowRight />
-              )}
-            </span>
-          </button>
-          <div className={classRightPanel}>
-            <div className="w-full min-h-10"></div>
-            <InfoPanel info={info} onChange={setInfo} disabled={taskStatus?.phase !== 0} />
+    <div className={classContainer}>
+      <div className={classCard}>
+        <h1 className={classTitle}>Robot Type Selection</h1>
+
+        {currentRobotType && (
+          <div className={classCurrentType}>
+            <strong>Current Robot Type:</strong> {currentRobotType}
           </div>
-        </div>
+        )}
+
+        {taskStatus && taskStatus.phase > 0 && (
+          <div className="text-sm text-orange-600 bg-orange-100 px-3 py-2 rounded-md text-center mb-4">
+            <strong>⚠️ Task in progress (Phase {taskStatus.phase})</strong>
+            <div className="text-xs mt-1">Robot type cannot be changed during task execution</div>
+          </div>
+        )}
+
+        <label className={classLabel}>Select Robot Type:</label>
+
+        <select
+          className={classSelect}
+          value={selectedRobotType}
+          onChange={(e) => setSelectedRobotType(e.target.value)}
+          disabled={fetching || loading || (taskStatus && taskStatus.phase > 0)}
+        >
+          <option value="" disabled>
+            Choose a robot type...
+          </option>
+          {robotTypes.map((type) => (
+            <option key={type} value={type}>
+              {type}
+            </option>
+          ))}
+        </select>
+
+        <button
+          className={classButton}
+          onClick={handleSetRobotType}
+          disabled={
+            loading || fetching || !selectedRobotType || (taskStatus && taskStatus.phase > 0)
+          }
+        >
+          {loading ? 'Setting...' : 'Set Robot Type'}
+        </button>
+
+        <button
+          className={classRefreshButton}
+          onClick={fetchRobotTypes}
+          disabled={fetching || loading || (taskStatus && taskStatus.phase > 0)}
+        >
+          {fetching ? 'Loading...' : 'Refresh Robot Types'}
+        </button>
+
+        {robotTypes.length === 0 && !fetching && (
+          <div className="text-center text-gray-500 text-sm mt-4">
+            No robot types available. Please check ROS connection.
+          </div>
+        )}
       </div>
-      <ControlPanel
-        onCommand={handleControlCommand}
-        episodeStatus={episodeStatus}
-        taskInfo={taskInfo}
-      />
     </div>
   );
 }
