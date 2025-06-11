@@ -16,6 +16,7 @@
 
 import React, { useState, useEffect } from 'react';
 import clsx from 'clsx';
+import { MdRefresh } from 'react-icons/md';
 import toast from 'react-hot-toast';
 import { useRosServiceCaller } from '../hooks/useRosServiceCaller';
 
@@ -237,7 +238,10 @@ export default function HomePage({ rosHost, currentRobotType, setCurrentRobotTyp
           onClick={fetchRobotTypes}
           disabled={fetching || loading || (taskStatus && taskStatus.phase > 0)}
         >
-          {fetching ? 'Loading...' : 'Refresh Robot Types'}
+          <div className="flex items-center justify-center gap-2">
+            <MdRefresh size={16} className={fetching ? 'animate-spin' : ''} />
+            {fetching ? 'Loading...' : 'Refresh Robot Type List'}
+          </div>
         </button>
 
         {robotTypes.length === 0 && !fetching && (

@@ -1,9 +1,23 @@
 import React from 'react';
 import clsx from 'clsx';
+import { MdOpenInFull } from 'react-icons/md';
 
-const CompactStorageStatus = ({ totalCapacity, usedCapacity, className, showDetails = false }) => {
+const CompactSystemStatus = ({
+  label = 'System',
+  type = 'storage', // 'cpu', 'ram', 'storage'
+  totalCapacity,
+  usedCapacity,
+  cpuPercentage, // For CPU usage
+  className,
+  showDetails = false,
+}) => {
   // Calculate usage percentage
-  const usagePercentage = totalCapacity > 0 ? (usedCapacity / totalCapacity) * 100 : 0;
+  let usagePercentage;
+  if (type === 'cpu') {
+    usagePercentage = cpuPercentage || 0;
+  } else {
+    usagePercentage = totalCapacity > 0 ? (usedCapacity / totalCapacity) * 100 : 0;
+  }
 
   // Format bytes to human readable format
   const formatBytes = (bytes) => {
@@ -33,7 +47,9 @@ const CompactStorageStatus = ({ totalCapacity, usedCapacity, className, showDeta
   };
 
   const containerClass = clsx(
-    'flex items-center space-x-3 p-2 bg-white rounded-lg border border-gray-200',
+    'flex items-center space-x-3 p-2 bg-white rounded-xl border border-gray-200',
+    'hover:bg-gray-50 hover:border-gray-300 hover:shadow-md transition-all duration-200',
+    'cursor-pointer transform hover:scale-105',
     className
   );
 
@@ -49,6 +65,15 @@ const CompactStorageStatus = ({ totalCapacity, usedCapacity, className, showDeta
   const circumference = 2 * Math.PI * radius;
   const strokeDasharray = circumference;
   const strokeDashoffset = circumference - (usagePercentage / 100) * circumference;
+
+  // Get display text for usage info
+  const getUsageText = () => {
+    if (type === 'cpu') {
+      return `${Math.round(usagePercentage)}%`;
+    } else {
+      return `${formatBytes(usedCapacity)} / ${formatBytes(totalCapacity)}`;
+    }
+  };
 
   return (
     <div className={containerClass}>
@@ -85,10 +110,10 @@ const CompactStorageStatus = ({ totalCapacity, usedCapacity, className, showDeta
         </div>
       </div>
 
-      {/* Storage Info */}
+      {/* System Info */}
       <div className="flex-1 min-w-0">
         <div className="flex items-center justify-between mb-1">
-          <span className="text-sm font-medium text-gray-700">Storage</span>
+          <span className="text-sm font-medium text-gray-700">{label}</span>
           {usagePercentage >= 90 && (
             <svg className="w-4 h-4 text-red-500" fill="currentColor" viewBox="0 0 20 20">
               <path
@@ -102,14 +127,23 @@ const CompactStorageStatus = ({ totalCapacity, usedCapacity, className, showDeta
 
         {showDetails ? (
           <div className="space-y-1">
-            <div className="flex justify-between text-xs">
-              <span className="text-gray-500">Used:</span>
-              <span className="font-medium">{formatBytes(usedCapacity)}</span>
-            </div>
-            <div className="flex justify-between text-xs">
-              <span className="text-gray-500">Total:</span>
-              <span className="font-medium">{formatBytes(totalCapacity)}</span>
-            </div>
+            {type === 'cpu' ? (
+              <div className="flex justify-between text-xs">
+                <span className="text-gray-500">Usage:</span>
+                <span className="font-medium">{Math.round(usagePercentage)}%</span>
+              </div>
+            ) : (
+              <>
+                <div className="flex justify-between text-xs">
+                  <span className="text-gray-500">Used:</span>
+                  <span className="font-medium">{formatBytes(usedCapacity)}</span>
+                </div>
+                <div className="flex justify-between text-xs">
+                  <span className="text-gray-500">Total:</span>
+                  <span className="font-medium">{formatBytes(totalCapacity)}</span>
+                </div>
+              </>
+            )}
           </div>
         ) : (
           <div className="flex items-center justify-between">
@@ -119,14 +153,20 @@ const CompactStorageStatus = ({ totalCapacity, usedCapacity, className, showDeta
                 style={{ width: `${Math.min(usagePercentage, 100)}%` }}
               ></div>
             </div>
-            <span className="text-xs text-gray-500 whitespace-nowrap">
-              {formatBytes(usedCapacity)} / {formatBytes(totalCapacity)}
-            </span>
+            <span className="text-xs text-gray-500 whitespace-nowrap">{getUsageText()}</span>
           </div>
         )}
+      </div>
+
+      {/* Expand Icon */}
+      <div className="flex-shrink-0 ml-2">
+        <MdOpenInFull
+          size={16}
+          className="text-gray-400 hover:text-gray-600 transition-colors duration-200"
+        />
       </div>
     </div>
   );
 };
 
-export default CompactStorageStatus;
+export default CompactSystemStatus;

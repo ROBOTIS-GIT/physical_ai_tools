@@ -18,8 +18,8 @@ import React, { useState, useEffect, useRef, useCallback } from 'react';
 import clsx from 'clsx';
 import ProgressBar from './ProgressBar';
 import { MdPlayArrow, MdStop, MdReplay, MdSkipNext, MdCheck } from 'react-icons/md';
-import CompactStorageStatus from './CompactStorageStatus';
-import StorageStatus from './StorageStatus';
+import CompactSystemStatus from './CompactSystemStatus';
+import SystemStatus from './SystemStatus';
 import EpisodeStatus from './EpisodeStatus';
 import Tooltip from './Tooltip';
 
@@ -76,6 +76,7 @@ export default function ControlPanel({ onCommand, episodeStatus, taskInfo }) {
   const [hovered, setHovered] = useState(null);
   const [pressed, setPressed] = useState(null);
   const [started, setStarted] = useState(false);
+  const [expandedSystemIndex, setExpandedSystemIndex] = useState(null);
   const startedRef = useRef(started);
 
   useEffect(() => {
@@ -368,10 +369,69 @@ export default function ControlPanel({ onCommand, episodeStatus, taskInfo }) {
           }}
         />
       </div>
-      <StorageStatus
-        totalCapacity={episodeStatus?.totalStorageSize * 1024 * 1024 * 1024 || 0}
-        usedCapacity={episodeStatus?.usedStorageSize * 1024 * 1024 * 1024 || 0}
-      />
+      <div className="flex flex-col gap-2">
+        {expandedSystemIndex !== null ? (
+          /* Expanded System View */
+          <div onClick={() => setExpandedSystemIndex(null)} className="cursor-pointer">
+            {expandedSystemIndex === 0 ? (
+              /* CPU Details */
+              <SystemStatus
+                label="CPU"
+                type="cpu"
+                cpuPercentage={episodeStatus?.usedCpu} // CPU usage percentage
+              />
+            ) : expandedSystemIndex === 1 ? (
+              /* RAM Details */
+              <SystemStatus
+                label="RAM"
+                type="ram"
+                totalCapacity={episodeStatus?.totalRamSize * 1024 * 1024 * 1024 || 0}
+                usedCapacity={episodeStatus?.usedRamSize * 1024 * 1024 * 1024 || 0}
+              />
+            ) : (
+              /* Storage Details */
+              <SystemStatus
+                label="Storage"
+                type="storage"
+                totalCapacity={episodeStatus?.totalStorageSize * 1024 * 1024 * 1024 || 0}
+                usedCapacity={episodeStatus?.usedStorageSize * 1024 * 1024 * 1024 || 0}
+              />
+            )}
+          </div>
+        ) : (
+          /* Compact System List */
+          <>
+            {/* CPU */}
+            <div onClick={() => setExpandedSystemIndex(0)} className="cursor-pointer">
+              <CompactSystemStatus
+                label="CPU"
+                type="cpu"
+                cpuPercentage={episodeStatus?.usedCpu} // CPU usage percentage
+              />
+            </div>
+
+            {/* RAM */}
+            <div onClick={() => setExpandedSystemIndex(1)} className="cursor-pointer">
+              <CompactSystemStatus
+                label="RAM"
+                type="ram"
+                totalCapacity={episodeStatus?.totalRamSize * 1024 * 1024 * 1024 || 0}
+                usedCapacity={episodeStatus?.usedRamSize * 1024 * 1024 * 1024 || 0}
+              />
+            </div>
+
+            {/* Storage */}
+            <div onClick={() => setExpandedSystemIndex(2)} className="cursor-pointer">
+              <CompactSystemStatus
+                label="Storage"
+                type="storage"
+                totalCapacity={episodeStatus?.totalStorageSize * 1024 * 1024 * 1024 || 0}
+                usedCapacity={episodeStatus?.usedStorageSize * 1024 * 1024 * 1024 || 0}
+              />
+            </div>
+          </>
+        )}
+      </div>
     </div>
   );
 }

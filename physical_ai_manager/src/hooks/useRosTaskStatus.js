@@ -32,6 +32,9 @@ export function useRosTaskStatus(rosbridgeUrl, topicName = '/task/status') {
     repoId: '',
     usedStorageSize: 0,
     totalStorageSize: 0,
+    usedCpu: 0,
+    usedRamSize: 0,
+    totalRamSize: 0,
   });
 
   const [taskInfo, setTaskInfo] = useState({
@@ -116,6 +119,9 @@ export function useRosTaskStatus(rosbridgeUrl, topicName = '/task/status') {
           repoId: msg.task_info?.repo_id || '',
           usedStorageSize: msg.used_storage_size || 0,
           totalStorageSize: msg.total_storage_size || 0,
+          usedCpu: msg.used_cpu || 0,
+          usedRamSize: msg.used_ram_size || 0,
+          totalRamSize: msg.total_ram_size || 0,
         });
 
         // Extract TaskInfo from TaskStatus message
