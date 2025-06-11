@@ -35,21 +35,21 @@ export function useRosTaskStatus(rosbridgeUrl, topicName = '/task/status') {
   });
 
   const [taskInfo, setTaskInfo] = useState({
-    taskName: 'ai_worker_test_task',
+    taskName: 'pick_and_place',
     robotType: 'ai_worker',
     taskType: 'record',
     taskInstruction: 'pick and place objects',
-    repoId: 'robotis/ai_worker_dataset',
+    repoId: 'RobotisSW',
     fps: 30,
     tags: ['tutorial'],
     warmupTime: 5,
-    episodeTime: 60,
-    resetTime: 60,
-    numEpisodes: 100,
+    episodeTime: 20,
+    resetTime: 5,
+    numEpisodes: 5,
     resume: true,
     pushToHub: true,
     privateMode: false,
-    useImageBuffer: false,
+    useImageBuffer: true,
   });
 
   const [connected, setConnected] = useState(false);

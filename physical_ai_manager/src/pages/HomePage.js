@@ -19,7 +19,6 @@ import clsx from 'clsx';
 import { MdKeyboardDoubleArrowLeft, MdKeyboardDoubleArrowRight } from 'react-icons/md';
 import toast, { useToasterStore } from 'react-hot-toast';
 import ImageGrid from '../components/ImageGrid';
-import EpisodeStatus from '../components/EpisodeStatus';
 import ControlPanel from '../components/ControlPanel';
 import InfoPanel from '../components/InfoPanel';
 import { useRosServiceCaller } from '../hooks/useRosServiceCaller';
@@ -173,7 +172,7 @@ export default function HomePage({ topics, setTopics, rosHost }) {
 
   const classHideButton = clsx(
     'absolute',
-    'top-10',
+    'top-3',
     'bg-white',
     'border',
     'border-gray-300',
@@ -233,20 +232,15 @@ export default function HomePage({ topics, setTopics, rosHost }) {
           </button>
           <div className={classRightPanel}>
             <div className="w-full min-h-10"></div>
-            <div className="w-[250px] flex justify-center">
-              <EpisodeStatus
-                episodeStatus={{
-                  ...episodeStatus,
-                  numEpisodes: taskInfo?.numEpisodes,
-                }}
-              />
-            </div>
-            <div className="w-full min-h-10"></div>
             <InfoPanel info={info} onChange={setInfo} disabled={taskStatus?.phase !== 0} />
           </div>
         </div>
       </div>
-      <ControlPanel onCommand={handleControlCommand} episodeStatus={episodeStatus} />
+      <ControlPanel
+        onCommand={handleControlCommand}
+        episodeStatus={episodeStatus}
+        taskInfo={taskInfo}
+      />
     </div>
   );
 }

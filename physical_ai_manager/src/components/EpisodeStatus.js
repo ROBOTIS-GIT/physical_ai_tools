@@ -25,17 +25,22 @@ const classEpisodeStatusBody = clsx(
   'flex',
   'flex-col',
   'items-center',
-  'rounded-xl',
+  'justify-center',
+  'gap-1',
+  'rounded-2xl',
   'border',
-  'p-2',
+  'border-gray-200',
+  'py-5',
+  'px-4',
   'box-border',
-  'shadow-md'
+  'shadow-md',
+  'bg-white'
 );
 
 export default function EpisodeStatus({ episodeStatus }) {
   return (
     <div className={classEpisodeStatusBody}>
-      <div className="mb-1 justify-start text-2xl">Episode</div>
+      <div className="mb-1 justify- text-3xl">Episode</div>
       <div className="h-3"></div>
       <div className="w-full bg-gray-200 rounded-lg py-1.5 px-3 text-3xl font-bold">
         <span className="font-bold">{episodeStatus?.currentEpisodeNumber}</span> /{' '}

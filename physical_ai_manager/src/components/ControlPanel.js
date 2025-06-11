@@ -20,6 +20,7 @@ import ProgressBar from './ProgressBar';
 import { MdPlayArrow, MdStop, MdReplay, MdSkipNext, MdCheck } from 'react-icons/md';
 import CompactStorageStatus from './CompactStorageStatus';
 import StorageStatus from './StorageStatus';
+import EpisodeStatus from './EpisodeStatus';
 import Tooltip from './Tooltip';
 
 const buttons = [
@@ -65,11 +66,12 @@ const phaseGuideMessages = {
   1: '🔥 Warmup in progress',
   2: '🏠 Reset in progress',
   3: '🔴 Recording in progress',
-  4: '◼️ Task Stopped',
-  5: '⚡ Inference in progress',
+  4: '💾 Saving...',
+  5: '◼️ Task Stopped',
+  6: '⚡ Inference in progress',
 };
 
-export default function ControlPanel({ onCommand, episodeStatus }) {
+export default function ControlPanel({ onCommand, episodeStatus, taskInfo }) {
   const icon_size = 70;
   const [hovered, setHovered] = useState(null);
   const [pressed, setPressed] = useState(null);
@@ -86,7 +88,7 @@ export default function ControlPanel({ onCommand, episodeStatus }) {
       const phase = episodeStatus?.phase;
 
       let isNone = phase == 0;
-      let isStopped = phase == 4;
+      let isStopped = phase == 5;
 
       switch (label) {
         case 'Start':
@@ -159,9 +161,22 @@ export default function ControlPanel({ onCommand, episodeStatus }) {
   }, []);
 
   useEffect(() => {
+    const isInputFocused = () => {
+      const activeElement = document.activeElement;
+      if (!activeElement) return false;
+
+      const tagName = activeElement.tagName.toLowerCase();
+      const isEditable = activeElement.contentEditable === 'true';
+
+      return tagName === 'input' || tagName === 'textarea' || tagName === 'select' || isEditable;
+    };
+
     const handleKeyDown = (e) => {
       // Ignore repeated keydown events when holding the key
       if (e.repeat) return;
+
+      // Ignore keyboard shortcuts when user is typing in input fields
+      if (isInputFocused()) return;
 
       const buttonLabel = getButtonFromKey(e);
       if (buttonLabel) {
@@ -172,6 +187,9 @@ export default function ControlPanel({ onCommand, episodeStatus }) {
     const handleKeyUp = (e) => {
       // Always release pressed state on keyup
       handleKeyboardRelease();
+
+      // Ignore keyboard shortcuts when user is typing in input fields
+      if (isInputFocused()) return;
 
       // Get the button label and execute the command
       const buttonLabel = getButtonFromKey(e);
@@ -336,6 +354,14 @@ export default function ControlPanel({ onCommand, episodeStatus }) {
           {phaseGuideMessages[episodeStatus?.phase]}
         </div>
         <ProgressBar percent={episodeStatus?.progress} />
+      </div>
+      <div className="w-[250px] h-full p-1">
+        <EpisodeStatus
+          episodeStatus={{
+            ...episodeStatus,
+            numEpisodes: taskInfo?.numEpisodes,
+          }}
+        />
       </div>
       <StorageStatus
         totalCapacity={episodeStatus?.totalStorageSize * 1024 * 1024 * 1024 || 0}
