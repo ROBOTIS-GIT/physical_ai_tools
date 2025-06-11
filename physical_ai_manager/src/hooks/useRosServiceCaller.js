@@ -189,11 +189,16 @@ export function useRosServiceCaller(rosbridgeUrl) {
   const setRobotType = useCallback(
     async (robot_type) => {
       try {
+        console.log('setRobotType called with:', robot_type);
+        console.log('Calling service /set_robot_type with request:', { robot_type: robot_type });
+
         const result = await callService(
           '/set_robot_type',
           'physical_ai_interfaces/srv/SetRobotType',
           { robot_type: robot_type }
         );
+
+        console.log('setRobotType service response:', result);
         return result;
       } catch (error) {
         console.error('Failed to set robot type:', error);
