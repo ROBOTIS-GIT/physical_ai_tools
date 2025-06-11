@@ -203,6 +203,14 @@ export function useRosTaskStatus(rosbridgeUrl, topicName = '/task/status') {
     }));
   }, []);
 
+  // Function to update task info
+  const updateTaskInfo = useCallback((updates) => {
+    setTaskInfo((prevInfo) => ({
+      ...prevInfo,
+      ...updates,
+    }));
+  }, []);
+
   return {
     taskStatus,
     taskInfo,
@@ -212,5 +220,6 @@ export function useRosTaskStatus(rosbridgeUrl, topicName = '/task/status') {
     getPhaseName,
     updateTaskStatus,
     resetTaskToIdle,
+    updateTaskInfo,
   };
 }

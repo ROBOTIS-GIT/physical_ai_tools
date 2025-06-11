@@ -33,6 +33,31 @@ export default function ImageGrid({ topics, setTopics, rosHost }) {
   const rosbridgeUrl = `ws://${rosHost.split(':')[0]}:9090`;
   const { getImageTopicList } = useRosServiceCaller(rosbridgeUrl);
 
+  // Auto-assign topics to grid cells (center, left, right order)
+  const autoAssignTopics = (imageTopics, isRefresh = false) => {
+    if (imageTopics.length > 0) {
+      const autoTopics = Array(layout.length).fill(null);
+
+      // Assignment order: center (idx=1), left (idx=0), right (idx=2)
+      const assignmentOrder = [1, 0, 2];
+
+      for (let i = 0; i < Math.min(imageTopics.length, assignmentOrder.length); i++) {
+        autoTopics[assignmentOrder[i]] = imageTopics[i];
+        console.log(
+          `${isRefresh ? 'Re-a' : 'A'}ssigned topic ${imageTopics[i]} to grid position ${
+            assignmentOrder[i]
+          }`
+        );
+      }
+
+      console.log(`Final ${isRefresh ? 're-assigned' : 'auto-assigned'} topics:`, autoTopics);
+      setTopics(autoTopics);
+      toast.success(
+        `${isRefresh ? 'Re-a' : 'Auto-a'}ssigned ${Math.min(imageTopics.length, 3)} topics to grid`
+      );
+    }
+  };
+
   // Adjust the length of the topics array
   React.useEffect(() => {
     if (topics.length !== layout.length) {
@@ -41,7 +66,7 @@ export default function ImageGrid({ topics, setTopics, rosHost }) {
     // eslint-disable-next-line
   }, []);
 
-  // Fetch image topic list on component mount
+  // Fetch image topic list on component mount and auto-assign topics
   useEffect(() => {
     const fetchTopicList = async () => {
       setIsLoadingTopics(true);
@@ -49,9 +74,13 @@ export default function ImageGrid({ topics, setTopics, rosHost }) {
       try {
         const result = await getImageTopicList();
         if (result && result.success) {
-          setTopicList(result.image_topic_list || []);
+          const imageTopics = result.image_topic_list || [];
+          setTopicList(imageTopics);
           setTopicListError(null);
-          toast.success(`Loaded ${result.image_topic_list?.length || 0} image topics`);
+          toast.success(`Loaded ${imageTopics.length} image topics`);
+
+          // Auto-assign topics to grid cells
+          autoAssignTopics(imageTopics, false);
         } else {
           console.error('Failed to get image topic list:', result?.message);
           const errorMsg = result?.message || 'Unknown error occurred';
@@ -70,7 +99,7 @@ export default function ImageGrid({ topics, setTopics, rosHost }) {
     };
 
     fetchTopicList();
-  }, [getImageTopicList]);
+  }, [getImageTopicList, setTopics]);
 
   const handlePlusClick = (idx) => {
     setSelectedIdx(idx);
@@ -83,9 +112,13 @@ export default function ImageGrid({ topics, setTopics, rosHost }) {
     try {
       const result = await getImageTopicList();
       if (result && result.success) {
-        setTopicList(result.image_topic_list || []);
+        const imageTopics = result.image_topic_list || [];
+        setTopicList(imageTopics);
         setTopicListError(null);
-        toast.success(`Refreshed: ${result.image_topic_list?.length || 0} image topics`);
+        toast.success(`Refreshed: ${imageTopics.length} image topics`);
+
+        // Auto-assign topics to grid cells
+        autoAssignTopics(imageTopics, true);
       } else {
         const errorMsg = result?.message || 'Unknown error occurred';
         setTopicListError(`Service error: ${errorMsg}`);

@@ -29,6 +29,7 @@ export default function RecordPage({
   yamlContent,
   taskStatus: propsTaskStatus,
   taskInfo: propsTaskInfo,
+  updateTaskInfo,
 }) {
   const rosbridgeUrl = `ws://${rosHost.split(':')[0]}:9090`;
 
@@ -36,16 +37,18 @@ export default function RecordPage({
   const { toasts } = useToasterStore();
   const TOAST_LIMIT = 3;
 
+  // Use taskStatus and taskInfo from props (received from App.js)
+  const taskStatus = propsTaskStatus;
+  const taskInfo = propsTaskInfo;
+
   useEffect(() => {
     toasts
       .filter((t) => t.visible) // Only consider visible toasts
       .filter((_, i) => i >= TOAST_LIMIT) // Is toast index over limit?
       .forEach((t) => toast.dismiss(t.id)); // Dismiss – Use toast.remove(t.id) for no exit animation
-  }, [toasts]);
 
-  // Use taskStatus and taskInfo from props (received from App.js)
-  const taskStatus = propsTaskStatus;
-  const taskInfo = propsTaskInfo;
+    updateTaskInfo({ taskType: 'record' });
+  }, [toasts]);
 
   // Start with default values and update with data from topic
   const [info, setInfo] = useState(taskInfo);
@@ -256,11 +259,40 @@ export default function RecordPage({
     }
   );
 
+  const classRobotTypeContainer = clsx(
+    'absolute',
+    'top-4',
+    'left-4',
+    'z-20',
+    'flex',
+    'flex-row',
+    'items-center',
+    'bg-white/90',
+    'backdrop-blur-sm',
+    'rounded-full',
+    'px-3',
+    'py-1',
+    'shadow-md',
+    'border',
+    'border-gray-100'
+  );
+  const classRobotType = clsx('ml-2 mr-1 my-2 text-gray-600 text-lg');
+  const classRobotTypeValue = clsx(
+    'mx-1 my-2 px-2 text-lg text-blue-600 focus:outline-none bg-blue-100 rounded-full'
+  );
+
   return (
     <div className={classMainContainer}>
       <div className={classContentsArea}>
-        <div className={classImageGridContainer}>
-          <ImageGrid topics={topics} setTopics={setTopics} rosHost={rosHost} />
+        <div className="w-full h-full flex flex-col relative">
+          {/* Robot Type Overlay */}
+          <div className={classRobotTypeContainer}>
+            <div className={classRobotType}>Robot Type</div>
+            <div className={classRobotTypeValue}>{taskInfo?.robotType}</div>
+          </div>
+          <div className={classImageGridContainer}>
+            <ImageGrid topics={topics} setTopics={setTopics} rosHost={rosHost} />
+          </div>
         </div>
         <div className={classRightPanelArea}>
           <button

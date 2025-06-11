@@ -25,12 +25,14 @@ export default function RobotTypeSelector({
   currentRobotType,
   setCurrentRobotType,
   taskStatus,
+  taskInfo,
+  updateTaskInfo,
   className,
 }) {
   const rosbridgeUrl = `ws://${rosHost.split(':')[0]}:9090`;
   const { getRobotTypeList, setRobotType } = useRosServiceCaller(rosbridgeUrl);
 
-  const [robotTypes, setRobotTypes] = useState(['a']);
+  const [robotTypes, setRobotTypes] = useState([]);
   const [selectedRobotType, setSelectedRobotType] = useState(currentRobotType || '');
   const [loading, setLoading] = useState(false);
   const [fetching, setFetching] = useState(false);
@@ -105,6 +107,10 @@ export default function RobotTypeSelector({
 
       if (result && result.success) {
         setCurrentRobotType(selectedRobotType);
+        // Update task info with the selected robot type
+        if (updateTaskInfo) {
+          updateTaskInfo({ robotType: selectedRobotType });
+        }
         toast.success(`Robot type set to: ${selectedRobotType}`);
       } else {
         toast.error(`Failed to set robot type: ${result.message || 'Unknown error'}`);
@@ -128,6 +134,13 @@ export default function RobotTypeSelector({
       setSelectedRobotType(currentRobotType);
     }
   }, [currentRobotType]);
+
+  // Initialize task info robot type if currentRobotType is set but task info is empty
+  useEffect(() => {
+    if (currentRobotType && taskInfo && updateTaskInfo && !taskInfo.robotType) {
+      updateTaskInfo({ robotType: currentRobotType });
+    }
+  }, [currentRobotType, taskInfo, updateTaskInfo]);
 
   const classCard = clsx(
     'bg-white',
@@ -206,6 +219,11 @@ export default function RobotTypeSelector({
       {currentRobotType && (
         <div className={classCurrentType}>
           <strong>Current Robot Type:</strong> {currentRobotType}
+          {taskInfo && taskInfo.robotType && (
+            <div className="text-xs text-green-600 mt-1">
+              ✓ Saved to Task Info: {taskInfo.robotType}
+            </div>
+          )}
         </div>
       )}
 

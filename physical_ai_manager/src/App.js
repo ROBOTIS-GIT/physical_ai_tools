@@ -36,7 +36,7 @@ function App() {
 
   // Subscribe to task status from ROS topic (always active)
   const rosbridgeUrl = `ws://${rosHost.split(':')[0]}:9090`;
-  const { taskStatus, taskInfo } = useRosTaskStatus(rosbridgeUrl, '/task/status');
+  const { taskStatus, taskInfo, updateTaskInfo } = useRosTaskStatus(rosbridgeUrl, '/task/status');
 
   // Load YAML content from local storage
   const [yamlContent, setYamlContent] = useState(() => {
@@ -151,6 +151,8 @@ function App() {
             currentRobotType={currentRobotType}
             setCurrentRobotType={setCurrentRobotType}
             taskStatus={taskStatus}
+            taskInfo={taskInfo}
+            updateTaskInfo={updateTaskInfo}
           />
         ) : page === 'record' ? (
           <RecordPage
@@ -160,6 +162,7 @@ function App() {
             yamlContent={yamlContent}
             taskStatus={taskStatus}
             taskInfo={taskInfo}
+            updateTaskInfo={updateTaskInfo}
           />
         ) : (
           <SettingPage

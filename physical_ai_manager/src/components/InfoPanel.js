@@ -237,36 +237,6 @@ const InfoPanel = ({ info, onChange, disabled = false }) => {
         />
       </div>
 
-      <div className={clsx('flex', 'items-center', 'mb-2.5')}>
-        <span className={classLabel}>Robot Type</span>
-        <input
-          className={classTextInput}
-          type="text"
-          value={info.robotType || ''}
-          onChange={(e) => handleChange('robotType', e.target.value)}
-          disabled={!isEditable}
-        />
-      </div>
-
-      <div className={clsx('flex', 'items-center', 'mb-2.5')}>
-        <span className={classLabel}>Task Type</span>
-        <select
-          className={classSelect}
-          value={info.taskType || ''}
-          onChange={(e) => handleChange('taskType', e.target.value)}
-          disabled={!isEditable}
-        >
-          <option value="" disabled>
-            Select task type...
-          </option>
-          {taskTypeOptions.map((option) => (
-            <option key={option.value} value={option.value}>
-              {option.label}
-            </option>
-          ))}
-        </select>
-      </div>
-
       <div className={clsx('flex', 'items-start', 'mb-2.5')}>
         <span
           className={clsx(

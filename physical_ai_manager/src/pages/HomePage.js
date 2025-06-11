@@ -18,7 +18,14 @@ import React from 'react';
 import clsx from 'clsx';
 import RobotTypeSelector from '../components/RobotTypeSelector';
 
-export default function HomePage({ rosHost, currentRobotType, setCurrentRobotType, taskStatus }) {
+export default function HomePage({
+  rosHost,
+  currentRobotType,
+  setCurrentRobotType,
+  taskStatus,
+  taskInfo,
+  updateTaskInfo,
+}) {
   const classContainer = clsx(
     'w-full',
     'h-full',
@@ -35,6 +42,8 @@ export default function HomePage({ rosHost, currentRobotType, setCurrentRobotTyp
         currentRobotType={currentRobotType}
         setCurrentRobotType={setCurrentRobotType}
         taskStatus={taskStatus}
+        taskInfo={taskInfo}
+        updateTaskInfo={updateTaskInfo}
       />
     </div>
   );
