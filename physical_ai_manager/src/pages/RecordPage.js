@@ -14,7 +14,7 @@
 //
 // Author: Kiwoong Park
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import clsx from 'clsx';
 import { MdKeyboardDoubleArrowLeft, MdKeyboardDoubleArrowRight } from 'react-icons/md';
 import toast, { useToasterStore } from 'react-hot-toast';
@@ -22,6 +22,7 @@ import ImageGrid from '../components/ImageGrid';
 import ControlPanel from '../components/ControlPanel';
 import InfoPanel from '../components/InfoPanel';
 import { useRosServiceCaller } from '../hooks/useRosServiceCaller';
+
 export default function RecordPage({
   topics,
   setTopics,
@@ -46,19 +47,10 @@ export default function RecordPage({
       .filter((t) => t.visible) // Only consider visible toasts
       .filter((_, i) => i >= TOAST_LIMIT) // Is toast index over limit?
       .forEach((t) => toast.dismiss(t.id)); // Dismiss – Use toast.remove(t.id) for no exit animation
-
-    updateTaskInfo({ taskType: 'record' });
   }, [toasts]);
 
-  // Start with default values and update with data from topic
-  const [info, setInfo] = useState(taskInfo);
-
-  // Update info state when taskInfo changes
-  useEffect(() => {
-    if (taskInfo) {
-      setInfo(taskInfo);
-    }
-  }, [taskInfo]);
+  // Start with default values - let user manage editing independently
+  const [info, setInfo] = useState({ ...taskInfo, taskType: 'record' } || { taskType: 'record' });
 
   const [episodeStatus, setEpisodeStatus] = useState(taskStatus);
 
@@ -72,6 +64,11 @@ export default function RecordPage({
   const [isRightPanelCollapsed, setIsRightPanelCollapsed] = useState(false);
 
   const { sendRecordCommand } = useRosServiceCaller(rosbridgeUrl);
+
+  // Memoize the onChange handler to prevent recreation on every render
+  const handleInfoChange = useCallback((newInfo) => {
+    setInfo(newInfo);
+  }, []);
 
   // Validation function for required fields
   const validateTaskInfo = (taskInfo) => {
@@ -310,7 +307,7 @@ export default function RecordPage({
           </button>
           <div className={classRightPanel}>
             <div className="w-full min-h-10"></div>
-            <InfoPanel info={info} onChange={setInfo} disabled={taskStatus?.phase !== 0} />
+            <InfoPanel info={info} onChange={handleInfoChange} disabled={taskStatus?.phase !== 0} />
           </div>
         </div>
       </div>
