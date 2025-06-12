@@ -209,5 +209,52 @@ export function useRosServiceCaller(rosbridgeUrl) {
     [callService]
   );
 
-  return { callService, sendRecordCommand, getImageTopicList, getRobotTypeList, setRobotType };
+  const registerHFUser = useCallback(
+    async (token) => {
+      try {
+        console.log('Calling service /register_hf_user with request:', { token: token });
+
+        const result = await callService(
+          '/register_hf_user',
+          'physical_ai_interfaces/srv/SetHFUser',
+          { token: token }
+        );
+
+        console.log('registerHFUser service response:', result);
+        return result;
+      } catch (error) {
+        console.error('Failed to register HF user:', error);
+        throw new Error(`${error.message || error}`);
+      }
+    },
+    [callService]
+  );
+
+  const getRegisteredHFUser = useCallback(async () => {
+    try {
+      console.log('Calling service /get_registered_hf_user with request:', {});
+
+      const result = await callService(
+        '/get_registered_hf_user',
+        'physical_ai_interfaces/srv/GetHFUser',
+        {}
+      );
+
+      console.log('getRegisteredHFUser service response:', result);
+      return result;
+    } catch (error) {
+      console.error('Failed to get registered HF user:', error);
+      throw new Error(`${error.message || error}`);
+    }
+  }, [callService]);
+
+  return {
+    callService,
+    sendRecordCommand,
+    getImageTopicList,
+    getRobotTypeList,
+    setRobotType,
+    registerHFUser,
+    getRegisteredHFUser,
+  };
 }

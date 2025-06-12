@@ -17,6 +17,7 @@
 import React, { useState, useEffect } from 'react';
 import clsx from 'clsx';
 import TagInput from './TagInput';
+import { useRosServiceCaller } from '../hooks/useRosServiceCaller';
 
 const dummyTaskInfoList = [
   {
@@ -56,6 +57,23 @@ const InfoPanel = ({ info, onChange, disabled = false }) => {
   const [taskInfoList] = useState(dummyTaskInfoList);
   const [isEditable, setIsEditable] = useState(!disabled);
 
+  // User ID list for dropdown
+  const [userIdList, setUserIdList] = useState([
+    'user123',
+    'robotics_team',
+    'ai_researcher',
+    'demo_user',
+    'test_account',
+  ]);
+
+  // Token popup states
+  const [showTokenPopup, setShowTokenPopup] = useState(false);
+  const [tokenInput, setTokenInput] = useState('');
+  const [isLoading, setIsLoading] = useState(false);
+
+  // ROS service caller
+  const { registerHFUser, getRegisteredHFUser } = useRosServiceCaller();
+
   const handleChange = (field, value) => {
     if (!isEditable) return; // Block changes when not editable
     onChange({ ...info, [field]: value });
@@ -64,6 +82,53 @@ const InfoPanel = ({ info, onChange, disabled = false }) => {
   const handleSelect = (selected) => {
     onChange(selected);
     setShowPopup(false);
+  };
+
+  const handleTokenSubmit = async () => {
+    if (!tokenInput.trim()) {
+      alert('Please enter a token');
+      return;
+    }
+
+    setIsLoading(true);
+    try {
+      const result = await registerHFUser(tokenInput.trim());
+      console.log('registerHFUser result:', result);
+
+      if (result && result.user_id_list) {
+        setUserIdList(result.user_id_list);
+        setShowTokenPopup(false);
+        setTokenInput('');
+        alert('User ID list updated successfully!');
+      } else {
+        alert('Failed to get user ID list from response');
+      }
+    } catch (error) {
+      console.error('Error registering HF user:', error);
+      alert(`Failed to register user: ${error.message}`);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleLoadUserId = async () => {
+    setIsLoading(true);
+    try {
+      const result = await getRegisteredHFUser();
+      console.log('getRegisteredHFUser result:', result);
+
+      if (result && result.user_id_list) {
+        setUserIdList(result.user_id_list);
+        alert('User ID list loaded successfully!');
+      } else {
+        alert('Failed to get user ID list from response');
+      }
+    } catch (error) {
+      console.error('Error loading HF user list:', error);
+      alert(`Failed to load user ID list: ${error.message}`);
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   // Update isEditable state when the disabled prop changes
@@ -142,8 +207,8 @@ const InfoPanel = ({ info, onChange, disabled = false }) => {
     'focus:ring-blue-500',
     'focus:border-transparent',
     {
-      'bg-gray-100 cursor-not-allowed': !isEditable,
-      'bg-white': isEditable,
+      'bg-gray-100 cursor-not-allowed': !isEditable || info.pushToHub,
+      'bg-white': isEditable && !info.pushToHub,
     }
   );
 
@@ -279,6 +344,22 @@ const InfoPanel = ({ info, onChange, disabled = false }) => {
         />
       </div>
 
+      <div className={clsx('flex', 'items-center', 'mb-2')}>
+        <span className={classLabel}>Push to Hub</span>
+        <div className={clsx('flex', 'items-center')}>
+          <input
+            className={classCheckbox}
+            type="checkbox"
+            checked={!!info.pushToHub}
+            onChange={(e) => handleChange('pushToHub', e.target.checked)}
+            disabled={!isEditable}
+          />
+          <span className={clsx('ml-2', 'text-sm', 'text-gray-500')}>
+            {info.pushToHub ? 'Enabled' : 'Disabled'}
+          </span>
+        </div>
+      </div>
+
       <div className={clsx('flex', 'items-start', 'mb-2.5')}>
         <span
           className={clsx(
@@ -290,14 +371,86 @@ const InfoPanel = ({ info, onChange, disabled = false }) => {
             'pt-2'
           )}
         >
-          Repo ID
+          User ID
         </span>
-        <textarea
-          className={classRepoIdTextarea}
-          value={info.repoId || ''}
-          onChange={(e) => handleChange('repoId', e.target.value)}
-          disabled={!isEditable}
-        />
+
+        <div className="flex-1 min-w-0">
+          {info.pushToHub ? (
+            /* Dropdown selection when Push to Hub is enabled */
+            <>
+              <div className="flex flex-row gap-2 mb-2">
+                <button
+                  className={clsx(
+                    'px-3',
+                    'py-1',
+                    'text-xs',
+                    'font-medium',
+                    'rounded',
+                    'transition-colors',
+                    {
+                      'bg-blue-500 text-white hover:bg-blue-600': isEditable && !isLoading,
+                      'bg-gray-400 text-gray-600 cursor-not-allowed': !isEditable || isLoading,
+                    }
+                  )}
+                  onClick={() => {
+                    if (isEditable && !isLoading) {
+                      handleLoadUserId();
+                    }
+                  }}
+                  disabled={!isEditable || isLoading}
+                >
+                  {isLoading ? 'Loading...' : 'Load User ID'}
+                </button>
+                <button
+                  className={clsx(
+                    'px-3',
+                    'py-1',
+                    'text-xs',
+                    'font-medium',
+                    'rounded',
+                    'transition-colors',
+                    {
+                      'bg-green-500 text-white hover:bg-green-600': isEditable,
+                      'bg-gray-400 text-gray-600 cursor-not-allowed': !isEditable,
+                    }
+                  )}
+                  onClick={() => {
+                    if (isEditable) {
+                      setShowTokenPopup(true);
+                    }
+                  }}
+                  disabled={!isEditable}
+                >
+                  Set
+                </button>
+              </div>
+              <select
+                className={classSelect}
+                value={info.repoId || ''}
+                onChange={(e) => handleChange('repoId', e.target.value)}
+                disabled={!isEditable}
+              >
+                <option value="">Select User ID</option>
+                {userIdList.map((userId) => (
+                  <option key={userId} value={userId}>
+                    {userId}
+                  </option>
+                ))}
+              </select>
+              <div className="text-xs text-gray-500 mt-1 leading-relaxed">
+                Select from available User IDs when Push to Hub is enabled
+              </div>
+            </>
+          ) : (
+            /* Text input when Push to Hub is disabled */
+            <textarea
+              className={classRepoIdTextarea}
+              value={info.repoId || ''}
+              onChange={(e) => handleChange('repoId', e.target.value)}
+              disabled={!isEditable}
+            />
+          )}
+        </div>
       </div>
 
       <div className={clsx('flex', 'items-center', 'mb-2.5')}>
@@ -305,6 +458,7 @@ const InfoPanel = ({ info, onChange, disabled = false }) => {
         <input
           className={classTextInput}
           type="number"
+          step="5"
           value={info.fps || ''}
           onChange={(e) => handleChange('fps', Number(e.target.value))}
           disabled={!isEditable}
@@ -330,6 +484,7 @@ const InfoPanel = ({ info, onChange, disabled = false }) => {
         <input
           className={classTextInput}
           type="number"
+          step="5"
           value={info.warmupTime || ''}
           onChange={(e) => handleChange('warmupTime', e.target.value)}
           disabled={!isEditable}
@@ -341,6 +496,7 @@ const InfoPanel = ({ info, onChange, disabled = false }) => {
         <input
           className={classTextInput}
           type="number"
+          step="5"
           value={info.episodeTime || ''}
           onChange={(e) => handleChange('episodeTime', e.target.value)}
           disabled={!isEditable}
@@ -352,6 +508,7 @@ const InfoPanel = ({ info, onChange, disabled = false }) => {
         <input
           className={classTextInput}
           type="number"
+          step="5"
           value={info.resetTime || ''}
           onChange={(e) => handleChange('resetTime', e.target.value)}
           disabled={!isEditable}
@@ -363,19 +520,27 @@ const InfoPanel = ({ info, onChange, disabled = false }) => {
         <input
           className={classTextInput}
           type="number"
+          step="1"
           value={info.numEpisodes || ''}
           onChange={(e) => handleChange('numEpisodes', Number(e.target.value))}
           disabled={!isEditable}
         />
       </div>
 
-      <div className={clsx('flex', 'items-center', 'mb-2.5')}>
-        <span className={classLabel}>Token</span>
-        <textarea
-          className={classTokenTextarea}
-          onChange={(e) => handleChange('token', e.target.value)}
-          disabled={!isEditable}
-        />
+      <div className={clsx('flex', 'items-center', 'mb-2')}>
+        <span className={classLabel}>Use Image Buffer</span>
+        <div className={clsx('flex', 'items-center')}>
+          <input
+            className={classCheckbox}
+            type="checkbox"
+            checked={!!info.useImageBuffer}
+            onChange={(e) => handleChange('useImageBuffer', e.target.checked)}
+            disabled={!isEditable}
+          />
+          <span className={clsx('ml-2', 'text-sm', 'text-gray-500')}>
+            {info.pushToHub ? 'Enabled' : 'Disabled'}
+          </span>
+        </div>
       </div>
 
       <div className={clsx('flex', 'items-center', 'mb-2.5')}>
@@ -395,22 +560,6 @@ const InfoPanel = ({ info, onChange, disabled = false }) => {
       </div>
 
       <div className={clsx('flex', 'items-center', 'mb-2')}>
-        <span className={classLabel}>Push to Hub</span>
-        <div className={clsx('flex', 'items-center')}>
-          <input
-            className={classCheckbox}
-            type="checkbox"
-            checked={!!info.pushToHub}
-            onChange={(e) => handleChange('pushToHub', e.target.checked)}
-            disabled={!isEditable}
-          />
-          <span className={clsx('ml-2', 'text-sm', 'text-gray-500')}>
-            {info.pushToHub ? 'Enabled' : 'Disabled'}
-          </span>
-        </div>
-      </div>
-
-      <div className={clsx('flex', 'items-center', 'mb-2')}>
         <span className={classLabel}>Private Mode</span>
         <div className={clsx('flex', 'items-center')}>
           <input
@@ -418,22 +567,6 @@ const InfoPanel = ({ info, onChange, disabled = false }) => {
             type="checkbox"
             checked={!!info.privateMode}
             onChange={(e) => handleChange('privateMode', e.target.checked)}
-            disabled={!isEditable}
-          />
-          <span className={clsx('ml-2', 'text-sm', 'text-gray-500')}>
-            {info.pushToHub ? 'Enabled' : 'Disabled'}
-          </span>
-        </div>
-      </div>
-
-      <div className={clsx('flex', 'items-center', 'mb-2')}>
-        <span className={classLabel}>Use Image Buffer</span>
-        <div className={clsx('flex', 'items-center')}>
-          <input
-            className={classCheckbox}
-            type="checkbox"
-            checked={!!info.useImageBuffer}
-            onChange={(e) => handleChange('useImageBuffer', e.target.checked)}
             disabled={!isEditable}
           />
           <span className={clsx('ml-2', 'text-sm', 'text-gray-500')}>
@@ -488,6 +621,68 @@ const InfoPanel = ({ info, onChange, disabled = false }) => {
             >
               Cancel
             </button>
+          </div>
+        </div>
+      )}
+
+      {showTokenPopup && (
+        <div className="fixed inset-0 bg-black bg-opacity-40 flex items-center justify-center z-50">
+          <div className="bg-white p-6 rounded-lg shadow-lg max-w-md w-full">
+            <div className="mb-4 font-bold text-lg">Enter Hugging Face Token</div>
+            <div className="mb-4">
+              <label className="block text-sm font-medium text-gray-700 mb-2">Token</label>
+              <input
+                type="password"
+                className={clsx(
+                  'w-full',
+                  'p-3',
+                  'border',
+                  'border-gray-300',
+                  'rounded-md',
+                  'focus:outline-none',
+                  'focus:ring-2',
+                  'focus:ring-blue-500',
+                  'focus:border-transparent'
+                )}
+                value={tokenInput}
+                onChange={(e) => setTokenInput(e.target.value)}
+                placeholder="Enter your Hugging Face token"
+                disabled={isLoading}
+              />
+              <div className="text-xs text-gray-500 mt-1">
+                This token will be used to fetch your available User IDs
+              </div>
+            </div>
+            <div className="flex gap-3">
+              <button
+                className={clsx(
+                  'flex-1',
+                  'px-4',
+                  'py-2',
+                  'rounded',
+                  'font-medium',
+                  'transition-colors',
+                  {
+                    'bg-blue-500 text-white hover:bg-blue-600': !isLoading,
+                    'bg-gray-400 text-gray-600 cursor-not-allowed': isLoading,
+                  }
+                )}
+                onClick={handleTokenSubmit}
+                disabled={isLoading}
+              >
+                {isLoading ? 'Loading...' : 'Submit'}
+              </button>
+              <button
+                className="flex-1 px-4 py-2 bg-gray-400 text-white rounded hover:bg-gray-500 transition-colors"
+                onClick={() => {
+                  setShowTokenPopup(false);
+                  setTokenInput('');
+                }}
+                disabled={isLoading}
+              >
+                Cancel
+              </button>
+            </div>
           </div>
         </div>
       )}

@@ -364,7 +364,10 @@ export default function ControlPanel({ onCommand, episodeStatus, taskInfo }) {
                 disabled={isDisabled}
               >
                 <span className={classControlPanelButtonIcon}>
-                  <Icon size={icon_size} color={isDisabled ? '#9ca3af' : color} />
+                  <Icon
+                    style={{ fontSize: 'clamp(1rem, 4vw, 4rem)' }}
+                    color={isDisabled ? '#9ca3af' : color}
+                  />
                 </span>
                 {label}
               </button>
