@@ -52,7 +52,7 @@ const dummyTaskInfoList = [
   },
 ];
 
-const InfoPanel = ({ info, onChange, disabled = false }) => {
+const InfoPanel = ({ info, onChange, disabled = false, rosHost }) => {
   const [showPopup, setShowPopup] = useState(false);
   const [taskInfoList] = useState(dummyTaskInfoList);
   const [isEditable, setIsEditable] = useState(!disabled);
@@ -69,7 +69,9 @@ const InfoPanel = ({ info, onChange, disabled = false }) => {
   const [showUserIdDropdown, setShowUserIdDropdown] = useState(false);
 
   // ROS service caller
-  const { registerHFUser, getRegisteredHFUser } = useRosServiceCaller();
+
+  const rosbridgeUrl = `ws://${rosHost.split(':')[0]}:9090`;
+  const { registerHFUser, getRegisteredHFUser } = useRosServiceCaller(rosbridgeUrl);
 
   const handleChange = (field, value) => {
     if (!isEditable) return; // Block changes when not editable
