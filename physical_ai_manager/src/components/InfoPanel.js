@@ -58,13 +58,7 @@ const InfoPanel = ({ info, onChange, disabled = false }) => {
   const [isEditable, setIsEditable] = useState(!disabled);
 
   // User ID list for dropdown
-  const [userIdList, setUserIdList] = useState([
-    'user123',
-    'robotics_team',
-    'ai_researcher',
-    'demo_user',
-    'test_account',
-  ]);
+  const [userIdList, setUserIdList] = useState([]);
 
   // Token popup states
   const [showTokenPopup, setShowTokenPopup] = useState(false);
@@ -388,55 +382,57 @@ const InfoPanel = ({ info, onChange, disabled = false }) => {
         </span>
 
         <div className="flex-1 min-w-0">
+          {/* Common Load button for both modes */}
+          <button
+            className={clsx(
+              'px-3',
+              'py-1',
+              'text-xs',
+              'font-medium',
+              'rounded',
+              'transition-colors',
+              {
+                'bg-blue-500 text-white hover:bg-blue-600': isEditable && !isLoading,
+                'bg-gray-400 text-gray-600 cursor-not-allowed': !isEditable || isLoading,
+              }
+            )}
+            onClick={() => {
+              if (isEditable && !isLoading) {
+                handleLoadUserId();
+              }
+            }}
+            disabled={!isEditable || isLoading}
+          >
+            {isLoading ? 'Loading...' : 'Load registered User ID'}
+          </button>
+          {info.pushToHub && (
+            <button
+              className={clsx(
+                'px-3',
+                'py-1',
+                'text-xs',
+                'font-medium',
+                'rounded',
+                'transition-colors',
+                {
+                  'bg-green-500 text-white hover:bg-green-600': isEditable && !isLoading,
+                  'bg-gray-400 text-gray-600 cursor-not-allowed': !isEditable || isLoading,
+                }
+              )}
+              onClick={() => {
+                if (isEditable && !isLoading) {
+                  setShowTokenPopup(true);
+                }
+              }}
+              disabled={!isEditable || isLoading}
+            >
+              Change User
+            </button>
+          )}
+
           {info.pushToHub ? (
             /* Dropdown selection only when Push to Hub is enabled */
             <>
-              <div className="flex flex-row gap-2 mb-2">
-                <button
-                  className={clsx(
-                    'px-3',
-                    'py-1',
-                    'text-xs',
-                    'font-medium',
-                    'rounded',
-                    'transition-colors',
-                    {
-                      'bg-blue-500 text-white hover:bg-blue-600': isEditable && !isLoading,
-                      'bg-gray-400 text-gray-600 cursor-not-allowed': !isEditable || isLoading,
-                    }
-                  )}
-                  onClick={() => {
-                    if (isEditable && !isLoading) {
-                      handleLoadUserId();
-                    }
-                  }}
-                  disabled={!isEditable || isLoading}
-                >
-                  {isLoading ? 'Loading...' : 'Load User ID'}
-                </button>
-                <button
-                  className={clsx(
-                    'px-3',
-                    'py-1',
-                    'text-xs',
-                    'font-medium',
-                    'rounded',
-                    'transition-colors',
-                    {
-                      'bg-green-500 text-white hover:bg-green-600': isEditable && !isLoading,
-                      'bg-gray-400 text-gray-600 cursor-not-allowed': !isEditable || isLoading,
-                    }
-                  )}
-                  onClick={() => {
-                    if (isEditable && !isLoading) {
-                      setShowTokenPopup(true);
-                    }
-                  }}
-                  disabled={!isEditable || isLoading}
-                >
-                  Set
-                </button>
-              </div>
               <select
                 className={classSelect}
                 value={info.repoId || ''}
@@ -466,29 +462,6 @@ const InfoPanel = ({ info, onChange, disabled = false }) => {
                     disabled={!isEditable}
                     placeholder="Enter User ID or load from registered IDs"
                   />
-                  <button
-                    className={clsx(
-                      'mt-2',
-                      'px-3',
-                      'py-1',
-                      'text-xs',
-                      'font-medium',
-                      'rounded',
-                      'transition-colors',
-                      {
-                        'bg-blue-500 text-white hover:bg-blue-600': isEditable && !isLoading,
-                        'bg-gray-400 text-gray-600 cursor-not-allowed': !isEditable || isLoading,
-                      }
-                    )}
-                    onClick={() => {
-                      if (isEditable && !isLoading) {
-                        handleLoadUserId();
-                      }
-                    }}
-                    disabled={!isEditable || isLoading}
-                  >
-                    {isLoading ? 'Loading...' : 'Load from Registered IDs'}
-                  </button>
                   <div className="text-xs text-gray-500 mt-1 leading-relaxed">
                     Enter any User ID or load from registered IDs
                   </div>
