@@ -71,6 +71,9 @@ const InfoPanel = ({ info, onChange, disabled = false }) => {
   const [tokenInput, setTokenInput] = useState('');
   const [isLoading, setIsLoading] = useState(false);
 
+  // User ID selection states
+  const [showUserIdDropdown, setShowUserIdDropdown] = useState(false);
+
   // ROS service caller
   const { registerHFUser, getRegisteredHFUser } = useRosServiceCaller();
 
@@ -119,7 +122,12 @@ const InfoPanel = ({ info, onChange, disabled = false }) => {
 
       if (result && result.user_id_list) {
         setUserIdList(result.user_id_list);
-        alert('User ID list loaded successfully!');
+        if (info.pushToHub) {
+          alert('User ID list loaded successfully!');
+        } else {
+          // For non-push-to-hub mode, show dropdown for selection
+          setShowUserIdDropdown(true);
+        }
       } else {
         alert('Failed to get user ID list from response');
       }
@@ -129,6 +137,11 @@ const InfoPanel = ({ info, onChange, disabled = false }) => {
     } finally {
       setIsLoading(false);
     }
+  };
+
+  const handleUserIdSelect = (selectedUserId) => {
+    handleChange('repoId', selectedUserId);
+    setShowUserIdDropdown(false);
   };
 
   // Update isEditable state when the disabled prop changes
@@ -376,7 +389,7 @@ const InfoPanel = ({ info, onChange, disabled = false }) => {
 
         <div className="flex-1 min-w-0">
           {info.pushToHub ? (
-            /* Dropdown selection when Push to Hub is enabled */
+            /* Dropdown selection only when Push to Hub is enabled */
             <>
               <div className="flex flex-row gap-2 mb-2">
                 <button
@@ -410,16 +423,16 @@ const InfoPanel = ({ info, onChange, disabled = false }) => {
                     'rounded',
                     'transition-colors',
                     {
-                      'bg-green-500 text-white hover:bg-green-600': isEditable,
-                      'bg-gray-400 text-gray-600 cursor-not-allowed': !isEditable,
+                      'bg-green-500 text-white hover:bg-green-600': isEditable && !isLoading,
+                      'bg-gray-400 text-gray-600 cursor-not-allowed': !isEditable || isLoading,
                     }
                   )}
                   onClick={() => {
-                    if (isEditable) {
+                    if (isEditable && !isLoading) {
                       setShowTokenPopup(true);
                     }
                   }}
-                  disabled={!isEditable}
+                  disabled={!isEditable || isLoading}
                 >
                   Set
                 </button>
@@ -438,17 +451,82 @@ const InfoPanel = ({ info, onChange, disabled = false }) => {
                 ))}
               </select>
               <div className="text-xs text-gray-500 mt-1 leading-relaxed">
-                Select from available User IDs when Push to Hub is enabled
+                Select from registered User IDs (required for Hub upload)
               </div>
             </>
           ) : (
-            /* Text input when Push to Hub is disabled */
-            <textarea
-              className={classRepoIdTextarea}
-              value={info.repoId || ''}
-              onChange={(e) => handleChange('repoId', e.target.value)}
-              disabled={!isEditable}
-            />
+            /* Text input with optional registered ID selection when Push to Hub is disabled */
+            <>
+              {!showUserIdDropdown ? (
+                <>
+                  <textarea
+                    className={classRepoIdTextarea}
+                    value={info.repoId || ''}
+                    onChange={(e) => handleChange('repoId', e.target.value)}
+                    disabled={!isEditable}
+                    placeholder="Enter User ID or load from registered IDs"
+                  />
+                  <button
+                    className={clsx(
+                      'mt-2',
+                      'px-3',
+                      'py-1',
+                      'text-xs',
+                      'font-medium',
+                      'rounded',
+                      'transition-colors',
+                      {
+                        'bg-blue-500 text-white hover:bg-blue-600': isEditable && !isLoading,
+                        'bg-gray-400 text-gray-600 cursor-not-allowed': !isEditable || isLoading,
+                      }
+                    )}
+                    onClick={() => {
+                      if (isEditable && !isLoading) {
+                        handleLoadUserId();
+                      }
+                    }}
+                    disabled={!isEditable || isLoading}
+                  >
+                    {isLoading ? 'Loading...' : 'Load from Registered IDs'}
+                  </button>
+                  <div className="text-xs text-gray-500 mt-1 leading-relaxed">
+                    Enter any User ID or load from registered IDs
+                  </div>
+                </>
+              ) : (
+                <>
+                  <select
+                    className={classSelect}
+                    value=""
+                    onChange={(e) => {
+                      if (e.target.value) {
+                        handleUserIdSelect(e.target.value);
+                      }
+                    }}
+                    disabled={!isEditable}
+                  >
+                    <option value="">Select from registered User IDs</option>
+                    {userIdList.map((userId) => (
+                      <option key={userId} value={userId}>
+                        {userId}
+                      </option>
+                    ))}
+                  </select>
+                  <div className="flex gap-2 mt-2">
+                    <button
+                      className="px-3 py-1 text-xs font-medium rounded bg-gray-500 text-white hover:bg-gray-600 transition-colors"
+                      onClick={() => setShowUserIdDropdown(false)}
+                      disabled={!isEditable}
+                    >
+                      Cancel
+                    </button>
+                  </div>
+                  <div className="text-xs text-gray-500 mt-1 leading-relaxed">
+                    Select a registered User ID or cancel to enter manually
+                  </div>
+                </>
+              )}
+            </>
           )}
         </div>
       </div>

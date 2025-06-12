@@ -325,7 +325,12 @@ export default function RecordPage({
           </button>
           <div className={classRightPanel}>
             <div className="w-full min-h-10"></div>
-            <InfoPanel info={info} onChange={handleInfoChange} disabled={taskStatus?.phase !== 0} />
+            <InfoPanel
+              info={info}
+              onChange={handleInfoChange}
+              disabled={taskStatus?.phase !== 0}
+              rosHost={rosHost}
+            />
           </div>
         </div>
       </div>
