@@ -21,42 +21,12 @@ from pathlib import Path
 import subprocess
 import time
 from typing import List, Optional, Union
+from physical_ai_server.video_encoder.encoder_base import VideoEncoder
 
 import numpy as np
 
 
-class VideoBufferEncoder:
-
-    def __init__(
-        self,
-        fps: int = 30,
-        vcodec: str = 'libx264',
-        pix_fmt: str = 'yuv420p',
-        g: Optional[int] = 2,
-        crf: Optional[int] = 23,
-        qp: Optional[int] = None,
-        fast_decode: int = 0,
-    ):
-        self.buffer = []
-        self.fps = fps
-        self.vcodec = vcodec
-        self.pix_fmt = pix_fmt
-        self.g = g
-        self.crf = crf
-        self.qp = qp
-        self.fast_decode = fast_decode
-
-    def set_buffer(self, frames: List[np.ndarray]) -> None:
-        self.buffer = frames
-
-    def clear_buffer(self) -> None:
-        self.buffer = []
-
-    def encode_video(self, video_path: Union[str, Path]) -> None:
-        raise NotImplementedError('Must be implemented by subclasses')
-
-
-class FFmpegBufferEncoder(VideoBufferEncoder):
+class FFmpegEncoder(VideoEncoder):
 
     def __init__(
         self,
@@ -222,19 +192,3 @@ class FFmpegBufferEncoder(VideoBufferEncoder):
         finally:
             if self.clear_after_encode:
                 self.clear_buffer()
-
-
-class JetsonGPUEncoder(FFmpegBufferEncoder):
-    def __init__(self, *args, **kwargs):
-        # Set default codec to h264_nvenc for Jetson
-        kwargs.setdefault('vcodec', 'h264_nvenc')
-        # Set a default QP value if none is provided (28 is a reasonable default, similar to CRF 23)
-        kwargs.setdefault('qp', 28)
-        # NVENC presets are different, 'p5' (medium) is a good default
-        kwargs.setdefault('preset', 'p5')
-        
-        # Remove crf if it was passed, as it's not used by nvenc
-        kwargs.pop('crf', None)
-
-        super().__init__(*args, **kwargs)
-        print(f"Jetson GPU Encoder initialized with codec: {self.vcodec}")

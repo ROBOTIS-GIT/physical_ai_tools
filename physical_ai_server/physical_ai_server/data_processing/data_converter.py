@@ -18,6 +18,7 @@
 
 from typing import Any, Dict, List
 
+import cv2
 from cv_bridge import CvBridge
 import numpy as np
 from sensor_msgs.msg import CompressedImage, JointState
@@ -31,12 +32,27 @@ class DataConverter:
         self._image_converter = CvBridge()  # Image converter using CVBridge
         self._joint_converter = None  # Joint data converter
 
-    def compressed_image2cvmat(self, msg: CompressedImage) -> np.ndarray:
+    def compressed_image2cvmat(
+            self,
+            msg: CompressedImage,
+            desired_encoding: str = "passthrough") -> np.ndarray:
         try:
-            cv_image = self._image_converter.compressed_imgmsg_to_cv2(msg)
+            cv_image = self._image_converter.compressed_imgmsg_to_cv2(
+                    msg,
+                    desired_encoding=desired_encoding)
+            if cv_image is None:
+                raise RuntimeError("cv_bridge returned None")
+            if cv_image.dtype == np.uint16:
+                cv_image = cv2.normalize(
+                        cv_image,
+                        None,
+                        0,
+                        255,
+                        cv2.NORM_MINMAX,
+                        dtype=cv2.CV_8U)
             return cv_image
         except Exception as e:
-            raise RuntimeError(f'Failed to convert image: {str(e)}')
+            raise RuntimeError(f'Failed to convert compressed image: {str(e)}')
 
     def joint_trajectory2tensor_array(
             self,

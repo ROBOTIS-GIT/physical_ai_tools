@@ -8,7 +8,9 @@ rosidl_generate_interfaces(${PROJECT_NAME}
   "msg/TaskInfo.msg"
   "msg/TaskStatus.msg"
   "srv/GetImageTopicList.srv"
+  "srv/GetRobotTypeList.srv"
   "srv/SendCommand.srv"
+  "srv/SetRobotType.srv"
 )
 
 install(

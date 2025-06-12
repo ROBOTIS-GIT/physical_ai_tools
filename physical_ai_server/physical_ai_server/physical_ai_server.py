@@ -19,8 +19,8 @@
 from pathlib import Path
 
 import cv2
-from physical_ai_interfaces.msg import TaskInfo
-from physical_ai_interfaces.srv import SendCommand
+from physical_ai_interfaces.msg import TaskInfo, TaskStatus
+from physical_ai_interfaces.srv import SendCommand, GetImageTopicList
 from physical_ai_server.communication.communicator import Communicator
 from physical_ai_server.data_processing.data_converter import DataConverter
 from physical_ai_server.data_processing.data_manager import DataManager
@@ -45,10 +45,16 @@ class PhysicalAIServer(Node):
         # Create service
         self.recording_cmd_service = self.create_service(
             SendCommand,
-            'recording/command',
+            '/task/command',
             self.user_interaction_callback
         )
 
+        self.image_topic_list_service = self.create_service(
+            GetImageTopicList,
+            '/image/get_available_list',
+            self.get_image_topic_list_callback
+        )
+        self.on_recording = False
         self.communicator = None
         self.timer_manager = None
         self.data_converter = None
@@ -178,13 +184,7 @@ class PhysicalAIServer(Node):
         else:
             self.get_logger().error('Camera or Follower topic is not found')
             return False
-        self.get_logger().info(
-            f'{len(camera_data)} camera data received, ' +
-            f'{len(self.params['camera_topic_list'])} cameras'
-        )
-        for camera_topic_name in self.params['camera_topic_list']:
-            self.get_logger().info(
-                f'Camera topic {camera_topic_name} not found in received data')
+
         if len(camera_data) != len(self.params['camera_topic_list']):
             self.get_logger().error(
                 'Camera data length does not match the number of cameras')
@@ -231,11 +231,18 @@ class PhysicalAIServer(Node):
             images=camera_data,
             state=follower_data,
             action=leader_data)
-
+        current_status = TaskStatus()
         current_status = self.data_manager.get_current_record_status()
+        self.communicator.publish_status(status=current_status)
 
         if record_completed:
             self.get_logger().info('Recording stopped')
+
+            current_status.phase = TaskStatus.READY
+            current_status.proceed_time = int(0)
+            current_status.total_time = int(0)
+            self.communicator.publish_status(status=current_status)
+            self.on_recording = False
             self.timer_manager.stop(timer_name=self.operation_mode)
             return
 
@@ -312,40 +319,74 @@ class PhysicalAIServer(Node):
                 task_info=task_info)
 
             self.timer_manager.start(timer_name=self.operation_mode)
+
+            self.on_recording = True
             response.success = True
             response.message = 'Recording started'
 
-        elif request.command == SendCommand.Request.STOP:
-            self.get_logger().info('Stopping recording')
-            self.data_manager.record_stop()
-            response.success = True
-            response.message = 'Recording stopped'
+        else:
+            if not self.on_recording:
+                response.success = False
+                response.message = 'Not currently recording'
+            else:
+                if request.command == SendCommand.Request.STOP:
+                    self.get_logger().info('Stopping recording')
+                    self.data_manager.record_stop()
+                    response.success = True
+                    response.message = 'Recording stopped'
 
-        elif request.command == SendCommand.Request.MOVE_TO_NEXT:
-            self.get_logger().info('Moving to next episode')
-            self.data_manager.record_early_save()
-            response.success = True
-            response.message = 'Moved to next episode'  
+                elif request.command == SendCommand.Request.MOVE_TO_NEXT:
+                    self.get_logger().info('Moving to next episode')
+                    self.data_manager.record_early_save()
+                    response.success = True
+                    response.message = 'Moved to next episode'  
+                
+                elif request.command == SendCommand.Request.RERECORD:
+                    self.get_logger().info('Re-recording current episode')
+                    self.data_manager.re_record()
+                    response.success = True
+                    response.message = 'Re-recording current episode'
 
-        elif request.command == SendCommand.Request.TERMINATE_ALL:
-            self.get_logger().info('Terminating all operations')
-            self.data_manager.record_terminate()
-            response.success = True
-            response.message = 'All operations terminated'
+                elif request.command == SendCommand.Request.FINISH:
+                    self.get_logger().info('Terminating all operations')
+                    self.data_manager.record_finish()
+                    response.success = True
+                    response.message = 'All operations terminated'
 
-        elif request.command == SendCommand.Request.START_INFERENCE:
-            self.get_logger().info('Starting inference')
-            self.operation_mode = 'inference'
-            self.init_robot_control_parameters_from_user_task(
-                task_info.robot_type,
-                task_info.fps
-            )
-            self.timer_manager.start(timer_name=self.operation_mode)
-            response.success = True
-            response.message = 'Inference started'
+                # TODO: Implement inference start command
+                # elif request.command == SendCommand.Request.START_INFERENCE:
+                #     self.get_logger().info('Starting inference')
+                #     self.operation_mode = 'inference'
+                #     self.init_robot_control_parameters_from_user_task(
+                #         task_info.robot_type,
+                #         task_info.fps
+                #     )
+                #     self.timer_manager.start(timer_name=self.operation_mode)
+                #     response.success = True
+                #     response.message = 'Inference started'
 
         return response
 
+    def get_image_topic_list_callback(self, request, response):
+        if not self.on_recording:
+            self.get_logger().error('Not currently recording')
+            response.image_topic_list = []
+            response.success = False
+            response.message = 'Not currently recording'
+            return response
+
+        camera_topic_list = self.communicator.get_camera_topic_list()
+        if camera_topic_list == None or len(camera_topic_list) == 0:
+            self.get_logger().error('No image topics found')
+            response.image_topic_list = []
+            response.success = False
+            response.message = 'No image topics found'
+            return response
+
+        response.image_topic_list = camera_topic_list
+        response.success = True
+        response.message = 'Image topic list retrieved successfully'
+        return response
 
 def main(args=None):
     rclpy.init(args=args)

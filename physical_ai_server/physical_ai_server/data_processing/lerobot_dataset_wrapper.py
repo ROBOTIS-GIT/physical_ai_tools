@@ -35,9 +35,8 @@ from lerobot.common.datasets.utils import (
     write_info
 )
 import numpy as np
-from physical_ai_server.utils.video_utils import (
-    FFmpegBufferEncoder,
-    JetsonGPUEncoder)
+from physical_ai_server.video_encoder.ffmpeg_encoder import FFmpegEncoder
+from physical_ai_server.video_encoder.gstreamer_encoder import GStreamerEncoder
 
 
 class LeRobotDatasetWrapper(LeRobotDataset):
@@ -159,22 +158,14 @@ class LeRobotDatasetWrapper(LeRobotDataset):
         if not hasattr(self, 'encoders') or self.encoders is None:
             self.encoders = {}
 
-        if self._check_nvenc_availability():
-            print("Using NVIDIA NVENC encoder for video encoding.")
-            self.encoders[save_path] = JetsonGPUEncoder(
-                    vcodec='hevc_nvenc',
-                    fps=30,
-                    qp=25
-                )
-        else:
-            self.encoders[save_path] = FFmpegBufferEncoder(
-                    fps=30,
-                    chunk_size=50,
-                    preset='ultrafast',
-                    crf=28,
-                    pix_fmt='yuv420p',
-                    vcodec='libx264'
-                )
+        self.encoders[save_path] = FFmpegEncoder(
+                fps=30,
+                chunk_size=50,
+                preset='ultrafast',
+                crf=28,
+                pix_fmt='yuv420p',
+                vcodec='libx264'
+            )
         self.encoders[save_path].set_buffer(image_buffer)
         encoding_thread = threading.Thread(
             target=self.encoders[save_path].encode_video,
@@ -221,32 +212,4 @@ class LeRobotDatasetWrapper(LeRobotDataset):
                         v / 255.0, axis=0) for k, v in ep_stats[key].items()
                 }
         return ep_stats
-    
-    def _check_nvenc_availability(self) -> bool:
-        import subprocess
-        try:
-            result = subprocess.run(
-                ['ffmpeg', '-encoders'],
-                capture_output=True,
-                text=True,
-                check=False
-            )
 
-            if result.returncode != 0:
-                print(f"Failed to execute ffmpeg. Stderr: {result.stderr}")
-                return False
-
-            if ('h264_nvenc' in result.stdout or
-                'hevc_nvenc' in result.stdout or
-                'av1_nvenc' in result.stdout):
-                print("NVIDIA NVENC encoder is available.")
-                return True
-            else:
-                return False
-
-        except FileNotFoundError:
-            print("ffmpeg is not installed on the system or not in PATH.")
-            return False
-        except Exception as e:
-            print(f"Unknown error occurred: {e}")
-            return False

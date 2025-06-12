@@ -30,7 +30,9 @@ from lerobot.common.datasets.utils import DEFAULT_FEATURES
 from lerobot.common.robot_devices.control_configs import RecordControlConfig
 import numpy as np
 from physical_ai_server.data_processing.lerobot_dataset_wrapper import LeRobotDatasetWrapper
-from physical_ai_server.data_processing.storage_checker import StorageChecker
+from physical_ai_server.device_manager.storage_checker import StorageChecker
+from physical_ai_server.device_manager.cpu_checker import CPUChecker
+from physical_ai_server.device_manager.ram_checker import RAMChecker
 from physical_ai_interfaces.msg import TaskInfo
 from physical_ai_interfaces.msg import TaskStatus
 import requests
@@ -49,11 +51,12 @@ class DataManager:
 
         self._save_repo_name = f'{task_info.repo_id}/{task_info.robot_type}_{task_info.task_name}'
         self._save_path = save_root_path / self._save_repo_name
-        print('Save Path : ',self._save_path)
+        self._on_saving = False
         self._task_info = task_info
         self._lerobot_dataset = None
         self._record_episode_count = 0
         self._start_time_s = 0
+        self._proceed_time = 0
         self._status = 'warmup'
 
     def record(
@@ -63,13 +66,13 @@ class DataManager:
             action):
 
         if ((self._record_episode_count >= self._task_info.num_episodes) or 
-            (self._status == 'terminate')):
+            (self._status == 'finish')):
             if self._lerobot_dataset.check_video_encoding_completed():
                 if (self._task_info.push_to_hub and
                     self._record_episode_count > 0):
                     self._upload_dataset(
                         self._task_info.tags,
-                        self._task_info.private)
+                        self._task_info.private_mode)
                 return self.RECORD_COMPLETED
 
         if self._status == 'stop':
@@ -89,7 +92,7 @@ class DataManager:
                     frame[f'observation.images.{camera_name}'] = image
                 frame['observation.state'] = np.array(state)
                 frame['action'] = np.array(action)
-                frame['task'] = self._task_info.single_task
+                frame['task'] = self._task_info.task_instruction
 
                 if self._task_info.use_image_buffer:
                     self._lerobot_dataset.add_frame_without_write_image(frame)
@@ -97,11 +100,17 @@ class DataManager:
                     self._lerobot_dataset.add_frame(frame)
 
         elif self._status == 'save':
-            self.save()
-            if self._lerobot_dataset.check_video_encoding_completed():
-                self._status = 'reset'
-                self._start_time_s = 0
-            return self.RECORDING
+            if self._on_saving:
+                if self._lerobot_dataset.check_video_encoding_completed():
+                    self._episode_reset()
+                    self._record_episode_count += 1
+                    self._status = 'reset'
+                    self._start_time_s = 0
+                    self._on_saving = False
+            else:
+                self.save()
+                self._on_saving = True
+            return self.RECORDING            
 
         elif self._status == 'reset':
             if not self._check_time(self._task_info.reset_time_s, 'run'):
@@ -110,44 +119,62 @@ class DataManager:
         return self.RECORDING
 
     def save(self):
+        if self._lerobot_dataset.episode_buffer is None:
+            return
         if self._task_info.use_image_buffer:
             self._lerobot_dataset.save_episode_without_write_image()
         else:
             self._lerobot_dataset.save_episode()
-
-        self._episode_reset()
-        self._record_episode_count += 1
-        self._status = 'reset'
 
     def record_early_save(self):
         if self._lerobot_dataset.episode_buffer is not None:
             self._status = 'save'
 
     def record_stop(self):
+        self.save()
         self._episode_reset()
         self._status = 'stop'
 
-    def record_terminate(self):
-        self._status = 'terminate'
+    def record_finish(self):
+        self.save()
+        self._episode_reset()
+        self._status = 'finish'
+
+    def re_record(self):
+        self._episode_reset()
+        self._status = 'reset'
 
     def get_current_record_status(self):
         current_status = TaskStatus()
         current_status.task_info = self._task_info
-        current_status.proceed_time = self._proceed_time
-        current_status.current_episode_number = self._record_episode_count
+
+        current_status.proceed_time = int(getattr(self, '_proceed_time', 0))
+        current_status.current_episode_number = int(self._record_episode_count)
+
         total_storage, used_storage = StorageChecker.get_storage_gb("/")
-        current_status.used_storage_size = used_storage
-        current_status.total_storage_size = total_storage
+        current_status.used_storage_size = float(used_storage)
+        current_status.total_storage_size = float(total_storage)
+
+        cpu_usage = CPUChecker.get_cpu_usage()
+        current_status.used_cpu = float(cpu_usage)
+
+        ram_total, ram_used = RAMChecker.get_ram_gb()
+        current_status.used_ram_size = float(ram_used)
+        current_status.total_ram_size = float(ram_total)
 
         if self._status == 'warmup':
             current_status.phase = TaskStatus.WARMING_UP
-            current_status.total_time = self._task_info.warmup_time_s
+            current_status.total_time = int(self._task_info.warmup_time_s)
         elif self._status == 'run':
             current_status.phase = TaskStatus.RECORDING
-            current_status.total_time = self._task_info.episode_time_s
+            current_status.total_time = int(self._task_info.episode_time_s)
         elif self._status == 'reset':
             current_status.phase = TaskStatus.RESETTING
-            current_status.total_time = self._task_info.reset_time_s
+            current_status.total_time = int(self._task_info.reset_time_s)
+        elif self._status == 'save':
+            current_status.phase = TaskStatus.SAVING
+            current_status.proceed_time = int(0)
+            current_status.total_time = int(0)
 
         return current_status
 
@@ -158,7 +185,7 @@ class DataManager:
 
     def _check_time(self, limit_time, next_status):
         self._proceed_time = time.perf_counter() - self._start_time_s
-        if self._proceed_time > limit_time:
+        if self._proceed_time >= limit_time:
             self._status = next_status
             self._start_time_s = 0
             return True

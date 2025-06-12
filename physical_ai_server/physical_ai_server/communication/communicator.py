@@ -17,8 +17,9 @@
 # Author: Dongyun Kim
 
 from functools import partial
-from typing import Any, Dict, Optional, Set, Tuple
+from typing import Any, Dict, List, Optional, Set, Tuple
 
+from physical_ai_interfaces.msg import TaskStatus
 from physical_ai_server.communication.multi_subscriber import MultiSubscriber
 from physical_ai_server.utils.parameter_utils import parse_topic_list_with_names
 from rclpy.node import Node
@@ -69,7 +70,7 @@ class Communicator:
         self.leader_topic_msgs = {}
 
         self.init_subscribers()
-        # self.init_publishers()
+        self.init_publishers()
 
     def _get_enabled_sources_for_mode(self, mode: str) -> Set[str]:
         enabled_sources = set()
@@ -86,14 +87,20 @@ class Communicator:
         return enabled_sources
 
     def init_publishers(self):
-        for name, topic_name in self.joint_topics.items():
-            if 'leader' in name.lower():
-                self.joint_publishers[name] = self.node.create_publisher(
-                    JointTrajectory,
-                    topic_name,
-                    100
-                )
-                self.node.get_logger().info(f'Initialized joint publisher: {name} -> {topic_name}')
+        # for name, topic_name in self.joint_topics.items():
+        #     if 'leader' in name.lower():
+        #         self.joint_publishers[name] = self.node.create_publisher(
+        #             JointTrajectory,
+        #             topic_name,
+        #             100
+        #         )
+        #         self.node.get_logger().info(f'Initialized joint publisher: {name} -> {topic_name}')
+
+        self.status_publisher = self.node.create_publisher(
+            TaskStatus,
+            '/task/status',
+            100
+        )
 
     def init_subscribers(self):
         # Initialize camera subscribers if defined
@@ -156,3 +163,16 @@ class Communicator:
     def send_action(self, joint_msgs: Dict[str, JointTrajectory]):
         for name, joint_msg in joint_msgs.items():
             self.joint_publishers[name].publish(joint_msg)
+
+    def publish_status(self, status: TaskStatus):
+        self.status_publisher.publish(status)
+
+    def get_camera_topic_list(self) -> List[str] | None:
+        camera_topic_list = []
+        for topic_name in self.camera_topics.values():
+            # Remove '/compressed' suffix if present
+            topic = topic_name
+            if topic.endswith('/compressed'):
+                topic = topic[:-11]  # Remove '/compressed' suffix
+            camera_topic_list.append(topic)
+        return camera_topic_list
