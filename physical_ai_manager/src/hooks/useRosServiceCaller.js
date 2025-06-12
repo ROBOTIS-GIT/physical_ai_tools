@@ -121,7 +121,6 @@ export function useRosServiceCaller(rosbridgeUrl) {
         const request = {
           task_info: {
             task_name: String(task_info.taskName || ''),
-            robot_type: String(task_info.robotType || ''),
             task_type: String(task_info.taskType || ''),
             repo_id: String(task_info.repoId || ''),
             task_instruction: String(task_info.taskInstruction || ''),
