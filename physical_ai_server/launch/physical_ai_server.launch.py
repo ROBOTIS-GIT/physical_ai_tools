@@ -29,7 +29,7 @@ def generate_launch_description():
     pkg_dir = get_package_share_directory('physical_ai_server')
     
     # Get all YAML config files from the config directory
-    config_dir = os.path.join(pkg_dir, 'config')
+    config_dir = os.path.join(pkg_dir, 'config', 'robot_config')
     config_files = glob.glob(os.path.join(config_dir, '*.yaml'))
     
     # Sort config files for consistent ordering

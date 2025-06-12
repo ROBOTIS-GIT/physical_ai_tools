@@ -35,7 +35,7 @@ class CPUChecker:
         """
         try:
             # Get CPU usage percentage with a 1 second interval for accuracy
-            cpu_percent = psutil.cpu_percent(interval=1)
+            cpu_percent = psutil.cpu_percent(interval=None)
             return cpu_percent
         except Exception:
             return 0.0

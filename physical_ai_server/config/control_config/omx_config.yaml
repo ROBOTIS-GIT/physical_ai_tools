@@ -1,0 +1,5 @@
+physical_ai_server:
+  ros__parameters:
+    omx:
+      joystick_topic_list:
+        - right_joystick:/leader/joystick_controller_right/joint_trajectory
