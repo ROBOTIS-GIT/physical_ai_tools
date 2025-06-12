@@ -108,6 +108,16 @@ export default function RecordPage({
     };
   };
 
+  const validateTokenExists = (pushToHub, token) => {
+    if (pushToHub) {
+      if (token === '') {
+        return false;
+      }
+      return true;
+    }
+    return true;
+  };
+
   const handleControlCommand = async (cmd) => {
     console.log('Control command received:', cmd);
     let result;
@@ -122,6 +132,14 @@ export default function RecordPage({
             duration: 4000,
           });
           console.error('Validation failed. Missing fields:', validation.missingFields);
+          return;
+        }
+
+        // Validate token exists when push to hub option is enabled
+        const tokenValidation = validateTokenExists(info.pushToHub, info.token);
+        if (!tokenValidation) {
+          toast.error('❌ Token is required when Push to Hub option is enabled');
+          console.error('Validation failed. Token is required when push to hub option is enabled');
           return;
         }
 

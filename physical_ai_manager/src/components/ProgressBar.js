@@ -40,7 +40,7 @@ export default function ProgressBar({ percent = 0 }) {
   );
 
   return (
-    <div className="w-full max-w-xl h-9 bg-gray-400 rounded-full relative overflow-hidden">
+    <div className="w-full h-9 bg-gray-400 rounded-full relative overflow-hidden">
       <div
         className="h-full bg-gray-700 rounded-full transition-all duration-300"
         style={{ width: `${percent}%` }}

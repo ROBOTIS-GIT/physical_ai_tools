@@ -147,6 +147,27 @@ const InfoPanel = ({ info, onChange, disabled = false }) => {
     }
   );
 
+  const classTokenTextarea = clsx(
+    'text-sm',
+    'resize-y',
+    'min-h-10',
+    'max-h-24',
+    'h-10',
+    'w-full',
+    'p-2',
+    'border',
+    'border-gray-300',
+    'rounded-md',
+    'focus:outline-none',
+    'focus:ring-2',
+    'focus:ring-blue-500',
+    'focus:border-transparent',
+    {
+      'bg-gray-100 cursor-not-allowed': !isEditable,
+      'bg-white': isEditable,
+    }
+  );
+
   const classTextInput = clsx(
     'text-sm',
     'w-full',
@@ -344,6 +365,15 @@ const InfoPanel = ({ info, onChange, disabled = false }) => {
           type="number"
           value={info.numEpisodes || ''}
           onChange={(e) => handleChange('numEpisodes', Number(e.target.value))}
+          disabled={!isEditable}
+        />
+      </div>
+
+      <div className={clsx('flex', 'items-center', 'mb-2.5')}>
+        <span className={classLabel}>Token</span>
+        <textarea
+          className={classTokenTextarea}
+          onChange={(e) => handleChange('token', e.target.value)}
           disabled={!isEditable}
         />
       </div>

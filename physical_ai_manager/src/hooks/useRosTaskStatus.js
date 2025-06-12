@@ -49,6 +49,7 @@ export function useRosTaskStatus(rosbridgeUrl, topicName = '/task/status') {
     episodeTime: 20,
     resetTime: 5,
     numEpisodes: 5,
+    token: '',
     resume: true,
     pushToHub: true,
     privateMode: false,
