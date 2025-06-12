@@ -14,7 +14,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
-# Author: Dongyun Kim
+# Author: Dongyun Kim, Seongwoo Kim
 
 import os
 import glob
@@ -28,9 +28,11 @@ def generate_launch_description():
     pkg_dir = get_package_share_directory('physical_ai_server')
     
     # Get all YAML config files from the config directory
-    config_dir = os.path.join(pkg_dir, 'config', 'robot_config')
-    config_files = glob.glob(os.path.join(config_dir, '*.yaml'))
-    config_files.sort()
+    robot_config_dir = os.path.join(pkg_dir, 'config', 'robot_config')
+    control_config_dir = os.path.join(pkg_dir, 'config', 'control_config')
+    robot_config_files = glob.glob(os.path.join(robot_config_dir, '*.yaml'))
+    control_config_files = glob.glob(os.path.join(control_config_dir, '*.yaml'))
+    config_files = sorted(robot_config_files + control_config_files)
     print(f"Loading config files: {config_files}")
 
     physical_ai_server = Node(

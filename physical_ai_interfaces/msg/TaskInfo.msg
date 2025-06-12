@@ -1,5 +1,4 @@
 string task_name
-string token
 string task_type
 string repo_id
 string task_instruction

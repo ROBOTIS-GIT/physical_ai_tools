@@ -33,6 +33,7 @@ class Communicator:
     SOURCE_CAMERA = 'camera'
     SOURCE_FOLLOWER = 'follower'
     SOURCE_LEADER = 'leader'
+    SOURCE_JOYSTICK = 'joystick'
 
     # Define operation modes
     MODE_COLLECTION = 'collection'  # Full data collection mode (images, follower, leader)
@@ -51,6 +52,7 @@ class Communicator:
         # Parse topic lists for more convenient access
         self.camera_topics = parse_topic_list_with_names(self.params['camera_topic_list'])
         self.joint_topics = parse_topic_list_with_names(self.params['joint_topic_list'])
+        self.joystick_topic = parse_topic_list_with_names(self.params['joystick_topic_list'])
 
         # Determine which sources to enable based on operation mode
         self.enabled_sources = self._get_enabled_sources_for_mode(self.operation_mode)
@@ -68,6 +70,7 @@ class Communicator:
         self.camera_topic_msgs = {}
         self.follower_topic_msgs = {}
         self.leader_topic_msgs = {}
+        self.joystick_msgs = {}
 
         self.init_subscribers()
         self.init_publishers()
@@ -82,6 +85,7 @@ class Communicator:
         # Leader is only needed in collection mode
         if mode == self.MODE_COLLECTION:
             enabled_sources.add(self.SOURCE_LEADER)
+            enabled_sources.add(self.SOURCE_JOYSTICK)
 
         self.node.get_logger().info(f'Enabled sources for {mode} mode: {enabled_sources}')
         return enabled_sources
@@ -142,6 +146,17 @@ class Communicator:
             self.joint_topics[name] = msg_type()
             self.node.get_logger().info(
                 f'Joint subscriber: {name} -> {topic} ({msg_type.__name__})')
+        
+        for name, topic in self.joystick_topic.items():
+            # self.node.get_logger().info(f'[DEBUG] Joystick topic pair: {name} -> {topic}')
+            self.multi_subscriber.add_subscriber(
+                category='joystick',
+                name=name,
+                topic=topic,
+                msg_type=JointTrajectory,
+                callback=partial(self._joystick_callback, name)
+            )
+            self.node.get_logger().info(f'Joystick subscriber: {name} -> {topic}')
 
     def _camera_callback(self, name: str, msg: CompressedImage) -> None:
         self.camera_topic_msgs[name] = msg
@@ -151,6 +166,9 @@ class Communicator:
 
     def _leader_callback(self, name: str, msg: JointTrajectory) -> None:
         self.leader_topic_msgs[name] = msg
+    
+    def _joystick_callback(self, name: str, msg: JointTrajectory) -> None:
+        self.joystick_msgs[name] = msg
 
     def get_latest_data(self) -> Optional[Tuple[Dict, Dict, Dict]]:
         if not (self.camera_topic_msgs or self.follower_topic_msgs or self.leader_topic_msgs):
@@ -176,3 +194,11 @@ class Communicator:
                 topic = topic[:-11]  # Remove '/compressed' suffix
             camera_topic_list.append(topic)
         return camera_topic_list
+    
+    def get_joystick_position(self) -> Optional[float]:
+        # for name, topic in self.joystick_topic.items():
+        #     print(f"[DEBUG] joystick_topic: {name} -> {topic}")
+        msg = self.joystick_msgs.get('right_joystick')
+        if msg and msg.points and msg.points[0].positions:
+            return msg.points[0].positions[0]
+        return None

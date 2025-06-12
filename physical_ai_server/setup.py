@@ -6,7 +6,8 @@ from setuptools import setup
 
 package_name = 'physical_ai_server'
 authors_info = [
-    ('Dongyun Kim', 'kdy@robotis.com')
+    ('Dongyun Kim', 'kdy@robotis.com'),
+    ('Seongwoo Kim', 'kimsw@robotis.com'),
 ]
 authors = ', '.join(author for author, _ in authors_info)
 author_emails = ', '.join(email for _, email in authors_info)
@@ -20,6 +21,7 @@ setup(
         ('share/' + package_name, ['package.xml']),
         ('share/' + package_name + '/launch', glob('launch/*.launch.py')),
         ('share/' + package_name + '/config/robot_config', glob('config/robot_config/*.yaml')),
+        ('share/' + package_name + '/config/control_config', glob('config/control_config/*.yaml')),
     ],
     install_requires=['setuptools', 'physical_ai_interfaces'],
     zip_safe=True,
