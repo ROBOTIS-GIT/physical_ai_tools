@@ -74,7 +74,6 @@ const phaseGuideMessages = {
 const spinnerFrames = ['⠋', '⠙', '⠹', '⠸', '⠼', '⠴', '⠦', '⠧'];
 
 export default function ControlPanel({ onCommand, episodeStatus, taskInfo }) {
-  const icon_size = 70;
   const [hovered, setHovered] = useState(null);
   const [pressed, setPressed] = useState(null);
   const [started, setStarted] = useState(false);
@@ -93,15 +92,15 @@ export default function ControlPanel({ onCommand, episodeStatus, taskInfo }) {
   }, [episodeStatus]);
 
   const isReadyState = (phase) => {
-    return phase == 0;
+    return phase === 0;
   };
 
   const isStoppedState = (phase) => {
-    return phase == 5;
+    return phase === 5;
   };
 
   const isRunningState = (phase) => {
-    return phase == 1 || phase == 2 || phase == 3 || phase == 4 || phase == 6;
+    return phase === 1 || phase === 2 || phase === 3 || phase === 4 || phase === 6;
   };
 
   const updateSpinnerFrame = () => {

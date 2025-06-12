@@ -227,27 +227,6 @@ const InfoPanel = ({ info, onChange, disabled = false, rosHost }) => {
     }
   );
 
-  const classTokenTextarea = clsx(
-    'text-sm',
-    'resize-y',
-    'min-h-10',
-    'max-h-24',
-    'h-10',
-    'w-full',
-    'p-2',
-    'border',
-    'border-gray-300',
-    'rounded-md',
-    'focus:outline-none',
-    'focus:ring-2',
-    'focus:ring-blue-500',
-    'focus:border-transparent',
-    {
-      'bg-gray-100 cursor-not-allowed': !isEditable,
-      'bg-white': isEditable,
-    }
-  );
-
   const classTextInput = clsx(
     'text-sm',
     'w-full',
@@ -284,12 +263,6 @@ const InfoPanel = ({ info, onChange, disabled = false, rosHost }) => {
     }
   );
 
-  // Task type options
-  const taskTypeOptions = [
-    { value: 'record', label: 'Record' },
-    { value: 'inference', label: 'Inference' },
-  ];
-
   const classCheckbox = clsx(
     'w-4',
     'h-4',
@@ -304,6 +277,37 @@ const InfoPanel = ({ info, onChange, disabled = false, rosHost }) => {
       'cursor-pointer': isEditable,
     }
   );
+
+  // Common button base styles
+  const classButtonBase = clsx(
+    'px-3',
+    'py-1',
+    'text-s',
+    'font-medium',
+    'rounded-xl',
+    'transition-colors'
+  );
+
+  // Button variants
+  const getButtonVariant = (variant, isActive = true, isLoading = false) => {
+    const variants = {
+      blue: {
+        active: 'bg-blue-200 text-blue-800 hover:bg-blue-300',
+        disabled: 'bg-gray-200 text-gray-500 cursor-not-allowed',
+      },
+      red: {
+        active: 'bg-red-200 text-red-800 hover:bg-red-300',
+        disabled: 'bg-gray-200 text-gray-500 cursor-not-allowed',
+      },
+      green: {
+        active: 'bg-green-200 text-green-800 hover:bg-green-300',
+        disabled: 'bg-gray-200 text-gray-500 cursor-not-allowed',
+      },
+    };
+
+    const isDisabled = !isActive || isLoading;
+    return variants[variant]?.[isDisabled ? 'disabled' : 'active'] || '';
+  };
 
   return (
     <div className={classInfoPanel}>
@@ -395,18 +399,7 @@ const InfoPanel = ({ info, onChange, disabled = false, rosHost }) => {
           {/* Common Load button for both modes */}
           <div className="flex gap-2 mb-2">
             <button
-              className={clsx(
-                'px-3',
-                'py-1',
-                'text-s',
-                'font-medium',
-                'rounded-xl',
-                'transition-colors',
-                {
-                  'bg-blue-200 text-blue-800 hover:bg-blue-300': isEditable && !isLoading,
-                  'bg-gray-200 text-gray-500 cursor-not-allowed': !isEditable || isLoading,
-                }
-              )}
+              className={clsx(classButtonBase, getButtonVariant('blue', isEditable, isLoading))}
               onClick={() => {
                 if (isEditable && !isLoading) {
                   handleLoadUserId();
@@ -418,7 +411,7 @@ const InfoPanel = ({ info, onChange, disabled = false, rosHost }) => {
             </button>
             {!info.pushToHub && showUserIdDropdown && (
               <button
-                className="px-3 py-1 text-s font-medium rounded-xl bg-red-200 text-red-800 hover:bg-red-300 transition-colors"
+                className={clsx(classButtonBase, getButtonVariant('red', isEditable))}
                 onClick={() => setShowUserIdDropdown(false)}
                 disabled={!isEditable}
               >
@@ -427,18 +420,7 @@ const InfoPanel = ({ info, onChange, disabled = false, rosHost }) => {
             )}
             {info.pushToHub && (
               <button
-                className={clsx(
-                  'px-3',
-                  'py-1',
-                  'text-s',
-                  'font-medium',
-                  'rounded-xl',
-                  'transition-colors',
-                  {
-                    'bg-green-200 text-green-800 hover:bg-green-300': isEditable && !isLoading,
-                    'bg-gray-200 text-gray-500 cursor-not-allowed': !isEditable || isLoading,
-                  }
-                )}
+                className={clsx(classButtonBase, getButtonVariant('green', isEditable, isLoading))}
                 onClick={() => {
                   if (isEditable && !isLoading) {
                     setShowTokenPopup(true);
@@ -688,6 +670,7 @@ const InfoPanel = ({ info, onChange, disabled = false, rosHost }) => {
         </div>
       )}
 
+      {/* Input Hugging Face Token Popup */}
       {showTokenPopup && (
         <div className="fixed inset-0 bg-black bg-opacity-40 flex items-center justify-center z-50">
           <div className="bg-white p-6 rounded-lg shadow-lg max-w-md w-full">

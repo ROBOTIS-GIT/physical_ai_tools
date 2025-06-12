@@ -14,7 +14,7 @@
 //
 // Author: Kiwoong Park
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import clsx from 'clsx';
 import { MdRefresh } from 'react-icons/md';
 import toast from 'react-hot-toast';
@@ -38,7 +38,7 @@ export default function RobotTypeSelector({
   const [fetching, setFetching] = useState(false);
 
   // Fetch robot type list
-  const fetchRobotTypes = async () => {
+  const fetchRobotTypes = useCallback(async () => {
     setFetching(true);
     try {
       const result = await getRobotTypeList();
@@ -71,7 +71,7 @@ export default function RobotTypeSelector({
     } finally {
       setFetching(false);
     }
-  };
+  }, [getRobotTypeList, currentRobotType, setCurrentRobotType]);
 
   // Set robot type
   const handleSetRobotType = async () => {
@@ -126,14 +126,14 @@ export default function RobotTypeSelector({
   // Fetch robot types when component mounts
   useEffect(() => {
     fetchRobotTypes();
-  }, []);
+  }, [fetchRobotTypes]);
 
   // Sync selectedRobotType when currentRobotType changes
   useEffect(() => {
     if (currentRobotType && currentRobotType !== selectedRobotType) {
       setSelectedRobotType(currentRobotType);
     }
-  }, [currentRobotType]);
+  }, [currentRobotType, selectedRobotType]);
 
   // Initialize task info robot type if currentRobotType is set but task info is empty
   useEffect(() => {

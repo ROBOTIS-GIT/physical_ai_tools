@@ -58,11 +58,15 @@ export default function RecordPage({
   useEffect(() => {
     if (taskStatus) {
       setEpisodeStatus(taskStatus);
+
+      if (taskStatus.error !== '') {
+        toast.error(`${taskStatus.error}`);
+      }
     }
   }, [taskStatus]);
 
   useEffect(() => {
-    if (taskInfo.robotType != '') {
+    if (taskInfo.robotType !== '') {
       setInfo(
         { ...taskInfo, tags: [taskInfo.robotType, 'robotis'] } || {
           tags: [taskInfo.robotType, 'robotis'],
@@ -84,7 +88,6 @@ export default function RecordPage({
   const validateTaskInfo = (taskInfo) => {
     const requiredFields = [
       { key: 'taskName', label: 'Task Name' },
-      { key: 'robotType', label: 'Robot Type' },
       { key: 'taskType', label: 'Task Type' },
       { key: 'taskInstruction', label: 'Task Instruction' },
       { key: 'userId', label: 'User ID' },
@@ -112,7 +115,7 @@ export default function RecordPage({
       }
     }
 
-    if (taskInfo.userId == 'Select User ID') {
+    if (taskInfo.userId === 'Select User ID') {
       missingFields.push('User ID');
     }
 

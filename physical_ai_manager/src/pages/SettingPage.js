@@ -15,12 +15,10 @@
 // Author: Kiwoong Park
 
 import React from 'react';
-import YamlEditor from '../components/YamlEditor';
 import RosTopicList from '../components/RosTopicList';
 import RosTopicSubscriber from '../components/RosTopicSubscriber';
-import RosServiceCaller from '../components/RosServiceCaller';
 
-export default function SettingPage({ rosHost, setRosHost, yamlContent, setYamlContent }) {
+export default function SettingPage({ rosHost }) {
   const rosbridgeUrl = `ws://${rosHost.split(':')[0]}:9090`;
 
   return (
@@ -33,9 +31,6 @@ export default function SettingPage({ rosHost, setRosHost, yamlContent, setYamlC
           Current auto-set value: <b>{rosHost}</b>
           <br />
           (This value is automatically determined based on window.location.hostname)
-        </div>
-        <div className="mt-10 w-3/5">
-          <YamlEditor onYamlLoad={setYamlContent} />
         </div>
       </div>
       <div className="flex flex-col items-stretch">

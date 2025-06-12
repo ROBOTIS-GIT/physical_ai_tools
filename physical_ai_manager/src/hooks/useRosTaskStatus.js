@@ -35,6 +35,7 @@ export function useRosTaskStatus(rosbridgeUrl, topicName = '/task/status') {
     usedCpu: 0,
     usedRamSize: 0,
     totalRamSize: 0,
+    error: '',
   });
 
   const [taskInfo, setTaskInfo] = useState({
@@ -123,11 +124,12 @@ export function useRosTaskStatus(rosbridgeUrl, topicName = '/task/status') {
           usedCpu: msg.used_cpu || 0,
           usedRamSize: msg.used_ram_size || 0,
           totalRamSize: msg.total_ram_size || 0,
+          error: msg.error || '',
         });
 
         // Extract TaskInfo from TaskStatus message
         if (msg.task_info) {
-          if (msg.phase != 0) {
+          if (msg.phase !== 0) {
             // update task info only when task is not stopped
             setTaskInfo({
               taskName: msg.task_info.task_name || '',
