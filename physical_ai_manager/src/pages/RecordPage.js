@@ -61,6 +61,16 @@ export default function RecordPage({
     }
   }, [taskStatus]);
 
+  useEffect(() => {
+    if (taskInfo.robotType != '') {
+      setInfo(
+        { ...taskInfo, tags: [taskInfo.robotType, 'robotis'] } || {
+          tags: [taskInfo.robotType, 'robotis'],
+        }
+      );
+    }
+  }, [taskInfo]);
+
   const [isRightPanelCollapsed, setIsRightPanelCollapsed] = useState(false);
 
   const { sendRecordCommand } = useRosServiceCaller(rosbridgeUrl);

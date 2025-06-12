@@ -24,7 +24,7 @@ export function useRosTaskStatus(rosbridgeUrl, topicName = '/task/status') {
   const [taskStatus, setTaskStatus] = useState({
     taskName: 'idle',
     running: false,
-    phase: 0, // NONE
+    phase: 0, // READY
     progress: 0,
     totalTime: 0,
     proceedTime: 0,
@@ -38,13 +38,13 @@ export function useRosTaskStatus(rosbridgeUrl, topicName = '/task/status') {
   });
 
   const [taskInfo, setTaskInfo] = useState({
-    taskName: 'pick_and_place',
-    robotType: 'ai_worker',
+    taskName: '',
+    robotType: '',
     taskType: 'record',
-    taskInstruction: 'pick and place objects',
+    taskInstruction: '',
     userId: '',
     fps: 30,
-    tags: ['tutorial'],
+    tags: [],
     warmupTime: 5,
     episodeTime: 20,
     resetTime: 5,

@@ -19,6 +19,7 @@ import clsx from 'clsx';
 import TagInput from './TagInput';
 import { useRosServiceCaller } from '../hooks/useRosServiceCaller';
 import toast from 'react-hot-toast';
+import { MdVisibility, MdVisibilityOff } from 'react-icons/md';
 
 const dummyTaskInfoList = [
   {
@@ -65,6 +66,7 @@ const InfoPanel = ({ info, onChange, disabled = false, rosHost }) => {
   const [showTokenPopup, setShowTokenPopup] = useState(false);
   const [tokenInput, setTokenInput] = useState('');
   const [isLoading, setIsLoading] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
 
   // User ID selection states
   const [showUserIdDropdown, setShowUserIdDropdown] = useState(false);
@@ -333,6 +335,7 @@ const InfoPanel = ({ info, onChange, disabled = false, rosHost }) => {
           value={info.taskName || ''}
           onChange={(e) => handleChange('taskName', e.target.value)}
           disabled={!isEditable}
+          placeholder="Enter Task Name"
         />
       </div>
 
@@ -354,6 +357,7 @@ const InfoPanel = ({ info, onChange, disabled = false, rosHost }) => {
           value={info.taskInstruction || ''}
           onChange={(e) => handleChange('taskInstruction', e.target.value)}
           disabled={!isEditable}
+          placeholder="Enter Task Instruction"
         />
       </div>
 
@@ -389,52 +393,63 @@ const InfoPanel = ({ info, onChange, disabled = false, rosHost }) => {
 
         <div className="flex-1 min-w-0">
           {/* Common Load button for both modes */}
-          <button
-            className={clsx(
-              'px-3',
-              'py-1',
-              'text-xs',
-              'font-medium',
-              'rounded',
-              'transition-colors',
-              {
-                'bg-blue-500 text-white hover:bg-blue-600': isEditable && !isLoading,
-                'bg-gray-400 text-gray-600 cursor-not-allowed': !isEditable || isLoading,
-              }
-            )}
-            onClick={() => {
-              if (isEditable && !isLoading) {
-                handleLoadUserId();
-              }
-            }}
-            disabled={!isEditable || isLoading}
-          >
-            {isLoading ? 'Loading...' : 'Load registered User ID'}
-          </button>
-          {info.pushToHub && (
+          <div className="flex gap-2 mb-2">
             <button
               className={clsx(
                 'px-3',
                 'py-1',
-                'text-xs',
+                'text-s',
                 'font-medium',
-                'rounded',
+                'rounded-xl',
                 'transition-colors',
                 {
-                  'bg-green-500 text-white hover:bg-green-600': isEditable && !isLoading,
-                  'bg-gray-400 text-gray-600 cursor-not-allowed': !isEditable || isLoading,
+                  'bg-blue-200 text-blue-800 hover:bg-blue-300': isEditable && !isLoading,
+                  'bg-gray-200 text-gray-500 cursor-not-allowed': !isEditable || isLoading,
                 }
               )}
               onClick={() => {
                 if (isEditable && !isLoading) {
-                  setShowTokenPopup(true);
+                  handleLoadUserId();
                 }
               }}
               disabled={!isEditable || isLoading}
             >
-              Change User
+              {isLoading ? 'Loading...' : 'Load'}
             </button>
-          )}
+            {!info.pushToHub && showUserIdDropdown && (
+              <button
+                className="px-3 py-1 text-s font-medium rounded-xl bg-red-200 text-red-800 hover:bg-red-300 transition-colors"
+                onClick={() => setShowUserIdDropdown(false)}
+                disabled={!isEditable}
+              >
+                Manual Input
+              </button>
+            )}
+            {info.pushToHub && (
+              <button
+                className={clsx(
+                  'px-3',
+                  'py-1',
+                  'text-s',
+                  'font-medium',
+                  'rounded-xl',
+                  'transition-colors',
+                  {
+                    'bg-green-200 text-green-800 hover:bg-green-300': isEditable && !isLoading,
+                    'bg-gray-200 text-gray-500 cursor-not-allowed': !isEditable || isLoading,
+                  }
+                )}
+                onClick={() => {
+                  if (isEditable && !isLoading) {
+                    setShowTokenPopup(true);
+                  }
+                }}
+                disabled={!isEditable || isLoading}
+              >
+                Change
+              </button>
+            )}
+          </div>
 
           {info.pushToHub ? (
             /* Dropdown selection only when Push to Hub is enabled */
@@ -491,17 +506,8 @@ const InfoPanel = ({ info, onChange, disabled = false, rosHost }) => {
                       </option>
                     ))}
                   </select>
-                  <div className="flex gap-2 mt-2">
-                    <button
-                      className="px-3 py-1 text-xs font-medium rounded bg-gray-500 text-white hover:bg-gray-600 transition-colors"
-                      onClick={() => setShowUserIdDropdown(false)}
-                      disabled={!isEditable}
-                    >
-                      Cancel
-                    </button>
-                  </div>
                   <div className="text-xs text-gray-500 mt-1 leading-relaxed">
-                    Select a registered User ID or cancel to enter manually
+                    Select a registered User ID or use Cancel button above
                   </div>
                 </>
               )}
@@ -688,24 +694,39 @@ const InfoPanel = ({ info, onChange, disabled = false, rosHost }) => {
             <div className="mb-4 font-bold text-lg">Enter Hugging Face Token</div>
             <div className="mb-4">
               <label className="block text-sm font-medium text-gray-700 mb-2">Token</label>
-              <input
-                type="password"
-                className={clsx(
-                  'w-full',
-                  'p-3',
-                  'border',
-                  'border-gray-300',
-                  'rounded-md',
-                  'focus:outline-none',
-                  'focus:ring-2',
-                  'focus:ring-blue-500',
-                  'focus:border-transparent'
-                )}
-                value={tokenInput}
-                onChange={(e) => setTokenInput(e.target.value)}
-                placeholder="Enter your Hugging Face token"
-                disabled={isLoading}
-              />
+              <div className="relative">
+                <input
+                  type={showPassword ? 'text' : 'password'}
+                  className={clsx(
+                    'w-full',
+                    'p-3',
+                    'pr-10',
+                    'border',
+                    'border-gray-300',
+                    'rounded-md',
+                    'focus:outline-none',
+                    'focus:ring-2',
+                    'focus:ring-blue-500',
+                    'focus:border-transparent'
+                  )}
+                  value={tokenInput}
+                  onChange={(e) => setTokenInput(e.target.value)}
+                  placeholder="Enter your Hugging Face token"
+                  disabled={isLoading}
+                />
+                <button
+                  type="button"
+                  className="absolute inset-y-0 right-0 pr-3 flex items-center"
+                  onClick={() => setShowPassword(!showPassword)}
+                  disabled={isLoading}
+                >
+                  {showPassword ? (
+                    <MdVisibilityOff className="h-5 w-5 text-gray-400 hover:text-gray-600" />
+                  ) : (
+                    <MdVisibility className="h-5 w-5 text-gray-400 hover:text-gray-600" />
+                  )}
+                </button>
+              </div>
               <div className="text-xs text-gray-500 mt-1">
                 This token will be used to fetch your available User IDs
               </div>

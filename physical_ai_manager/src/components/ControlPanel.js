@@ -62,7 +62,7 @@ const buttons = [
 ];
 
 const phaseGuideMessages = {
-  0: '📍 Waiting to start',
+  0: '📍 Ready to start',
   1: '🔥 Warmup in progress',
   2: '🏠 Reset in progress',
   3: '🔴 Recording in progress',
