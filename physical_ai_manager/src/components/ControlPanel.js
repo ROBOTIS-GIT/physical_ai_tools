@@ -71,42 +71,64 @@ const phaseGuideMessages = {
   6: '⚡ Inference in progress',
 };
 
+const spinnerFrames = ['⠋', '⠙', '⠹', '⠸', '⠼', '⠴', '⠦', '⠧'];
+
 export default function ControlPanel({ onCommand, episodeStatus, taskInfo }) {
   const icon_size = 70;
   const [hovered, setHovered] = useState(null);
   const [pressed, setPressed] = useState(null);
   const [started, setStarted] = useState(false);
   const [expandedSystemIndex, setExpandedSystemIndex] = useState(null);
+  const [spinnerIndex, setSpinnerIndex] = useState(0);
   const startedRef = useRef(started);
 
   useEffect(() => {
     startedRef.current = started;
   }, [started]);
 
+  // // Spinner animation effect - update whenever taskStatus changes (ROS topic received)
+  // useEffect(() => {
+  //   // Update spinner index whenever episodeStatus changes (regardless of phase)
+  //   updateSpinnerFrame();
+  // }, [episodeStatus]);
+
+  const isReadyState = (phase) => {
+    return phase == 0;
+  };
+
+  const isStoppedState = (phase) => {
+    return phase == 5;
+  };
+
+  const isRunningState = (phase) => {
+    return phase == 1 || phase == 2 || phase == 3 || phase == 4 || phase == 6;
+  };
+
+  const updateSpinnerFrame = () => {
+    setSpinnerIndex((prevIndex) => (prevIndex + 1) % spinnerFrames.length);
+  };
+
   // Check if button should be enabled based on phase
   const isButtonEnabled = useCallback(
     (label) => {
       const phase = episodeStatus?.phase;
 
-      let isNone = phase == 0;
-      let isStopped = phase == 5;
-
       switch (label) {
         case 'Start':
           // Start button disabled when task is running or when running flag is true
-          return (isNone || isStopped) && !episodeStatus?.running;
+          return (isReadyState(phase) || isStoppedState(phase)) && !episodeStatus?.running;
         case 'Stop':
           // Stop button enabled only when task is running
-          return !(isNone || isStopped);
+          return !isReadyState(phase) && !isStoppedState(phase);
         case 'Retry':
           // Retry button enabled only when task is stopped
-          return !isNone;
+          return !isReadyState(phase);
         case 'Next':
           // Next button enabled only when task is stopped
-          return !isNone;
+          return !isReadyState(phase);
         case 'Finish':
           // Finish button enabled only when task is stopped
-          return !isNone;
+          return !isReadyState(phase);
         default:
           return false;
       }
@@ -351,8 +373,11 @@ export default function ControlPanel({ onCommand, episodeStatus, taskInfo }) {
         })}
       </div>
       <div className="w-full h-full rounded-2xl flex flex-1 flex-col justify-center items-center gap-2">
-        <div className="flex min-w-0 text-3xl text-center">
+        <div className="flex min-w-0 text-3xl text-center items-center gap-2">
           {phaseGuideMessages[episodeStatus?.phase]}
+          {isRunningState(episodeStatus?.phase) && (
+            <span className="font-mono text-blue-500">{spinnerFrames[spinnerIndex]}</span>
+          )}
         </div>
         <div className="w-full flex flex-col items-center gap-1">
           <div className="flex px-10 w-full justify-end text-xl text-gray-700 font-bold">
