@@ -18,6 +18,7 @@ import React, { useState, useEffect } from 'react';
 import clsx from 'clsx';
 import TagInput from './TagInput';
 import { useRosServiceCaller } from '../hooks/useRosServiceCaller';
+import toast from 'react-hot-toast';
 
 const dummyTaskInfoList = [
   {
@@ -85,7 +86,7 @@ const InfoPanel = ({ info, onChange, disabled = false, rosHost }) => {
 
   const handleTokenSubmit = async () => {
     if (!tokenInput.trim()) {
-      alert('Please enter a token');
+      toast.error('Please enter a token');
       return;
     }
 
@@ -98,13 +99,13 @@ const InfoPanel = ({ info, onChange, disabled = false, rosHost }) => {
         setUserIdList(result.user_id_list);
         setShowTokenPopup(false);
         setTokenInput('');
-        alert('User ID list updated successfully!');
+        toast.success('User ID list updated successfully!');
       } else {
-        alert('Failed to get user ID list from response');
+        toast.error('Failed to get user ID list from response');
       }
     } catch (error) {
       console.error('Error registering HF user:', error);
-      alert(`Failed to register user: ${error.message}`);
+      toast.error(`Failed to register user: ${error.message}`);
     } finally {
       setIsLoading(false);
     }
@@ -118,18 +119,14 @@ const InfoPanel = ({ info, onChange, disabled = false, rosHost }) => {
 
       if (result && result.user_id_list) {
         setUserIdList(result.user_id_list);
-        if (info.pushToHub) {
-          alert('User ID list loaded successfully!');
-        } else {
-          // For non-push-to-hub mode, show dropdown for selection
-          setShowUserIdDropdown(true);
-        }
+        toast.success('User ID list loaded successfully!');
+        setShowUserIdDropdown(true);
       } else {
-        alert('Failed to get user ID list from response');
+        toast.error('Failed to get user ID list from response');
       }
     } catch (error) {
       console.error('Error loading HF user list:', error);
-      alert(`Failed to load user ID list: ${error.message}`);
+      toast.error(`Failed to load user ID list: ${error.message}`);
     } finally {
       setIsLoading(false);
     }
@@ -144,6 +141,13 @@ const InfoPanel = ({ info, onChange, disabled = false, rosHost }) => {
   useEffect(() => {
     setIsEditable(!disabled);
   }, [disabled]);
+
+  // Reset dropdown state when Push to Hub is unchecked
+  useEffect(() => {
+    if (!info.pushToHub) {
+      setShowUserIdDropdown(false);
+    }
+  }, [info.pushToHub]);
 
   const classLabel = clsx('text-sm', 'text-gray-600', 'w-28', 'flex-shrink-0', 'font-medium');
 
@@ -465,7 +469,7 @@ const InfoPanel = ({ info, onChange, disabled = false, rosHost }) => {
                     placeholder="Enter User ID or load from registered IDs"
                   />
                   <div className="text-xs text-gray-500 mt-1 leading-relaxed">
-                    Enter any User ID or load from registered IDs
+                    Enter any User ID manually or load from registered IDs
                   </div>
                 </>
               ) : (
