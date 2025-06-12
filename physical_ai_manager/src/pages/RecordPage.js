@@ -77,7 +77,7 @@ export default function RecordPage({
       { key: 'robotType', label: 'Robot Type' },
       { key: 'taskType', label: 'Task Type' },
       { key: 'taskInstruction', label: 'Task Instruction' },
-      { key: 'repoId', label: 'Repo ID' },
+      { key: 'userId', label: 'User ID' },
       { key: 'fps', label: 'FPS' },
       { key: 'warmupTime', label: 'Warmup Time' },
       { key: 'episodeTime', label: 'Episode Time' },
@@ -100,6 +100,10 @@ export default function RecordPage({
       ) {
         missingFields.push(field.label);
       }
+    }
+
+    if (taskInfo.userId == 'Select User ID') {
+      missingFields.push('User ID');
     }
 
     return {

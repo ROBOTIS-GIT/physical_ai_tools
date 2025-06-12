@@ -26,7 +26,7 @@ const dummyTaskInfoList = [
     robotType: 'Type A',
     taskType: 'Type X',
     taskInstruction: 'Do X',
-    repoId: 'repo1',
+    userId: 'repo1',
     fps: 30,
     tags: ['tag1'],
     warmupTime: '10',
@@ -41,7 +41,7 @@ const dummyTaskInfoList = [
     robotType: 'Type B',
     taskType: 'Type Y',
     taskInstruction: 'Do Y',
-    repoId: 'repo2',
+    userId: 'repo2',
     fps: 20,
     tags: ['tag2'],
     warmupTime: '5',
@@ -133,7 +133,7 @@ const InfoPanel = ({ info, onChange, disabled = false, rosHost }) => {
   };
 
   const handleUserIdSelect = (selectedUserId) => {
-    handleChange('repoId', selectedUserId);
+    handleChange('userId', selectedUserId);
     setShowUserIdDropdown(false);
   };
 
@@ -441,8 +441,8 @@ const InfoPanel = ({ info, onChange, disabled = false, rosHost }) => {
             <>
               <select
                 className={classSelect}
-                value={info.repoId || ''}
-                onChange={(e) => handleChange('repoId', e.target.value)}
+                value={info.userId || ''}
+                onChange={(e) => handleChange('userId', e.target.value)}
                 disabled={!isEditable}
               >
                 <option value="">Select User ID</option>
@@ -463,10 +463,10 @@ const InfoPanel = ({ info, onChange, disabled = false, rosHost }) => {
                 <>
                   <textarea
                     className={classRepoIdTextarea}
-                    value={info.repoId || ''}
-                    onChange={(e) => handleChange('repoId', e.target.value)}
+                    value={info.userId || ''}
+                    onChange={(e) => handleChange('userId', e.target.value)}
                     disabled={!isEditable}
-                    placeholder="Enter User ID or load from registered IDs"
+                    placeholder="Enter User ID or load from registered ID"
                   />
                   <div className="text-xs text-gray-500 mt-1 leading-relaxed">
                     Enter any User ID manually or load from registered IDs

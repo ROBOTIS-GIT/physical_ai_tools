@@ -122,7 +122,7 @@ export function useRosServiceCaller(rosbridgeUrl) {
           task_info: {
             task_name: String(task_info.taskName || ''),
             task_type: String(task_info.taskType || ''),
-            repo_id: String(task_info.repoId || ''),
+            user_id: String(task_info.userId || ''),
             task_instruction: String(task_info.taskInstruction || ''),
             fps: Number(task_info.fps) || 0,
             tags: task_info.tags || [],
@@ -130,7 +130,6 @@ export function useRosServiceCaller(rosbridgeUrl) {
             episode_time_s: Number(task_info.episodeTime) || 0,
             reset_time_s: Number(task_info.resetTime) || 0,
             num_episodes: Number(task_info.numEpisodes) || 0,
-            token: String(task_info.token || ''),
             resume: Boolean(task_info.resume),
             push_to_hub: Boolean(task_info.pushToHub),
             private_mode: Boolean(task_info.privateMode),
