@@ -212,4 +212,3 @@ class LeRobotDatasetWrapper(LeRobotDataset):
                         v / 255.0, axis=0) for k, v in ep_stats[key].items()
                 }
         return ep_stats
-

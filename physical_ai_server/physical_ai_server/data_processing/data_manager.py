@@ -18,10 +18,10 @@
 
 import os
 import time
-
-from huggingface_hub import snapshot_download
-
+import subprocess
 import sys
+
+from huggingface_hub import HfApi, snapshot_download
 
 dev_lerobot_path = '/root/ros2_ws/src/physical_ai_tools/lerobot'
 if dev_lerobot_path not in sys.path:
@@ -45,11 +45,12 @@ class DataManager:
     def __init__(
             self,
             save_root_path,
+            robot_type,
             task_info,
             num_image_writer_processes=1,
             num_image_writer_threads_per_camera=1):
 
-        self._save_repo_name = f'{task_info.repo_id}/{task_info.robot_type}_{task_info.task_name}'
+        self._save_repo_name = f'{task_info.repo_id}/{robot_type}_{task_info.task_name}_99'
         self._save_path = save_root_path / self._save_repo_name
         self._on_saving = False
         self._task_info = task_info
@@ -58,6 +59,7 @@ class DataManager:
         self._start_time_s = 0
         self._proceed_time = 0
         self._status = 'warmup'
+        self._cpu_checker = CPUChecker()
 
     def record(
             self,
@@ -148,20 +150,6 @@ class DataManager:
         current_status = TaskStatus()
         current_status.task_info = self._task_info
 
-        current_status.proceed_time = int(getattr(self, '_proceed_time', 0))
-        current_status.current_episode_number = int(self._record_episode_count)
-
-        total_storage, used_storage = StorageChecker.get_storage_gb("/")
-        current_status.used_storage_size = float(used_storage)
-        current_status.total_storage_size = float(total_storage)
-
-        cpu_usage = CPUChecker.get_cpu_usage()
-        current_status.used_cpu = float(cpu_usage)
-
-        ram_total, ram_used = RAMChecker.get_ram_gb()
-        current_status.used_ram_size = float(ram_used)
-        current_status.total_ram_size = float(ram_total)
-
         if self._status == 'warmup':
             current_status.phase = TaskStatus.WARMING_UP
             current_status.total_time = int(self._task_info.warmup_time_s)
@@ -176,6 +164,19 @@ class DataManager:
             current_status.proceed_time = int(0)
             current_status.total_time = int(0)
 
+        current_status.proceed_time = int(getattr(self, '_proceed_time', 0))
+        current_status.current_episode_number = int(self._record_episode_count)
+
+        total_storage, used_storage = StorageChecker.get_storage_gb("/")
+        current_status.used_storage_size = float(used_storage)
+        current_status.total_storage_size = float(total_storage)
+
+        current_status.used_cpu = float(self._cpu_checker.get_cpu_usage())
+
+        ram_total, ram_used = RAMChecker.get_ram_gb()
+        current_status.used_ram_size = float(ram_used)
+        current_status.total_ram_size = float(ram_total)
+
         return current_status
 
     def _episode_reset(self):
@@ -188,6 +189,7 @@ class DataManager:
         if self._proceed_time >= limit_time:
             self._status = next_status
             self._start_time_s = 0
+            self._proceed_time = 0
             return True
         else:
             return False
@@ -225,9 +227,8 @@ class DataManager:
 
                 if not self._task_info.use_image_buffer:
                     self._lerobot_dataset.start_image_writer(
-                            num_processes=self._task_info.num_image_writer_processes,
-                            num_threads=self._task_info.num_image_writer_threads_per_camera *
-                            len(images),
+                            num_processes=1,
+                            num_threads=1
                         )
 
             return True
@@ -268,8 +269,45 @@ class DataManager:
                 use_videos=True
             )
 
+    def validate_and_login_huggingface_token(
+            self,
+            hf_token):
+
+        if hf_token is None or hf_token.strip() == "":
+            return False
+
+        # First validate the token
+        api = HfApi(token=hf_token)
+        try:
+            user_info = api.whoami()
+            print(f"Token validated for user: {user_info['name']}")
+        except Exception as e:
+            print(f"Token validation failed: {e}")
+            return False
+
+        # If validation successful, login using huggingface-cli
+        try:
+            # Use huggingface-cli login with token
+            result = subprocess.run([
+                'huggingface-cli', 'login', '--token', hf_token
+            ], capture_output=True, text=True, check=True)
+            
+            print("Successfully logged in to HuggingFace Hub")
+            return True
+            
+        except subprocess.CalledProcessError as e:
+            print(f"Failed to login with huggingface-cli: {e}")
+            print(f"Error output: {e.stderr}")
+            return False
+        except FileNotFoundError:
+            print("huggingface-cli not found. Please install package.")
+            return False
+
     def _upload_dataset(self, tags, private=False):
-        self._lerobot_dataset.push_to_hub(tags=tags, private=private)
+        try:
+            self._lerobot_dataset.push_to_hub(tags=tags, private=private)
+        except Exception as e:
+            print(f"Error uploading dataset: {e}")
 
     def _download_dataset(self, repo_id):
         snapshot_download(

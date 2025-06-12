@@ -23,7 +23,6 @@ from ament_index_python.packages import get_package_share_directory
 from launch import LaunchDescription
 from launch_ros.actions import Node
 
-
 def generate_launch_description():
     # Find package share directory for the physical_ai_server package
     pkg_dir = get_package_share_directory('physical_ai_server')
@@ -31,14 +30,9 @@ def generate_launch_description():
     # Get all YAML config files from the config directory
     config_dir = os.path.join(pkg_dir, 'config', 'robot_config')
     config_files = glob.glob(os.path.join(config_dir, '*.yaml'))
-    
-    # Sort config files for consistent ordering
     config_files.sort()
-    
-    # Print found config files for debugging
     print(f"Loading config files: {config_files}")
 
-    # Create node action for the physical_ai_server node with all config files
     physical_ai_server = Node(
         package='physical_ai_server',
         executable='physical_ai_server',
@@ -47,7 +41,6 @@ def generate_launch_description():
         parameters=config_files
     )
 
-    # Return launch description
     return LaunchDescription([
         physical_ai_server
     ])

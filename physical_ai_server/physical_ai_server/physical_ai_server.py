@@ -16,11 +16,19 @@
 #
 # Author: Dongyun Kim
 
+import os
+import glob
 from pathlib import Path
 
 import cv2
+from ament_index_python.packages import get_package_share_directory
 from physical_ai_interfaces.msg import TaskInfo, TaskStatus
-from physical_ai_interfaces.srv import SendCommand, GetImageTopicList
+from physical_ai_interfaces.srv import (
+    GetImageTopicList,
+    GetRobotTypeList,
+    SendCommand,
+    SetRobotType
+    )
 from physical_ai_server.communication.communicator import Communicator
 from physical_ai_server.data_processing.data_converter import DataConverter
 from physical_ai_server.data_processing.data_manager import DataManager
@@ -54,6 +62,18 @@ class PhysicalAIServer(Node):
             '/image/get_available_list',
             self.get_image_topic_list_callback
         )
+
+        self.get_robot_types_service = self.create_service(
+            GetRobotTypeList,
+            '/get_robot_types',
+            self.get_robot_types_callback
+        )
+        self.set_robot_type_service = self.create_service(
+            SetRobotType,
+            '/set_robot_type',
+            self.set_robot_type_callback
+        )
+
         self.on_recording = False
         self.communicator = None
         self.timer_manager = None
@@ -64,18 +84,23 @@ class PhysicalAIServer(Node):
         self.total_joint_order = None
         self.default_save_root_path = Path.home() / '.cache/huggingface/lerobot'
 
+        pkg_dir = get_package_share_directory('physical_ai_server')
+        config_dir = os.path.join(pkg_dir, 'config')
+        config_files = glob.glob(os.path.join(config_dir, '*.yaml'))
+        config_files.sort()
+        
+        self.robot_type_list = []
+        for config_file in config_files:
+            robot_type = os.path.splitext(os.path.basename(config_file))[0]
+            if robot_type.endswith('_config'):
+                robot_type = robot_type[:-7]
+            self.robot_type_list.append(robot_type)
+        
+        self.get_logger().info(f"Initialized robot_type_list: {self.robot_type_list}")
+
     def init_robot_control_parameters_from_user_task(
             self,
-            robot_type,
             timer_frequency):
-        self.get_ros_params(robot_type)
-
-        # Initialize observation manager
-        self.communicator = Communicator(
-            node=self,
-            operation_mode=self.operation_mode,
-            params=self.params
-        )
 
         # Create data_collection_timer for periodic data collection with specified frequency
         self.timer_manager = TimerManager(
@@ -105,7 +130,7 @@ class PhysicalAIServer(Node):
         self.joint_order = None
         self.total_joint_order = None
 
-    def get_ros_params(self, robot_type):
+    def init_ros_params(self, robot_type):
         # Define parameter names to load
         param_names = [
             'camera_topic_list',
@@ -153,6 +178,13 @@ class PhysicalAIServer(Node):
         # Log loaded parameters
         log_parameters(self, self.params)
         log_parameters(self, self.joint_order)
+
+        # Initialize observation manager
+        self.communicator = Communicator(
+            node=self,
+            operation_mode=self.operation_mode,
+            params=self.params
+        )
 
     def update_latest_data(
             self,
@@ -301,92 +333,135 @@ class PhysicalAIServer(Node):
                 return
 
     def user_interaction_callback(self, request, response):
-        if request.command == SendCommand.Request.START_RECORD:
-            task_info = request.task_info
-            self.get_logger().info(
-                'Starting recording with task: ' + task_info.task_name)
-            self.get_logger().info(
-                'Robot Type: ' + task_info.robot_type)
-            self.operation_mode = 'collection'
+        try:
+            if request.command == SendCommand.Request.START_RECORD:
+                task_info = request.task_info
+                self.get_logger().info(
+                    'Starting recording with task: ' + task_info.task_name)
+                self.get_logger().info(
+                    'Robot Type: ' + self.robot_type)
+                self.operation_mode = 'collection'
+                self.get_logger().info(f'fps : {task_info.fps}')
+                self.init_robot_control_parameters_from_user_task(
+                    task_info.fps
+                )
 
-            self.init_robot_control_parameters_from_user_task(
-                task_info.robot_type,
-                task_info.fps
-            )
+                self.data_manager = DataManager(
+                    save_root_path=self.default_save_root_path,
+                    robot_type=self.robot_type,
+                    task_info=task_info)
 
-            self.data_manager = DataManager(
-                save_root_path=self.default_save_root_path,
-                task_info=task_info)
+                if not self.data_manager.validate_huggingface_token(task_info.token):
+                    self.get_logger().info(
+                        'Invalid Hugging Face token. Please check your token.')
+                    response.success = False
+                    response.message = 'Invalid Hugging Face token. Please check your token.'
+                    return
 
-            self.timer_manager.start(timer_name=self.operation_mode)
+                self.timer_manager.start(timer_name=self.operation_mode)
 
-            self.on_recording = True
-            response.success = True
-            response.message = 'Recording started'
+                self.on_recording = True
+                response.success = True
+                response.message = 'Recording started'
 
-        else:
-            if not self.on_recording:
-                response.success = False
-                response.message = 'Not currently recording'
             else:
-                if request.command == SendCommand.Request.STOP:
-                    self.get_logger().info('Stopping recording')
-                    self.data_manager.record_stop()
-                    response.success = True
-                    response.message = 'Recording stopped'
+                if not self.on_recording:
+                    response.success = False
+                    response.message = 'Not currently recording'
+                else:
+                    if request.command == SendCommand.Request.STOP:
+                        self.get_logger().info('Stopping recording')
+                        self.data_manager.record_stop()
+                        response.success = True
+                        response.message = 'Recording stopped'
 
-                elif request.command == SendCommand.Request.MOVE_TO_NEXT:
-                    self.get_logger().info('Moving to next episode')
-                    self.data_manager.record_early_save()
-                    response.success = True
-                    response.message = 'Moved to next episode'  
-                
-                elif request.command == SendCommand.Request.RERECORD:
-                    self.get_logger().info('Re-recording current episode')
-                    self.data_manager.re_record()
-                    response.success = True
-                    response.message = 'Re-recording current episode'
+                    elif request.command == SendCommand.Request.MOVE_TO_NEXT:
+                        self.get_logger().info('Moving to next episode')
+                        self.data_manager.record_early_save()
+                        response.success = True
+                        response.message = 'Moved to next episode'  
+                    
+                    elif request.command == SendCommand.Request.RERECORD:
+                        self.get_logger().info('Re-recording current episode')
+                        self.data_manager.re_record()
+                        response.success = True
+                        response.message = 'Re-recording current episode'
 
-                elif request.command == SendCommand.Request.FINISH:
-                    self.get_logger().info('Terminating all operations')
-                    self.data_manager.record_finish()
-                    response.success = True
-                    response.message = 'All operations terminated'
+                    elif request.command == SendCommand.Request.FINISH:
+                        self.get_logger().info('Terminating all operations')
+                        self.data_manager.record_finish()
+                        response.success = True
+                        response.message = 'All operations terminated'
 
-                # TODO: Implement inference start command
-                # elif request.command == SendCommand.Request.START_INFERENCE:
-                #     self.get_logger().info('Starting inference')
-                #     self.operation_mode = 'inference'
-                #     self.init_robot_control_parameters_from_user_task(
-                #         task_info.robot_type,
-                #         task_info.fps
-                #     )
-                #     self.timer_manager.start(timer_name=self.operation_mode)
-                #     response.success = True
-                #     response.message = 'Inference started'
-
+                    # TODO: Implement inference start command
+                    # elif request.command == SendCommand.Request.START_INFERENCE:
+                    #     self.get_logger().info('Starting inference')
+                    #     self.operation_mode = 'inference'
+                    #     self.init_robot_control_parameters_from_user_task(
+                    #         task_info.robot_type,
+                    #         task_info.fps
+                    #     )
+                    #     self.timer_manager.start(timer_name=self.operation_mode)
+                    #     response.success = True
+                    #     response.message = 'Inference started'
+        except Exception as e:
+            self.get_logger().error(f'Error in user interaction: {str(e)}')
+            response.success = False
+            response.message = f'Error in user interaction: {str(e)}'
+            return response
         return response
 
     def get_image_topic_list_callback(self, request, response):
-        if not self.on_recording:
-            self.get_logger().error('Not currently recording')
+        if self.communicator is None:
+            self.get_logger().error('Communicator is not initialized')
             response.image_topic_list = []
             response.success = False
-            response.message = 'Not currently recording'
+            response.message = 'Please select a robot type on the Home page.'
             return response
 
         camera_topic_list = self.communicator.get_camera_topic_list()
-        if camera_topic_list == None or len(camera_topic_list) == 0:
+        if len(camera_topic_list) == 0:
             self.get_logger().error('No image topics found')
             response.image_topic_list = []
             response.success = False
-            response.message = 'No image topics found'
+            response.message = 'Please check image topics in your robot configuration.'
             return response
 
         response.image_topic_list = camera_topic_list
         response.success = True
         response.message = 'Image topic list retrieved successfully'
         return response
+
+    def get_robot_types_callback(self, request, response):
+        if self.robot_type_list is None:
+            self.get_logger().error('Robot type list is not set')
+            response.robot_types = []
+            response.success = False
+            response.message = 'Robot type list is not set'
+            return response
+
+        self.get_logger().info(f'Available robot types: {self.robot_type_list}')
+        response.robot_types = self.robot_type_list
+        response.success = True
+        response.message = 'Robot type list retrieved successfully'
+        return response
+
+    def set_robot_type_callback(self, request, response):
+        try:
+            self.get_logger().info(f'Setting robot type to: {request.robot_type}')
+            self.operation_mode = 'collection'
+            self.robot_type = request.robot_type
+            self.init_ros_params(self.robot_type)
+            response.success = True
+            response.message = f'Robot type set to {self.robot_type}'
+            return response
+        except Exception as e:
+            self.get_logger().error(f'Failed to set robot type: {str(e)}')
+            response.success = False
+            response.message = f'Failed to set robot type: {str(e)}'
+            return response
+
+
 
 def main(args=None):
     rclpy.init(args=args)
