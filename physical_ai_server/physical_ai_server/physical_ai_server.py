@@ -194,9 +194,6 @@ class PhysicalAIServer(Node):
             leader_data: list) -> bool:
 
         image_msgs, follower_msgs, leader_msgs = self.communicator.get_latest_data()
-        joystick_position = self.communicator.get_joystick_position()
-        print(f'Joystick position: {joystick_position}')
-
 
         if image_msgs is not None and follower_msgs is not None:
             for key, value in image_msgs.items():
@@ -254,6 +251,15 @@ class PhysicalAIServer(Node):
                 follower_data,
                 leader_data):
             return
+        
+        if (
+            self.communicator is not None and
+            self.communicator.get_joystick_position() > 0.0
+        ):
+            if self.data_manager._lerobot_dataset is not None:
+                self.data_manager.record_early_save()
+            return
+            
 
         if not self.data_manager.check_lerobot_dataset(
                 camera_data,
@@ -354,13 +360,6 @@ class PhysicalAIServer(Node):
                     save_root_path=self.default_save_root_path,
                     robot_type=self.robot_type,
                     task_info=task_info)
-                
-                # if not self.data_manager.validate_huggingface_token(task_info.token):
-                #     self.get_logger().info(
-                #         'Invalid Hugging Face token. Please check your token.')
-                #     response.success = False
-                #     response.message = 'Invalid Hugging Face token. Please check your token.'
-                #     return
 
                 self.timer_manager.start(timer_name=self.operation_mode)
 

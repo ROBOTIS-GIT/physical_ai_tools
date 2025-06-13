@@ -1,7 +1,7 @@
 string task_name
 string task_type
 string repo_id
-string task_instruction
+string[] task_instruction
 uint8 fps
 string[] tags
 uint16 warmup_time_s    # [s]
