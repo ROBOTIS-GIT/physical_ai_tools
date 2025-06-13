@@ -127,7 +127,7 @@ export default function ControlPanel({ onCommand, episodeStatus, taskInfo }) {
           return !isReadyState(phase);
         case 'Finish':
           // Finish button enabled only when task is stopped
-          return !isReadyState(phase);
+          return true; // Always enabled
         default:
           return false;
       }
