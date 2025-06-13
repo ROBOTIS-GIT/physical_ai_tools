@@ -6,28 +6,3 @@ services:
     container_name: physical_ai_manager
     network_mode: host
     restart: unless-stopped
-
-  physical_ai_server:
-    build:
-      context: .
-      dockerfile: Dockerfile
-    container_name: physical_ai_server
-    network_mode: host
-    restart: unless-stopped
-    tty: true
-    cap_add:
-      - SYS_NICE
-    ulimits:
-      rtprio: 99
-      rttime: -1
-      memlock: 8428281856
-    environment:
-      - DISPLAY=${DISPLAY}
-      - QT_X11_NO_MITSHM=1
-    volumes:
-      - /dev:/dev
-      - ./workspace:/workspace
-      - /tmp/.X11-unix:/tmp/.X11-unix:rw
-      - /tmp/.docker.xauth:/tmp/.docker.xauth:rw
-      - ./start.sh:/start.sh
-    privileged: true
