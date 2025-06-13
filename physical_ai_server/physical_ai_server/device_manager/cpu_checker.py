@@ -16,26 +16,25 @@
 #
 # Author: Dongyun Kim
 
+from collections import deque
+
 import psutil
 
 
 class CPUChecker:
+    def __init__(self, window_size: int = 30):
+        self.window_size = window_size
+        self.cpu_samples = deque(maxlen=window_size)
+        psutil.cpu_percent(interval=None)
 
-    @staticmethod
-    def get_cpu_usage() -> float:
-        """
-        Returns the current overall CPU usage percentage.
-
-        This method retrieves the current CPU utilization across all cores
-        as a percentage value. The measurement is taken over a brief interval
-        to provide an accurate reading.
-
-        Returns:
-            float: CPU usage percentage (0.0 to 100.0). Returns 0.0 if an error occurs.
-        """
+    def get_cpu_usage(self) -> float:
         try:
-            # Get CPU usage percentage with a 1 second interval for accuracy
-            cpu_percent = psutil.cpu_percent(interval=1)
-            return cpu_percent
+            current_cpu = psutil.cpu_percent(interval=None)
+            self.cpu_samples.append(current_cpu)
+            if len(self.cpu_samples) > 0:
+                return sum(self.cpu_samples) / len(self.cpu_samples)
+            else:
+                return 0.0
+
         except Exception:
             return 0.0

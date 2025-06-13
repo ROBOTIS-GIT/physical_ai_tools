@@ -20,10 +20,9 @@ import os
 from pathlib import Path
 import subprocess
 import time
-from typing import List, Optional, Union
-from physical_ai_server.video_encoder.encoder_base import VideoEncoder
+from typing import Union
 
-import numpy as np
+from physical_ai_server.video_encoder.encoder_base import VideoEncoder
 
 
 class FFmpegEncoder(VideoEncoder):

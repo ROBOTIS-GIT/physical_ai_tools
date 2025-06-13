@@ -15,28 +15,15 @@
 # limitations under the License.
 #
 # Author: Dongyun Kim
+from typing import Tuple
 
 import psutil
-from typing import Tuple
 
 
 class RAMChecker:
 
     @staticmethod
     def get_ram_gb() -> Tuple[float, float]:
-        """
-        Returns the total and used RAM in gigabytes.
-
-        This method retrieves the current memory usage information and
-        converts it from bytes to gigabytes for easier readability.
-        It provides both total available RAM and currently used RAM.
-
-        Returns:
-            Tuple[float, float]: A tuple containing:
-                - Total RAM in GB (float)
-                - Used RAM in GB (float)
-            Returns (0.0, 0.0) if an error occurs.
-        """
         try:
             memory = psutil.virtual_memory()
             total_gb = memory.total / (1024 ** 3)

@@ -35,13 +35,13 @@ class DataConverter:
     def compressed_image2cvmat(
             self,
             msg: CompressedImage,
-            desired_encoding: str = "passthrough") -> np.ndarray:
+            desired_encoding: str = 'passthrough') -> np.ndarray:
         try:
             cv_image = self._image_converter.compressed_imgmsg_to_cv2(
                     msg,
                     desired_encoding=desired_encoding)
             if cv_image is None:
-                raise RuntimeError("cv_bridge returned None")
+                raise RuntimeError('cv_bridge returned None')
             if cv_image.dtype == np.uint16:
                 cv_image = cv2.normalize(
                         cv_image,

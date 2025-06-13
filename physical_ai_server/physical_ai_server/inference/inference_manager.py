@@ -1,26 +1,32 @@
-import logging
-import os
-import time
-from dataclasses import asdict
-from pprint import pformat
+#!/usr/bin/env python3
+#
+# Copyright 2025 ROBOTIS CO., LTD.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+#
+# Author: Dongyun Kim
+
+from lerobot.common.policies.pretrained import PreTrainedPolicy
 import numpy as np
 import torch
 
-import sys
-dev_lerobot_path = '/root/ros2_ws/src/physical_ai_tools/lerobot'
-if dev_lerobot_path not in sys.path:
-    sys.path.insert(0, dev_lerobot_path)
-from lerobot.common.policies.pretrained import PreTrainedPolicy
-
 
 class InferenceManager:
-    """Manager for inference-related tasks, such as loading policies and datasets."""
-
     def __init__(
             self,
             policy_type: str,
             policy_path: str,
-            device: str = "cuda"):
+            device: str = 'cuda'):
 
         self.policy = self._load_policy(policy_type, policy_path)
         self.device = device
@@ -42,7 +48,7 @@ class InferenceManager:
         observation = self._preprocess(images, state, task_instruction)
         with torch.inference_mode():
             action = self.policy.select_action(observation)
-            action = action.squeeze(0).to("cpu").numpy()
+            action = action.squeeze(0).to('cpu').numpy()
 
         return action
 
@@ -89,32 +95,32 @@ class InferenceManager:
         return tensor_data
 
     def _get_policy_class(self, name: str) -> PreTrainedPolicy:
-        """Get the policy's class and config class given a name (matching the policy class' `name` attribute)."""
-        if name == "tdmpc":
+        if name == 'tdmpc':
             from lerobot.common.policies.tdmpc.modeling_tdmpc import TDMPCPolicy
 
             return TDMPCPolicy
-        elif name == "diffusion":
+        elif name == 'diffusion':
             from lerobot.common.policies.diffusion.modeling_diffusion import DiffusionPolicy
 
             return DiffusionPolicy
-        elif name == "act":
+        elif name == 'act':
             from lerobot.common.policies.act.modeling_act import ACTPolicy
 
             return ACTPolicy
-        elif name == "vqbet":
+        elif name == 'vqbet':
             from lerobot.common.policies.vqbet.modeling_vqbet import VQBeTPolicy
 
             return VQBeTPolicy
-        elif name == "pi0":
+        elif name == 'pi0':
             from lerobot.common.policies.pi0.modeling_pi0 import PI0Policy
 
             return PI0Policy
-        elif name == "pi0fast":
+        elif name == 'pi0fast':
             from lerobot.common.policies.pi0fast.modeling_pi0fast import PI0FASTPolicy
             return PI0FASTPolicy
-        # elif name == "groot-n1":
+        # TODO: Uncomment when GrootN1Policy is implemented
+        # elif name == 'groot-n1':
         #     from Isaac.groot_n1.policies.groot_n1 import GrootN1Policy
         #     return GrootN1Policy
         else:
-            raise NotImplementedError(f"Policy with name {name} is not implemented.")
+            raise NotImplementedError(f'Policy with name {name} is not implemented.')

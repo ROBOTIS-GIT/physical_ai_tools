@@ -19,3 +19,4 @@ float32 total_storage_size      # [GB]
 float32 used_cpu                # [%]
 float32 used_ram_size           # [GB]
 float32 total_ram_size          # [GB]
+string error

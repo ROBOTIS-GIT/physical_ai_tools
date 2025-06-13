@@ -23,7 +23,7 @@ from typing import Tuple
 class StorageChecker:
 
     @staticmethod
-    def get_storage_gb(path: str = "/") -> Tuple[float, float]:
+    def get_storage_gb(path: str = '/') -> Tuple[float, float]:
         try:
             total, used, _ = shutil.disk_usage(path)
             total_gb = total / (1024 ** 3)

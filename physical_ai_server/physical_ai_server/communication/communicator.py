@@ -17,9 +17,12 @@
 # Author: Dongyun Kim
 
 from functools import partial
-from typing import Any, Dict, List, Optional, Set, Tuple
+from typing import Any, Dict, Optional, Set, Tuple
 
 from physical_ai_interfaces.msg import TaskStatus
+from physical_ai_interfaces.srv import (
+    GetImageTopicList
+)
 from physical_ai_server.communication.multi_subscriber import MultiSubscriber
 from physical_ai_server.utils.parameter_utils import parse_topic_list_with_names
 from rclpy.node import Node
@@ -71,6 +74,7 @@ class Communicator:
 
         self.init_subscribers()
         self.init_publishers()
+        self.init_services()
 
     def _get_enabled_sources_for_mode(self, mode: str) -> Set[str]:
         enabled_sources = set()
@@ -85,22 +89,6 @@ class Communicator:
 
         self.node.get_logger().info(f'Enabled sources for {mode} mode: {enabled_sources}')
         return enabled_sources
-
-    def init_publishers(self):
-        # for name, topic_name in self.joint_topics.items():
-        #     if 'leader' in name.lower():
-        #         self.joint_publishers[name] = self.node.create_publisher(
-        #             JointTrajectory,
-        #             topic_name,
-        #             100
-        #         )
-        #         self.node.get_logger().info(f'Initialized joint publisher: {name} -> {topic_name}')
-
-        self.status_publisher = self.node.create_publisher(
-            TaskStatus,
-            '/task/status',
-            100
-        )
 
     def init_subscribers(self):
         # Initialize camera subscribers if defined
@@ -143,6 +131,28 @@ class Communicator:
             self.node.get_logger().info(
                 f'Joint subscriber: {name} -> {topic} ({msg_type.__name__})')
 
+    def init_publishers(self):
+        # for name, topic_name in self.joint_topics.items():
+        #     if 'leader' in name.lower():
+        #         self.joint_publishers[name] = self.node.create_publisher(
+        #             JointTrajectory,
+        #             topic_name,
+        #             100
+        #         )
+
+        self.status_publisher = self.node.create_publisher(
+            TaskStatus,
+            '/task/status',
+            100
+        )
+
+    def init_services(self):
+        self.image_topic_list_service = self.node.create_service(
+            GetImageTopicList,
+            '/image/get_available_list',
+            self.get_image_topic_list_callback
+        )
+
     def _camera_callback(self, name: str, msg: CompressedImage) -> None:
         self.camera_topic_msgs[name] = msg
 
@@ -167,12 +177,22 @@ class Communicator:
     def publish_status(self, status: TaskStatus):
         self.status_publisher.publish(status)
 
-    def get_camera_topic_list(self) -> List[str] | None:
+    def get_image_topic_list_callback(self, request, response):
         camera_topic_list = []
         for topic_name in self.camera_topics.values():
-            # Remove '/compressed' suffix if present
             topic = topic_name
             if topic.endswith('/compressed'):
-                topic = topic[:-11]  # Remove '/compressed' suffix
+                topic = topic[:-11]
             camera_topic_list.append(topic)
-        return camera_topic_list
+
+        if len(camera_topic_list) == 0:
+            self.get_logger().error('No image topics found')
+            response.image_topic_list = []
+            response.success = False
+            response.message = 'Please check image topics in your robot configuration.'
+            return response
+
+        response.image_topic_list = camera_topic_list
+        response.success = True
+        response.message = 'Image topic list retrieved successfully'
+        return response

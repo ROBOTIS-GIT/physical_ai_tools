@@ -7,10 +7,12 @@ find_package(rosidl_default_generators REQUIRED)
 rosidl_generate_interfaces(${PROJECT_NAME}
   "msg/TaskInfo.msg"
   "msg/TaskStatus.msg"
+  "srv/GetHFUser.srv"
   "srv/GetImageTopicList.srv"
   "srv/GetRobotTypeList.srv"
   "srv/SendCommand.srv"
   "srv/SetRobotType.srv"
+  "srv/SetHFUser.srv"
 )
 
 install(
