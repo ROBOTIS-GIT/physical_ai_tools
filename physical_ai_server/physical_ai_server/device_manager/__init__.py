@@ -16,18 +16,5 @@
 #
 # Author: Dongyun Kim
 
-from lerobot.lerobot.common.datasets.lerobot_dataset import LeRobotDataset
 
-
-class DataSaver(LeRobotDataset):
-
-    def __init__(self, robot, config):
-        # Assume config is of type RecordControlConfig
-        self.robot = robot
-        self.config = config
-        # TODO: Implement init function
-        pass
-
-    def record(self):
-        # TODO: Implement record function
-        pass
+# This file makes the directory a Python package

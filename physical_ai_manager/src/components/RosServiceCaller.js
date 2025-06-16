@@ -14,15 +14,14 @@
 //
 // Author: Kiwoong Park
 
-import React, { useState } from 'react';
+import React, { useState, useImperativeHandle, forwardRef } from 'react';
+import clsx from 'clsx';
 import ROSLIB from 'roslib';
 
-export default function RosServiceCaller({
-  rosbridgeUrl,
-  serviceName,
-  serviceType,
-  requestFields,
-}) {
+const RosServiceCaller = forwardRef(function RosServiceCaller(
+  { rosbridgeUrl, serviceName, serviceType, requestFields },
+  ref
+) {
   const [response, setResponse] = useState(null);
   const [connected, setConnected] = useState(false);
   const [request, setRequest] = useState(requestFields || {});
@@ -30,48 +29,102 @@ export default function RosServiceCaller({
 
   React.useEffect(() => {
     const ros = new ROSLIB.Ros({ url: rosbridgeUrl });
-    ros.on('connection', () => setConnected(true));
-    ros.on('error', () => setConnected(false));
-    ros.on('close', () => setConnected(false));
-    return () => ros.close();
+
+    ros.on('connection', () => {
+      console.log('RosServiceCaller: Connected to ROS bridge');
+      setConnected(true);
+    });
+
+    ros.on('error', (error) => {
+      console.error('RosServiceCaller: ROS connection error:', error);
+      setConnected(false);
+    });
+
+    ros.on('close', () => {
+      console.log('RosServiceCaller: ROS connection closed');
+      setConnected(false);
+    });
+
+    return () => {
+      try {
+        ros.close();
+      } catch (error) {
+        console.error('Error closing ROS connection:', error);
+      }
+    };
   }, [rosbridgeUrl]);
 
   const handleChange = (e) => {
     setRequest({ ...request, [e.target.name]: e.target.value });
   };
 
-  const callService = () => {
+  const callService = (serviceName, serviceType, request) => {
+    if (!connected) {
+      console.warn('ROS not connected, cannot call service');
+      setResponse({ error: 'ROS not connected' });
+      return;
+    }
+
     setLoading(true);
-    const ros = new ROSLIB.Ros({ url: rosbridgeUrl });
-    const service = new ROSLIB.Service({
-      ros,
-      name: serviceName,
-      serviceType: serviceType,
-    });
-    const req = new ROSLIB.ServiceRequest(request);
-    service.callService(req, (result) => {
-      setResponse(result);
+    setResponse(null);
+
+    try {
+      const ros = new ROSLIB.Ros({ url: rosbridgeUrl });
+
+      ros.on('connection', () => {
+        const service = new ROSLIB.Service({
+          ros,
+          name: serviceName,
+          serviceType: serviceType,
+        });
+        const req = new ROSLIB.ServiceRequest(request);
+
+        service.callService(
+          req,
+          (result) => {
+            console.log('Service call successful:', result);
+            setResponse(result);
+            setLoading(false);
+            ros.close();
+          },
+          (error) => {
+            console.error('Service call failed:', error);
+            setResponse({ error: error.toString() });
+            setLoading(false);
+            ros.close();
+          }
+        );
+      });
+
+      ros.on('error', (error) => {
+        console.error('ROS connection error during service call:', error);
+        setResponse({ error: 'Connection failed: ' + error.toString() });
+        setLoading(false);
+        ros.close();
+      });
+    } catch (error) {
+      console.error('Failed to create ROS connection for service call:', error);
+      setResponse({ error: 'Failed to create connection: ' + error.toString() });
       setLoading(false);
-      ros.close();
-    });
+    }
   };
 
+  useImperativeHandle(ref, () => ({
+    callService,
+  }));
+
   return (
-    <div
-      style={{
-        background: '#fff',
-        borderRadius: 16,
-        boxShadow: '0 2px 8px rgba(0,0,0,0.06)',
-        padding: 20,
-        minWidth: 260,
-        margin: 16,
-      }}
-    >
-      <div style={{ fontWeight: 600, marginBottom: 8 }}>ROS Service Call</div>
-      <div style={{ fontSize: 14, color: connected ? '#1a7f37' : '#c00', marginBottom: 8 }}>
+    <div className="bg-white rounded-lg shadow-md p-6 w-full max-w-md">
+      <h3 className="text-lg font-semibold mb-4">ROS Service Caller</h3>
+      <div
+        className={clsx('text-sm mb-2', {
+          'text-green-700': connected,
+          'text-red-600': !connected,
+        })}
+      >
         {connected ? 'Connected' : 'Disconnected'}
       </div>
-      <div style={{ fontSize: 13, color: '#333', wordBreak: 'break-all', marginBottom: 8 }}>
+      <div className="text-xs text-gray-800 break-all mb-2">
         <b>Service:</b> {serviceName}
         <br />
         <b>Type:</b> {serviceType}
@@ -81,58 +134,47 @@ export default function RosServiceCaller({
           e.preventDefault();
           callService();
         }}
-        style={{ marginBottom: 8 }}
+        className="mb-2"
       >
         {Object.keys(request).map((key) => (
-          <div key={key} style={{ marginBottom: 4 }}>
-            <label style={{ fontSize: 12 }}>{key}: </label>
+          <div key={key} className="mb-1">
+            <label className="text-xs">{key}: </label>
             <input
               name={key}
               value={request[key]}
               onChange={handleChange}
-              style={{
-                fontSize: 12,
-                padding: 2,
-                borderRadius: 4,
-                border: '1px solid #ccc',
-                width: 120,
-              }}
+              className={clsx('text-xs', 'p-0.5', 'rounded', 'border', 'border-gray-300', 'w-30')}
             />
           </div>
         ))}
         <button
           type="submit"
           disabled={loading}
-          style={{
-            marginTop: 8,
-            padding: '4px 12px',
-            borderRadius: 6,
-            border: 'none',
-            background: '#1a7f37',
-            color: '#fff',
-            fontWeight: 600,
-            cursor: 'pointer',
-          }}
+          className={clsx(
+            'mt-2',
+            'py-1',
+            'px-3',
+            'rounded-md',
+            'border-none',
+            'bg-green-700',
+            'text-white',
+            'font-semibold',
+            'cursor-pointer',
+            'disabled:opacity-50'
+          )}
         >
           {loading ? 'Calling...' : 'Call Service'}
         </button>
       </form>
-      <div style={{ fontSize: 12, color: '#333', wordBreak: 'break-all' }}>
+      <div className="text-xs text-gray-800 break-all">
         <b>Response:</b>
         <br />
-        <pre
-          style={{
-            fontSize: 12,
-            background: '#f7f7f7',
-            padding: 8,
-            borderRadius: 8,
-            maxHeight: 200,
-            overflow: 'auto',
-          }}
-        >
+        <pre className="text-xs bg-gray-100 p-2 rounded-lg max-h-50 overflow-auto">
           {response ? JSON.stringify(response, null, 2) : '(no response)'}
         </pre>
       </div>
     </div>
   );
-}
+});
+
+export default RosServiceCaller;

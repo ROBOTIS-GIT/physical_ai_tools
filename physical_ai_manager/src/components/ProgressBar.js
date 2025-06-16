@@ -15,51 +15,37 @@
 // Author: Kiwoong Park
 
 import React from 'react';
+import clsx from 'clsx';
 
 export default function ProgressBar({ percent = 0 }) {
   // If over 50%, white, otherwise dark color
-  const textColor = percent > 50 ? '#fff' : '#222';
+  const textColor = percent > 50 ? 'text-white' : 'text-gray-800';
+
+  const classProgressBarText = clsx(
+    'absolute',
+    'left-0',
+    'top-0',
+    'w-full',
+    'h-full',
+    'flex',
+    'items-center',
+    'justify-center',
+    'font-bold',
+    'text-lg',
+    'pointer-events-none',
+    'z-10',
+    'transition-colors',
+    'duration-300',
+    textColor
+  );
+
   return (
-    <div
-      style={{
-        width: '100%',
-        maxWidth: 400,
-        height: 38,
-        background: '#e0e0e0',
-        borderRadius: 20,
-        position: 'relative',
-        overflow: 'hidden',
-      }}
-    >
+    <div className="w-full h-9 bg-gray-400 rounded-full relative overflow-hidden">
       <div
-        style={{
-          width: `${percent}%`,
-          height: '100%',
-          background: '#444',
-          borderRadius: 20,
-          transition: 'width 0.3s',
-        }}
+        className="h-full bg-gray-700 rounded-full transition-all duration-300"
+        style={{ width: `${percent}%` }}
       ></div>
-      <span
-        style={{
-          position: 'absolute',
-          left: 0,
-          top: 0,
-          width: '100%',
-          height: '100%',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          color: textColor,
-          fontWeight: 700,
-          fontSize: 18,
-          pointerEvents: 'none',
-          zIndex: 2,
-          transition: 'color 0.3s',
-        }}
-      >
-        {percent}%
-      </span>
+      <span className={classProgressBarText}>{percent}%</span>
     </div>
   );
 }

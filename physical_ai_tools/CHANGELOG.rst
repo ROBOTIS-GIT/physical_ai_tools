@@ -2,6 +2,18 @@
 Changelog for package physical_ai_tools
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
+0.5.3 (2025-06-16)
+------------------
+* Refactored Physical AI Server for improved data collection capabilities
+* Implemented data acquisition functionality using ROS2 topics
+* Modified configuration system to allow flexible robot type selection
+* Updated data collection method to utilize image buffers for efficiency
+* Overall UI improvements for physical_ai_manager
+* Added status information display from physical_ai_server
+* Added functionality to receive task information from users and send commands to physical_ai_server
+* Added bringup launch file that runs physical_ai_server with rosbridge_server and webvideo_server
+* Contributors: Dongyun Kim, Kiwoong Park
+
 0.5.2 (2025-05-29)
 ------------------
 * Adjusted the waiting timeout for joint states.

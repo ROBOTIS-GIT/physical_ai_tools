@@ -15,35 +15,41 @@
 // Author: Kiwoong Park
 
 import React from 'react';
+import clsx from 'clsx';
 
-export default function EpisodeStatus() {
+const classEpisodeStatusBody = clsx(
+  'h-full',
+  'w-full',
+  'max-w-xs',
+  'text-center',
+  'flex',
+  'flex-col',
+  'items-center',
+  'justify-center',
+  'gap-1',
+  'rounded-2xl',
+  'border',
+  'border-gray-200',
+  'py-5',
+  'px-4',
+  'box-border',
+  'shadow-md',
+  'bg-white'
+);
+
+export default function EpisodeStatus({ episodeStatus }) {
   return (
-    <div
-      style={{
-        height: '100%',
-        width: '300px',
-        textAlign: 'center',
-        display: 'flex',
-        flexDirection: 'column',
-        alignItems: 'center',
-        borderRadius: 16,
-        border: '0px solid transparent',
-        padding: 16,
-        boxSizing: 'border-box',
-        boxShadow: 'rgba(0, 0, 0, 0.06) 0px 2px 8px',
-      }}
-    >
-      <div style={{ fontSize: 32, marginBottom: 16, justifyContent: 'flex-start' }}>Episode</div>
+    <div className={classEpisodeStatusBody}>
+      <div className="mb-1 justify- text-3xl" style={{ fontSize: 'clamp(1.5rem, 1.5vw, 2rem)' }}>
+        Episode
+      </div>
+      <div className="h-3"></div>
       <div
-        style={{
-          background: '#ededed',
-          borderRadius: 12,
-          padding: '16px 32px',
-          fontSize: 24,
-          fontWeight: 'bold',
-        }}
+        className="w-full bg-gray-200 rounded-lg py-1.5 px-3 font-bold whitespace-nowrap"
+        style={{ fontSize: 'clamp(1rem, 1.5vw, 2rem)' }}
       >
-        <span style={{ fontWeight: 700 }}>14</span> / <span style={{ color: '#555' }}>150</span>
+        <span className="font-bold">{episodeStatus?.currentEpisodeNumber}</span> /{' '}
+        <span className="text-gray-600">{episodeStatus?.numEpisodes}</span>
       </div>
     </div>
   );
