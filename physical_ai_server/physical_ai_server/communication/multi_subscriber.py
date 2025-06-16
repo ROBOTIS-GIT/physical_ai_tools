@@ -16,7 +16,6 @@
 #
 # Author: Dongyun Kim
 
-
 from collections import defaultdict
 from typing import Callable, Optional, Set, Type
 
