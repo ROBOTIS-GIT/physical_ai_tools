@@ -56,3 +56,4 @@ jobs:
           vcs-repo-file-url: ""
           package-name: |
             physical_ai_server
+            physical_ai_interfaces

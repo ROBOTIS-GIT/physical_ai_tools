@@ -77,3 +77,18 @@ class MultiSubscriber:
         )
 
         self._node.get_logger().info(f'Subscribed to {topic} as {category}/{name}')
+
+    def cleanup(self):
+        self._node.get_logger().info(
+            'Cleaning up MultiSubscriber resources...')
+
+        for category, subscribers in self._subscribers.items():
+            for name, subscriber in subscribers.items():
+                self._node.destroy_subscription(subscriber)
+                self._node.get_logger().debug(
+                    f'Destroyed subscriber {category}/{name}')
+
+        self._subscribers.clear()
+
+        self._node.get_logger().info(
+            'MultiSubscriber cleanup completed')

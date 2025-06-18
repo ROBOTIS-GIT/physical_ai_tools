@@ -15,6 +15,7 @@
 // Author: Kiwoong Park
 
 import React, { useEffect, useState } from 'react';
+import clsx from 'clsx';
 import ROSLIB from 'roslib';
 
 export default function RosTopicList({ rosbridgeUrl }) {
@@ -49,25 +50,19 @@ export default function RosTopicList({ rosbridgeUrl }) {
   }, [rosbridgeUrl]);
 
   return (
-    <div
-      style={{
-        background: '#fff',
-        borderRadius: 16,
-        boxShadow: '0 2px 8px rgba(0,0,0,0.06)',
-        padding: 20,
-        minWidth: 260,
-        maxHeight: 400,
-        overflowY: 'auto',
-        margin: 16,
-      }}
-    >
-      <div style={{ fontWeight: 600, marginBottom: 8 }}>ROS Topics</div>
-      <div style={{ fontSize: 14, color: connected ? '#1a7f37' : '#c00', marginBottom: 8 }}>
+    <div className="bg-white rounded-lg shadow-md p-6 w-full max-w-md">
+      <h3 className="text-lg font-semibold mb-4">ROS Topics</h3>
+      <div
+        className={clsx('text-sm mb-2', {
+          'text-green-700': connected,
+          'text-red-600': !connected,
+        })}
+      >
         {connected ? 'Connected' : 'Disconnected'}
       </div>
-      <ul style={{ padding: 0, margin: 0, listStyle: 'none' }}>
+      <ul className="p-0 m-0 list-none">
         {topics.map((topic) => (
-          <li key={topic} style={{ padding: '2px 0', fontSize: 13 }}>
+          <li key={topic} className="py-0.5 text-xs">
             {topic}
           </li>
         ))}

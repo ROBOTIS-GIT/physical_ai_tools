@@ -2,7 +2,7 @@
 <?xml-model href="http://download.ros.org/schema/package_format3.xsd" schematypens="http://www.w3.org/2001/XMLSchema"?>
 <package format="3">
   <name>physical_ai_server</name>
-  <version>0.5.2</version>
+  <version>0.5.3</version>
   <description>
     ROS 2 package for Open Platform AI Kit integration
   </description>
@@ -12,6 +12,7 @@
   <depend>rclpy</depend>
   <depend>std_msgs</depend>
   <depend>sensor_msgs</depend>
+  <depend>physical_ai_interfaces</depend>
   <depend>message_filters</depend>
   <depend>cv_bridge</depend>
   <depend>trajectory_msgs</depend>

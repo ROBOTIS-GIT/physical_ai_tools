@@ -30,7 +30,8 @@ def declare_parameters(
 ) -> None:
     for name in param_names:
         param_path = f'{robot_type}.{name}'
-        node.declare_parameter(param_path, default_value)
+        if not node.has_parameter(param_path):
+            node.declare_parameter(param_path, default_value)
 
 
 def load_parameters(
