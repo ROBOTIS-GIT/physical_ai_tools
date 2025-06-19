@@ -9,8 +9,8 @@ physical_ai_server:
         - cam_wrist:/camera/cam_wrist/color/image_rect_raw/compressed
 
       joint_topic_list:
-        - follower:/joint_states
-        - leader:/leader/arm_with_timestamp
+        - follower:/leader/joint_states
+        - leader:/leader/joint_trajectory
 
       joint_list:
         - leader
@@ -23,4 +23,4 @@ physical_ai_server:
           - joint4
           - joint5
           - joint6
-          - gripper
+          - rh_r1_joint

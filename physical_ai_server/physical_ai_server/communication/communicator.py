@@ -188,7 +188,7 @@ class Communicator:
             camera_topic_list.append(topic)
 
         if len(camera_topic_list) == 0:
-            self.get_logger().error('No image topics found')
+            self.node.get_logger().error('No image topics found')
             response.image_topic_list = []
             response.success = False
             response.message = 'Please check image topics in your robot configuration.'
