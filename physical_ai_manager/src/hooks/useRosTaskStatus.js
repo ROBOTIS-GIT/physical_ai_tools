@@ -17,46 +17,24 @@
 import { useRef, useEffect, useState, useCallback } from 'react';
 import ROSLIB from 'roslib';
 import TaskPhase from '../constants/taskPhases';
+import { useTaskStore } from '../flux/hooks/useTaskStore';
+import AppActions from '../flux/actions/AppActions';
 
 export function useRosTaskStatus(rosbridgeUrl, topicName = '/task/status') {
   const rosRef = useRef(null);
   const topicRef = useRef(null);
 
-  const [taskStatus, setTaskStatus] = useState({
-    robotType: '',
-    taskName: 'idle',
-    running: false,
-    phase: TaskPhase.READY,
-    progress: 0,
-    totalTime: 0,
-    proceedTime: 0,
-    currentEpisodeNumber: 0,
-    userId: '',
-    usedStorageSize: 0,
-    totalStorageSize: 0,
-    usedCpu: 0,
-    usedRamSize: 0,
-    totalRamSize: 0,
-    error: '',
-    topicReceived: false,
-  });
+  const { taskInfo, taskStatus } = useTaskStore();
 
-  const [taskInfo, setTaskInfo] = useState({
-    taskName: '',
-    taskType: 'record',
-    taskInstruction: '',
-    userId: '',
-    fps: 30,
-    tags: [],
-    warmupTime: 5,
-    episodeTime: 20,
-    resetTime: 5,
-    numEpisodes: 5,
-    token: '',
-    pushToHub: true,
-    privateMode: false,
-    useOptimizedSave: true,
-  });
+  const onUpdateTaskInfo = useCallback((updatedTaskInfo) => {
+    console.log('onUpdateTaskInfo', updatedTaskInfo);
+    AppActions.updateTaskInfo(updatedTaskInfo);
+  }, []);
+
+  const onUpdateTaskStatus = useCallback((updatedTaskStatus) => {
+    console.log('onUpdateTaskStatus', updatedTaskStatus);
+    AppActions.updateTaskStatus(updatedTaskStatus);
+  }, []);
 
   const [connected, setConnected] = useState(false);
 
@@ -119,7 +97,7 @@ export function useRosTaskStatus(rosbridgeUrl, topicName = '/task/status') {
         const isRunning = msg.phase >= TaskPhase.WARMING_UP && msg.phase <= TaskPhase.RECORDING;
 
         // ROS message to React state
-        setTaskStatus({
+        onUpdateTaskStatus({
           robotType: msg.robot_type || '',
           taskName: msg.task_info?.task_name || 'idle',
           running: isRunning,
@@ -141,7 +119,7 @@ export function useRosTaskStatus(rosbridgeUrl, topicName = '/task/status') {
         // Extract TaskInfo from TaskStatus message
         if (msg.task_info) {
           // update task info only when task is not stopped
-          setTaskInfo({
+          onUpdateTaskInfo({
             taskName: msg.task_info.task_name || '',
             taskType: msg.task_info.task_type || '',
             taskInstruction: msg.task_info.task_instruction || '',
@@ -199,7 +177,7 @@ export function useRosTaskStatus(rosbridgeUrl, topicName = '/task/status') {
 
   // Function to manually update task status (for stop/finish commands)
   const updateTaskStatus = useCallback((updates) => {
-    setTaskStatus((prevStatus) => ({
+    onUpdateTaskStatus((prevStatus) => ({
       ...prevStatus,
       ...updates,
     }));
@@ -207,7 +185,7 @@ export function useRosTaskStatus(rosbridgeUrl, topicName = '/task/status') {
 
   // Function to reset task to initial state
   const resetTaskToIdle = useCallback(() => {
-    setTaskStatus((prevStatus) => ({
+    onUpdateTaskStatus((prevStatus) => ({
       ...prevStatus,
       running: false,
       phase: 0,
@@ -216,7 +194,7 @@ export function useRosTaskStatus(rosbridgeUrl, topicName = '/task/status') {
 
   // Function to update task info
   const updateTaskInfo = useCallback((updates) => {
-    setTaskInfo((prevInfo) => ({
+    onUpdateTaskInfo((prevInfo) => ({
       ...prevInfo,
       ...updates,
     }));

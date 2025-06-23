@@ -14,12 +14,17 @@
 //
 // Author: Kiwoong Park
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import clsx from 'clsx';
 import TagInput from './TagInput';
 import { useRosServiceCaller } from '../hooks/useRosServiceCaller';
 import toast from 'react-hot-toast';
 import { MdVisibility, MdVisibilityOff } from 'react-icons/md';
+
+// Flux imports
+import { useAppStore } from '../flux/hooks/useAppStore';
+import { useTaskStore } from '../flux/hooks/useTaskStore';
+import AppActions from '../flux/actions/AppActions';
 
 const taskInfos = [
   {
@@ -52,7 +57,7 @@ const taskInfos = [
   },
 ];
 
-const InfoPanel = ({ info, onChange, disabled = false, rosHost }) => {
+const InfoPanel = ({ disabled = false }) => {
   const [showPopup, setShowPopup] = useState(false);
   const [taskInfoList] = useState(taskInfos);
   const [isEditable, setIsEditable] = useState(!disabled);
@@ -70,17 +75,24 @@ const InfoPanel = ({ info, onChange, disabled = false, rosHost }) => {
   const [showUserIdDropdown, setShowUserIdDropdown] = useState(false);
 
   // ROS service caller
-
-  const rosbridgeUrl = `ws://${rosHost.split(':')[0]}:9090`;
+  const rosbridgeUrl = useAppStore().getRosBridgeUrl();
   const { registerHFUser, getRegisteredHFUser } = useRosServiceCaller(rosbridgeUrl);
+
+  const { taskInfo } = useTaskStore();
+
+  const onUpdateTaskInfo = useCallback((updatedTaskInfo) => {
+    console.log('onUpdateTaskInfo', updatedTaskInfo);
+    AppActions.updateTaskInfo(updatedTaskInfo);
+  }, []);
 
   const handleChange = (field, value) => {
     if (!isEditable) return; // Block changes when not editable
-    onChange({ ...info, [field]: value });
+    const updatedTaskInfo = { ...taskInfo, [field]: value };
+    onUpdateTaskInfo(updatedTaskInfo);
   };
 
   const handleSelect = (selected) => {
-    onChange(selected);
+    onUpdateTaskInfo(selected);
     setShowPopup(false);
   };
 
@@ -144,10 +156,10 @@ const InfoPanel = ({ info, onChange, disabled = false, rosHost }) => {
 
   // Reset dropdown state when Push to Hub is unchecked
   useEffect(() => {
-    if (!info.pushToHub) {
+    if (!taskInfo.pushToHub) {
       setShowUserIdDropdown(false);
     }
-  }, [info.pushToHub]);
+  }, [taskInfo.pushToHub]);
 
   const classLabel = clsx('text-sm', 'text-gray-600', 'w-28', 'flex-shrink-0', 'font-medium');
 
@@ -220,8 +232,8 @@ const InfoPanel = ({ info, onChange, disabled = false, rosHost }) => {
     'focus:ring-blue-500',
     'focus:border-transparent',
     {
-      'bg-gray-100 cursor-not-allowed': !isEditable || info.pushToHub,
-      'bg-white': isEditable && !info.pushToHub,
+      'bg-gray-100 cursor-not-allowed': !isEditable || taskInfo.pushToHub,
+      'bg-white': isEditable && !taskInfo.pushToHub,
     }
   );
 
@@ -334,7 +346,7 @@ const InfoPanel = ({ info, onChange, disabled = false, rosHost }) => {
         <span className={classLabel}>Task Name</span>
         <textarea
           className={classTaskNameTextarea}
-          value={info.taskName || ''}
+          value={taskInfo.taskName || ''}
           onChange={(e) => handleChange('taskName', e.target.value)}
           disabled={!isEditable}
           placeholder="Enter Task Name"
@@ -356,7 +368,7 @@ const InfoPanel = ({ info, onChange, disabled = false, rosHost }) => {
         </span>
         <textarea
           className={classTaskInstructionTextarea}
-          value={info.taskInstruction || ''}
+          value={taskInfo.taskInstruction || ''}
           onChange={(e) => handleChange('taskInstruction', e.target.value)}
           disabled={!isEditable}
           placeholder="Enter Task Instruction"
@@ -369,29 +381,29 @@ const InfoPanel = ({ info, onChange, disabled = false, rosHost }) => {
           <input
             className={classCheckbox}
             type="checkbox"
-            checked={!!info.pushToHub}
+            checked={!!taskInfo.pushToHub}
             onChange={(e) => handleChange('pushToHub', e.target.checked)}
             disabled={!isEditable}
           />
           <span className={clsx('ml-2', 'text-sm', 'text-gray-500')}>
-            {info.pushToHub ? 'Enabled' : 'Disabled'}
+            {taskInfo.pushToHub ? 'Enabled' : 'Disabled'}
           </span>
         </div>
       </div>
 
-      {info.pushToHub && (
+      {taskInfo.pushToHub && (
         <div className={clsx('flex', 'items-center', 'mb-2')}>
           <span className={classLabel}>Private Mode</span>
           <div className={clsx('flex', 'items-center')}>
             <input
               className={classCheckbox}
               type="checkbox"
-              checked={!!info.privateMode}
+              checked={!!taskInfo.privateMode}
               onChange={(e) => handleChange('privateMode', e.target.checked)}
               disabled={!isEditable}
             />
             <span className={clsx('ml-2', 'text-sm', 'text-gray-500')}>
-              {info.privateMode ? 'Enabled' : 'Disabled'}
+              {taskInfo.privateMode ? 'Enabled' : 'Disabled'}
             </span>
           </div>
         </div>
@@ -425,7 +437,7 @@ const InfoPanel = ({ info, onChange, disabled = false, rosHost }) => {
             >
               {isLoading ? 'Loading...' : 'Load'}
             </button>
-            {!info.pushToHub && showUserIdDropdown && (
+            {!taskInfo.pushToHub && showUserIdDropdown && (
               <button
                 className={clsx(classButtonBase, getButtonVariant('red', isEditable))}
                 onClick={() => setShowUserIdDropdown(false)}
@@ -434,7 +446,7 @@ const InfoPanel = ({ info, onChange, disabled = false, rosHost }) => {
                 Manual Input
               </button>
             )}
-            {info.pushToHub && (
+            {taskInfo.pushToHub && (
               <button
                 className={clsx(classButtonBase, getButtonVariant('green', isEditable, isLoading))}
                 onClick={() => {
@@ -449,12 +461,12 @@ const InfoPanel = ({ info, onChange, disabled = false, rosHost }) => {
             )}
           </div>
 
-          {info.pushToHub ? (
+          {taskInfo.pushToHub ? (
             /* Dropdown selection only when Push to Hub is enabled */
             <>
               <select
                 className={classSelect}
-                value={info.userId || ''}
+                value={taskInfo.userId || ''}
                 onChange={(e) => handleChange('userId', e.target.value)}
                 disabled={!isEditable}
               >
@@ -476,7 +488,7 @@ const InfoPanel = ({ info, onChange, disabled = false, rosHost }) => {
                 <>
                   <textarea
                     className={classRepoIdTextarea}
-                    value={info.userId || ''}
+                    value={taskInfo.userId || ''}
                     onChange={(e) => handleChange('userId', e.target.value)}
                     disabled={!isEditable}
                     placeholder="Enter User ID or load from registered ID"
@@ -520,7 +532,7 @@ const InfoPanel = ({ info, onChange, disabled = false, rosHost }) => {
           className={classTextInput}
           type="number"
           step="5"
-          value={info.fps || ''}
+          value={taskInfo.fps || ''}
           onChange={(e) => handleChange('fps', Number(e.target.value))}
           disabled={!isEditable}
         />
@@ -530,7 +542,7 @@ const InfoPanel = ({ info, onChange, disabled = false, rosHost }) => {
         <span className={clsx(classLabel, 'pt-2')}>Tags</span>
         <div className="flex-1 min-w-0">
           <TagInput
-            tags={info.tags || []}
+            tags={taskInfo.tags || []}
             onChange={(newTags) => handleChange('tags', newTags)}
             disabled={!isEditable}
           />
@@ -548,7 +560,7 @@ const InfoPanel = ({ info, onChange, disabled = false, rosHost }) => {
           step="5"
           min={0}
           max={65535}
-          value={info.warmupTime || ''}
+          value={taskInfo.warmupTime || ''}
           onChange={(e) => handleChange('warmupTime', Number(e.target.value) || 0)}
           disabled={!isEditable}
         />
@@ -562,7 +574,7 @@ const InfoPanel = ({ info, onChange, disabled = false, rosHost }) => {
           step="5"
           min={0}
           max={65535}
-          value={info.episodeTime || ''}
+          value={taskInfo.episodeTime || ''}
           onChange={(e) => handleChange('episodeTime', Number(e.target.value) || 0)}
           disabled={!isEditable}
         />
@@ -576,7 +588,7 @@ const InfoPanel = ({ info, onChange, disabled = false, rosHost }) => {
           step="5"
           min={0}
           max={65535}
-          value={info.resetTime || ''}
+          value={taskInfo.resetTime || ''}
           onChange={(e) => handleChange('resetTime', Number(e.target.value) || 0)}
           disabled={!isEditable}
         />
@@ -590,7 +602,7 @@ const InfoPanel = ({ info, onChange, disabled = false, rosHost }) => {
           step="1"
           min={0}
           max={65535}
-          value={info.numEpisodes || ''}
+          value={taskInfo.numEpisodes || ''}
           onChange={(e) => handleChange('numEpisodes', Number(e.target.value) || 0)}
           disabled={!isEditable}
         />
@@ -602,12 +614,12 @@ const InfoPanel = ({ info, onChange, disabled = false, rosHost }) => {
           <input
             className={classCheckbox}
             type="checkbox"
-            checked={!!info.useOptimizedSave}
+            checked={!!taskInfo.useOptimizedSave}
             onChange={(e) => handleChange('useOptimizedSave', e.target.checked)}
             disabled={!isEditable}
           />
           <span className={clsx('ml-2', 'text-sm', 'text-gray-500')}>
-            {info.useOptimizedSave ? 'Enabled' : 'Disabled'}
+            {taskInfo.useOptimizedSave ? 'Enabled' : 'Disabled'}
           </span>
         </div>
       </div>

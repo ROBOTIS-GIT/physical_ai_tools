@@ -14,7 +14,7 @@
 //
 // Author: Kiwoong Park
 
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useEffect, useRef } from 'react';
 import clsx from 'clsx';
 import { MdHome, MdVideocam } from 'react-icons/md';
 import { Toaster } from 'react-hot-toast';
@@ -23,44 +23,47 @@ import './App.css';
 import HomePage from './pages/HomePage';
 import RecordPage from './pages/RecordPage';
 import SettingPage from './pages/SettingPage';
+
+// Flux imports
+import { useAppStore } from './flux/hooks/useAppStore';
+import { useTaskStore } from './flux/hooks/useTaskStore';
+import AppActions from './flux/actions/AppActions';
+
 import { useRosTaskStatus } from './hooks/useRosTaskStatus';
 
 function App() {
-  const defaultRosHost = window.location.hostname + ':8080';
-  const [page, setPage] = useState('home');
-  const [topics, setTopics] = useState([null, null, null, null]);
-  const [rosHost, setRosHost] = useState(defaultRosHost);
-  const [currentRobotType, setCurrentRobotType] = useState('');
   const isFirstLoad = useRef(true);
 
-  // Subscribe to task status from ROS topic (always active)
-  const rosbridgeUrl = `ws://${rosHost.split(':')[0]}:9090`;
-  const { taskStatus, taskInfo, updateTaskInfo, updateTaskStatus } = useRosTaskStatus(
-    rosbridgeUrl,
-    '/task/status'
-  );
+  // Get state from Flux stores
+  const { currentPage, currentRobotType, error, rosHost } = useAppStore();
 
+  const { taskStatus } = useTaskStore();
+
+  const rosbridgeUrl = `ws://${rosHost.split(':')[0]}:9090`;
+
+  const { rosTaskStatus } = useRosTaskStatus(rosbridgeUrl, '/task/status');
+
+  // Handle automatic navigation to record page on first load
   useEffect(() => {
-    if (isFirstLoad.current && page === 'home' && taskStatus.topicReceived) {
-      setPage('record');
+    if (isFirstLoad.current && currentPage === 'home' && taskStatus.topicReceived) {
+      AppActions.navigateToPage('record');
+      AppActions.setFirstLoad(false);
       isFirstLoad.current = false;
     }
-  }, [page, taskStatus]);
+  }, [currentPage, taskStatus]);
 
-  // Load YAML content from local storage
-  const [yamlContent, setYamlContent] = useState(() => {
-    const savedContent = localStorage.getItem('yamlFileContent');
-    try {
-      return savedContent ? JSON.parse(savedContent) : null;
-    } catch (error) {
-      console.error('Error parsing YAML data from local storage:', error);
-      return null;
+  // Handle errors with toast notifications
+  useEffect(() => {
+    if (error) {
+      toast.error(error);
+      AppActions.clearError();
     }
-  });
+  }, [error]);
 
   const handleHomePageNavigation = () => {
     isFirstLoad.current = false;
-    setPage('home');
+    AppActions.setFirstLoad(false);
+    AppActions.navigateToPage('home');
   };
 
   // Check conditions for Record page navigation
@@ -68,7 +71,8 @@ function App() {
     if (process.env.REACT_APP_DEBUG === 'true') {
       console.log('handleRecordPageNavigation');
       isFirstLoad.current = false;
-      setPage('record');
+      AppActions.setFirstLoad(false);
+      AppActions.navigateToPage('record');
       return;
     }
 
@@ -76,7 +80,8 @@ function App() {
     if (taskStatus && taskStatus.robotType !== '') {
       console.log('robot type:', taskStatus.robotType, '=> allowing navigation to Record page');
       isFirstLoad.current = false;
-      setPage('record');
+      AppActions.setFirstLoad(false);
+      AppActions.navigateToPage('record');
       return;
     }
 
@@ -91,7 +96,7 @@ function App() {
 
     // Allow navigation if conditions are met
     console.log('Robot type set, allowing navigation to Record page');
-    setPage('record');
+    AppActions.navigateToPage('record');
   };
 
   return (
@@ -116,8 +121,8 @@ function App() {
             'outline-none',
             'min-w-20',
             {
-              'hover:bg-gray-300 active:bg-gray-400': page !== 'home',
-              'bg-gray-300': page === 'home',
+              'hover:bg-gray-300 active:bg-gray-400': currentPage !== 'home',
+              'bg-gray-300': currentPage === 'home',
             }
           )}
           onClick={handleHomePageNavigation}
@@ -144,8 +149,8 @@ function App() {
             'outline-none',
             'min-w-20',
             {
-              'hover:bg-gray-300 active:bg-gray-400': page !== 'record',
-              'bg-gray-300': page === 'record',
+              'hover:bg-gray-300 active:bg-gray-400': currentPage !== 'record',
+              'bg-gray-300': currentPage === 'record',
             }
           )}
           onClick={handleRecordPageNavigation}
@@ -155,33 +160,12 @@ function App() {
         </button>
       </aside>
       <main className="flex-1 flex flex-col h-screen min-h-0">
-        {page === 'home' ? (
-          <HomePage
-            topics={topics}
-            setTopics={setTopics}
-            rosHost={rosHost}
-            currentRobotType={currentRobotType}
-            setCurrentRobotType={setCurrentRobotType}
-            taskStatus={taskStatus}
-            updateTaskStatus={updateTaskStatus}
-          />
-        ) : page === 'record' ? (
-          <RecordPage
-            topics={topics}
-            setTopics={setTopics}
-            rosHost={rosHost}
-            yamlContent={yamlContent}
-            taskStatus={taskStatus}
-            taskInfo={taskInfo}
-            updateTaskInfo={updateTaskInfo}
-          />
+        {currentPage === 'home' ? (
+          <HomePage />
+        ) : currentPage === 'record' ? (
+          <RecordPage />
         ) : (
-          <SettingPage
-            rosHost={rosHost}
-            setRosHost={setRosHost}
-            yamlContent={yamlContent}
-            setYamlContent={setYamlContent}
-          />
+          <SettingPage />
         )}
       </main>
       <Toaster
@@ -200,7 +184,7 @@ function App() {
             },
           },
           error: {
-            duration: 6000,
+            duration: 4000,
             style: {
               background: '#ef4444',
             },

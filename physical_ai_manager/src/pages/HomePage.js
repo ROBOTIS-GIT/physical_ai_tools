@@ -18,13 +18,15 @@ import React from 'react';
 import clsx from 'clsx';
 import RobotTypeSelector from '../components/RobotTypeSelector';
 
-export default function HomePage({
-  rosHost,
-  currentRobotType,
-  setCurrentRobotType,
-  taskStatus,
-  updateTaskStatus,
-}) {
+// Flux imports
+import { useAppStore } from '../flux/hooks/useAppStore';
+import { useTaskStore } from '../flux/hooks/useTaskStore';
+
+export default function HomePage() {
+  // Get state from Flux stores
+  const { rosHost, currentRobotType } = useAppStore();
+  const { taskStatus } = useTaskStore();
+
   const classContainer = clsx(
     'w-full',
     'h-full',
@@ -39,9 +41,7 @@ export default function HomePage({
       <RobotTypeSelector
         rosHost={rosHost}
         currentRobotType={currentRobotType}
-        setCurrentRobotType={setCurrentRobotType}
         taskStatus={taskStatus}
-        updateTaskStatus={updateTaskStatus}
       />
     </div>
   );

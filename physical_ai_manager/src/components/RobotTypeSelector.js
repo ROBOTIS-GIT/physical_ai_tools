@@ -20,14 +20,16 @@ import { MdRefresh } from 'react-icons/md';
 import toast from 'react-hot-toast';
 import { useRosServiceCaller } from '../hooks/useRosServiceCaller';
 
-export default function RobotTypeSelector({
-  rosHost,
-  currentRobotType,
-  setCurrentRobotType,
-  taskStatus,
-  updateTaskStatus,
-  className,
-}) {
+// Flux imports
+import { useAppStore } from '../flux/hooks/useAppStore';
+import { useTaskStore } from '../flux/hooks/useTaskStore';
+import AppActions from '../flux/actions/AppActions';
+
+export default function RobotTypeSelector({ className }) {
+  // Get state from Flux stores
+  const { rosHost, currentRobotType } = useAppStore();
+  const { taskStatus } = useTaskStore();
+
   const rosbridgeUrl = `ws://${rosHost.split(':')[0]}:9090`;
   const { getRobotTypeList, setRobotType } = useRosServiceCaller(rosbridgeUrl);
 
@@ -97,11 +99,12 @@ export default function RobotTypeSelector({
       console.log('Set robot type result:', result);
 
       if (result && result.success) {
-        setCurrentRobotType(selectedRobotType);
+        // Update robot type in the store
+        AppActions.setRobotType(selectedRobotType);
+
         // Update task status with the selected robot type
-        if (updateTaskStatus) {
-          updateTaskStatus({ robotType: selectedRobotType });
-        }
+        AppActions.updateTaskStatus({ robotType: selectedRobotType });
+
         toast.success(`Robot type set to: ${selectedRobotType}`);
       } else {
         toast.error(`Failed to set robot type: ${result.message || 'Unknown error'}`);
@@ -128,10 +131,10 @@ export default function RobotTypeSelector({
 
   // Initialize task info robot type if currentRobotType is set but task info is empty
   useEffect(() => {
-    if (currentRobotType && updateTaskStatus) {
-      updateTaskStatus({ robotType: currentRobotType });
+    if (currentRobotType) {
+      AppActions.updateTaskStatus({ robotType: currentRobotType });
     }
-  }, [currentRobotType, updateTaskStatus]);
+  }, [currentRobotType]);
 
   const classCard = clsx(
     'bg-white',
@@ -199,72 +202,57 @@ export default function RobotTypeSelector({
     'px-3',
     'py-2',
     'rounded-md',
-    'text-center',
-    'mb-4'
+    'mb-4',
+    'text-center'
   );
 
   return (
     <div className={classCard}>
-      <h1 className={classTitle}>Robot Type Selection</h1>
+      <h2 className={classTitle}>Robot Type Selection</h2>
 
-      {currentRobotType && (
-        <div className={classCurrentType}>
-          <strong>Current Robot Type:</strong> {currentRobotType}
-          {taskStatus && taskStatus.robotType && (
-            <div className="text-xs text-green-600 mt-1">
-              ✓ Saved to Task Status: {taskStatus.robotType}
-            </div>
-          )}
-        </div>
-      )}
-
-      {taskStatus && taskStatus.phase > 0 && (
-        <div className="text-sm text-orange-600 bg-orange-100 px-3 py-2 rounded-md text-center mb-4">
-          <strong>⚠️ Task in progress (Phase {taskStatus.phase})</strong>
-          <div className="text-xs mt-1">Robot type cannot be changed during task execution</div>
-        </div>
-      )}
-
-      <label className={classLabel}>Select Robot Type:</label>
-
-      <select
-        className={classSelect}
-        value={selectedRobotType}
-        onChange={(e) => setSelectedRobotType(e.target.value)}
-        disabled={fetching || loading || (taskStatus && taskStatus.phase > 0)}
-      >
-        <option value="" disabled>
-          Choose a robot type...
-        </option>
-        {robotTypes.map((type) => (
-          <option key={type} value={type}>
-            {type}
-          </option>
-        ))}
-      </select>
+      <div>
+        <label className={classLabel}>Available Robot Types:</label>
+        <select
+          value={selectedRobotType}
+          onChange={(e) => setSelectedRobotType(e.target.value)}
+          className={classSelect}
+          disabled={loading || fetching}
+        >
+          <option value="">Select a robot type</option>
+          {robotTypes.map((type) => (
+            <option key={type} value={type}>
+              {type}
+            </option>
+          ))}
+        </select>
+      </div>
 
       <button
-        className={classButton}
         onClick={handleSetRobotType}
-        disabled={loading || fetching || !selectedRobotType || (taskStatus && taskStatus.phase > 0)}
+        disabled={loading || !selectedRobotType || fetching}
+        className={classButton}
       >
         {loading ? 'Setting...' : 'Set Robot Type'}
       </button>
 
       <button
-        className={classRefreshButton}
         onClick={fetchRobotTypes}
-        disabled={fetching || loading || (taskStatus && taskStatus.phase > 0)}
+        disabled={fetching || loading}
+        className={classRefreshButton}
       >
-        <div className="flex items-center justify-center gap-2">
-          <MdRefresh size={16} className={fetching ? 'animate-spin' : ''} />
-          {fetching ? 'Loading...' : 'Refresh Robot Type List'}
-        </div>
+        <MdRefresh className="inline mr-2" />
+        {fetching ? 'Refreshing...' : 'Refresh List'}
       </button>
 
-      {robotTypes.length === 0 && !fetching && (
-        <div className="text-center text-gray-500 text-sm mt-4">
-          No robot types available. Please check ROS connection.
+      {currentRobotType && (
+        <div className={classCurrentType}>
+          <strong>Current Robot Type:</strong> {currentRobotType}
+        </div>
+      )}
+
+      {taskStatus && taskStatus.robotType && (
+        <div className={classCurrentType}>
+          <strong>Task Robot Type:</strong> {taskStatus.robotType}
         </div>
       )}
     </div>
