@@ -17,15 +17,14 @@
 // TaskPhase enum-like object for task status phases
 // Use this for better code readability and maintainability
 
-const TaskPhase = {
-  READY: 0,
-  WARMING_UP: 1,
-  RESETTING: 2,
-  RECORDING: 3,
-  SAVING: 4,
-  STOPPED: 5,
-  INFERENCING: 6,
-  // Add more phases as needed
+const TaskCommand = {
+  NONE: 0,
+  START_RECORD: 1,
+  START_INFERENCE: 2,
+  STOP: 3,
+  NEXT: 4,
+  RERECORD: 5,
+  FINISH: 6,
 };
 
-export default TaskPhase;
+export default TaskCommand;

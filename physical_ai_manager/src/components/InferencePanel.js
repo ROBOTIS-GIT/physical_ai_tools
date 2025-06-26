@@ -21,40 +21,7 @@ import { useRosServiceCaller } from '../hooks/useRosServiceCaller';
 import toast from 'react-hot-toast';
 import { MdVisibility, MdVisibilityOff } from 'react-icons/md';
 
-const taskInfos = [
-  {
-    taskName: 'Task 1',
-    robotType: 'Type A',
-    taskType: 'Type X',
-    taskInstruction: 'Do X',
-    userId: 'repo1',
-    fps: 30,
-    tags: ['tag1'],
-    warmupTime: '10',
-    episodeTime: '60',
-    resetTime: '5',
-    numEpisodes: 3,
-    pushToHub: false,
-  },
-  {
-    taskName: 'Task 2',
-    robotType: 'Type B',
-    taskType: 'Type Y',
-    taskInstruction: 'Do Y',
-    userId: 'repo2',
-    fps: 20,
-    tags: ['tag2'],
-    warmupTime: '5',
-    episodeTime: '30',
-    resetTime: '2',
-    numEpisodes: 5,
-    pushToHub: true,
-  },
-];
-
-const InfoPanel = ({ info, onChange, disabled = false, rosHost }) => {
-  const [showPopup, setShowPopup] = useState(false);
-  const [taskInfoList] = useState(taskInfos);
+const InferencePanel = ({ info, onChange, disabled = false, rosHost }) => {
   const [isEditable, setIsEditable] = useState(!disabled);
 
   // User ID list for dropdown
@@ -81,11 +48,6 @@ const InfoPanel = ({ info, onChange, disabled = false, rosHost }) => {
     },
     [isEditable, onChange, info]
   );
-
-  const handleSelect = (selected) => {
-    onChange(selected);
-    setShowPopup(false);
-  };
 
   const handleTokenSubmit = async () => {
     if (!tokenInput.trim()) {
@@ -201,6 +163,26 @@ const InfoPanel = ({ info, onChange, disabled = false, rosHost }) => {
   );
 
   const classTaskInstructionTextarea = clsx(
+    'text-sm',
+    'resize-y',
+    'min-h-10',
+    'max-h-20',
+    'w-full',
+    'p-2',
+    'border',
+    'border-gray-300',
+    'rounded-md',
+    'focus:outline-none',
+    'focus:ring-2',
+    'focus:ring-blue-500',
+    'focus:border-transparent',
+    {
+      'bg-gray-100 cursor-not-allowed': !isEditable,
+      'bg-white': isEditable,
+    }
+  );
+
+  const classPolicyPathTextarea = clsx(
     'text-sm',
     'resize-y',
     'min-h-16',
@@ -346,17 +328,6 @@ const InfoPanel = ({ info, onChange, disabled = false, rosHost }) => {
         )}
       </div>
 
-      <div className={clsx('flex', 'items-center', 'mb-2.5')}>
-        <span className={classLabel}>Task Name</span>
-        <textarea
-          className={classTaskNameTextarea}
-          value={info.taskName || ''}
-          onChange={(e) => handleChange('taskName', e.target.value)}
-          disabled={!isEditable}
-          placeholder="Enter Task Name"
-        />
-      </div>
-
       <div className={clsx('flex', 'items-start', 'mb-2.5')}>
         <span
           className={clsx(
@@ -379,6 +350,63 @@ const InfoPanel = ({ info, onChange, disabled = false, rosHost }) => {
         />
       </div>
 
+      <div className={clsx('flex', 'items-start', 'mb-2.5')}>
+        <span
+          className={clsx(
+            'text-sm',
+            'text-gray-600',
+            'w-28',
+            'flex-shrink-0',
+            'font-medium',
+            'pt-2'
+          )}
+        >
+          Policy Path
+        </span>
+        <textarea
+          className={classPolicyPathTextarea}
+          value={info.policyPath || ''}
+          onChange={(e) => handleChange('policyPath', e.target.value)}
+          disabled={!isEditable}
+          placeholder="Enter Policy Path"
+        />
+      </div>
+
+      <div className="w-full h-1 my-2 border-t border-gray-300"></div>
+
+      <div className="text-xs text-gray-400 mt-1 ml-2">
+        Recording during inference will be supported in a future update
+      </div>
+
+      <div className="h-3 w-full"></div>
+
+      <div className={clsx('flex', 'items-center', 'mb-2')}>
+        <span className={classLabel}>Record</span>
+        <div className={clsx('flex', 'items-center')}>
+          <input
+            className={classCheckbox}
+            type="checkbox"
+            checked={info.recordInferenceMode}
+            onChange={(e) => handleChange('recordInferenceMode', e.target.checked)}
+            disabled={true}
+          />
+          <span className={clsx('ml-2', 'text-sm', 'text-gray-500')}>
+            {info.recordInferenceMode ? 'Enabled' : 'Disabled'}
+          </span>
+        </div>
+      </div>
+
+      <div className={clsx('flex', 'items-center', 'mb-2.5')}>
+        <span className={classLabel}>Task Name</span>
+        <textarea
+          className={classTaskNameTextarea}
+          value={info.taskName || ''}
+          onChange={(e) => handleChange('taskName', e.target.value)}
+          disabled={!isEditable || !info.recordInferenceMode}
+          placeholder="Enter Task Name"
+        />
+      </div>
+
       <div className={clsx('flex', 'items-center', 'mb-2')}>
         <span className={classLabel}>Push to Hub</span>
         <div className={clsx('flex', 'items-center')}>
@@ -387,7 +415,7 @@ const InfoPanel = ({ info, onChange, disabled = false, rosHost }) => {
             type="checkbox"
             checked={!!info.pushToHub}
             onChange={(e) => handleChange('pushToHub', e.target.checked)}
-            disabled={!isEditable}
+            disabled={!isEditable || !info.recordInferenceMode}
           />
           <span className={clsx('ml-2', 'text-sm', 'text-gray-500')}>
             {info.pushToHub ? 'Enabled' : 'Disabled'}
@@ -404,7 +432,7 @@ const InfoPanel = ({ info, onChange, disabled = false, rosHost }) => {
               type="checkbox"
               checked={!!info.privateMode}
               onChange={(e) => handleChange('privateMode', e.target.checked)}
-              disabled={!isEditable}
+              disabled={!isEditable || !info.recordInferenceMode}
             />
             <span className={clsx('ml-2', 'text-sm', 'text-gray-500')}>
               {info.privateMode ? 'Enabled' : 'Disabled'}
@@ -431,34 +459,43 @@ const InfoPanel = ({ info, onChange, disabled = false, rosHost }) => {
           {/* Common Load button for both modes */}
           <div className="flex gap-2 mb-2">
             <button
-              className={clsx(classButtonBase, getButtonVariant('blue', isEditable, isLoading))}
+              className={clsx(
+                classButtonBase,
+                getButtonVariant('blue', isEditable && info.recordInferenceMode, isLoading)
+              )}
               onClick={() => {
-                if (isEditable && !isLoading) {
+                if (isEditable && !isLoading && info.recordInferenceMode) {
                   handleLoadUserId();
                 }
               }}
-              disabled={!isEditable || isLoading}
+              disabled={!isEditable || isLoading || !info.recordInferenceMode}
             >
               {isLoading ? 'Loading...' : 'Load'}
             </button>
             {!info.pushToHub && showUserIdDropdown && (
               <button
-                className={clsx(classButtonBase, getButtonVariant('red', isEditable))}
+                className={clsx(
+                  classButtonBase,
+                  getButtonVariant('red', isEditable && info.recordInferenceMode)
+                )}
                 onClick={() => setShowUserIdDropdown(false)}
-                disabled={!isEditable}
+                disabled={!isEditable || !info.recordInferenceMode}
               >
                 Manual Input
               </button>
             )}
             {info.pushToHub && (
               <button
-                className={clsx(classButtonBase, getButtonVariant('green', isEditable, isLoading))}
+                className={clsx(
+                  classButtonBase,
+                  getButtonVariant('green', isEditable && info.recordInferenceMode, isLoading)
+                )}
                 onClick={() => {
-                  if (isEditable && !isLoading) {
+                  if (isEditable && !isLoading && info.recordInferenceMode) {
                     setShowTokenPopup(true);
                   }
                 }}
-                disabled={!isEditable || isLoading}
+                disabled={!isEditable || isLoading || !info.recordInferenceMode}
               >
                 Change
               </button>
@@ -472,7 +509,7 @@ const InfoPanel = ({ info, onChange, disabled = false, rosHost }) => {
                 className={classSelect}
                 value={info.userId || ''}
                 onChange={(e) => handleChange('userId', e.target.value)}
-                disabled={!isEditable}
+                disabled={!isEditable || !info.recordInferenceMode}
               >
                 <option value="">Select User ID</option>
                 {userIdList.map((userId) => (
@@ -494,7 +531,7 @@ const InfoPanel = ({ info, onChange, disabled = false, rosHost }) => {
                     className={classRepoIdTextarea}
                     value={info.userId || ''}
                     onChange={(e) => handleChange('userId', e.target.value)}
-                    disabled={!isEditable}
+                    disabled={!isEditable || !info.recordInferenceMode}
                     placeholder="Enter User ID or load from registered ID"
                   />
                   <div className="text-xs text-gray-500 mt-1 leading-relaxed">
@@ -511,7 +548,7 @@ const InfoPanel = ({ info, onChange, disabled = false, rosHost }) => {
                         handleUserIdSelect(e.target.value);
                       }
                     }}
-                    disabled={!isEditable}
+                    disabled={!isEditable || !info.recordInferenceMode}
                   >
                     <option value="">Select from registered User IDs</option>
                     {userIdList.map((userId) => (
@@ -538,7 +575,7 @@ const InfoPanel = ({ info, onChange, disabled = false, rosHost }) => {
           step="5"
           value={info.fps || ''}
           onChange={(e) => handleChange('fps', Number(e.target.value))}
-          disabled={!isEditable}
+          disabled={!isEditable || !info.recordInferenceMode}
         />
       </div>
 
@@ -548,7 +585,7 @@ const InfoPanel = ({ info, onChange, disabled = false, rosHost }) => {
           <TagInput
             tags={info.tags || []}
             onChange={(newTags) => handleChange('tags', newTags)}
-            disabled={!isEditable}
+            disabled={!isEditable || !info.recordInferenceMode}
           />
           <div className="text-xs text-gray-500 mt-1 leading-relaxed">
             Press Enter or use comma to add tags
@@ -566,7 +603,7 @@ const InfoPanel = ({ info, onChange, disabled = false, rosHost }) => {
           max={65535}
           value={info.warmupTime || ''}
           onChange={(e) => handleChange('warmupTime', Number(e.target.value) || 0)}
-          disabled={!isEditable}
+          disabled={!isEditable || !info.recordInferenceMode}
         />
       </div>
 
@@ -580,7 +617,7 @@ const InfoPanel = ({ info, onChange, disabled = false, rosHost }) => {
           max={65535}
           value={info.episodeTime || ''}
           onChange={(e) => handleChange('episodeTime', Number(e.target.value) || 0)}
-          disabled={!isEditable}
+          disabled={!isEditable || !info.recordInferenceMode}
         />
       </div>
 
@@ -594,7 +631,7 @@ const InfoPanel = ({ info, onChange, disabled = false, rosHost }) => {
           max={65535}
           value={info.resetTime || ''}
           onChange={(e) => handleChange('resetTime', Number(e.target.value) || 0)}
-          disabled={!isEditable}
+          disabled={!isEditable || !info.recordInferenceMode}
         />
       </div>
 
@@ -608,7 +645,7 @@ const InfoPanel = ({ info, onChange, disabled = false, rosHost }) => {
           max={65535}
           value={info.numEpisodes || ''}
           onChange={(e) => handleChange('numEpisodes', Number(e.target.value) || 0)}
-          disabled={!isEditable}
+          disabled={!isEditable || !info.recordInferenceMode}
         />
       </div>
 
@@ -620,63 +657,13 @@ const InfoPanel = ({ info, onChange, disabled = false, rosHost }) => {
             type="checkbox"
             checked={!!info.useOptimizedSave}
             onChange={(e) => handleChange('useOptimizedSave', e.target.checked)}
-            disabled={!isEditable}
+            disabled={!isEditable || !info.recordInferenceMode}
           />
           <span className={clsx('ml-2', 'text-sm', 'text-gray-500')}>
             {info.useOptimizedSave ? 'Enabled' : 'Disabled'}
           </span>
         </div>
       </div>
-
-      <div className="mt-4 space-y-2">
-        <button
-          className={clsx(
-            'px-4',
-            'py-2',
-            'rounded',
-            'w-full',
-            'text-sm',
-            'font-medium',
-            'transition-colors',
-            {
-              'bg-blue-500 text-white hover:bg-blue-600': isEditable,
-              'bg-gray-400 text-gray-600 cursor-not-allowed': !isEditable,
-            },
-            'hidden'
-          )}
-          onClick={() => setShowPopup(true)}
-          disabled={!isEditable}
-        >
-          Load Previous Task Info
-        </button>
-      </div>
-
-      {showPopup && (
-        <div className="fixed inset-0 bg-black bg-opacity-40 flex items-center justify-center z-50">
-          <div className="bg-white p-6 rounded-lg shadow-lg max-w-2xl w-full">
-            <div className="mb-4 font-bold text-lg">Select Task Info</div>
-            <div className="grid grid-cols-2 gap-4">
-              {taskInfoList.map((item, idx) => (
-                <div
-                  key={idx}
-                  className="p-4 border rounded cursor-pointer hover:bg-blue-100"
-                  onClick={() => handleSelect(item)}
-                >
-                  <div className="font-semibold">{item.taskName}</div>
-                  <div className="text-sm text-gray-600">{item.taskType}</div>
-                  <div className="text-xs text-gray-400">{item.repoId}</div>
-                </div>
-              ))}
-            </div>
-            <button
-              className="mt-6 px-4 py-2 bg-gray-400 text-white rounded"
-              onClick={() => setShowPopup(false)}
-            >
-              Cancel
-            </button>
-          </div>
-        </div>
-      )}
 
       {/* Input Hugging Face Token Popup */}
       {showTokenPopup && (
@@ -759,4 +746,4 @@ const InfoPanel = ({ info, onChange, disabled = false, rosHost }) => {
   );
 };
 
-export default InfoPanel;
+export default InferencePanel;

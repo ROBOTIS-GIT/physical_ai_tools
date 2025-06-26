@@ -2,6 +2,15 @@
 Changelog for package physical_ai_server
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
+0.5.4 (2025-06-25)
+------------------
+* Added support for inference mode in the physical AI Server, including a new InferencePage and related UI components.
+* Changed the robot naming format.
+* Added Robot Config to support FFW-SG2 robot.
+* Added Msg Topic and data acquisition functionality to support Mobile Robot.
+* Fixed minor errors in the data acquisition process to improve software stability.
+* Contributors: Dongyun Kim
+
 0.5.3 (2025-06-16)
 ------------------
 * Refactored Physical AI Server for improved data collection capabilities

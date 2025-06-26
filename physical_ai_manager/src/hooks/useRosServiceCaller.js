@@ -16,6 +16,7 @@
 
 import { useRef, useCallback } from 'react';
 import ROSLIB from 'roslib';
+import TaskCommand from '../constants/taskCommand';
 
 export function useRosServiceCaller(rosbridgeUrl) {
   const rosRef = useRef(null);
@@ -100,30 +101,30 @@ export function useRosServiceCaller(rosbridgeUrl) {
   );
 
   const sendRecordCommand = useCallback(
-    async (command, task_info, model_path = '') => {
+    async (command, task_info) => {
       try {
         let command_enum;
         switch (command) {
           case 'none':
-            command_enum = 0;
+            command_enum = TaskCommand.NONE;
             break;
           case 'start_record':
-            command_enum = 1;
+            command_enum = TaskCommand.START_RECORD;
             break;
           case 'start_inference':
-            command_enum = 2;
+            command_enum = TaskCommand.START_INFERENCE;
             break;
           case 'stop':
-            command_enum = 3;
+            command_enum = TaskCommand.STOP;
             break;
           case 'next':
-            command_enum = 4;
+            command_enum = TaskCommand.NEXT;
             break;
           case 'rerecord':
-            command_enum = 5;
+            command_enum = TaskCommand.RERECORD;
             break;
           case 'finish':
-            command_enum = 6;
+            command_enum = TaskCommand.FINISH;
             break;
           default:
             throw new Error(`Unknown command: ${command}`);
@@ -140,6 +141,8 @@ export function useRosServiceCaller(rosbridgeUrl) {
             task_type: String(task_info.taskType || ''),
             user_id: String(task_info.userId || ''),
             task_instruction: String(task_info.taskInstruction || ''),
+            policy_path: String(task_info.policyPath || ''),
+            record_inference_mode: Boolean(task_info.recordInferenceMode),
             fps: Number(task_info.fps) || 0,
             tags: task_info.tags || [],
             warmup_time_s: Number(task_info.warmupTime) || 0,
@@ -151,7 +154,6 @@ export function useRosServiceCaller(rosbridgeUrl) {
             use_optimized_save_mode: Boolean(task_info.useOptimizedSave),
           },
           command: Number(command_enum),
-          model_path: String(model_path),
         };
 
         console.log(`Sending command '${command}' (${command_enum}) to service`);

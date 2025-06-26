@@ -23,7 +23,7 @@ import { useRosServiceCaller } from '../hooks/useRosServiceCaller';
 
 const layout = [{ aspect: '16/9' }, { aspect: '16/9' }, { aspect: '16/9' }];
 
-export default function ImageGrid({ topics, setTopics, rosHost }) {
+export default function ImageGrid({ topics, setTopics, rosHost, isActive = true }) {
   const [modalOpen, setModalOpen] = React.useState(false);
   const [selectedIdx, setSelectedIdx] = React.useState(null);
   const [topicList, setTopicList] = useState([]);
@@ -196,6 +196,7 @@ export default function ImageGrid({ topics, setTopics, rosHost }) {
               rosHost={rosHost}
               onClose={handleCellClose}
               onPlusClick={handlePlusClick}
+              isActive={isActive}
             />
             <div className={classTopicLabel}>{topics[idx] || ''}</div>
           </div>

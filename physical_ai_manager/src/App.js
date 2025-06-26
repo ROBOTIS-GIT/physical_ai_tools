@@ -16,12 +16,13 @@
 
 import React, { useState, useEffect, useRef } from 'react';
 import clsx from 'clsx';
-import { MdHome, MdVideocam } from 'react-icons/md';
+import { MdHome, MdVideocam, MdMemory } from 'react-icons/md';
 import { Toaster } from 'react-hot-toast';
 import toast from 'react-hot-toast';
 import './App.css';
 import HomePage from './pages/HomePage';
 import RecordPage from './pages/RecordPage';
+import InferencePage from './pages/InferencePage';
 import SettingPage from './pages/SettingPage';
 import { useRosTaskStatus } from './hooks/useRosTaskStatus';
 
@@ -42,10 +43,14 @@ function App() {
 
   useEffect(() => {
     if (isFirstLoad.current && page === 'home' && taskStatus.topicReceived) {
-      setPage('record');
+      if (taskInfo?.taskType === 'record') {
+        setPage('record');
+      } else if (taskInfo?.taskType === 'inference') {
+        setPage('inference');
+      }
       isFirstLoad.current = false;
     }
-  }, [page, taskStatus]);
+  }, [page, taskStatus, taskInfo]);
 
   // Load YAML content from local storage
   const [yamlContent, setYamlContent] = useState(() => {
@@ -94,29 +99,57 @@ function App() {
     setPage('record');
   };
 
+  const handleInferencePageNavigation = () => {
+    if (process.env.REACT_APP_DEBUG === 'true') {
+      console.log('handleInferencePageNavigation');
+      isFirstLoad.current = false;
+      setPage('inference');
+      return;
+    }
+
+    // Allow navigation if task is in progress
+    if (taskStatus && taskStatus.robotType !== '') {
+      console.log('robot type:', taskStatus.robotType, '=> allowing navigation to Inference page');
+      isFirstLoad.current = false;
+      setPage('inference');
+      return;
+    }
+
+    // Block navigation if robot type is not set
+    if (!currentRobotType || currentRobotType.trim() === '') {
+      toast.error('Please select a robot type first in the Home page', {
+        duration: 4000,
+      });
+      console.log('Robot type not set, blocking navigation to Inference page');
+      return;
+    }
+
+    // Allow navigation if conditions are met
+    console.log('Robot type set, allowing navigation to Inference page');
+    setPage('inference');
+  };
+
   return (
     <div className="flex h-screen w-screen">
-      <aside className="w-30 bg-gray-200 h-full flex flex-col items-center pt-10 gap-6">
+      <aside className="w-30 bg-gray-100 h-full flex flex-col items-center pt-10 gap-4 shadow-[inset_0_0_2px_rgba(0,0,0,0.1)]">
         <button
           className={clsx(
             'flex',
             'flex-col',
             'items-center',
-            'bg-gray-100',
             'rounded-2xl',
             'border-none',
             'py-5',
             'px-4',
-            'mb-3',
             'text-base',
             'text-gray-800',
             'cursor-pointer',
             'transition-colors',
             'duration-150',
             'outline-none',
-            'min-w-20',
+            'min-w-24',
             {
-              'hover:bg-gray-300 active:bg-gray-400': page !== 'home',
+              'hover:bg-gray-200 active:bg-gray-400': page !== 'home',
               'bg-gray-300': page === 'home',
             }
           )}
@@ -130,21 +163,19 @@ function App() {
             'flex',
             'flex-col',
             'items-center',
-            'bg-gray-100',
             'rounded-2xl',
             'border-none',
             'py-5',
             'px-4',
-            'mb-3',
             'text-base',
             'text-gray-800',
             'cursor-pointer',
             'transition-colors',
             'duration-150',
             'outline-none',
-            'min-w-20',
+            'min-w-24',
             {
-              'hover:bg-gray-300 active:bg-gray-400': page !== 'record',
+              'hover:bg-gray-200 active:bg-gray-400': page !== 'record',
               'bg-gray-300': page === 'record',
             }
           )}
@@ -152,6 +183,32 @@ function App() {
         >
           <MdVideocam size={32} className="mb-1.5" />
           <span className="mt-1 text-sm">Record</span>
+        </button>
+        <button
+          className={clsx(
+            'flex',
+            'flex-col',
+            'items-center',
+            'rounded-2xl',
+            'border-none',
+            'py-5',
+            'px-4',
+            'text-base',
+            'text-gray-800',
+            'cursor-pointer',
+            'transition-colors',
+            'duration-150',
+            'outline-none',
+            'w-24',
+            {
+              'hover:bg-gray-200 active:bg-gray-400': page !== 'inference',
+              'bg-gray-300': page === 'inference',
+            }
+          )}
+          onClick={handleInferencePageNavigation}
+        >
+          <MdMemory size={32} className="mb-1.5" />
+          <span className="mt-1 text-sm">Inference</span>
         </button>
       </aside>
       <main className="flex-1 flex flex-col h-screen min-h-0">
@@ -174,6 +231,16 @@ function App() {
             taskStatus={taskStatus}
             taskInfo={taskInfo}
             updateTaskInfo={updateTaskInfo}
+            isActive={page === 'record'}
+          />
+        ) : page === 'inference' ? (
+          <InferencePage
+            topics={topics}
+            setTopics={setTopics}
+            rosHost={rosHost}
+            taskStatus={taskStatus}
+            taskInfo={taskInfo}
+            isActive={page === 'inference'}
           />
         ) : (
           <SettingPage

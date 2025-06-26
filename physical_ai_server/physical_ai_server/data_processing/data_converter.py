@@ -20,6 +20,8 @@ from typing import Any, Dict, List
 
 import cv2
 from cv_bridge import CvBridge
+from geometry_msgs.msg import Twist
+from nav_msgs.msg import Odometry
 import numpy as np
 from sensor_msgs.msg import CompressedImage, JointState
 import torch
@@ -92,7 +94,7 @@ class DataConverter:
             ))
             ordered_positions = [
                 joint_pos_map[name]
-                for name in joint_order
+                for name in joint_order if name in joint_pos_map
             ]
             if target_format == 'numpy':
                 return np.array(ordered_positions, dtype=np.float32)
@@ -103,25 +105,87 @@ class DataConverter:
         except Exception as e:
             raise RuntimeError(f'Failed to convert joint state: {str(e)}')
 
-    def tensor_array2joint_trajectory(
+    def twist2tensor_array(
+            self,
+            msg: Twist,
+            target_format: str = 'numpy') -> Any:
+
+        try:
+            linear = np.array([
+                msg.linear.x,
+                msg.linear.y
+            ], dtype=np.float32)
+            angular = np.array([
+                msg.angular.z
+            ], dtype=np.float32)
+
+            if target_format == 'numpy':
+                return np.concatenate((linear, angular))
+            elif target_format == 'torch':
+                return torch.tensor(
+                    np.concatenate((linear, angular)), dtype=torch.float32)
+            else:
+                raise ValueError(
+                    f'Unsupported target format: {target_format}')
+        except Exception as e:
+            raise RuntimeError(
+                f'Failed to convert twist message: {str(e)}')
+
+    def odometry2tensor_array(
+            self,
+            msg: Odometry,
+            target_format: str = 'numpy') -> Any:
+
+        try:
+            position = np.array([
+                msg.twist.twist.linear.x,
+                msg.twist.twist.linear.y
+            ], dtype=np.float32)
+            orientation = np.array([
+                msg.twist.twist.angular.z
+            ], dtype=np.float32)
+
+            if target_format == 'numpy':
+                return np.concatenate((position, orientation))
+            elif target_format == 'torch':
+                return torch.tensor(
+                    np.concatenate((position, orientation)), dtype=torch.float32)
+            else:
+                raise ValueError(
+                    f'Unsupported target format: {target_format}')
+        except Exception as e:
+            raise RuntimeError(
+                f'Failed to convert odometry message: {str(e)}')
+
+    def tensor_array2joint_msgs(
             self,
             action,
-            joint_order: Dict[str, Any]):
+            leader_topic_types: Dict[str, Any],
+            leader_joint_orders: Dict[str, List[str]]):
 
-        mapped_action = {}
-        follower_joint_list = [value for key, value in joint_order.items() if 'follower' in key][0]
+        start_idx = 0
+        joint_pub_msgs = {}
 
-        for order, name in enumerate(follower_joint_list):
-            mapped_action[name] = action[order]
+        for key, value in leader_joint_orders.items():
+            count = len(value)
+            action_slice = action[start_idx:start_idx + count]
+            start_idx += count
+            if key.startswith('joint_order.'):
+                key = key.replace('joint_order.', '')
+            if leader_topic_types[key] == JointTrajectory:
+                joint_pub_msgs[key] = JointTrajectory(
+                    joint_names=value,
+                    points=[JointTrajectoryPoint(
+                        positions=action_slice
+                    )])
+            elif leader_topic_types[key] == Twist:
+                tmp_twist = Twist()
+                tmp_twist.linear.x = float(action_slice[0])
+                tmp_twist.linear.y = float(action_slice[1])
+                tmp_twist.angular.z = float(action_slice[2])
+                joint_pub_msgs[key] = tmp_twist
+            else:
+                raise ValueError(
+                    f'Unsupported leader topic type: {leader_topic_types[key]}')
 
-        joint_trajectory_msgs = {}
-        for key, value in joint_order.items():
-            if 'leader' in key:
-                key = key.split('.')[-1]
-                reorder_action = [mapped_action[joint] for joint in value]
-                joint_msg = JointTrajectory()
-                joint_msg.joint_names = value
-                joint_msg.points.append(JointTrajectoryPoint(positions=reorder_action))
-                joint_trajectory_msgs[key] = joint_msg
-
-        return joint_trajectory_msgs
+        return joint_pub_msgs

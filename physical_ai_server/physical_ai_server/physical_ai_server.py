@@ -20,18 +20,23 @@ import glob
 import os
 from pathlib import Path
 import time
+from typing import Optional
 
 from ament_index_python.packages import get_package_share_directory
 from physical_ai_interfaces.msg import TaskStatus
 from physical_ai_interfaces.srv import (
     GetHFUser,
+    GetPolicyList,
     GetRobotTypeList,
+    GetSavedPolicyList,
     SendCommand,
     SetHFUser,
     SetRobotType,
-    )
+)
+
 from physical_ai_server.communication.communicator import Communicator
 from physical_ai_server.data_processing.data_manager import DataManager
+from physical_ai_server.inference.inference_manager import InferenceManager
 from physical_ai_server.timer.timer_manager import TimerManager
 from physical_ai_server.utils.parameter_utils import (
     declare_parameters,
@@ -46,61 +51,55 @@ from rclpy.node import Node
 class PhysicalAIServer(Node):
     # Define operation modes (constants taken from Communicator)
 
+    DEFAULT_SAVE_ROOT_PATH = Path.home() / '.cache/huggingface/lerobot'
+    DEFAULT_TOPIC_TIMEOUT = 5.0  # seconds
+
     def __init__(self):
         super().__init__('physical_ai_server')
         self.get_logger().info('Start Physical AI Server')
 
-        self.communicator = None
-        self.data_manager = None
-        self.timer_manager = None
-
         self.params = None
         self.total_joint_order = None
-
         self.on_recording = False
-        self.default_save_root_path = Path.home() / '.cache/huggingface/lerobot'
+        self.on_inference = False
 
-        self.init_ros_service()
         self.robot_type_list = self.get_robot_type_list()
-        self.timer_callback_dict = {
-            'collection': self.data_collection_timer_callback,
-            'inference': self.inference_timer_callback
-        }
-        self.topic_timeout = 5  # seconds
-        self.start_recording_time = 0
+        self.start_recording_time: float = 0.0
 
-    def init_ros_service(self):
+        self._init_core_components()
+
+        self._init_ros_service()
+
+        self._setup_timer_callbacks()
+
+    def _init_core_components(self):
+        self.communicator: Optional[Communicator] = None
+        self.data_manager: Optional[DataManager] = None
+        self.timer_manager: Optional[TimerManager] = None
+        self.inference_manager: Optional[InferenceManager] = None
+
+    def _init_ros_service(self):
         self.get_logger().info('Initializing ROS services...')
-        self.recording_cmd_service = self.create_service(
-            SendCommand,
-            '/task/command',
-            self.user_interaction_callback
-        )
+        service_definitions = [
+            ('/task/command', SendCommand, self.user_interaction_callback),
+            ('/get_robot_types', GetRobotTypeList, self.get_robot_types_callback),
+            ('/set_robot_type', SetRobotType, self.set_robot_type_callback),
+            ('/register_hf_user', SetHFUser, self.set_hf_user_callback),
+            ('/get_registered_hf_user', GetHFUser, self.get_hf_user_callback),
+            ('/get_policy_list', GetPolicyList, self.get_policy_list_callback),
+            ('/get_saved_policies', GetSavedPolicyList, self.get_saved_policies_callback),
+        ]
 
-        self.get_robot_types_service = self.create_service(
-            GetRobotTypeList,
-            '/get_robot_types',
-            self.get_robot_types_callback
-        )
+        for service_name, service_type, callback in service_definitions:
+            self.create_service(service_type, service_name, callback)
 
-        self.set_robot_type_service = self.create_service(
-            SetRobotType,
-            '/set_robot_type',
-            self.set_robot_type_callback
-        )
-
-        self.set_hf_user_service = self.create_service(
-            SetHFUser,
-            '/register_hf_user',
-            self.set_hf_user_callback
-        )
-
-        self.get_hf_user_service = self.create_service(
-            GetHFUser,
-            '/get_registered_hf_user',
-            self.get_hf_user_callback
-        )
         self.get_logger().info('ROS services initialized successfully')
+
+    def _setup_timer_callbacks(self):
+        self.timer_callback_dict = {
+            'collection': self._data_collection_timer_callback,
+            'inference': self._inference_timer_callback
+        }
 
     def init_ros_params(self, robot_type):
         self.get_logger().info(f'Initializing ROS parameters for robot type: {robot_type}')
@@ -157,6 +156,8 @@ class PhysicalAIServer(Node):
             operation_mode=self.operation_mode,
             params=self.params
         )
+
+        self.inference_manager = InferenceManager()
         self.get_logger().info(
             f'ROS parameters initialized successfully for robot type: {robot_type}')
 
@@ -166,7 +167,7 @@ class PhysicalAIServer(Node):
         self.get_logger().info(
             'Initializing robot control parameters from user task...')
         self.data_manager = DataManager(
-            save_root_path=self.default_save_root_path,
+            save_root_path=self.DEFAULT_SAVE_ROOT_PATH,
             robot_type=self.robot_type,
             task_info=task_info
         )
@@ -239,20 +240,20 @@ class PhysicalAIServer(Node):
         self.get_logger().info(f'Available robot types: {robot_type_list}')
         return robot_type_list
 
-    def data_collection_timer_callback(self):
+    def _data_collection_timer_callback(self):
         error_msg = ''
         current_status = TaskStatus()
         camera_msgs, follower_msgs, leader_msgs = self.communicator.get_latest_data()
         camera_data, follower_data, leader_data = self.data_manager.convert_msgs_to_raw_datas(
             camera_msgs,
             follower_msgs,
-            leader_msgs,
             self.total_joint_order,
+            leader_msgs,
             self.joint_order)
 
         if (not camera_data or
                 len(camera_data) != len(self.params['camera_topic_list'])):
-            if time.perf_counter() - self.start_recording_time > self.topic_timeout:
+            if time.perf_counter() - self.start_recording_time > self.DEFAULT_TOPIC_TIMEOUT:
                 error_msg = 'Camera data not received within timeout period'
                 self.get_logger().error(error_msg)
             else:
@@ -260,7 +261,7 @@ class PhysicalAIServer(Node):
                 return
 
         elif not follower_data or len(follower_data) != len(self.total_joint_order):
-            if time.perf_counter() - self.start_recording_time > self.topic_timeout:
+            if time.perf_counter() - self.start_recording_time > self.DEFAULT_TOPIC_TIMEOUT:
                 error_msg = 'Follower data not received within timeout period'
                 self.get_logger().error(error_msg)
             else:
@@ -268,7 +269,7 @@ class PhysicalAIServer(Node):
                 return
 
         elif not leader_data or len(leader_data) != len(self.total_joint_order):
-            if time.perf_counter() - self.start_recording_time > self.topic_timeout:
+            if time.perf_counter() - self.start_recording_time > self.DEFAULT_TOPIC_TIMEOUT:
                 error_msg = 'Leader data not received within timeout period'
                 self.get_logger().error(error_msg)
             else:
@@ -307,12 +308,69 @@ class PhysicalAIServer(Node):
             self.timer_manager.stop(timer_name=self.operation_mode)
             return
 
-    def inference_timer_callback(self):
-        # TODO: Implement inference timer callback logic
-        camera_data = {}
-        follower_data = []
-        leader_data = []
-        print(camera_data, follower_data, leader_data)
+    def _inference_timer_callback(self):
+        error_msg = ''
+        current_status = TaskStatus()
+        camera_msgs, follower_msgs, _ = self.communicator.get_latest_data()
+        camera_data, follower_data, _ = self.data_manager.convert_msgs_to_raw_datas(
+            camera_msgs,
+            follower_msgs,
+            self.total_joint_order)
+
+        if (not camera_data or
+                len(camera_data) != len(self.params['camera_topic_list'])):
+            self.get_logger().info('Waiting for camera data...')
+            return
+        elif not follower_data or len(follower_data) != len(self.total_joint_order):
+            self.get_logger().info('Waiting for follower data...')
+            return
+
+        if self.inference_manager.policy is None:
+            if not self.inference_manager.load_policy():
+                self.get_logger().error('Failed to load policy')
+                return
+
+        try:
+            if not self.on_inference:
+                self.get_logger().info('Inference mode is not active')
+                current_status.phase = TaskStatus.READY
+                self.communicator.publish_status(status=current_status)
+                self.inference_manager.clear_policy()
+                self.timer_manager.stop(timer_name=self.operation_mode)
+                return
+
+            action = self.inference_manager.predict(
+                images=camera_data,
+                state=follower_data,
+                task_instruction=self.task_instruction
+            )
+
+            self.get_logger().info(
+                f'Action data: {action}')
+            action_pub_msgs = self.data_manager.data_converter.tensor_array2joint_msgs(
+                action,
+                self.joint_topic_types,
+                self.joint_order
+            )
+
+            self.communicator.publish_action(
+                joint_msg_datas=action_pub_msgs
+            )
+            current_status = self.data_manager.get_current_record_status()
+            current_status.phase = TaskStatus.INFERENCING
+            self.communicator.publish_status(status=current_status)
+
+        except Exception as e:
+            self.get_logger().error(f'Inference failed, please check : {str(e)}')
+            error_msg = f'Inference failed, please check : {str(e)}'
+            self.on_recording = False
+            self.on_inference = False
+            current_status.phase = TaskStatus.READY
+            current_status.error = error_msg
+            self.communicator.publish_status(status=current_status)
+            self.inference_manager.clear_policy()
+            self.timer_manager.stop(timer_name=self.operation_mode)
+            return
 
     def user_interaction_callback(self, request, response):
         try:
@@ -330,21 +388,39 @@ class PhysicalAIServer(Node):
                 self.init_robot_control_parameters_from_user_task(
                     task_info
                 )
+
                 self.start_recording_time = time.perf_counter()
                 self.on_recording = True
                 response.success = True
                 response.message = 'Recording started'
 
             elif request.command == SendCommand.Request.START_INFERENCE:
-                # TODO: This is currently hardcoded to 'collection',
-                # and support for 'inference' mode will be added in a future PR.
+                self.joint_topic_types = self.communicator.get_publisher_msg_types()
                 self.operation_mode = 'inference'
-                self.on_recording = False
+                task_info = request.task_info
+                self.task_instruction = task_info.task_instruction
+
+                valid_result, result_message = self.inference_manager.validate_policy(
+                    policy_path=task_info.policy_path)
+
+                if not valid_result:
+                    response.success = False
+                    response.message = result_message
+                    self.get_logger().error(response.message)
+                    return response
+
+                self.init_robot_control_parameters_from_user_task(
+                    task_info
+                )
+                if task_info.record_inference_mode:
+                    self.on_recording = True
+                self.on_inference = True
+                self.start_recording_time = time.perf_counter()
                 response.success = True
                 response.message = 'Inference started'
 
             else:
-                if not self.on_recording:
+                if not self.on_recording and not self.on_inference:
                     response.success = False
                     response.message = 'Not currently recording'
                 else:
@@ -369,6 +445,7 @@ class PhysicalAIServer(Node):
                     elif request.command == SendCommand.Request.FINISH:
                         self.get_logger().info('Terminating all operations')
                         self.data_manager.record_finish()
+                        self.on_inference = False
                         response.success = True
                         response.message = 'All operations terminated'
 
@@ -391,6 +468,35 @@ class PhysicalAIServer(Node):
         response.robot_types = self.robot_type_list
         response.success = True
         response.message = 'Robot type list retrieved successfully'
+        return response
+
+    def get_policy_list_callback(self, request, response):
+        policy_list = InferenceManager.get_available_policies()
+        if not policy_list:
+            self.get_logger().warning('No policies available')
+            response.success = False
+            response.message = 'No policies available'
+        else:
+            self.get_logger().info(f'Available policies: {policy_list}')
+            response.success = True
+            response.message = 'Policy list retrieved successfully'
+        response.policy_list = policy_list
+        return response
+
+    def get_saved_policies_callback(self, request, response):
+        saved_policy_path, saved_policy_type = InferenceManager.get_saved_policies()
+        if not saved_policy_path and not saved_policy_type:
+            self.get_logger().warning('No saved policies found')
+            response.saved_policy_path = []
+            response.saved_policy_type = []
+            response.success = False
+            response.message = 'No saved policies found'
+        else:
+            self.get_logger().info(f'Saved policies path: {saved_policy_path}')
+            response.saved_policy_path = saved_policy_path
+            response.saved_policy_type = saved_policy_type
+            response.success = True
+            response.message = 'Saved policies retrieved successfully'
         return response
 
     def set_robot_type_callback(self, request, response):

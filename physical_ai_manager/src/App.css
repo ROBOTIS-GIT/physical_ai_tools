@@ -16,7 +16,13 @@
  * Author: Kiwoong Park
  */
 
-@import url('https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/variable/pretendardvariable.min.css');
+@font-face {
+  font-family: 'Pretendard Variable';
+  src: url('../public/fonts/PretendardVariable.woff2') format('woff2-variations');
+  font-weight: 45 920;
+  font-style: normal;
+  font-display: swap;
+}
 
 html,
 body {

@@ -16,8 +16,11 @@
 #
 # Author: Dongyun Kim
 
+import os
+
 from lerobot.common.policies.pretrained import PreTrainedPolicy
 import numpy as np
+from physical_ai_server.utils.read_file import read_json_file
 import torch
 
 
@@ -25,17 +28,55 @@ class InferenceManager:
 
     def __init__(
             self,
-            policy_type: str,
-            policy_path: str,
             device: str = 'cuda'):
 
-        self.policy = self._load_policy(policy_type, policy_path)
         self.device = device
+        self.policy_type = None
+        self.policy_path = None
+        self.policy = None
 
-    def _load_policy(self, policy_type: str, policy_path: str):
-        policy_cls = self._get_policy_class(policy_type)
-        policy = policy_cls.from_pretrained(policy_path)
-        return policy
+    def validate_policy(self, policy_path: str) -> bool:
+        result_message = ''
+        if not os.path.exists(policy_path) or not os.path.isdir(policy_path):
+            result_message = f'Policy path {policy_path} does not exist or is not a directory.'
+            return False, result_message
+
+        config_path = os.path.join(policy_path, 'config.json')
+        if not os.path.exists(config_path):
+            result_message = f'config.json file does not exist in {policy_path}.'
+            return False, result_message
+
+        config = read_json_file(config_path)
+        if (config is None or
+                ('type' not in config and 'model_type' not in config)):
+            result_message = f'config.json malformed or missing fields in {policy_path}.'
+            return False, result_message
+
+        available_policies = self.__class__.get_available_policies()
+        policy_type = config.get('type') or config.get('model_type')
+        if policy_type not in available_policies:
+            result_message = f'Policy type {policy_type} is not supported.'
+            return False, result_message
+
+        self.policy_path = policy_path
+        self.policy_type = policy_type
+        return True, f'Policy {policy_type} is valid.'
+
+    def load_policy(self):
+        try:
+            policy_cls = self._get_policy_class(self.policy_type)
+            self.policy = policy_cls.from_pretrained(self.policy_path)
+            return True
+        except Exception as e:
+            print(f'Failed to load policy from {self.policy_path}: {e}')
+            return False
+
+    def clear_policy(self):
+        if hasattr(self, 'policy'):
+            del self.policy
+            self.policy = None
+        else:
+            print('No policy to clear.')
 
     def get_policy_config(self):
         return self.policy.config
@@ -86,8 +127,9 @@ class InferenceManager:
 
     def _convert_np2tensors(
             self,
-            data: dict[str, np.ndarray]) -> dict[str, torch.Tensor]:
-
+            data):
+        if isinstance(data, list):
+            data = np.array(data)
         tensor_data = torch.from_numpy(data)
         tensor_data = tensor_data.to(torch.float32)
         tensor_data = tensor_data.to(self.device, non_blocking=True)
@@ -124,4 +166,64 @@ class InferenceManager:
         #     from Isaac.groot_n1.policies.groot_n1 import GrootN1Policy
         #     return GrootN1Policy
         else:
-            raise NotImplementedError(f'Policy with name {name} is not implemented.')
+            raise NotImplementedError(
+                f'Policy with name {name} is not implemented.')
+
+    @staticmethod
+    def get_available_policies() -> list[str]:
+        return [
+            'tdmpc',
+            'diffusion',
+            'act',
+            'vqbet',
+            'pi0',
+            'pi0fast',
+        ]
+
+    @staticmethod
+    def get_saved_policies():
+        import os
+        import json
+
+        home_dir = os.path.expanduser('~')
+        hub_dir = os.path.join(home_dir, '.cache/huggingface/hub')
+        models_folder_list = [d for d in os.listdir(hub_dir) if d.startswith('models--')]
+
+        saved_policy_path = []
+        saved_policy_type = []
+
+        for model_folder in models_folder_list:
+            model_path = os.path.join(hub_dir, model_folder)
+            snapshots_path = os.path.join(model_path, 'snapshots')
+
+            # Check if snapshots directory exists
+            if os.path.exists(snapshots_path) and os.path.isdir(snapshots_path):
+                # Get list of folders inside snapshots directory
+                snapshot_folders = [
+                    d for d in os.listdir(snapshots_path)
+                    if os.path.isdir(os.path.join(snapshots_path, d))
+                ]
+
+            # Check if pretrained_model folder exists in each snapshot folder
+            for snapshot_folder in snapshot_folders:
+                snapshot_path = os.path.join(snapshots_path, snapshot_folder)
+                pretrained_model_path = os.path.join(snapshot_path, 'pretrained_model')
+
+                # If pretrained_model folder exists, add to saved_policies
+                if os.path.exists(pretrained_model_path) and os.path.isdir(pretrained_model_path):
+                    config_path = os.path.join(pretrained_model_path, 'config.json')
+                    if os.path.exists(config_path):
+                        try:
+                            with open(config_path, 'r') as f:
+                                config = json.load(f)
+                                if 'type' in config:
+                                    saved_policy_path.append(pretrained_model_path)
+                                    saved_policy_type.append(config['type'])
+                                elif 'model_type' in config:
+                                    saved_policy_path.append(pretrained_model_path)
+                                    saved_policy_type.append(config['model_type'])
+                        except (json.JSONDecodeError, IOError):
+                            # If config.json cannot be read, store path only
+                            print('File IO Errors : ', IOError)
+
+        return saved_policy_path, saved_policy_type

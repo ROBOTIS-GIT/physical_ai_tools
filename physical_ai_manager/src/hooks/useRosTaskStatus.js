@@ -43,8 +43,10 @@ export function useRosTaskStatus(rosbridgeUrl, topicName = '/task/status') {
 
   const [taskInfo, setTaskInfo] = useState({
     taskName: '',
-    taskType: 'record',
+    taskType: '',
     taskInstruction: '',
+    policyPath: '',
+    recordInferenceMode: false,
     userId: '',
     fps: 30,
     tags: [],
@@ -145,6 +147,8 @@ export function useRosTaskStatus(rosbridgeUrl, topicName = '/task/status') {
             taskName: msg.task_info.task_name || '',
             taskType: msg.task_info.task_type || '',
             taskInstruction: msg.task_info.task_instruction || '',
+            policyPath: msg.task_info.policy_path || '',
+            recordInferenceMode: msg.task_info.record_inference_mode || false,
             userId: msg.task_info.user_id || '',
             fps: msg.task_info.fps || 0,
             tags: msg.task_info.tags || [],
@@ -193,6 +197,7 @@ export function useRosTaskStatus(rosbridgeUrl, topicName = '/task/status') {
       [TaskPhase.RECORDING]: 'RECORDING',
       [TaskPhase.SAVING]: 'SAVING',
       [TaskPhase.STOPPED]: 'STOPPED',
+      [TaskPhase.INFERENCING]: 'INFERENCING',
     };
     return phaseNames[phase] || 'UNKNOWN';
   }, []);

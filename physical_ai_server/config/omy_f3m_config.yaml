@@ -1,6 +1,6 @@
 physical_ai_server:
   ros__parameters:
-    omy:
+    omy_f3m:
       observation_list:
         - cam_wrist
         - state
@@ -10,7 +10,7 @@ physical_ai_server:
 
       joint_topic_list:
         - follower:/joint_states
-        - leader:/leader/arm_with_timestamp
+        - leader:/leader/joint_trajectory
 
       joint_list:
         - leader
@@ -23,4 +23,4 @@ physical_ai_server:
           - joint4
           - joint5
           - joint6
-          - gripper
+          - rh_r1_joint

@@ -18,12 +18,15 @@
 
 import gc
 import os
+import shutil
 import subprocess
 import time
 
 import cv2
+from geometry_msgs.msg import Twist
 from huggingface_hub import HfApi, snapshot_download
 from lerobot.common.datasets.utils import DEFAULT_FEATURES
+from nav_msgs.msg import Odometry
 import numpy as np
 from physical_ai_interfaces.msg import TaskStatus
 from physical_ai_server.data_processing.data_converter import DataConverter
@@ -32,6 +35,8 @@ from physical_ai_server.device_manager.cpu_checker import CPUChecker
 from physical_ai_server.device_manager.ram_checker import RAMChecker
 from physical_ai_server.device_manager.storage_checker import StorageChecker
 import requests
+from sensor_msgs.msg import JointState
+from trajectory_msgs.msg import JointTrajectory
 
 
 class DataManager:
@@ -144,9 +149,11 @@ class DataManager:
         if self._lerobot_dataset.episode_buffer is None:
             return
         if self._task_info.use_optimized_save_mode:
-            self._lerobot_dataset.save_episode_without_write_image()
+            if self._lerobot_dataset.episode_buffer['size'] > 0:
+                self._lerobot_dataset.save_episode_without_write_image()
         else:
-            self._lerobot_dataset.save_episode()
+            if self._lerobot_dataset.episode_buffer['size'] > 0:
+                self._lerobot_dataset.save_episode()
 
     def create_frame(
             self,
@@ -191,21 +198,22 @@ class DataManager:
         elif self._status == 'reset':
             current_status.phase = TaskStatus.RESETTING
             current_status.total_time = int(self._task_info.reset_time_s)
-        elif self._status == 'save':
-            current_status.phase = TaskStatus.SAVING
+        elif self._status == 'save' or self._status == 'finish':
+            is_saving, encoding_progress = self._get_encoding_progress()
+            if is_saving:
+                current_status.phase = TaskStatus.SAVING
+                current_status.total_time = int(0)
+                self._proceed_time = int(0)
+                current_status.encoding_progress = encoding_progress
+        elif self._status == 'stop':
+            is_saving, encoding_progress = self._get_encoding_progress()
             current_status.total_time = int(0)
             self._proceed_time = int(0)
-            if self._lerobot_dataset is not None:
-                if hasattr(self._lerobot_dataset, 'encoders') and \
-                        self._lerobot_dataset.encoders is not None:
-                    if self._lerobot_dataset.encoders:
-                        min_encoding_percentage = 100
-                        for key, values in self._lerobot_dataset.encoders.items():
-                            min_encoding_percentage = min(
-                                min_encoding_percentage,
-                                values.get_encoding_status()['progress_percentage'])
-                        current_status.encoding_progress = float(
-                            min_encoding_percentage)
+            if is_saving:
+                current_status.phase = TaskStatus.SAVING
+                current_status.encoding_progress = encoding_progress
+            else:
+                current_status.phase = TaskStatus.STOPPED
 
         current_status.proceed_time = int(getattr(self, '_proceed_time', 0))
         current_status.current_episode_number = int(self._record_episode_count)
@@ -222,13 +230,28 @@ class DataManager:
 
         return current_status
 
+    def _get_encoding_progress(self):
+        min_encoding_percentage = 100
+        is_saving = False
+        if self._lerobot_dataset is not None:
+            if hasattr(self._lerobot_dataset, 'encoders') and \
+                    self._lerobot_dataset.encoders is not None:
+                if self._lerobot_dataset.encoders:
+                    is_saving = True
+                    for key, values in self._lerobot_dataset.encoders.items():
+                        min_encoding_percentage = min(
+                            min_encoding_percentage,
+                            values.get_encoding_status()['progress_percentage'])
+
+        return is_saving, float(min_encoding_percentage)
+
     def convert_msgs_to_raw_datas(
             self,
             image_msgs,
             follower_msgs,
-            leader_msgs,
             total_joint_order,
-            leader_joint_order) -> tuple:
+            leader_msgs=None,
+            leader_joint_order=None) -> tuple:
 
         camera_data = {}
         follower_data = []
@@ -242,15 +265,30 @@ class DataManager:
         if follower_msgs is not None:
             for key, value in follower_msgs.items():
                 if value is not None:
-                    follower_data.extend(self.data_converter.joint_state2tensor_array(
+                    follower_data.extend(self.joint_msgs2tensor_array(
                         value, total_joint_order))
 
         if leader_msgs is not None:
             for key, value in leader_msgs.items():
-                leader_data.extend(self.data_converter.joint_trajectory2tensor_array(
-                    value, leader_joint_order[f'joint_order.{key}']))
+                if value is not None:
+                    leader_data.extend(self.joint_msgs2tensor_array(
+                        value, leader_joint_order[f'joint_order.{key}']))
 
         return camera_data, follower_data, leader_data
+
+    def joint_msgs2tensor_array(self, msg_data, joint_order=None):
+        if isinstance(msg_data, JointTrajectory):
+            return self.data_converter.joint_trajectory2tensor_array(
+                msg_data, joint_order)
+        elif isinstance(msg_data, JointState):
+            return self.data_converter.joint_state2tensor_array(
+                msg_data, joint_order)
+        elif isinstance(msg_data, Odometry):
+            return self.data_converter.odometry2tensor_array(msg_data)
+        elif isinstance(msg_data, Twist):
+            return self.data_converter.twist2tensor_array(msg_data)
+        else:
+            raise ValueError(f'Unsupported message type: {type(msg_data)}')
 
     def _episode_reset(self):
         if self._lerobot_dataset and hasattr(self._lerobot_dataset, 'episode_buffer'):
@@ -277,7 +315,17 @@ class DataManager:
     def _check_dataset_exists(self, repo_id, root):
         # Local dataset check
         if os.path.exists(root):
-            return True
+            dataset_necessary_folders = ['meta', 'videos', 'data']
+            invalid_foler = False
+            for folder in dataset_necessary_folders:
+                if not os.path.exists(os.path.join(root, folder)):
+                    print(f'Dataset {repo_id} is incomplete, missing {folder} folder.')
+                    invalid_foler = True
+            if not invalid_foler:
+                return True
+            else:
+                print(f'Dataset {repo_id} is incomplete, re-creating dataset.')
+                shutil.rmtree(root)
 
         if self._task_info.push_to_hub:
             # Huggingface dataset check

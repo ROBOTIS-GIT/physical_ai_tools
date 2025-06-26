@@ -20,11 +20,11 @@ import { MdKeyboardDoubleArrowLeft, MdKeyboardDoubleArrowRight } from 'react-ico
 import toast, { useToasterStore } from 'react-hot-toast';
 import ImageGrid from '../components/ImageGrid';
 import ControlPanel from '../components/ControlPanel';
-import InfoPanel from '../components/InfoPanel';
+import InferencePanel from '../components/InferencePanel';
 import { useRosServiceCaller } from '../hooks/useRosServiceCaller';
 import TaskPhase from '../constants/taskPhases';
 
-export default function RecordPage({
+export default function InferencePage({
   topics,
   setTopics,
   rosHost,
@@ -42,7 +42,9 @@ export default function RecordPage({
   const taskStatus = propsTaskStatus;
   const taskInfo = propsTaskInfo;
 
-  const [info, setInfo] = useState({ ...taskInfo, taskType: 'record' } || { taskType: 'record' });
+  const [info, setInfo] = useState(
+    { ...taskInfo, taskType: 'inference' } || { taskType: 'inference' }
+  );
   const [episodeStatus, setEpisodeStatus] = useState(taskStatus);
   const [isRightPanelCollapsed, setIsRightPanelCollapsed] = useState(false);
   const [isTaskStatusPaused, setIsTaskStatusPaused] = useState(false);
@@ -68,7 +70,7 @@ export default function RecordPage({
 
   useEffect(() => {
     if (taskStatus.robotType !== '') {
-      setInfo({ ...taskInfo, tags: [taskStatus.robotType, 'robotis'], taskType: 'record' });
+      setInfo({ ...taskInfo, tags: [taskStatus.robotType, 'robotis'], taskType: 'inference' });
     }
   }, [taskStatus, taskInfo]);
 
@@ -81,10 +83,12 @@ export default function RecordPage({
 
   // Validation function for required fields
   const validateTaskInfo = (taskInfo) => {
-    const requiredFields = [
+    const requiredFieldsForRecordInferenceMode = [
       { key: 'taskName', label: 'Task Name' },
       { key: 'taskType', label: 'Task Type' },
       { key: 'taskInstruction', label: 'Task Instruction' },
+      { key: 'recordInferenceMode', label: 'Record Inference Mode' },
+      { key: 'policyPath', label: 'Policy Path' },
       { key: 'userId', label: 'User ID' },
       { key: 'fps', label: 'FPS' },
       { key: 'warmupTime', label: 'Warmup Time' },
@@ -92,6 +96,17 @@ export default function RecordPage({
       { key: 'resetTime', label: 'Reset Time' },
       { key: 'numEpisodes', label: 'Num Episodes' },
     ];
+
+    const requiredFieldsForInferenceOnly = [
+      { key: 'taskType', label: 'Task Type' },
+      { key: 'taskInstruction', label: 'Task Instruction' },
+      { key: 'policyPath', label: 'Policy Path' },
+      { key: 'recordInferenceMode', label: 'Record Inference Mode' },
+    ];
+
+    const requiredFields = taskInfo.recordInferenceMode
+      ? requiredFieldsForRecordInferenceMode
+      : requiredFieldsForInferenceOnly;
 
     const missingFields = [];
 
@@ -134,7 +149,7 @@ export default function RecordPage({
           console.error('Validation failed. Missing fields:', validation.missingFields);
           return;
         }
-        result = await sendRecordCommand('start_record', info);
+        result = await sendRecordCommand('start_inference', info);
       } else if (cmd === 'Stop') {
         result = await sendRecordCommand('stop', info);
       } else if (cmd === 'Retry') {
@@ -338,7 +353,7 @@ export default function RecordPage({
           </button>
           <div className={classRightPanel}>
             <div className="w-full min-h-10"></div>
-            <InfoPanel
+            <InferencePanel
               info={info}
               onChange={handleInfoChange}
               disabled={taskStatus?.phase !== TaskPhase.READY || !isTaskStatusPaused}
@@ -351,7 +366,7 @@ export default function RecordPage({
         onCommand={handleControlCommand}
         episodeStatus={episodeStatus}
         taskInfo={taskInfo}
-        page="record"
+        page="inference"
       />
     </div>
   );

@@ -59,6 +59,7 @@ export default function ImageGridCell({
   rosHost,
   onClose,
   onPlusClick,
+  isActive = true,
   style = {},
 }) {
   return (
@@ -80,7 +81,7 @@ export default function ImageGridCell({
           <MdClose size={20} />
         </button>
       )}
-      {topic && topic.trim() !== '' ? (
+      {topic && topic.trim() !== '' && isActive ? (
         <img
           id={`img-stream-${idx}`}
           src={`http://${rosHost}/stream?quality=50&default_transport=compressed&topic=${topic}`}

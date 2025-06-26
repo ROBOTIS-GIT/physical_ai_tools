@@ -2,6 +2,11 @@
 Changelog for package physical_ai_manager
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
+0.5.4 (2025-06-25)
+------------------
+* Added a new inference page for running and monitoring inference tasks.
+* Contributors: Kiwoong Park
+
 0.5.3 (2025-06-16)
 ------------------
 * Overall UI improvements for physical_ai_manager

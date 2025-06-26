@@ -69,11 +69,12 @@ const phaseGuideMessages = {
   [TaskPhase.RECORDING]: '🔴 Recording in progress',
   [TaskPhase.SAVING]: '💾 Saving...',
   [TaskPhase.STOPPED]: '◼️ Task Stopped',
+  [TaskPhase.INFERENCING]: '⏳ Inferencing',
 };
 
 const spinnerFrames = ['⠋', '⠙', '⠹', '⠸', '⠼', '⠴', '⠦', '⠧'];
 
-export default function ControlPanel({ onCommand, episodeStatus, taskInfo }) {
+export default function ControlPanel({ onCommand, episodeStatus, taskInfo, page }) {
   const [hovered, setHovered] = useState(null);
   const [pressed, setPressed] = useState(null);
   const [started, setStarted] = useState(false);
@@ -104,7 +105,8 @@ export default function ControlPanel({ onCommand, episodeStatus, taskInfo }) {
       phase === TaskPhase.WARMING_UP ||
       phase === TaskPhase.RESETTING ||
       phase === TaskPhase.RECORDING ||
-      phase === TaskPhase.SAVING
+      phase === TaskPhase.SAVING ||
+      phase === TaskPhase.INFERENCING
     );
   };
 
@@ -117,18 +119,37 @@ export default function ControlPanel({ onCommand, episodeStatus, taskInfo }) {
     (label) => {
       const phase = episodeStatus?.phase;
 
+      if (page === 'record' && taskInfo?.taskType !== 'record' && taskInfo?.taskType !== '') {
+        return false;
+      }
+
+      if (page === 'inference' && taskInfo?.taskType !== 'inference' && taskInfo?.taskType !== '') {
+        return false;
+      }
+
+      const isInferenceTaskType = taskInfo?.taskType === 'inference';
+
       switch (label) {
         case 'Start':
           // Start button disabled when task is running or when running flag is true
           return (isReadyState(phase) || isStoppedState(phase)) && !episodeStatus?.running;
         case 'Stop':
           // Stop button enabled only when task is running
+          if (isInferenceTaskType) {
+            return !isReadyState(phase) && !isStoppedState(phase) && taskInfo.recordInferenceMode;
+          }
           return !isReadyState(phase) && !isStoppedState(phase);
         case 'Retry':
           // Retry button enabled only when task is stopped
+          if (isInferenceTaskType) {
+            return !isReadyState(phase) && taskInfo.recordInferenceMode;
+          }
           return !isReadyState(phase);
         case 'Next':
           // Next button enabled only when task is stopped
+          if (isInferenceTaskType) {
+            return !isReadyState(phase) && taskInfo.recordInferenceMode;
+          }
           return !isReadyState(phase);
         case 'Finish':
           // Finish button enabled only when task is stopped
@@ -137,7 +158,7 @@ export default function ControlPanel({ onCommand, episodeStatus, taskInfo }) {
           return false;
       }
     },
-    [episodeStatus]
+    [episodeStatus, taskInfo, page]
   );
 
   const handleCommand = useCallback(
