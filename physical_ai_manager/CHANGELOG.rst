@@ -2,6 +2,10 @@
 Changelog for package physical_ai_manager
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
+0.5.6 (2025-06-26)
+------------------
+* None
+
 0.5.5 (2025-06-26)
 ------------------
 * Fixed control panel button states not reflecting correct taskType when switching between Record and Inference pages

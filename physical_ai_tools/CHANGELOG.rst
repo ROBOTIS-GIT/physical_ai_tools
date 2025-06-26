@@ -2,6 +2,11 @@
 Changelog for package physical_ai_tools
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
+0.5.6 (2025-06-26)
+------------------
+* Reordered pip install order in Dockerfile to fix the numpy version issue
+* Contributors: Woojin Wie
+
 0.5.5 (2025-06-26)
 ------------------
 * Fixed control panel button states not reflecting correct taskType when switching between Record and Inference pages
