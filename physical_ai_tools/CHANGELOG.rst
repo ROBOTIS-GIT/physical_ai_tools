@@ -2,6 +2,11 @@
 Changelog for package physical_ai_tools
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
+0.5.5 (2025-06-26)
+------------------
+* Fixed control panel button states not reflecting correct taskType when switching between Record and Inference pages
+* Contributors: Kiwoong Park
+
 0.5.4 (2025-06-25)
 ------------------
 * Added support for inference mode in the physical AI Server, including a new InferencePage and related UI components.

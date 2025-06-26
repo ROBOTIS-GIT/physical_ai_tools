@@ -350,7 +350,7 @@ export default function RecordPage({
       <ControlPanel
         onCommand={handleControlCommand}
         episodeStatus={episodeStatus}
-        taskInfo={taskInfo}
+        taskInfo={info}
         page="record"
       />
     </div>

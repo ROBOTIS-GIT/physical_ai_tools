@@ -365,7 +365,7 @@ export default function InferencePage({
       <ControlPanel
         onCommand={handleControlCommand}
         episodeStatus={episodeStatus}
-        taskInfo={taskInfo}
+        taskInfo={info}
         page="inference"
       />
     </div>
