@@ -2,6 +2,11 @@
 Changelog for package physical_ai_server
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
+0.5.7 (2025-06-26)
+------------------
+* Added Image Transport Plugin and fixed missing Gstreamer components
+* Contributors: Dongyun Kim
+
 0.5.6 (2025-06-26)
 ------------------
 * None

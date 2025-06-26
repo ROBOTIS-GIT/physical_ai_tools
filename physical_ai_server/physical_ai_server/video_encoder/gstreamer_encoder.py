@@ -161,7 +161,7 @@ class GStreamerEncoder(VideoEncoder):
     def _create_pipeline(self, output_path: str) -> bool:
         pipeline_str = (
             f'appsrc name=source caps=video/x-raw,format=RGB,width={self.width},'
-            f'height={self.height},framerate={self.fps} '
+            f'height={self.height},framerate={self.fps}/1 '
             f'! queue max-size-buffers=50 '
             f'! videoconvert ! nvvidconv '
             f'! nvv4l2h264enc bitrate={self.bitrate} preset-level={self.preset_level} '
