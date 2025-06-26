@@ -18,6 +18,8 @@
 
 import os
 
+from gr00t.model.policy import Gr00tPolicy
+from gr00t.experiment.data_config import DATA_CONFIG_MAP
 from lerobot.common.policies.pretrained import PreTrainedPolicy
 import numpy as np
 from physical_ai_server.utils.read_file import read_json_file
@@ -64,8 +66,22 @@ class InferenceManager:
 
     def load_policy(self):
         try:
-            policy_cls = self._get_policy_class(self.policy_type)
-            self.policy = policy_cls.from_pretrained(self.policy_path)
+            self.policy_cls = self._get_policy_class(self.policy_type)
+            if self.policy_cls == Gr00tPolicy:
+                data_config = DATA_CONFIG_MAP['omy_f3m']
+                modality_config = data_config.modality_config()
+                modality_transform = data_config.transform()
+                self.policy = Gr00tPolicy(
+                    model_path=self.policy_path,
+                    embodiment_tag='new_embodiment',
+                    modality_config=modality_config,
+                    modality_transform=modality_transform,
+                    denoising_steps=4,
+                    device=self.device
+                )
+            else:
+                self.policy = self.policy_cls.from_pretrained(self.policy_path)
+            
             return True
         except Exception as e:
             print(f'Failed to load policy from {self.policy_path}: {e}')
@@ -87,7 +103,11 @@ class InferenceManager:
             state: list[float],
             task_instruction: str = None) -> list:
 
-        observation = self._preprocess(images, state, task_instruction)
+        if self.policy_cls == Gr00tPolicy:
+            observation = self._preprocess_for_gr00t(images, state, task_instruction)
+        else:
+            observation = self._preprocess(images, state, task_instruction)
+        print("OBSERVATION: ", observation)
         with torch.inference_mode():
             action = self.policy.select_action(observation)
             action = action.squeeze(0).to('cpu').numpy()
@@ -99,6 +119,24 @@ class InferenceManager:
             images: dict[str, np.ndarray],
             state: list,
             task_instruction: str = None) -> dict:
+
+        observation = self._convert_images2tensors(images)
+        observation['observation.state'] = self._convert_np2tensors(state)
+        for key in observation.keys():
+            observation[key] = observation[key].to(self.device)
+
+        if task_instruction is not None:
+            observation['task'] = [task_instruction]
+
+        return observation
+
+    def _preprocess_for_gr00t(
+            self,
+            images: dict[str, np.ndarray],
+            state: list,
+            task_instruction: str = None) -> dict:
+        print("MODALITY: ", self.policy.get_modality_config())
+
 
         observation = self._convert_images2tensors(images)
         observation['observation.state'] = self._convert_np2tensors(state)
@@ -161,10 +199,9 @@ class InferenceManager:
         elif name == 'pi0fast':
             from lerobot.common.policies.pi0fast.modeling_pi0fast import PI0FASTPolicy
             return PI0FASTPolicy
-        # TODO: Uncomment when GrootN1Policy is implemented
-        # elif name == 'groot-n1':
-        #     from Isaac.groot_n1.policies.groot_n1 import GrootN1Policy
-        #     return GrootN1Policy
+        elif name == 'gr00t_n1_5':
+            from gr00t.model.policy import Gr00tPolicy
+            return Gr00tPolicy
         else:
             raise NotImplementedError(
                 f'Policy with name {name} is not implemented.')
@@ -178,6 +215,7 @@ class InferenceManager:
             'vqbet',
             'pi0',
             'pi0fast',
+            'gr00t_n1_5',
         ]
 
     @staticmethod
