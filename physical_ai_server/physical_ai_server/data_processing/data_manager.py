@@ -262,6 +262,7 @@ class DataManager:
                 camera_data[key] = cv2.cvtColor(
                     self.data_converter.compressed_image2cvmat(value),
                     cv2.COLOR_BGR2RGB)
+
         if follower_msgs is not None:
             for key, value in follower_msgs.items():
                 if value is not None:
