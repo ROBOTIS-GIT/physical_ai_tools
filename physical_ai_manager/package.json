@@ -28,6 +28,9 @@
     "start": "react-scripts start",
     "build": "react-scripts build",
     "test": "react-scripts test",
+    "test:watch": "react-scripts test --watchAll",
+    "test:coverage": "react-scripts test --coverage --watchAll=false",
+    "test:ci": "react-scripts test --coverage --watchAll=false --ci",
     "eject": "react-scripts eject",
     "start:debug": "REACT_APP_DEBUG=true react-scripts start"
   },
