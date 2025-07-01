@@ -167,6 +167,14 @@ const InfoPanel = () => {
     }
   }, [info.pushToHub]);
 
+  // Auto-enable optimized save when multi-task mode is enabled
+  useEffect(() => {
+    if (useMultiTaskMode && !info.useOptimizedSave) {
+      dispatch(setTaskInfo({ ...info, useOptimizedSave: true }));
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [useMultiTaskMode, info.useOptimizedSave, dispatch]);
+
   useEffect(() => {
     handleLoadUserId();
   }, [handleLoadUserId]);
@@ -433,7 +441,7 @@ const InfoPanel = () => {
             <button
               type="button"
               className={classSingleTaskButton}
-              onClick={() => isEditable && dispatch(setUseMultiTaskMode(!useMultiTaskMode))}
+              onClick={() => isEditable && dispatch(setUseMultiTaskMode(false))}
               disabled={!isEditable}
             >
               Single Task
@@ -441,7 +449,7 @@ const InfoPanel = () => {
             <button
               type="button"
               className={classMultiTaskButton}
-              onClick={() => isEditable && dispatch(setUseMultiTaskMode(!useMultiTaskMode))}
+              onClick={() => isEditable && dispatch(setUseMultiTaskMode(true))}
               disabled={!isEditable}
             >
               Multi Task
@@ -708,17 +716,24 @@ const InfoPanel = () => {
 
       <div className={clsx('flex', 'items-center', 'mb-2')}>
         <span className={classLabel}>Optimized Save</span>
-        <div className={clsx('flex', 'items-center')}>
-          <input
-            className={classCheckbox}
-            type="checkbox"
-            checked={!!info.useOptimizedSave}
-            onChange={(e) => handleChange('useOptimizedSave', e.target.checked)}
-            disabled={!isEditable}
-          />
-          <span className={clsx('ml-2', 'text-sm', 'text-gray-500')}>
-            {info.useOptimizedSave ? 'Enabled' : 'Disabled'}
-          </span>
+        <div className="flex flex-col">
+          <div className={clsx('flex', 'items-center')}>
+            <input
+              className={clsx(classCheckbox, {
+                'cursor-not-allowed opacity-50': useMultiTaskMode,
+              })}
+              type="checkbox"
+              checked={!!info.useOptimizedSave}
+              onChange={(e) => handleChange('useOptimizedSave', e.target.checked)}
+              disabled={!isEditable || useMultiTaskMode}
+            />
+            <span className={clsx('ml-2', 'text-sm', 'text-gray-500')}>
+              {info.useOptimizedSave ? 'Enabled' : 'Disabled'}
+            </span>
+          </div>
+          {useMultiTaskMode && (
+            <span className="text-xs text-blue-600 ml-1">(Auto-enabled in Multi-Task mode)</span>
+          )}
         </div>
       </div>
 
