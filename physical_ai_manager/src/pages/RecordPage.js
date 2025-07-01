@@ -18,7 +18,7 @@ import React, { useState, useEffect } from 'react';
 import { useSelector, useDispatch } from 'react-redux';
 import clsx from 'clsx';
 import toast, { useToasterStore } from 'react-hot-toast';
-import { MdKeyboardDoubleArrowLeft, MdKeyboardDoubleArrowRight } from 'react-icons/md';
+import { MdKeyboardDoubleArrowLeft, MdKeyboardDoubleArrowRight, MdTask } from 'react-icons/md';
 import ControlPanel from '../components/ControlPanel';
 import ImageGrid from '../components/ImageGrid';
 import InfoPanel from '../components/InfoPanel';
@@ -154,6 +154,51 @@ export default function RecordPage({ isActive = true }) {
     'mx-1 my-2 px-2 text-lg text-blue-600 focus:outline-none bg-blue-100 rounded-full'
   );
 
+  const classTaskInstructionContainer = clsx(
+    'absolute',
+    'bottom-1',
+    'left-10',
+    'w-[40%]',
+    'z-30',
+    'flex',
+    'flex-row',
+    'items-center',
+    'bg-gradient-to-r',
+    'from-green-50/70',
+    'to-emerald-50/70',
+    'backdrop-blur-xs',
+    'rounded-xl',
+    'px-4',
+    'py-3',
+    'shadow-lg',
+    'border',
+    'border-green-100/50',
+    'hover:shadow-xl',
+    'hover:from-green-50/80',
+    'hover:to-emerald-50/80',
+    'transition-all',
+    'duration-300'
+  );
+
+  const classTaskIcon = clsx('text-green-600', 'text-2xl', 'mr-3', 'flex-shrink-0');
+
+  const classTaskLabel = clsx(
+    'text-green-700',
+    'font-semibold',
+    'text-lg',
+    'mr-3',
+    'flex-shrink-0'
+  );
+
+  const classTaskValue = clsx(
+    'text-green-800',
+    'text-lg',
+    'font-medium',
+    'flex-1',
+    'min-w-0',
+    'whitespace-normal'
+  );
+
   return (
     <div className={classMainContainer}>
       <div className={classContentsArea}>
@@ -164,6 +209,17 @@ export default function RecordPage({ isActive = true }) {
           </div>
           <div className={classImageGridContainer}>
             <ImageGrid isActive={isActive} />
+            {useMultiTaskMode && (
+              <div className={classTaskInstructionContainer}>
+                <div className="flex flex-col">
+                  <div className="flex flex-row">
+                    <MdTask className={classTaskIcon} />
+                    <span className={classTaskLabel}>Current Task</span>
+                  </div>
+                  <span className={classTaskValue}>{taskStatus.currentTaskInstruction}</span>
+                </div>
+              </div>
+            )}
           </div>
         </div>
         <div className={classRightPanelArea}>
@@ -186,11 +242,6 @@ export default function RecordPage({ isActive = true }) {
           </div>
         </div>
       </div>
-      {useMultiTaskMode && (
-        <div className="flex text-gray-500 mx-14 text-xl">
-          Task: {taskStatus.currentTaskInstruction}
-        </div>
-      )}
       <ControlPanel />
     </div>
   );
