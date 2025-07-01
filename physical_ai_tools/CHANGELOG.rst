@@ -2,6 +2,11 @@
 Changelog for package physical_ai_tools
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
+0.5.8 (2025-07-01)
+------------------
+* Updated lerobot submodule to the latest version.
+* Contributors: Dongyun Kim
+
 0.5.7 (2025-06-26)
 ------------------
 * Added Image Transport Plugin and fixed missing Gstreamer components

@@ -39,7 +39,7 @@ class LeRobotDatasetWrapper(LeRobotDataset):
         super().__init__(*args, **kwargs)
         self.encoders = {}
 
-    def add_frame_without_write_image(self, frame: dict) -> None:
+    def add_frame_without_write_image(self, frame: dict, task: str) -> None:
         validate_frame(frame, self.features)
 
         if self.episode_buffer is None:
@@ -58,6 +58,7 @@ class LeRobotDatasetWrapper(LeRobotDataset):
             else:
                 self.episode_buffer[key].append(frame[key])
 
+        self.episode_buffer['task'].append(task)
         self.episode_buffer['size'] += 1
 
     def save_episode_without_write_image(self):

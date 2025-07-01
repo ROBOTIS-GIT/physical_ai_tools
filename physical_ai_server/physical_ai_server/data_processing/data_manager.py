@@ -84,7 +84,9 @@ class DataManager:
                     return self.RECORDING
                 frame = self.create_frame(images, state, action)
                 if self._task_info.use_optimized_save_mode:
-                    self._lerobot_dataset.add_frame_without_write_image(frame)
+                    self._lerobot_dataset.add_frame_without_write_image(
+                        frame,
+                        self._task_info.task_instruction)
                 else:
                     self._lerobot_dataset.add_frame(frame)
 
@@ -166,7 +168,6 @@ class DataManager:
             frame[f'observation.images.{camera_name}'] = image
         frame['observation.state'] = np.array(state)
         frame['action'] = np.array(action)
-        frame['task'] = self._task_info.task_instruction
         return frame
 
     def record_early_save(self):
