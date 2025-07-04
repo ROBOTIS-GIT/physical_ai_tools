@@ -17,14 +17,24 @@
 import React from 'react';
 import clsx from 'clsx';
 
+import { useSelector } from 'react-redux';
+
 const SystemStatus = ({
   label = 'System',
   type = 'storage', // 'cpu', 'ram', 'storage'
-  totalCapacity, // For RAM/Storage
-  usedCapacity, // For RAM/Storage
-  cpuPercentage, // For CPU usage
   className,
 }) => {
+  const cpuPercentage = useSelector((state) => state.tasks.taskStatus.usedCpu);
+  const totalRamSize = useSelector((state) => state.tasks.taskStatus.totalRamSize);
+  const usedRamSize = useSelector((state) => state.tasks.taskStatus.usedRamSize);
+  const totalStorageSize = useSelector((state) => state.tasks.taskStatus.totalStorageSize);
+  const usedStorageSize = useSelector((state) => state.tasks.taskStatus.usedStorageSize);
+
+  const totalCapacity =
+    type === 'ram' ? totalRamSize * 1024 * 1024 * 1024 : totalStorageSize * 1024 * 1024 * 1024;
+  const usedCapacity =
+    type === 'ram' ? usedRamSize * 1024 * 1024 * 1024 : usedStorageSize * 1024 * 1024 * 1024;
+
   // Calculate usage percentage
   let usagePercentage;
   let freeCapacity = 0;

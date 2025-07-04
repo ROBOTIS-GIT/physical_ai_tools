@@ -15,51 +15,24 @@
 // Author: Kiwoong Park
 
 import { useRef, useEffect, useState, useCallback } from 'react';
+import toast from 'react-hot-toast';
+import { useDispatch, useSelector } from 'react-redux';
 import ROSLIB from 'roslib';
 import TaskPhase from '../constants/taskPhases';
+import {
+  setTaskStatus,
+  setTaskInfo,
+  setHeartbeatStatus,
+  setLastHeartbeatTime,
+} from '../features/tasks/taskSlice';
 
-export function useRosTaskStatus(rosbridgeUrl, topicName = '/task/status') {
+export function useRosTaskStatus() {
   const rosRef = useRef(null);
-  const topicRef = useRef(null);
+  const taskStatusTopicRef = useRef(null);
+  const heartbeatTopicRef = useRef(null);
 
-  const [taskStatus, setTaskStatus] = useState({
-    robotType: '',
-    taskName: 'idle',
-    running: false,
-    phase: TaskPhase.READY,
-    progress: 0,
-    totalTime: 0,
-    proceedTime: 0,
-    currentEpisodeNumber: 0,
-    userId: '',
-    usedStorageSize: 0,
-    totalStorageSize: 0,
-    usedCpu: 0,
-    usedRamSize: 0,
-    totalRamSize: 0,
-    error: '',
-    topicReceived: false,
-  });
-
-  const [taskInfo, setTaskInfo] = useState({
-    taskName: '',
-    taskType: '',
-    taskInstruction: '',
-    policyPath: '',
-    recordInferenceMode: false,
-    userId: '',
-    fps: 30,
-    tags: [],
-    warmupTime: 5,
-    episodeTime: 20,
-    resetTime: 5,
-    numEpisodes: 5,
-    token: '',
-    pushToHub: true,
-    privateMode: false,
-    useOptimizedSave: true,
-  });
-
+  const dispatch = useDispatch();
+  const rosbridgeUrl = useSelector((state) => state.ros.rosbridgeUrl);
   const [connected, setConnected] = useState(false);
 
   const getRosConnection = useCallback(() => {
@@ -86,27 +59,50 @@ export function useRosTaskStatus(rosbridgeUrl, topicName = '/task/status') {
     return rosRef.current;
   }, [rosbridgeUrl]);
 
+  const cleanup = useCallback(() => {
+    if (taskStatusTopicRef.current) {
+      taskStatusTopicRef.current.unsubscribe();
+      taskStatusTopicRef.current = null;
+    }
+    if (heartbeatTopicRef.current) {
+      heartbeatTopicRef.current.unsubscribe();
+      heartbeatTopicRef.current = null;
+    }
+    if (rosRef.current) {
+      rosRef.current.close();
+      rosRef.current = null;
+    }
+    setConnected(false);
+    dispatch(setHeartbeatStatus('disconnected'));
+  }, [dispatch]);
+
   const subscribeToTaskStatus = useCallback(() => {
     const ros = getRosConnection();
     if (!ros) return;
 
-    // Unsubscribe existing topic if any
-    if (topicRef.current) {
-      topicRef.current.unsubscribe();
-      topicRef.current = null;
+    // Skip if already subscribed
+    if (taskStatusTopicRef.current) {
+      console.log('Task status already subscribed, skipping...');
+      return;
     }
 
     try {
-      topicRef.current = new ROSLIB.Topic({
+      taskStatusTopicRef.current = new ROSLIB.Topic({
         ros,
-        name: topicName,
+        name: '/task/status',
         messageType: 'physical_ai_interfaces/msg/TaskStatus',
       });
 
-      topicRef.current.subscribe((msg) => {
+      taskStatusTopicRef.current.subscribe((msg) => {
         console.log('Received task status:', msg);
 
         let progress = 0;
+
+        if (msg.error !== '') {
+          console.log('error:', msg.error);
+          toast.error(msg.error);
+          return;
+        }
 
         // Calculate progress percentage
         if (msg.phase === TaskPhase.SAVING) {
@@ -117,76 +113,102 @@ export function useRosTaskStatus(rosbridgeUrl, topicName = '/task/status') {
           progress = msg.total_time > 0 ? (msg.proceed_time / msg.total_time) * 100 : 0;
         }
 
-        // Determine if task is running (phase 1, 2, or 3)
-        const isRunning = msg.phase >= TaskPhase.WARMING_UP && msg.phase <= TaskPhase.RECORDING;
+        const isRunning =
+          msg.phase === TaskPhase.WARMING_UP ||
+          msg.phase === TaskPhase.RESETTING ||
+          msg.phase === TaskPhase.RECORDING ||
+          msg.phase === TaskPhase.SAVING ||
+          msg.phase === TaskPhase.INFERENCING;
 
         // ROS message to React state
-        setTaskStatus({
-          robotType: msg.robot_type || '',
-          taskName: msg.task_info?.task_name || 'idle',
-          running: isRunning,
-          phase: msg.phase || 0,
-          progress: Math.round(progress),
-          totalTime: msg.total_time || 0,
-          proceedTime: msg.proceed_time || 0,
-          currentEpisodeNumber: msg.current_episode_number || 0,
-          userId: msg.task_info?.user_id || '',
-          usedStorageSize: msg.used_storage_size || 0,
-          totalStorageSize: msg.total_storage_size || 0,
-          usedCpu: msg.used_cpu || 0,
-          usedRamSize: msg.used_ram_size || 0,
-          totalRamSize: msg.total_ram_size || 0,
-          error: msg.error || '',
-          topicReceived: true,
-        });
+        dispatch(
+          setTaskStatus({
+            robotType: msg.robot_type || '',
+            taskName: msg.task_info?.task_name || 'idle',
+            running: isRunning,
+            phase: msg.phase || 0,
+            progress: Math.round(progress),
+            totalTime: msg.total_time || 0,
+            proceedTime: msg.proceed_time || 0,
+            currentEpisodeNumber: msg.current_episode_number || 0,
+            userId: msg.task_info?.user_id || '',
+            usedStorageSize: msg.used_storage_size || 0,
+            totalStorageSize: msg.total_storage_size || 0,
+            usedCpu: msg.used_cpu || 0,
+            usedRamSize: msg.used_ram_size || 0,
+            totalRamSize: msg.total_ram_size || 0,
+            error: msg.error || '',
+            topicReceived: true,
+          })
+        );
 
         // Extract TaskInfo from TaskStatus message
         if (msg.task_info) {
           // update task info only when task is not stopped
-          setTaskInfo({
-            taskName: msg.task_info.task_name || '',
-            taskType: msg.task_info.task_type || '',
-            taskInstruction: msg.task_info.task_instruction || '',
-            policyPath: msg.task_info.policy_path || '',
-            recordInferenceMode: msg.task_info.record_inference_mode || false,
-            userId: msg.task_info.user_id || '',
-            fps: msg.task_info.fps || 0,
-            tags: msg.task_info.tags || [],
-            warmupTime: msg.task_info.warmup_time_s || 0,
-            episodeTime: msg.task_info.episode_time_s || 0,
-            resetTime: msg.task_info.reset_time_s || 0,
-            numEpisodes: msg.task_info.num_episodes || 0,
-            pushToHub: msg.task_info.push_to_hub || false,
-            privateMode: msg.task_info.private_mode || false,
-            useOptimizedSave: msg.task_info.use_optimized_save_mode || false,
-          });
+          dispatch(
+            setTaskInfo({
+              taskName: msg.task_info.task_name || '',
+              taskType: msg.task_info.task_type || '',
+              taskInstruction: msg.task_info.task_instruction || '',
+              policyPath: msg.task_info.policy_path || '',
+              recordInferenceMode: msg.task_info.record_inference_mode || false,
+              userId: msg.task_info.user_id || '',
+              fps: msg.task_info.fps || 0,
+              tags: msg.task_info.tags || [],
+              warmupTime: msg.task_info.warmup_time_s || 0,
+              episodeTime: msg.task_info.episode_time_s || 0,
+              resetTime: msg.task_info.reset_time_s || 0,
+              numEpisodes: msg.task_info.num_episodes || 0,
+              pushToHub: msg.task_info.push_to_hub || false,
+              privateMode: msg.task_info.private_mode || false,
+              useOptimizedSave: msg.task_info.use_optimized_save_mode || false,
+            })
+          );
         }
       });
     } catch (error) {
       console.error('Failed to subscribe to task status topic:', error);
     }
-  }, [getRosConnection, topicName]);
+  }, [getRosConnection, dispatch]);
 
-  const cleanup = useCallback(() => {
-    if (topicRef.current) {
-      topicRef.current.unsubscribe();
-      topicRef.current = null;
+  const subscribeToHeartbeat = useCallback(() => {
+    const ros = getRosConnection();
+    if (!ros) return;
+
+    // Skip if already subscribed
+    if (heartbeatTopicRef.current) {
+      console.log('Heartbeat already subscribed, skipping...');
+      return;
     }
-    if (rosRef.current) {
-      rosRef.current.close();
-      rosRef.current = null;
+
+    try {
+      heartbeatTopicRef.current = new ROSLIB.Topic({
+        ros,
+        name: '/heartbeat',
+        messageType: 'std_msgs/msg/Empty',
+      });
+
+      heartbeatTopicRef.current.subscribe(() => {
+        dispatch(setHeartbeatStatus('connected'));
+        dispatch(setLastHeartbeatTime(Date.now()));
+      });
+
+      console.log('Heartbeat subscription established');
+    } catch (error) {
+      console.error('Failed to subscribe to heartbeat topic:', error);
     }
-    setConnected(false);
-  }, []);
+  }, [getRosConnection, dispatch]);
 
   // Start connection and subscription
   useEffect(() => {
     if (!rosbridgeUrl) return;
 
     subscribeToTaskStatus();
+    subscribeToHeartbeat();
 
     return cleanup;
-  }, [rosbridgeUrl, subscribeToTaskStatus, cleanup]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [rosbridgeUrl]); // Only rosbridgeUrl as dependency to prevent unnecessary re-subscriptions
 
   // Helper function to get phase name
   const getPhaseName = useCallback((phase) => {
@@ -202,14 +224,6 @@ export function useRosTaskStatus(rosbridgeUrl, topicName = '/task/status') {
     return phaseNames[phase] || 'UNKNOWN';
   }, []);
 
-  // Function to manually update task status (for stop/finish commands)
-  const updateTaskStatus = useCallback((updates) => {
-    setTaskStatus((prevStatus) => ({
-      ...prevStatus,
-      ...updates,
-    }));
-  }, []);
-
   // Function to reset task to initial state
   const resetTaskToIdle = useCallback(() => {
     setTaskStatus((prevStatus) => ({
@@ -219,23 +233,11 @@ export function useRosTaskStatus(rosbridgeUrl, topicName = '/task/status') {
     }));
   }, []);
 
-  // Function to update task info
-  const updateTaskInfo = useCallback((updates) => {
-    setTaskInfo((prevInfo) => ({
-      ...prevInfo,
-      ...updates,
-    }));
-  }, []);
-
   return {
-    taskStatus,
-    taskInfo,
     connected,
     subscribeToTaskStatus,
     cleanup,
     getPhaseName,
-    updateTaskStatus,
     resetTaskToIdle,
-    updateTaskInfo,
   };
 }

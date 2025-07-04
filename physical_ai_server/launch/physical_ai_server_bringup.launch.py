@@ -23,10 +23,12 @@ from launch import LaunchDescription
 from launch.actions import IncludeLaunchDescription
 from launch.launch_description_sources import PythonLaunchDescriptionSource
 from launch_ros.actions import Node
+from launch_xml.launch_description_sources import XMLLaunchDescriptionSource
 
 
 def generate_launch_description():
     pkg_dir = get_package_share_directory('physical_ai_server')
+    rosbridge_pkg_dir = get_package_share_directory('rosbridge_server')
 
     # Include physical_ai_server.launch.py
     physical_ai_server_launch = IncludeLaunchDescription(
@@ -35,12 +37,13 @@ def generate_launch_description():
         )
     )
 
-    # rosbridge_server node
-    rosbridge_server_node = Node(
-        package='rosbridge_server',
-        executable='rosbridge_websocket',
-        name='rosbridge_websocket',
-        output='screen'
+    # Include rosbridge_websocket_launch.xml
+    rosbridge_server_launch = IncludeLaunchDescription(
+        XMLLaunchDescriptionSource(
+            os.path.join(
+                rosbridge_pkg_dir, 'launch', 'rosbridge_websocket_launch.xml'
+            )
+        )
     )
 
     # web_video_server node
@@ -53,6 +56,6 @@ def generate_launch_description():
 
     return LaunchDescription([
         physical_ai_server_launch,
-        rosbridge_server_node,
+        rosbridge_server_launch,
         web_video_server_node
     ])

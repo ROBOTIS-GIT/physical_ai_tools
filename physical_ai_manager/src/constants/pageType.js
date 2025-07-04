@@ -14,29 +14,13 @@
 //
 // Author: Kiwoong Park
 
-import React from 'react';
-import clsx from 'clsx';
-import RobotTypeSelector from '../components/RobotTypeSelector';
-import HeartbeatStatus from '../components/HeartbeatStatus';
+// PageType enum-like object for page types
+// Use this for better code readability and maintainability
 
-export default function HomePage() {
-  const classContainer = clsx(
-    'w-full',
-    'h-full',
-    'flex',
-    'items-center',
-    'justify-center',
-    'pt-10'
-  );
+const PageType = {
+  HOME: 'home',
+  RECORD: 'record',
+  INFERENCE: 'inference',
+};
 
-  const classHeartbeatStatus = clsx('absolute', 'top-5', 'left-35', 'z-10');
-
-  return (
-    <div className={classContainer}>
-      <div className={classHeartbeatStatus}>
-        <HeartbeatStatus />
-      </div>
-      <RobotTypeSelector />
-    </div>
-  );
-}
+export default PageType;

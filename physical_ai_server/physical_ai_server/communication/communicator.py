@@ -28,7 +28,14 @@ from physical_ai_interfaces.srv import (
 from physical_ai_server.communication.multi_subscriber import MultiSubscriber
 from physical_ai_server.utils.parameter_utils import parse_topic_list_with_names
 from rclpy.node import Node
+from rclpy.qos import (
+    DurabilityPolicy,
+    HistoryPolicy,
+    QoSProfile,
+    ReliabilityPolicy
+)
 from sensor_msgs.msg import CompressedImage, JointState
+from std_msgs.msg import Empty
 from trajectory_msgs.msg import JointTrajectory
 
 
@@ -75,6 +82,13 @@ class Communicator:
         self.camera_topic_msgs = {}
         self.follower_topic_msgs = {}
         self.leader_topic_msgs = {}
+
+        self.heartbeat_qos_profile = QoSProfile(
+            depth=1,
+            reliability=ReliabilityPolicy.BEST_EFFORT,
+            durability=DurabilityPolicy.VOLATILE,
+            history=HistoryPolicy.KEEP_LAST
+        )
 
         self.init_subscribers()
         self.init_publishers()
@@ -164,6 +178,11 @@ class Communicator:
             self.PUB_QOS_SIZE
         )
 
+        self.heartbeat_publisher = self.node.create_publisher(
+            Empty,
+            'heartbeat',
+            self.heartbeat_qos_profile)
+
     def init_services(self):
         self.image_topic_list_service = self.node.create_service(
             GetImageTopicList,
@@ -246,3 +265,7 @@ class Communicator:
         self.leader_topic_msgs.clear()
 
         self.node.get_logger().info('Communicator cleanup completed')
+
+    def heartbeat_timer_callback(self):
+        heartbeat_msg = Empty()
+        self.heartbeat_publisher.publish(heartbeat_msg)

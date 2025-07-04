@@ -76,6 +76,7 @@ class PhysicalAIServer(Node):
         self.communicator: Optional[Communicator] = None
         self.data_manager: Optional[DataManager] = None
         self.timer_manager: Optional[TimerManager] = None
+        self.heartbeat_timer: Optional[TimerManager] = None
         self.inference_manager: Optional[InferenceManager] = None
 
     def _init_ros_service(self):
@@ -156,6 +157,15 @@ class PhysicalAIServer(Node):
             operation_mode=self.operation_mode,
             params=self.params
         )
+
+        if self.heartbeat_timer is None:
+            self.heartbeat_timer = TimerManager(node=self)
+            self.heartbeat_timer.set_timer(
+                timer_name='heartbeat',
+                timer_frequency=1.0,
+                callback_function=self.communicator.heartbeat_timer_callback
+            )
+            self.heartbeat_timer.start(timer_name='heartbeat')
 
         self.inference_manager = InferenceManager()
         self.get_logger().info(
