@@ -15,11 +15,18 @@
 // Author: Kiwoong Park
 
 import { useRef, useCallback } from 'react';
+import { useSelector } from 'react-redux';
 import ROSLIB from 'roslib';
+import PageType from '../constants/pageType';
 import TaskCommand from '../constants/taskCommand';
 
-export function useRosServiceCaller(rosbridgeUrl) {
+export function useRosServiceCaller() {
   const rosRef = useRef(null);
+
+  const rosbridgeUrl = useSelector((state) => state.ros.rosbridgeUrl);
+
+  const taskInfo = useSelector((state) => state.tasks.taskInfo);
+  const page = useSelector((state) => state.ui.currentPage);
 
   const getRosConnection = useCallback(() => {
     return new Promise((resolve, reject) => {
@@ -101,7 +108,7 @@ export function useRosServiceCaller(rosbridgeUrl) {
   );
 
   const sendRecordCommand = useCallback(
-    async (command, task_info) => {
+    async (command) => {
       try {
         let command_enum;
         switch (command) {
@@ -130,28 +137,31 @@ export function useRosServiceCaller(rosbridgeUrl) {
             throw new Error(`Unknown command: ${command}`);
         }
 
-        // Validate required task_info fields
-        if (!task_info) {
-          throw new Error('Task info is required');
+        let taskType = '';
+
+        if (page === PageType.RECORD) {
+          taskType = 'record';
+        } else if (page === PageType.INFERENCE) {
+          taskType = 'inference';
         }
 
         const request = {
           task_info: {
-            task_name: String(task_info.taskName || ''),
-            task_type: String(task_info.taskType || ''),
-            user_id: String(task_info.userId || ''),
-            task_instruction: String(task_info.taskInstruction || ''),
-            policy_path: String(task_info.policyPath || ''),
-            record_inference_mode: Boolean(task_info.recordInferenceMode),
-            fps: Number(task_info.fps) || 0,
-            tags: task_info.tags || [],
-            warmup_time_s: Number(task_info.warmupTime) || 0,
-            episode_time_s: Number(task_info.episodeTime) || 0,
-            reset_time_s: Number(task_info.resetTime) || 0,
-            num_episodes: Number(task_info.numEpisodes) || 0,
-            push_to_hub: Boolean(task_info.pushToHub),
-            private_mode: Boolean(task_info.privateMode),
-            use_optimized_save_mode: Boolean(task_info.useOptimizedSave),
+            task_name: String(taskInfo.taskName || ''),
+            task_type: String(taskType),
+            user_id: String(taskInfo.userId || ''),
+            task_instruction: String(taskInfo.taskInstruction || ''),
+            policy_path: String(taskInfo.policyPath || ''),
+            record_inference_mode: Boolean(taskInfo.recordInferenceMode),
+            fps: Number(taskInfo.fps) || 0,
+            tags: taskInfo.tags || [],
+            warmup_time_s: Number(taskInfo.warmupTime) || 0,
+            episode_time_s: Number(taskInfo.episodeTime) || 0,
+            reset_time_s: Number(taskInfo.resetTime) || 0,
+            num_episodes: Number(taskInfo.numEpisodes) || 0,
+            push_to_hub: Boolean(taskInfo.pushToHub),
+            private_mode: Boolean(taskInfo.privateMode),
+            use_optimized_save_mode: Boolean(taskInfo.useOptimizedSave),
           },
           command: Number(command_enum),
         };
@@ -171,7 +181,7 @@ export function useRosServiceCaller(rosbridgeUrl) {
         throw new Error(`${error.message || error}`);
       }
     },
-    [callService]
+    [callService, taskInfo, page]
   );
 
   const getImageTopicList = useCallback(async () => {

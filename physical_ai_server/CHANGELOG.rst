@@ -2,6 +2,11 @@
 Changelog for package physical_ai_server
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
+0.5.8 (2025-07-07)
+------------------
+* Added heartbeat topic publishing to monitor alive status of Physical AI Server
+* Contributors: Dongyun Kim
+
 0.5.7 (2025-06-26)
 ------------------
 * Added Image Transport Plugin and fixed missing Gstreamer components

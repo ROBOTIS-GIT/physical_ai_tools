@@ -15,13 +15,17 @@
 // Author: Kiwoong Park
 
 import React, { useState, useEffect, useRef, useCallback } from 'react';
+import { useSelector } from 'react-redux';
 import clsx from 'clsx';
-import ProgressBar from './ProgressBar';
+import toast, { useToasterStore } from 'react-hot-toast';
 import { MdPlayArrow, MdStop, MdReplay, MdSkipNext, MdCheck } from 'react-icons/md';
+import { useRosServiceCaller } from '../hooks/useRosServiceCaller';
 import CompactSystemStatus from './CompactSystemStatus';
-import SystemStatus from './SystemStatus';
 import EpisodeStatus from './EpisodeStatus';
+import ProgressBar from './ProgressBar';
+import SystemStatus from './SystemStatus';
 import Tooltip from './Tooltip';
+import PageType from '../constants/pageType';
 import TaskPhase from '../constants/taskPhases';
 
 const buttons = [
@@ -72,9 +76,42 @@ const phaseGuideMessages = {
   [TaskPhase.INFERENCING]: '⏳ Inferencing',
 };
 
+const requiredFieldsForRecord = [
+  { key: 'taskName', label: 'Task Name' },
+  { key: 'taskInstruction', label: 'Task Instruction' },
+  { key: 'userId', label: 'User ID' },
+  { key: 'fps', label: 'FPS' },
+  { key: 'warmupTime', label: 'Warmup Time' },
+  { key: 'episodeTime', label: 'Episode Time' },
+  { key: 'resetTime', label: 'Reset Time' },
+  { key: 'numEpisodes', label: 'Num Episodes' },
+];
+
+const requiredFieldsForRecordInferenceMode = [
+  { key: 'taskName', label: 'Task Name' },
+  { key: 'taskInstruction', label: 'Task Instruction' },
+  { key: 'policyPath', label: 'Policy Path' },
+  { key: 'userId', label: 'User ID' },
+  { key: 'fps', label: 'FPS' },
+  { key: 'warmupTime', label: 'Warmup Time' },
+  { key: 'episodeTime', label: 'Episode Time' },
+  { key: 'resetTime', label: 'Reset Time' },
+  { key: 'numEpisodes', label: 'Num Episodes' },
+];
+
+const requiredFieldsForInferenceOnly = [
+  { key: 'taskInstruction', label: 'Task Instruction' },
+  { key: 'policyPath', label: 'Policy Path' },
+];
+
 const spinnerFrames = ['⠋', '⠙', '⠹', '⠸', '⠼', '⠴', '⠦', '⠧'];
 
-export default function ControlPanel({ onCommand, episodeStatus, taskInfo, page }) {
+export default function ControlPanel() {
+  const taskInfo = useSelector((state) => state.tasks.taskInfo);
+  const taskStatus = useSelector((state) => state.tasks.taskStatus);
+  const rosHost = useSelector((state) => state.ros.rosHost);
+  const page = useSelector((state) => state.ui.currentPage);
+
   const [hovered, setHovered] = useState(null);
   const [pressed, setPressed] = useState(null);
   const [started, setStarted] = useState(false);
@@ -82,32 +119,30 @@ export default function ControlPanel({ onCommand, episodeStatus, taskInfo, page 
   const [spinnerIndex, setSpinnerIndex] = useState(0);
   const startedRef = useRef(started);
 
+  const { sendRecordCommand } = useRosServiceCaller();
+
+  const { toasts } = useToasterStore();
+  const TOAST_LIMIT = 3;
+
+  useEffect(() => {
+    toasts
+      .filter((t) => t.visible) // Only consider visible toasts
+      .filter((_, i) => i >= TOAST_LIMIT) // Is toast index over limit?
+      .forEach((t) => toast.dismiss(t.id)); // Dismiss – Use toast.remove(t.id) for no exit animation
+  }, [toasts]);
+
   useEffect(() => {
     startedRef.current = started;
   }, [started]);
 
   // Spinner animation effect - update whenever taskStatus changes (ROS topic received)
   useEffect(() => {
-    // Update spinner index whenever episodeStatus changes (regardless of phase)
+    // Update spinner index whenever taskStatus changes (regardless of phase)
     updateSpinnerFrame();
-  }, [episodeStatus]);
+  }, [taskStatus]);
 
   const isReadyState = (phase) => {
     return phase === TaskPhase.READY;
-  };
-
-  const isStoppedState = (phase) => {
-    return phase === TaskPhase.STOPPED;
-  };
-
-  const isRunningState = (phase) => {
-    return (
-      phase === TaskPhase.WARMING_UP ||
-      phase === TaskPhase.RESETTING ||
-      phase === TaskPhase.RECORDING ||
-      phase === TaskPhase.SAVING ||
-      phase === TaskPhase.INFERENCING
-    );
   };
 
   const updateSpinnerFrame = () => {
@@ -117,13 +152,19 @@ export default function ControlPanel({ onCommand, episodeStatus, taskInfo, page 
   // Check if button should be enabled based on phase
   const isButtonEnabled = useCallback(
     (label) => {
-      const phase = episodeStatus?.phase;
-
-      if (page === 'record' && taskInfo?.taskType !== 'record' && taskInfo?.taskType !== '') {
+      if (
+        page === PageType.RECORD &&
+        taskInfo?.taskType !== 'record' &&
+        taskInfo?.taskType !== ''
+      ) {
         return false;
       }
 
-      if (page === 'inference' && taskInfo?.taskType !== 'inference' && taskInfo?.taskType !== '') {
+      if (
+        page === PageType.INFERENCE &&
+        taskInfo?.taskType !== 'inference' &&
+        taskInfo?.taskType !== ''
+      ) {
         return false;
       }
 
@@ -132,25 +173,25 @@ export default function ControlPanel({ onCommand, episodeStatus, taskInfo, page 
       switch (label) {
         case 'Start':
           // Start button disabled when task is running or when running flag is true
-          return (isReadyState(phase) || isStoppedState(phase)) && !episodeStatus?.running;
+          return !taskStatus.running;
         case 'Stop':
           // Stop button enabled only when task is running
           if (isInferenceTaskType) {
-            return !isReadyState(phase) && !isStoppedState(phase) && taskInfo.recordInferenceMode;
+            return taskStatus.running && taskInfo.recordInferenceMode;
           }
-          return !isReadyState(phase) && !isStoppedState(phase);
+          return taskStatus.running;
         case 'Retry':
           // Retry button enabled only when task is stopped
           if (isInferenceTaskType) {
-            return !isReadyState(phase) && taskInfo.recordInferenceMode;
+            return !isReadyState(taskStatus.phase) && taskInfo.recordInferenceMode;
           }
-          return !isReadyState(phase);
+          return !isReadyState(taskStatus.phase);
         case 'Next':
           // Next button enabled only when task is stopped
           if (isInferenceTaskType) {
-            return !isReadyState(phase) && taskInfo.recordInferenceMode;
+            return !isReadyState(taskStatus.phase) && taskInfo.recordInferenceMode;
           }
-          return !isReadyState(phase);
+          return !isReadyState(taskStatus.phase);
         case 'Finish':
           // Finish button enabled only when task is stopped
           return true; // Always enabled
@@ -158,17 +199,132 @@ export default function ControlPanel({ onCommand, episodeStatus, taskInfo, page 
           return false;
       }
     },
-    [episodeStatus, taskInfo, page]
+    [taskStatus.phase, taskStatus.running, taskInfo.recordInferenceMode, taskInfo.taskType, page]
+  );
+
+  const validateTaskInfo = useCallback(() => {
+    const requiredFields =
+      page === PageType.RECORD
+        ? requiredFieldsForRecord
+        : page === PageType.INFERENCE
+        ? taskInfo.recordInferenceMode
+          ? requiredFieldsForRecordInferenceMode
+          : requiredFieldsForInferenceOnly
+        : requiredFieldsForInferenceOnly;
+
+    const missingFields = [];
+
+    for (const field of requiredFields) {
+      const value = taskInfo[field.key];
+
+      // Check if field is empty or invalid
+      if (
+        value === null ||
+        value === undefined ||
+        value === '' ||
+        (typeof value === 'string' && value.trim() === '') ||
+        (typeof value === 'number' && (isNaN(value) || value <= 0))
+      ) {
+        missingFields.push(field.label);
+      }
+    }
+
+    if (taskInfo.userId === 'Select User ID') {
+      missingFields.push('User ID');
+    }
+
+    return {
+      isValid: missingFields.length === 0,
+      missingFields,
+    };
+  }, [taskInfo, page]);
+
+  const handleControlCommand = useCallback(
+    async (cmd) => {
+      console.log('Control command received:', cmd);
+      let result;
+
+      try {
+        // Execute the appropriate command
+        if (cmd === 'Start') {
+          // Validate info before starting
+          const validation = validateTaskInfo();
+          if (!validation.isValid) {
+            toast.error(`Missing required fields: ${validation.missingFields.join(', ')}`);
+            console.error('Validation failed. Missing fields:', validation.missingFields);
+            return;
+          }
+          if (page === PageType.RECORD) {
+            result = await sendRecordCommand('start_record');
+          } else if (page === PageType.INFERENCE) {
+            result = await sendRecordCommand('start_inference');
+          } else {
+            console.warn(`Unknown page: ${page}`);
+            toast.error(`Unknown page: ${page}`);
+            return;
+          }
+        } else if (cmd === 'Stop') {
+          result = await sendRecordCommand('stop');
+        } else if (cmd === 'Retry') {
+          result = await sendRecordCommand('rerecord');
+        } else if (cmd === 'Next') {
+          result = await sendRecordCommand('next');
+        } else if (cmd === 'Finish') {
+          result = await sendRecordCommand('finish');
+        } else {
+          console.warn(`Unknown command: ${cmd}`);
+          toast.error(`Unknown command: ${cmd}`);
+          return;
+        }
+
+        console.log('Service call result:', result);
+
+        // Handle service response
+        if (result && result.success === false) {
+          toast.error(`Command failed: ${result.message || 'Unknown error'}`);
+          console.error(`Command '${cmd}' failed:`, result.message);
+        } else if (result && result.success === true) {
+          toast.success(`Command [${cmd}] executed successfully`);
+          console.log(`Command '${cmd}' executed successfully`);
+
+          // Task status will be updated automatically from ROS
+        } else {
+          // Handle case where result is undefined or doesn't have success field
+          console.warn(`Unexpected result format for command '${cmd}':`, result);
+          toast.error(`Command [${cmd}] completed with uncertain status`);
+        }
+      } catch (error) {
+        console.error('Error handling control command:', error);
+
+        // Show more specific error messages
+        let errorMessage = error.message || error.toString();
+        if (
+          errorMessage.includes('ROS connection failed') ||
+          errorMessage.includes('ROS connection timeout') ||
+          errorMessage.includes('WebSocket')
+        ) {
+          toast.error(`🔌 ROS connection failed: rosbridge server is not running (${rosHost})`);
+        } else if (errorMessage.includes('timeout')) {
+          toast.error(`⏰ Command execution timeout [${cmd}]: Server did not respond`);
+        } else {
+          toast.error(`❌ Command execution failed [${cmd}]: ${errorMessage}`);
+        }
+
+        // Continue execution even after error - don't block UI
+        console.log(`Continuing after error in command '${cmd}'`);
+      }
+    },
+    [sendRecordCommand, validateTaskInfo, page, rosHost]
   );
 
   const handleCommand = useCallback(
     (label) => {
-      if (onCommand) onCommand(label);
+      handleControlCommand(label);
       console.log(label + ' command executed');
       if (label === 'Start') setStarted(true);
       if (label === 'Stop' || label === 'Finish') setStarted(false);
     },
-    [onCommand]
+    [handleControlCommand]
   );
 
   // Helper function to get button label from keyboard event
@@ -407,11 +563,11 @@ export default function ControlPanel({ onCommand, episodeStatus, taskInfo, page 
             className="flex min-w-0 text-center items-center gap-2"
             style={{ fontSize: 'clamp(1rem, 2vw, 2.5rem)' }}
           >
-            {phaseGuideMessages[episodeStatus?.phase]}
+            {phaseGuideMessages[taskStatus.phase]}
           </div>
           <div>
             {/* Spinner */}
-            {isRunningState(episodeStatus?.phase) && (
+            {taskStatus.running && (
               <span className="font-mono text-blue-500 text-4xl">
                 {spinnerFrames[spinnerIndex]}
               </span>
@@ -421,19 +577,14 @@ export default function ControlPanel({ onCommand, episodeStatus, taskInfo, page 
         <div className="w-full flex flex-col items-center gap-1">
           <div className="w-full max-w-xl flex flex-col items-center gap-1">
             <div className="flex px-3 w-full justify-end text-xl text-gray-500 font-bold whitespace-nowrap ">
-              {episodeStatus?.proceedTime} / {episodeStatus?.totalTime} (s)
+              {taskStatus.proceedTime} / {taskStatus.totalTime} (s)
             </div>
-            <ProgressBar percent={episodeStatus?.progress} />
+            <ProgressBar percent={taskStatus.progress} />
           </div>
         </div>
       </div>
       <div className="flex justify-end flex-[0.4] min-w-30 h-full p-1">
-        <EpisodeStatus
-          episodeStatus={{
-            ...episodeStatus,
-            numEpisodes: taskInfo?.numEpisodes,
-          }}
-        />
+        <EpisodeStatus />
       </div>
       <div className="flex flex-col gap-2">
         {expandedSystemIndex !== null ? (
@@ -441,27 +592,13 @@ export default function ControlPanel({ onCommand, episodeStatus, taskInfo, page 
           <div onClick={() => setExpandedSystemIndex(null)} className="cursor-pointer">
             {expandedSystemIndex === 0 ? (
               /* CPU Details */
-              <SystemStatus
-                label="CPU"
-                type="cpu"
-                cpuPercentage={episodeStatus?.usedCpu} // CPU usage percentage
-              />
+              <SystemStatus label="CPU" type="cpu" />
             ) : expandedSystemIndex === 1 ? (
               /* RAM Details */
-              <SystemStatus
-                label="RAM"
-                type="ram"
-                totalCapacity={episodeStatus?.totalRamSize * 1024 * 1024 * 1024 || 0}
-                usedCapacity={episodeStatus?.usedRamSize * 1024 * 1024 * 1024 || 0}
-              />
+              <SystemStatus label="RAM" type="ram" />
             ) : (
               /* Storage Details */
-              <SystemStatus
-                label="Storage"
-                type="storage"
-                totalCapacity={episodeStatus?.totalStorageSize * 1024 * 1024 * 1024 || 0}
-                usedCapacity={episodeStatus?.usedStorageSize * 1024 * 1024 * 1024 || 0}
-              />
+              <SystemStatus label="Storage" type="storage" />
             )}
           </div>
         ) : (
@@ -469,31 +606,17 @@ export default function ControlPanel({ onCommand, episodeStatus, taskInfo, page 
           <>
             {/* CPU */}
             <div onClick={() => setExpandedSystemIndex(0)} className="cursor-pointer">
-              <CompactSystemStatus
-                label="CPU"
-                type="cpu"
-                cpuPercentage={episodeStatus?.usedCpu} // CPU usage percentage
-              />
+              <CompactSystemStatus label="CPU" type="cpu" />
             </div>
 
             {/* RAM */}
             <div onClick={() => setExpandedSystemIndex(1)} className="cursor-pointer">
-              <CompactSystemStatus
-                label="RAM"
-                type="ram"
-                totalCapacity={episodeStatus?.totalRamSize * 1024 * 1024 * 1024 || 0}
-                usedCapacity={episodeStatus?.usedRamSize * 1024 * 1024 * 1024 || 0}
-              />
+              <CompactSystemStatus label="RAM" type="ram" />
             </div>
 
             {/* Storage */}
             <div onClick={() => setExpandedSystemIndex(2)} className="cursor-pointer">
-              <CompactSystemStatus
-                label="Storage"
-                type="storage"
-                totalCapacity={episodeStatus?.totalStorageSize * 1024 * 1024 * 1024 || 0}
-                usedCapacity={episodeStatus?.usedStorageSize * 1024 * 1024 * 1024 || 0}
-              />
+              <CompactSystemStatus label="Storage" type="storage" />
             </div>
           </>
         )}

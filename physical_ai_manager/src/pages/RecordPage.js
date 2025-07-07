@@ -14,39 +14,31 @@
 //
 // Author: Kiwoong Park
 
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect } from 'react';
+import { useSelector, useDispatch } from 'react-redux';
 import clsx from 'clsx';
-import { MdKeyboardDoubleArrowLeft, MdKeyboardDoubleArrowRight } from 'react-icons/md';
 import toast, { useToasterStore } from 'react-hot-toast';
-import ImageGrid from '../components/ImageGrid';
+import { MdKeyboardDoubleArrowLeft, MdKeyboardDoubleArrowRight } from 'react-icons/md';
 import ControlPanel from '../components/ControlPanel';
+import HeartbeatStatus from '../components/HeartbeatStatus';
+import ImageGrid from '../components/ImageGrid';
 import InfoPanel from '../components/InfoPanel';
-import { useRosServiceCaller } from '../hooks/useRosServiceCaller';
-import TaskPhase from '../constants/taskPhases';
+import { addTag } from '../features/tasks/taskSlice';
+import { setIsFirstLoadFalse } from '../features/ui/uiSlice';
 
-export default function RecordPage({
-  topics,
-  setTopics,
-  rosHost,
-  taskStatus: propsTaskStatus,
-  taskInfo: propsTaskInfo,
-  isActive = true,
-}) {
-  const rosbridgeUrl = `ws://${rosHost.split(':')[0]}:9090`;
+export default function RecordPage({ isActive = true }) {
+  const dispatch = useDispatch();
+
+  const taskInfo = useSelector((state) => state.tasks.taskInfo);
+  const taskStatus = useSelector((state) => state.tasks.taskStatus);
 
   // Toast limit implementation using useToasterStore
   const { toasts } = useToasterStore();
   const TOAST_LIMIT = 3;
 
-  // Use taskStatus and taskInfo from props (received from App.js)
-  const taskStatus = propsTaskStatus;
-  const taskInfo = propsTaskInfo;
-
-  const [info, setInfo] = useState({ ...taskInfo, taskType: 'record' } || { taskType: 'record' });
-  const [episodeStatus, setEpisodeStatus] = useState(taskStatus);
   const [isRightPanelCollapsed, setIsRightPanelCollapsed] = useState(false);
-  const [isTaskStatusPaused, setIsTaskStatusPaused] = useState(false);
-  const [lastTaskStatusUpdate, setLastTaskStatusUpdate] = useState(Date.now());
+
+  const isFirstLoad = useSelector((state) => state.ui.isFirstLoad.record);
 
   useEffect(() => {
     toasts
@@ -55,156 +47,13 @@ export default function RecordPage({
       .forEach((t) => toast.dismiss(t.id)); // Dismiss – Use toast.remove(t.id) for no exit animation
   }, [toasts]);
 
-  // Update episodeStatus when taskStatus changes
   useEffect(() => {
-    if (taskStatus) {
-      setEpisodeStatus(taskStatus);
-
-      if (taskStatus.error !== '') {
-        toast.error(`${taskStatus.error}`);
-      }
+    if (isFirstLoad && taskStatus.robotType !== '' && taskInfo.tags.length === 0) {
+      dispatch(addTag(taskStatus.robotType));
+      dispatch(addTag('robotis'));
     }
-  }, [taskStatus]);
-
-  useEffect(() => {
-    if (taskStatus.robotType !== '') {
-      setInfo({ ...taskInfo, tags: [taskStatus.robotType, 'robotis'], taskType: 'record' });
-    }
-  }, [taskStatus, taskInfo]);
-
-  const { sendRecordCommand } = useRosServiceCaller(rosbridgeUrl);
-
-  // Memoize the onChange handler to prevent recreation on every render
-  const handleInfoChange = useCallback((newInfo) => {
-    setInfo(newInfo);
-  }, []);
-
-  // Validation function for required fields
-  const validateTaskInfo = (taskInfo) => {
-    const requiredFields = [
-      { key: 'taskName', label: 'Task Name' },
-      { key: 'taskType', label: 'Task Type' },
-      { key: 'taskInstruction', label: 'Task Instruction' },
-      { key: 'userId', label: 'User ID' },
-      { key: 'fps', label: 'FPS' },
-      { key: 'warmupTime', label: 'Warmup Time' },
-      { key: 'episodeTime', label: 'Episode Time' },
-      { key: 'resetTime', label: 'Reset Time' },
-      { key: 'numEpisodes', label: 'Num Episodes' },
-    ];
-
-    const missingFields = [];
-
-    for (const field of requiredFields) {
-      const value = taskInfo[field.key];
-
-      // Check if field is empty or invalid
-      if (
-        value === null ||
-        value === undefined ||
-        value === '' ||
-        (typeof value === 'string' && value.trim() === '') ||
-        (typeof value === 'number' && (isNaN(value) || value <= 0))
-      ) {
-        missingFields.push(field.label);
-      }
-    }
-
-    if (taskInfo.userId === 'Select User ID') {
-      missingFields.push('User ID');
-    }
-
-    return {
-      isValid: missingFields.length === 0,
-      missingFields,
-    };
-  };
-
-  const handleControlCommand = async (cmd) => {
-    console.log('Control command received:', cmd);
-    let result;
-
-    try {
-      // Execute the appropriate command
-      if (cmd === 'Start') {
-        // Validate info before starting
-        const validation = validateTaskInfo(info);
-        if (!validation.isValid) {
-          toast.error(`Missing required fields: ${validation.missingFields.join(', ')}`);
-          console.error('Validation failed. Missing fields:', validation.missingFields);
-          return;
-        }
-        result = await sendRecordCommand('start_record', info);
-      } else if (cmd === 'Stop') {
-        result = await sendRecordCommand('stop', info);
-      } else if (cmd === 'Retry') {
-        result = await sendRecordCommand('rerecord', info);
-      } else if (cmd === 'Next') {
-        result = await sendRecordCommand('next', info);
-      } else if (cmd === 'Finish') {
-        result = await sendRecordCommand('finish', info);
-      } else {
-        console.warn(`Unknown command: ${cmd}`);
-        toast.error(`Unknown command: ${cmd}`);
-        return;
-      }
-
-      console.log('Service call result:', result);
-
-      // Handle service response
-      if (result && result.success === false) {
-        toast.error(`Command failed: ${result.message || 'Unknown error'}`);
-        console.error(`Command '${cmd}' failed:`, result.message);
-      } else if (result && result.success === true) {
-        toast.success(`Command [${cmd}] executed successfully`);
-        console.log(`Command '${cmd}' executed successfully`);
-
-        // Task status will be updated automatically from ROS
-      } else {
-        // Handle case where result is undefined or doesn't have success field
-        console.warn(`Unexpected result format for command '${cmd}':`, result);
-        toast.error(`Command [${cmd}] completed with uncertain status`);
-      }
-    } catch (error) {
-      console.error('Error handling control command:', error);
-
-      // Show more specific error messages
-      let errorMessage = error.message || error.toString();
-      if (
-        errorMessage.includes('ROS connection failed') ||
-        errorMessage.includes('ROS connection timeout') ||
-        errorMessage.includes('WebSocket')
-      ) {
-        toast.error(`🔌 ROS connection failed: rosbridge server is not running (${rosHost})`);
-      } else if (errorMessage.includes('timeout')) {
-        toast.error(`⏰ Command execution timeout [${cmd}]: Server did not respond`);
-      } else {
-        toast.error(`❌ Command execution failed [${cmd}]: ${errorMessage}`);
-      }
-
-      // Continue execution even after error - don't block UI
-      console.log(`Continuing after error in command '${cmd}'`);
-    }
-  };
-
-  // track task status update
-  useEffect(() => {
-    if (taskStatus) {
-      setLastTaskStatusUpdate(Date.now());
-      setIsTaskStatusPaused(false);
-    }
-  }, [taskStatus]);
-
-  // Check if task status updates are paused (considered paused if no updates for 1 second)
-  useEffect(() => {
-    const UPDATE_PAUSE_THRESHOLD = 1000;
-    const timer = setInterval(() => {
-      const timeSinceLastUpdate = Date.now() - lastTaskStatusUpdate;
-      setIsTaskStatusPaused(timeSinceLastUpdate >= UPDATE_PAUSE_THRESHOLD);
-    }, 1000);
-
-    return () => clearInterval(timer);
-  }, [lastTaskStatusUpdate]);
+    dispatch(setIsFirstLoadFalse('record'));
+  }, [taskInfo.tags, taskStatus.robotType, dispatch, isFirstLoad]);
 
   const classMainContainer = 'h-full flex flex-col overflow-hidden';
   const classContentsArea = 'flex-1 flex min-h-0 pt-0 px-0 justify-center items-start';
@@ -305,6 +154,8 @@ export default function RecordPage({
     'mx-1 my-2 px-2 text-lg text-blue-600 focus:outline-none bg-blue-100 rounded-full'
   );
 
+  const classHeartbeatStatus = clsx('absolute', 'top-20', 'left-5', 'z-10');
+
   return (
     <div className={classMainContainer}>
       <div className={classContentsArea}>
@@ -313,13 +164,11 @@ export default function RecordPage({
             <div className={classRobotType}>Robot Type</div>
             <div className={classRobotTypeValue}>{taskStatus?.robotType}</div>
           </div>
+          <div className={classHeartbeatStatus}>
+            <HeartbeatStatus />
+          </div>
           <div className={classImageGridContainer}>
-            <ImageGrid
-              topics={topics}
-              setTopics={setTopics}
-              rosHost={rosHost}
-              isActive={isActive}
-            />
+            <ImageGrid isActive={isActive} />
           </div>
         </div>
         <div className={classRightPanelArea}>
@@ -338,21 +187,11 @@ export default function RecordPage({
           </button>
           <div className={classRightPanel}>
             <div className="w-full min-h-10"></div>
-            <InfoPanel
-              info={info}
-              onChange={handleInfoChange}
-              disabled={taskStatus?.phase !== TaskPhase.READY || !isTaskStatusPaused}
-              rosHost={rosHost}
-            />
+            <InfoPanel />
           </div>
         </div>
       </div>
-      <ControlPanel
-        onCommand={handleControlCommand}
-        episodeStatus={episodeStatus}
-        taskInfo={info}
-        page="record"
-      />
+      <ControlPanel />
     </div>
   );
 }

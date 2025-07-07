@@ -17,6 +17,7 @@
 import React from 'react';
 import clsx from 'clsx';
 import { MdClose } from 'react-icons/md';
+import { useSelector } from 'react-redux';
 
 const classImageGridCell = (topic) =>
   clsx(
@@ -56,12 +57,13 @@ export default function ImageGridCell({
   topic,
   aspect,
   idx,
-  rosHost,
   onClose,
   onPlusClick,
   isActive = true,
   style = {},
 }) {
+  const rosHost = useSelector((state) => state.ros.rosHost);
+
   return (
     <div
       className={classImageGridCell(topic)}
@@ -84,7 +86,7 @@ export default function ImageGridCell({
       {topic && topic.trim() !== '' && isActive ? (
         <img
           id={`img-stream-${idx}`}
-          src={`http://${rosHost}/stream?quality=50&default_transport=compressed&topic=${topic}`}
+          src={`http://${rosHost}:8080/stream?quality=50&type=ros_compressed&default_transport=compressed&topic=${topic}`}
           alt={topic}
           className="w-full h-full object-cover rounded-3xl bg-gray-100"
           onClick={(e) => e.stopPropagation()}
