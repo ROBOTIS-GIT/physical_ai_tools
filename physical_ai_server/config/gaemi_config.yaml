@@ -1,0 +1,26 @@
+physical_ai_server:
+  ros__parameters:
+    gaemi:
+      observation_list:
+        - front_f_view
+        - front_l_view
+        - front_r_view
+        - state
+
+      camera_topic_list: 
+        - front_f_view:/sensor/camera/realsense/front_view/front/compressed_image
+        - front_l_view:/sensor/camera/realsense/front_view/left/compressed_image
+        - front_r_view:/sensor/camera/realsense/front_view/right/compressed_image
+
+      joint_topic_list:
+        - follower_mobile:/slam/localization/odom
+        - leader_mobile:/app/cmd_vel
+
+      joint_list:
+        - leader_mobile
+
+      joint_order:
+        leader_mobile:
+          - linear_x
+          - linear_y
+          - angular_z
