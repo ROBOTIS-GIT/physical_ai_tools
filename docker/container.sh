@@ -32,11 +32,6 @@ start_container() {
 
     echo "Starting physical_ai_server container..."
 
-    # Set current user UID and GID for container permissions
-    export UID=$(id -u)
-    export GID=$(id -g)
-    echo "Using UID:GID = $UID:$GID"
-
     # Pull the latest images
     docker compose -f "${SCRIPT_DIR}/docker-compose.yml" pull
 
@@ -53,10 +48,6 @@ enter_container() {
     else
         echo "Warning: DISPLAY environment variable is not set. X11 forwarding will not be available."
     fi
-
-    # Set current user UID and GID for consistency
-    export UID=$(id -u)
-    export GID=$(id -g)
 
     if ! docker ps | grep -q "$CONTAINER_NAME"; then
         echo "Error: Container is not running"

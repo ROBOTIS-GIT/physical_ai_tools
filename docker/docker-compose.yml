@@ -7,7 +7,6 @@ services:
       dockerfile: Dockerfile
     network_mode: host
     restart: unless-stopped
-    user: '${UID:-1000}:${GID:-1000}'
     volumes:
       - /:/host
   physical_ai_server:
