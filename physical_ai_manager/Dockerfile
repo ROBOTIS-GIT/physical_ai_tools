@@ -10,9 +10,12 @@ RUN npm run build
 FROM nginx:1.27.5-alpine
 
 # Change nginx user UID to get user permission
-RUN apk add --no-cache shadow && \
-    usermod -u 1000 nginx && \
-    groupmod -g 1000 nginx
+# RUN apk add --no-cache shadow && \
+#     usermod -u 1000 nginx && \
+#     groupmod -g 1000 nginx
+
+RUN groupadd -g 1000 hostuser || true && \
+    usermod -a -G hostuser nginx
 
 COPY --from=build /app/build /usr/share/nginx/html
 COPY nginx.conf /etc/nginx/conf.d/default.conf
