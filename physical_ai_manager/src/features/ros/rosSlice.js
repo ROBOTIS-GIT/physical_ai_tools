@@ -20,9 +20,11 @@ import { createSlice } from '@reduxjs/toolkit';
 
 const initialState = {
   connected: false,
+  connecting: false,
   rosHost: '',
   rosbridgeUrl: '',
   imageTopicList: [],
+  connectionError: null,
 };
 
 const rosSlice = createSlice({
@@ -31,6 +33,9 @@ const rosSlice = createSlice({
   reducers: {
     setConnected: (state, action) => {
       state.connected = action.payload;
+    },
+    setConnecting: (state, action) => {
+      state.connecting = action.payload;
     },
     setRosHost: (state, action) => {
       state.rosHost = action.payload;
@@ -42,9 +47,25 @@ const rosSlice = createSlice({
     setImageTopicList: (state, action) => {
       state.imageTopicList = action.payload;
     },
+    setConnectionError: (state, action) => {
+      state.connectionError = action.payload;
+    },
+    resetConnection: (state) => {
+      state.connected = false;
+      state.connecting = false;
+      state.connectionError = null;
+    },
   },
 });
 
-export const { setConnected, setRosHost, setRosbridgeUrl, setImageTopicList } = rosSlice.actions;
+export const {
+  setConnected,
+  setConnecting,
+  setRosHost,
+  setRosbridgeUrl,
+  setImageTopicList,
+  setConnectionError,
+  resetConnection,
+} = rosSlice.actions;
 
 export default rosSlice.reducer;

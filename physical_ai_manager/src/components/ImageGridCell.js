@@ -14,7 +14,7 @@
 //
 // Author: Kiwoong Park
 
-import React from 'react';
+import React, { useCallback, useEffect, useRef } from 'react';
 import clsx from 'clsx';
 import { MdClose } from 'react-icons/md';
 import { useSelector } from 'react-redux';
@@ -63,6 +63,125 @@ export default function ImageGridCell({
   style = {},
 }) {
   const rosHost = useSelector((state) => state.ros.rosHost);
+  const containerRef = useRef(null);
+  const currentImgRef = useRef(null);
+  const isCreatingRef = useRef(false); // Track if createImage is in progress
+
+  // Completely remove img element from DOM
+  const destroyImage = useCallback(() => {
+    if (currentImgRef.current) {
+      console.log(`Destroying image stream for idx ${idx}`);
+      // First set src to empty
+      currentImgRef.current.src = '';
+      // Remove from DOM completely
+      if (currentImgRef.current.parentNode) {
+        currentImgRef.current.parentNode.removeChild(currentImgRef.current);
+      }
+      currentImgRef.current = null;
+    }
+  }, [idx]);
+
+  // Create new img element and add to DOM with staggered delay
+  const createImage = useCallback(async () => {
+    if (!topic || !topic.trim() || !isActive || !containerRef.current) {
+      return;
+    }
+
+    // Prevent multiple createImage calls from running simultaneously
+    if (isCreatingRef.current) {
+      console.log(`CreateImage already in progress for idx ${idx}, skipping`);
+      return;
+    }
+
+    isCreatingRef.current = true;
+    destroyImage(); // Remove any existing image first
+
+    try {
+      // Staggered delay - center first, then left and right
+      let staggeredDelay = 0;
+      if (idx === 1) {
+        // Center cell connects immediately
+        staggeredDelay = 0;
+      } else if (idx === 0 || idx === 2) {
+        // Left and right cells connect after 300ms
+        staggeredDelay = 300;
+      }
+
+      if (staggeredDelay > 0) {
+        console.log(
+          `Staggered delay ${staggeredDelay}ms for image stream idx ${idx}, topic: ${topic}`
+        );
+        await new Promise((resolve) => setTimeout(resolve, staggeredDelay));
+      } else {
+        console.log(`Immediate connection for center cell idx ${idx}, topic: ${topic}`);
+      }
+
+      // Check again if conditions are still valid after delay and if we should still proceed
+      if (!topic || !topic.trim() || !isActive || !containerRef.current || !isCreatingRef.current) {
+        console.log(
+          `Conditions changed during delay or cancelled, aborting image stream for idx ${idx}`
+        );
+        return;
+      }
+
+      console.log(`Creating new image stream for idx ${idx}, topic: ${topic}`);
+
+      const img = document.createElement('img');
+      const timestamp = Date.now();
+      img.src = `http://${rosHost}:8080/stream?quality=50&type=ros_compressed&default_transport=compressed&topic=${topic}&t=${timestamp}`;
+      img.alt = topic;
+      img.className = 'w-full h-full object-cover rounded-3xl bg-gray-100';
+      img.onclick = (e) => e.stopPropagation();
+
+      // Error and load handlers
+      img.onerror = () => {
+        console.error(`Image stream error for idx ${idx}, topic: ${topic}`);
+      };
+
+      img.onload = () => {
+        console.log(`Image stream started for idx ${idx}, topic: ${topic}`);
+      };
+
+      if (containerRef.current && isCreatingRef.current) {
+        containerRef.current.appendChild(img);
+        currentImgRef.current = img;
+      }
+    } finally {
+      isCreatingRef.current = false;
+    }
+  }, [topic, isActive, rosHost, idx, destroyImage]);
+
+  // Create/recreate image when topic, isActive, or rosHost changes
+  useEffect(() => {
+    if (topic && topic.trim() !== '' && isActive) {
+      // Call async createImage function with error handling
+      createImage().catch((error) => {
+        console.error(`Error creating image stream for idx ${idx}:`, error);
+        isCreatingRef.current = false; // Reset flag on error
+      });
+    } else {
+      destroyImage();
+    }
+
+    return () => {
+      // Cancel any ongoing createImage operation
+      isCreatingRef.current = false;
+      destroyImage();
+    };
+  }, [topic, isActive, rosHost, idx, createImage, destroyImage]);
+
+  // Force cleanup on unmount
+  useEffect(() => {
+    return () => {
+      destroyImage();
+    };
+  }, [idx, destroyImage]);
+
+  const handleClose = (e) => {
+    e.stopPropagation();
+    destroyImage();
+    onClose(idx);
+  };
 
   return (
     <div
@@ -71,29 +190,13 @@ export default function ImageGridCell({
       style={{ cursor: !topic ? 'pointer' : 'default', aspectRatio: aspect, ...style }}
     >
       {topic && topic.trim() !== '' && (
-        <button
-          className={classImageGridCellButton}
-          onClick={(e) => {
-            e.stopPropagation();
-            const img = document.querySelector(`#img-stream-${idx}`);
-            if (img) img.src = '';
-            onClose(idx);
-          }}
-        >
+        <button className={classImageGridCellButton} onClick={handleClose}>
           <MdClose size={20} />
         </button>
       )}
-      {topic && topic.trim() !== '' && isActive ? (
-        <img
-          id={`img-stream-${idx}`}
-          src={`http://${rosHost}:8080/stream?quality=50&type=ros_compressed&default_transport=compressed&topic=${topic}`}
-          alt={topic}
-          className="w-full h-full object-cover rounded-3xl bg-gray-100"
-          onClick={(e) => e.stopPropagation()}
-        />
-      ) : (
-        <div className="text-6xl text-gray-400 font-light">+</div>
-      )}
+      <div ref={containerRef} className="w-full h-full flex items-center justify-center">
+        {(!topic || !isActive) && <div className="text-6xl text-gray-400 font-light">+</div>}
+      </div>
     </div>
   );
 }

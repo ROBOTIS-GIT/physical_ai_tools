@@ -26,7 +26,7 @@ const initialState = {
     taskInstruction: '',
     policyPath: '',
     recordInferenceMode: false,
-    userId: '',
+    userId: undefined,
     fps: 30,
     tags: [],
     warmupTime: 5,

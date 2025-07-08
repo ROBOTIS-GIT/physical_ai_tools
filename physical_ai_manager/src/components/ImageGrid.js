@@ -105,6 +105,36 @@ export default function ImageGrid({ isActive = true }) {
     fetchTopicList();
   }, [getImageTopicList, autoAssignTopics, dispatch]);
 
+  // Cleanup all image streams when component unmounts
+  useEffect(() => {
+    return () => {
+      console.log('ImageGrid unmounting - cleaning up all streams');
+
+      // Clear all image streams when ImageGrid unmounts
+      layout.forEach((_, idx) => {
+        // Clean up images by ID
+        const imgById = document.querySelector(`#img-stream-${idx}`);
+        if (imgById) {
+          imgById.src = '';
+          if (imgById.parentNode) {
+            imgById.parentNode.removeChild(imgById);
+          }
+          console.log(`ImageGrid cleanup: removed img with id img-stream-${idx}`);
+        }
+      });
+
+      // Clean up all streaming images without IDs (perform query only once)
+      const streamingImgs = document.querySelectorAll('img[src*="/stream"]');
+      streamingImgs.forEach((img, streamIdx) => {
+        img.src = '';
+        if (img.parentNode) {
+          img.parentNode.removeChild(img);
+        }
+        console.log(`ImageGrid cleanup: removed streaming img ${streamIdx}`);
+      });
+    };
+  }, []);
+
   const handlePlusClick = (idx) => {
     setSelectedIdx(idx);
     setModalOpen(true);
@@ -142,8 +172,8 @@ export default function ImageGrid({ isActive = true }) {
   };
 
   const handleCellClose = (idx) => {
-    const img = document.querySelector(`#img-stream-${idx}`);
-    if (img) img.src = '';
+    console.log(`Manually closing cell ${idx}`);
+    // Only update state - DOM cleanup is handled by ImageGridCell
     setAsignedImageTopicList(asignedImageTopicList.map((t, i) => (i === idx ? null : t)));
   };
 
@@ -183,7 +213,7 @@ export default function ImageGrid({ isActive = true }) {
     <div className="w-full h-full overflow-hidden">
       <div className={classImageGridArea}>
         {layout.map((cell, idx) => (
-          <div key={idx} className={classImageGridCell(idx)}>
+          <div key={idx} className={classImageGridCell(idx)} data-cell-idx={idx}>
             <ImageGridCell
               topic={asignedImageTopicList[idx]}
               aspect={cell.aspect}

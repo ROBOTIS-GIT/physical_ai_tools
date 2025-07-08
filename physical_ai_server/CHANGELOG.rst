@@ -2,6 +2,10 @@
 Changelog for package physical_ai_server
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
+0.5.9 (2025-07-07)
+------------------
+* None
+
 0.5.8 (2025-07-07)
 ------------------
 * Added heartbeat topic publishing to monitor alive status of Physical AI Server

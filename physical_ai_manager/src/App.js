@@ -24,6 +24,7 @@ import HomePage from './pages/HomePage';
 import RecordPage from './pages/RecordPage';
 import InferencePage from './pages/InferencePage';
 import { useRosTaskStatus } from './hooks/useRosTaskStatus';
+import rosConnectionManager from './utils/rosConnectionManager';
 import { useDispatch, useSelector } from 'react-redux';
 import { setRosHost } from './features/ros/rosSlice';
 import { moveToPage } from './features/ui/uiSlice';
@@ -44,6 +45,14 @@ function App() {
 
   // Subscribe to task status from ROS topic (always active)
   useRosTaskStatus();
+
+  // Disconnect ROS connection when app unmounts
+  useEffect(() => {
+    return () => {
+      console.log('App unmounting, cleaning up global ROS connection');
+      rosConnectionManager.disconnect();
+    };
+  }, []);
 
   useEffect(() => {
     if (isFirstLoad.current && page === PageType.HOME && taskStatus.topicReceived) {
@@ -121,6 +130,26 @@ function App() {
     console.log('Robot type set, allowing navigation to Inference page');
     dispatch(moveToPage(PageType.INFERENCE));
   };
+
+  // Force cleanup of all image streams when page changes
+  useEffect(() => {
+    return () => {
+      // Clean up all possible image streams when page changes
+      console.log('Page changing, forcing complete cleanup of all image streams');
+
+      // Find all streaming images by src pattern
+      const allStreamImgs = document.querySelectorAll('img[src*="/stream"]');
+      allStreamImgs.forEach((img, index) => {
+        img.src = '';
+        if (img.parentNode) {
+          img.parentNode.removeChild(img);
+        }
+        console.log(`Page cleanup: removed stream image ${index}`);
+      });
+
+      console.log(`Page cleanup completed: removed ${allStreamImgs.length} streaming images`);
+    };
+  }, [page]);
 
   return (
     <div className="flex h-screen w-screen">

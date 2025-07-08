@@ -14,59 +14,23 @@
 //
 // Author: Kiwoong Park
 
-import { useRef, useCallback } from 'react';
+import { useCallback } from 'react';
 import { useSelector } from 'react-redux';
 import ROSLIB from 'roslib';
 import PageType from '../constants/pageType';
 import TaskCommand from '../constants/taskCommand';
+import rosConnectionManager from '../utils/rosConnectionManager';
 
 export function useRosServiceCaller() {
-  const rosRef = useRef(null);
-
-  const rosbridgeUrl = useSelector((state) => state.ros.rosbridgeUrl);
-
   const taskInfo = useSelector((state) => state.tasks.taskInfo);
   const page = useSelector((state) => state.ui.currentPage);
-
-  const getRosConnection = useCallback(() => {
-    return new Promise((resolve, reject) => {
-      if (rosRef.current && rosRef.current.isConnected === true) {
-        resolve(rosRef.current);
-        return;
-      }
-
-      // Create new ROS connection
-      const ros = new ROSLIB.Ros({ url: rosbridgeUrl });
-      const connectionTimeout = setTimeout(() => {
-        reject(new Error('ROS connection timeout - rosbridge server is not running'));
-      }, 2000); // 2 second timeout for faster feedback
-
-      ros.on('connection', () => {
-        clearTimeout(connectionTimeout);
-        console.log('Connected to ROS bridge');
-        rosRef.current = ros;
-        resolve(ros);
-      });
-
-      ros.on('error', (error) => {
-        clearTimeout(connectionTimeout);
-        console.error('ROS connection error:', error);
-        rosRef.current = null;
-        reject(new Error(`ROS connection failed: ${error.message || error}`));
-      });
-
-      ros.on('close', () => {
-        console.log('ROS connection closed');
-        rosRef.current = null;
-      });
-    });
-  }, [rosbridgeUrl]);
+  const rosbridgeUrl = useSelector((state) => state.ros.rosbridgeUrl);
 
   const callService = useCallback(
     async (serviceName, serviceType, request) => {
       try {
         console.log(`Attempting to call service: ${serviceName}`);
-        const ros = await getRosConnection();
+        const ros = await rosConnectionManager.getConnection(rosbridgeUrl);
 
         return new Promise((resolve, reject) => {
           const service = new ROSLIB.Service({
@@ -104,7 +68,7 @@ export function useRosServiceCaller() {
         );
       }
     },
-    [getRosConnection]
+    [rosbridgeUrl]
   );
 
   const sendRecordCommand = useCallback(

@@ -25,9 +25,9 @@ import {
   setHeartbeatStatus,
   setLastHeartbeatTime,
 } from '../features/tasks/taskSlice';
+import rosConnectionManager from '../utils/rosConnectionManager';
 
 export function useRosTaskStatus() {
-  const rosRef = useRef(null);
   const taskStatusTopicRef = useRef(null);
   const heartbeatTopicRef = useRef(null);
 
@@ -35,58 +35,36 @@ export function useRosTaskStatus() {
   const rosbridgeUrl = useSelector((state) => state.ros.rosbridgeUrl);
   const [connected, setConnected] = useState(false);
 
-  const getRosConnection = useCallback(() => {
-    if (!rosRef.current || rosRef.current.isConnected === false) {
-      rosRef.current = new ROSLIB.Ros({ url: rosbridgeUrl });
-
-      rosRef.current.on('connection', () => {
-        console.log('Connected to ROS bridge for task status');
-        setConnected(true);
-      });
-
-      rosRef.current.on('error', (error) => {
-        console.error('ROS task status connection error:', error);
-        setConnected(false);
-        rosRef.current = null;
-      });
-
-      rosRef.current.on('close', () => {
-        console.log('ROS task status connection closed');
-        setConnected(false);
-        rosRef.current = null;
-      });
-    }
-    return rosRef.current;
-  }, [rosbridgeUrl]);
-
   const cleanup = useCallback(() => {
+    console.log('Starting ROS task status cleanup...');
+
     if (taskStatusTopicRef.current) {
       taskStatusTopicRef.current.unsubscribe();
       taskStatusTopicRef.current = null;
+      console.log('Task status topic unsubscribed');
     }
     if (heartbeatTopicRef.current) {
       heartbeatTopicRef.current.unsubscribe();
       heartbeatTopicRef.current = null;
-    }
-    if (rosRef.current) {
-      rosRef.current.close();
-      rosRef.current = null;
+      console.log('Heartbeat topic unsubscribed');
     }
     setConnected(false);
     dispatch(setHeartbeatStatus('disconnected'));
+    console.log('ROS task status cleanup completed');
   }, [dispatch]);
 
-  const subscribeToTaskStatus = useCallback(() => {
-    const ros = getRosConnection();
-    if (!ros) return;
-
-    // Skip if already subscribed
-    if (taskStatusTopicRef.current) {
-      console.log('Task status already subscribed, skipping...');
-      return;
-    }
-
+  const subscribeToTaskStatus = useCallback(async () => {
     try {
+      const ros = await rosConnectionManager.getConnection(rosbridgeUrl);
+      if (!ros) return;
+
+      // Skip if already subscribed
+      if (taskStatusTopicRef.current) {
+        console.log('Task status already subscribed, skipping...');
+        return;
+      }
+
+      setConnected(true);
       taskStatusTopicRef.current = new ROSLIB.Topic({
         ros,
         name: '/task/status',
@@ -169,19 +147,19 @@ export function useRosTaskStatus() {
     } catch (error) {
       console.error('Failed to subscribe to task status topic:', error);
     }
-  }, [getRosConnection, dispatch]);
+  }, [dispatch, rosbridgeUrl]);
 
-  const subscribeToHeartbeat = useCallback(() => {
-    const ros = getRosConnection();
-    if (!ros) return;
-
-    // Skip if already subscribed
-    if (heartbeatTopicRef.current) {
-      console.log('Heartbeat already subscribed, skipping...');
-      return;
-    }
-
+  const subscribeToHeartbeat = useCallback(async () => {
     try {
+      const ros = await rosConnectionManager.getConnection(rosbridgeUrl);
+      if (!ros) return;
+
+      // Skip if already subscribed
+      if (heartbeatTopicRef.current) {
+        console.log('Heartbeat already subscribed, skipping...');
+        return;
+      }
+
       heartbeatTopicRef.current = new ROSLIB.Topic({
         ros,
         name: '/heartbeat',
@@ -197,14 +175,25 @@ export function useRosTaskStatus() {
     } catch (error) {
       console.error('Failed to subscribe to heartbeat topic:', error);
     }
-  }, [getRosConnection, dispatch]);
+  }, [dispatch, rosbridgeUrl]);
 
   // Start connection and subscription
   useEffect(() => {
     if (!rosbridgeUrl) return;
 
-    subscribeToTaskStatus();
-    subscribeToHeartbeat();
+    const initializeSubscriptions = async () => {
+      // Cleanup previous subscriptions before creating new ones
+      cleanup();
+
+      try {
+        await subscribeToTaskStatus();
+        await subscribeToHeartbeat();
+      } catch (error) {
+        console.error('Failed to initialize ROS subscriptions:', error);
+      }
+    };
+
+    initializeSubscriptions();
 
     return cleanup;
     // eslint-disable-next-line react-hooks/exhaustive-deps

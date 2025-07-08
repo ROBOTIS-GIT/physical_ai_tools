@@ -169,7 +169,7 @@ const InfoPanel = () => {
   }, [handleLoadUserId]);
 
   useEffect(() => {
-    if (userIdList.length > 0 && !info.userId) {
+    if (userIdList.length > 0 && info.userId === undefined) {
       handleUserIdSelect(userIdList[0]);
     }
   }, [userIdList, info.userId, handleUserIdSelect]);
@@ -207,7 +207,9 @@ const InfoPanel = () => {
     'p-4',
     'w-full',
     'max-w-[350px]',
-    'relative'
+    'relative',
+    'overflow-y-auto',
+    'scrollbar-thin'
   );
 
   const classTaskNameTextarea = clsx(
@@ -256,7 +258,7 @@ const InfoPanel = () => {
     'resize-y',
     'min-h-10',
     'max-h-24',
-    'h-10',
+    'h-14',
     'w-full',
     'p-2',
     'border',
@@ -558,6 +560,13 @@ const InfoPanel = () => {
               )}
             </>
           )}
+        </div>
+      </div>
+
+      <div className="flex flex-col items-center text-xs text-gray-500 mt-1 leading-relaxed bg-gray-100 p-2 rounded-md mb-2">
+        <div>Dataset will be saved with the following repo id</div>
+        <div className="text-blue-500 font-bold break-all">
+          {info.userId}/{taskStatus?.robotType}_{info.taskName}
         </div>
       </div>
 
