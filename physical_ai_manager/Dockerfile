@@ -8,6 +8,12 @@ RUN npm run build
 
 # Production stage
 FROM nginx:1.27.5-alpine
+
+# Change nginx user UID to get user permission
+RUN apk add --no-cache shadow && \
+    usermod -u 1000 nginx && \
+    groupmod -g 1000 nginx
+
 COPY --from=build /app/build /usr/share/nginx/html
 COPY nginx.conf /etc/nginx/conf.d/default.conf
 EXPOSE 80
