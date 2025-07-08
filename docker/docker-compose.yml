@@ -7,6 +7,8 @@ services:
       dockerfile: Dockerfile
     network_mode: host
     restart: unless-stopped
+    volumes:
+      - /:/host
   physical_ai_server:
     container_name: physical_ai_server
     image: robotis/physical-ai-server:latest
