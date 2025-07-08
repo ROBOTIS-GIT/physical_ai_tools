@@ -112,8 +112,7 @@ class DataConverter:
 
         try:
             linear = np.array([
-                msg.linear.x,
-                msg.linear.y
+                msg.linear.x
             ], dtype=np.float32)
             angular = np.array([
                 msg.angular.z
@@ -138,8 +137,7 @@ class DataConverter:
 
         try:
             position = np.array([
-                msg.twist.twist.linear.x,
-                msg.twist.twist.linear.y
+                msg.twist.twist.linear.x
             ], dtype=np.float32)
             orientation = np.array([
                 msg.twist.twist.angular.z

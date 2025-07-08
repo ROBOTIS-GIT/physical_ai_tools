@@ -8,13 +8,13 @@ physical_ai_server:
         - state
 
       camera_topic_list: 
-        - front_f_view:/sensor/camera/realsense/front_view/front/compressed_image
-        - front_l_view:/sensor/camera/realsense/front_view/left/compressed_image
-        - front_r_view:/sensor/camera/realsense/front_view/right/compressed_image
+        - front_f_view:/sensor/camera/realsense/front_view/front/color/image_raw/compressed
+        - front_l_view:/sensor/camera/realsense/front_view/left/color/image_raw/compressed
+        - front_r_view:/sensor/camera/realsense/front_view/right/color/image_raw/compressed
 
       joint_topic_list:
         - follower_mobile:/slam/localization/odom
-        - leader_mobile:/app/cmd_vel
+        - leader_mobile:/pilot/cmd_vel
 
       joint_list:
         - leader_mobile
@@ -22,5 +22,4 @@ physical_ai_server:
       joint_order:
         leader_mobile:
           - linear_x
-          - linear_y
           - angular_z
