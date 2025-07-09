@@ -14,8 +14,11 @@ FROM nginx:1.27.5-alpine
 #     usermod -u 1000 nginx && \
 #     groupmod -g 1000 nginx
 
-RUN groupadd -g 1000 hostuser || true && \
-    usermod -a -G hostuser nginx
+# RUN groupadd -g 1000 hostuser || true && \
+#     usermod -a -G hostuser nginx
+
+RUN groupadd -r nginx && useradd -r -g nginx nginx
+USER nginx
 
 COPY --from=build /app/build /usr/share/nginx/html
 COPY nginx.conf /etc/nginx/conf.d/default.conf
