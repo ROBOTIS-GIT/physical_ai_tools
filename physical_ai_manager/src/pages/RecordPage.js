@@ -18,7 +18,7 @@ import React, { useState, useEffect } from 'react';
 import { useSelector, useDispatch } from 'react-redux';
 import clsx from 'clsx';
 import toast, { useToasterStore } from 'react-hot-toast';
-import { MdKeyboardDoubleArrowLeft, MdKeyboardDoubleArrowRight } from 'react-icons/md';
+import { MdKeyboardDoubleArrowLeft, MdKeyboardDoubleArrowRight, MdTask } from 'react-icons/md';
 import ControlPanel from '../components/ControlPanel';
 import HeartbeatStatus from '../components/HeartbeatStatus';
 import ImageGrid from '../components/ImageGrid';
@@ -31,6 +31,8 @@ export default function RecordPage({ isActive = true }) {
 
   const taskInfo = useSelector((state) => state.tasks.taskInfo);
   const taskStatus = useSelector((state) => state.tasks.taskStatus);
+  const useMultiTaskMode = useSelector((state) => state.tasks.useMultiTaskMode);
+  const multiTaskIndex = useSelector((state) => state.tasks.multiTaskIndex);
 
   // Toast limit implementation using useToasterStore
   const { toasts } = useToasterStore();
@@ -155,6 +157,51 @@ export default function RecordPage({ isActive = true }) {
 
   const classHeartbeatStatus = clsx('absolute', 'top-20', 'left-5', 'z-10');
 
+  const classTaskInstructionContainer = clsx(
+    'absolute',
+    'bottom-1',
+    'left-10',
+    'w-[40%]',
+    'z-30',
+    'flex',
+    'flex-row',
+    'items-center',
+    'bg-gradient-to-r',
+    'from-green-50/70',
+    'to-emerald-50/70',
+    'backdrop-blur-xs',
+    'rounded-xl',
+    'px-4',
+    'py-3',
+    'shadow-lg',
+    'border',
+    'border-green-100/50',
+    'hover:shadow-xl',
+    'hover:from-green-50/80',
+    'hover:to-emerald-50/80',
+    'transition-all',
+    'duration-300'
+  );
+
+  const classTaskIcon = clsx('text-green-600', 'text-2xl', 'mr-3', 'flex-shrink-0');
+
+  const classTaskLabel = clsx(
+    'text-green-700',
+    'font-semibold',
+    'text-lg',
+    'mr-3',
+    'flex-shrink-0'
+  );
+
+  const classTaskValue = clsx(
+    'text-green-800',
+    'text-lg',
+    'font-medium',
+    'flex-1',
+    'min-w-0',
+    'whitespace-normal'
+  );
+
   return (
     <div className={classMainContainer}>
       <div className={classContentsArea}>
@@ -168,6 +215,22 @@ export default function RecordPage({ isActive = true }) {
           </div>
           <div className={classImageGridContainer}>
             <ImageGrid isActive={isActive} />
+            {useMultiTaskMode && (
+              <div className={classTaskInstructionContainer}>
+                <div className="flex flex-col">
+                  <div className="flex flex-row">
+                    <MdTask className={classTaskIcon} />
+                    <span className={classTaskLabel}>Current Task</span>
+                    {multiTaskIndex !== undefined && (
+                      <span className={classTaskLabel}>
+                        {`[${multiTaskIndex + 1} / ${taskInfo.taskInstruction.length}]`}
+                      </span>
+                    )}
+                  </div>
+                  <span className={classTaskValue}>{taskStatus.currentTaskInstruction}</span>
+                </div>
+              </div>
+            )}
           </div>
         </div>
         <div className={classRightPanelArea}>

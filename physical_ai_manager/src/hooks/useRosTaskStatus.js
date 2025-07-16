@@ -24,6 +24,8 @@ import {
   setTaskInfo,
   setHeartbeatStatus,
   setLastHeartbeatTime,
+  setUseMultiTaskMode,
+  setMultiTaskIndex,
 } from '../features/tasks/taskSlice';
 import rosConnectionManager from '../utils/rosConnectionManager';
 
@@ -109,6 +111,8 @@ export function useRosTaskStatus() {
             totalTime: msg.total_time || 0,
             proceedTime: msg.proceed_time || 0,
             currentEpisodeNumber: msg.current_episode_number || 0,
+            currentScenarioNumber: msg.current_scenario_number || 0,
+            currentTaskInstruction: msg.current_task_instruction || '',
             userId: msg.task_info?.user_id || '',
             usedStorageSize: msg.used_storage_size || 0,
             totalStorageSize: msg.total_storage_size || 0,
@@ -127,7 +131,7 @@ export function useRosTaskStatus() {
             setTaskInfo({
               taskName: msg.task_info.task_name || '',
               taskType: msg.task_info.task_type || '',
-              taskInstruction: msg.task_info.task_instruction || '',
+              taskInstruction: msg.task_info.task_instruction || [],
               policyPath: msg.task_info.policy_path || '',
               recordInferenceMode: msg.task_info.record_inference_mode || false,
               userId: msg.task_info.user_id || '',
@@ -142,6 +146,22 @@ export function useRosTaskStatus() {
               useOptimizedSave: msg.task_info.use_optimized_save_mode || false,
             })
           );
+        }
+
+        // Set multi-task index safely with null checks and optimized search
+        if (msg.task_info?.task_instruction && msg.current_task_instruction) {
+          const taskIndex = msg.task_info.task_instruction.indexOf(msg.current_task_instruction);
+          if (taskIndex !== -1) {
+            dispatch(setMultiTaskIndex(taskIndex));
+          } else {
+            dispatch(setMultiTaskIndex(undefined));
+          }
+        }
+
+        if (msg.task_info?.task_instruction.length > 1) {
+          dispatch(setUseMultiTaskMode(true));
+        } else {
+          dispatch(setUseMultiTaskMode(false));
         }
       });
     } catch (error) {

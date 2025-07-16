@@ -17,12 +17,13 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { useSelector, useDispatch } from 'react-redux';
 import clsx from 'clsx';
+import TaskInstructionInput from './TaskInstructionInput';
 import toast from 'react-hot-toast';
 import { MdVisibility, MdVisibilityOff } from 'react-icons/md';
 import { useRosServiceCaller } from '../hooks/useRosServiceCaller';
 import TagInput from './TagInput';
 import TaskPhase from '../constants/taskPhases';
-import { setTaskInfo } from '../features/tasks/taskSlice';
+import { setTaskInfo, setUseMultiTaskMode } from '../features/tasks/taskSlice';
 
 const taskInfos = [
   {
@@ -63,6 +64,8 @@ const InfoPanel = () => {
 
   const [isTaskStatusPaused, setIsTaskStatusPaused] = useState(false);
   const [lastTaskStatusUpdate, setLastTaskStatusUpdate] = useState(Date.now());
+
+  const useMultiTaskMode = useSelector((state) => state.tasks.useMultiTaskMode);
 
   const [showPopup, setShowPopup] = useState(false);
   const [taskInfoList] = useState(taskInfos);
@@ -164,6 +167,14 @@ const InfoPanel = () => {
     }
   }, [info.pushToHub]);
 
+  // Auto-enable optimized save when multi-task mode is enabled
+  useEffect(() => {
+    if (useMultiTaskMode && !info.useOptimizedSave) {
+      dispatch(setTaskInfo({ ...info, useOptimizedSave: true }));
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [useMultiTaskMode, info.useOptimizedSave, dispatch]);
+
   useEffect(() => {
     handleLoadUserId();
   }, [handleLoadUserId]);
@@ -251,6 +262,28 @@ const InfoPanel = () => {
       'bg-gray-100 cursor-not-allowed': !isEditable,
       'bg-white': isEditable,
     }
+  );
+
+  const classSingleTaskButton = clsx(
+    'px-3',
+    'py-1',
+    'text-sm',
+    'rounded-xl',
+    'font-medium',
+    'transition-colors',
+    !useMultiTaskMode ? 'bg-blue-500 text-white' : 'bg-gray-200 text-gray-700',
+    !isEditable && 'cursor-not-allowed opacity-60'
+  );
+
+  const classMultiTaskButton = clsx(
+    'px-3',
+    'py-1',
+    'text-sm',
+    'rounded-xl',
+    'font-medium',
+    'transition-colors',
+    useMultiTaskMode ? 'bg-blue-500 text-white' : 'bg-gray-200 text-gray-700',
+    !isEditable && 'cursor-not-allowed opacity-60'
   );
 
   const classRepoIdTextarea = clsx(
@@ -403,13 +436,47 @@ const InfoPanel = () => {
         >
           Task Instruction
         </span>
-        <textarea
-          className={classTaskInstructionTextarea}
-          value={info.taskInstruction || ''}
-          onChange={(e) => handleChange('taskInstruction', e.target.value)}
-          disabled={!isEditable}
-          placeholder="Enter Task Instruction"
-        />
+
+        <div>
+          {/* Single/Multi Task Mode Toggle */}
+          <div className={clsx('flex', 'justify-start', 'mb-3', 'gap-3')}>
+            <button
+              type="button"
+              className={classSingleTaskButton}
+              onClick={() => isEditable && dispatch(setUseMultiTaskMode(false))}
+              disabled={!isEditable}
+            >
+              Single Task
+            </button>
+            <button
+              type="button"
+              className={classMultiTaskButton}
+              onClick={() => isEditable && dispatch(setUseMultiTaskMode(true))}
+              disabled={!isEditable}
+            >
+              Multi Task
+            </button>
+          </div>
+
+          {useMultiTaskMode && (
+            <div className="flex-1 min-w-0">
+              <TaskInstructionInput
+                instructions={info.taskInstruction || []}
+                onChange={(newInstructions) => handleChange('taskInstruction', newInstructions)}
+                disabled={!isEditable}
+              />
+            </div>
+          )}
+          {!useMultiTaskMode && (
+            <textarea
+              className={classTaskInstructionTextarea}
+              value={info.taskInstruction || ''}
+              onChange={(e) => handleChange('taskInstruction', [e.target.value])}
+              disabled={!isEditable}
+              placeholder="Enter Task Instruction"
+            />
+          )}
+        </div>
       </div>
 
       <div className={clsx('flex', 'items-center', 'mb-2')}>
@@ -610,61 +677,72 @@ const InfoPanel = () => {
         />
       </div>
 
-      <div className={clsx('flex', 'items-center', 'mb-2.5')}>
-        <span className={classLabel}>Episode Time (s)</span>
-        <input
-          className={classTextInput}
-          type="number"
-          step="5"
-          min={0}
-          max={65535}
-          value={info.episodeTime || ''}
-          onChange={(e) => handleChange('episodeTime', Number(e.target.value) || 0)}
-          disabled={!isEditable}
-        />
-      </div>
+      {!useMultiTaskMode && (
+        <>
+          <div className={clsx('flex', 'items-center', 'mb-2.5')}>
+            <span className={classLabel}>Episode Time (s)</span>
+            <input
+              className={classTextInput}
+              type="number"
+              step="5"
+              min={0}
+              max={65535}
+              value={info.episodeTime || ''}
+              onChange={(e) => handleChange('episodeTime', Number(e.target.value) || 0)}
+              disabled={!isEditable}
+            />
+          </div>
 
-      <div className={clsx('flex', 'items-center', 'mb-2.5')}>
-        <span className={classLabel}>Reset Time (s)</span>
-        <input
-          className={classTextInput}
-          type="number"
-          step="5"
-          min={0}
-          max={65535}
-          value={info.resetTime || ''}
-          onChange={(e) => handleChange('resetTime', Number(e.target.value) || 0)}
-          disabled={!isEditable}
-        />
-      </div>
+          <div className={clsx('flex', 'items-center', 'mb-2.5')}>
+            <span className={classLabel}>Reset Time (s)</span>
+            <input
+              className={classTextInput}
+              type="number"
+              step="5"
+              min={0}
+              max={65535}
+              value={info.resetTime || ''}
+              onChange={(e) => handleChange('resetTime', Number(e.target.value) || 0)}
+              disabled={!isEditable || useMultiTaskMode}
+            />
+          </div>
 
-      <div className={clsx('flex', 'items-center', 'mb-2.5')}>
-        <span className={classLabel}>Num Episodes</span>
-        <input
-          className={classTextInput}
-          type="number"
-          step="1"
-          min={0}
-          max={65535}
-          value={info.numEpisodes || ''}
-          onChange={(e) => handleChange('numEpisodes', Number(e.target.value) || 0)}
-          disabled={!isEditable}
-        />
-      </div>
+          <div className={clsx('flex', 'items-center', 'mb-2.5')}>
+            <span className={classLabel}>Num Episodes</span>
+            <input
+              className={classTextInput}
+              type="number"
+              step="1"
+              min={0}
+              max={65535}
+              value={info.numEpisodes || ''}
+              onChange={(e) => handleChange('numEpisodes', Number(e.target.value) || 0)}
+              disabled={!isEditable || useMultiTaskMode}
+            />
+          </div>
+        </>
+      )}
 
       <div className={clsx('flex', 'items-center', 'mb-2')}>
         <span className={classLabel}>Optimized Save</span>
-        <div className={clsx('flex', 'items-center')}>
-          <input
-            className={classCheckbox}
-            type="checkbox"
-            checked={!!info.useOptimizedSave}
-            onChange={(e) => handleChange('useOptimizedSave', e.target.checked)}
-            disabled={!isEditable}
-          />
-          <span className={clsx('ml-2', 'text-sm', 'text-gray-500')}>
-            {info.useOptimizedSave ? 'Enabled' : 'Disabled'}
-          </span>
+        <div className="flex flex-col">
+          <div className={clsx('flex', 'items-center')}>
+            <input
+              className={clsx(classCheckbox, {
+                'cursor-not-allowed opacity-50': useMultiTaskMode,
+              })}
+              type="checkbox"
+              checked={!!info.useOptimizedSave}
+              onChange={(e) => handleChange('useOptimizedSave', e.target.checked)}
+              disabled={!isEditable || useMultiTaskMode}
+            />
+            <span className={clsx('ml-2', 'text-sm', 'text-gray-500')}>
+              {info.useOptimizedSave ? 'Enabled' : 'Disabled'}
+            </span>
+          </div>
+          {useMultiTaskMode && (
+            <span className="text-xs text-blue-600 ml-1">(Auto-enabled in Multi-Task mode)</span>
+          )}
         </div>
       </div>
 

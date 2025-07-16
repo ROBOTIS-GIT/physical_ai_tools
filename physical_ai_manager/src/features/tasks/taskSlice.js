@@ -23,7 +23,7 @@ const initialState = {
   taskInfo: {
     taskName: '',
     taskType: '',
-    taskInstruction: '',
+    taskInstruction: [],
     policyPath: '',
     recordInferenceMode: false,
     userId: undefined,
@@ -47,6 +47,8 @@ const initialState = {
     totalTime: 0,
     proceedTime: 0,
     currentEpisodeNumber: 0,
+    currentScenarioNumber: 0,
+    currentTaskInstruction: '',
     userId: '',
     usedStorageSize: 0,
     totalStorageSize: 0,
@@ -62,6 +64,8 @@ const initialState = {
   datasetList: [],
   heartbeatStatus: 'disconnected',
   lastHeartbeatTime: 0,
+  useMultiTaskMode: false,
+  multiTaskIndex: undefined,
 };
 
 const taskSlice = createSlice({
@@ -109,6 +113,12 @@ const taskSlice = createSlice({
     setLastHeartbeatTime: (state, action) => {
       state.lastHeartbeatTime = action.payload;
     },
+    setUseMultiTaskMode: (state, action) => {
+      state.useMultiTaskMode = action.payload;
+    },
+    setMultiTaskIndex: (state, action) => {
+      state.multiTaskIndex = action.payload;
+    },
   },
 });
 
@@ -126,6 +136,8 @@ export const {
   removeTag,
   setHeartbeatStatus,
   setLastHeartbeatTime,
+  setUseMultiTaskMode,
+  setMultiTaskIndex,
 } = taskSlice.actions;
 
 export default taskSlice.reducer;

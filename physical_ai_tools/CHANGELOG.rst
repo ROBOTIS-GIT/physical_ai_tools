@@ -2,6 +2,11 @@
 Changelog for package physical_ai_tools
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
+0.5.10 (2025-07-15)
+------------------
+* Added multi-tasking data recording support to the Physical AI Server
+* Contributors: Kiwoong Park, Seongwoo Kim
+
 0.5.9 (2025-07-07)
 ------------------
 * Use global ROS connection instead of multiple instances

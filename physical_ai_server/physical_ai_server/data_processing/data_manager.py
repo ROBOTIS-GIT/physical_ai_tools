@@ -14,7 +14,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
-# Author: Dongyun Kim
+# Author: Dongyun Kim, Seongwoo Kim
 
 import gc
 import os
@@ -43,6 +43,7 @@ class DataManager:
     RECORDING = False
     RECORD_COMPLETED = True
     RAM_LIMIT_GB = 2  # GB
+    SKIP_TIME = 0.1  # Seconds
 
     def __init__(
             self,
@@ -53,6 +54,7 @@ class DataManager:
         self._save_repo_name = f'{task_info.user_id}/{robot_type}_{task_info.task_name}'
         self._save_path = save_root_path / self._save_repo_name
         self._on_saving = False
+        self._single_task = len(task_info.task_instruction) == 1
         self._task_info = task_info
         self._lerobot_dataset = None
         self._record_episode_count = 0
@@ -63,6 +65,10 @@ class DataManager:
         self.data_converter = DataConverter()
         self.force_save_for_safety = False
         self._stop_save_completed = False
+        self.current_instruction = ''
+        self._current_task = 0
+        self._init_task_limits()
+        self._current_scenario_number = 0
 
     def record(
             self,
@@ -74,13 +80,18 @@ class DataManager:
             self._start_time_s = time.perf_counter()
 
         if self._status == 'warmup':
+            self._current_task = 0
+            self._current_scenario_number = 0
             if not self._check_time(self._task_info.warmup_time_s, 'run'):
                 return self.RECORDING
 
         elif self._status == 'run':
             if not self._check_time(self._task_info.episode_time_s, 'save'):
                 if RAMChecker.get_free_ram_gb() < self.RAM_LIMIT_GB:
-                    self.record_early_save()
+                    if not self._single_task:
+                        self._status = 'finish'
+                    else:
+                        self.record_early_save()
                     return self.RECORDING
                 frame = self.create_frame(images, state, action)
                 if self._task_info.use_optimized_save_mode:
@@ -90,9 +101,17 @@ class DataManager:
 
         elif self._status == 'save':
             if self._on_saving:
-                if self._lerobot_dataset.check_video_encoding_completed():
+                if (
+                    self._lerobot_dataset.check_video_encoding_completed()
+                    or (
+                        not self._single_task
+                        and self._lerobot_dataset.check_append_buffer_completed()
+                    )
+                ):
                     self._episode_reset()
                     self._record_episode_count += 1
+                    self._get_current_scenario_number()
+                    self._current_task += 1
                     self._status = 'reset'
                     self._start_time_s = 0
                     self._on_saving = False
@@ -101,7 +120,15 @@ class DataManager:
                 self._on_saving = True
 
         elif self._status == 'reset':
-            if not self._check_time(self._task_info.reset_time_s, 'run'):
+            if not self._single_task:
+                if not self._check_time(self.SKIP_TIME, 'run'):
+                    return self.RECORDING
+            else:
+                if not self._check_time(self._task_info.reset_time_s, 'run'):
+                    return self.RECORDING
+
+        elif self._status == 'skip_task':
+            if not self._check_time(self.SKIP_TIME, 'run'):
                 return self.RECORDING
 
         elif self._status == 'stop':
@@ -111,6 +138,8 @@ class DataManager:
                         self._on_saving = False
                         self._episode_reset()
                         self._record_episode_count += 1
+                        self._get_current_scenario_number()
+                        self._current_task += 1
                         self._stop_save_completed = True
                 else:
                     self.save()
@@ -131,6 +160,8 @@ class DataManager:
                     return self.RECORD_COMPLETED
             else:
                 self.save()
+                if not self._single_task:
+                    self._lerobot_dataset.video_encoding()
                 self._proceed_time = 0
                 self._on_saving = True
 
@@ -149,7 +180,9 @@ class DataManager:
         if self._lerobot_dataset.episode_buffer is None:
             return
         if self._task_info.use_optimized_save_mode:
-            if self._lerobot_dataset.episode_buffer['size'] > 0:
+            if not self._single_task:
+                self._lerobot_dataset.save_episode_without_video_encoding()
+            else:
                 self._lerobot_dataset.save_episode_without_write_image()
         else:
             if self._lerobot_dataset.episode_buffer['size'] > 0:
@@ -166,7 +199,10 @@ class DataManager:
             frame[f'observation.images.{camera_name}'] = image
         frame['observation.state'] = np.array(state)
         frame['action'] = np.array(action)
-        frame['task'] = self._task_info.task_instruction
+        self.current_instruction = self._task_info.task_instruction[
+            self._current_task % len(self._task_info.task_instruction)
+        ]
+        frame['task'] = self.current_instruction
         return frame
 
     def record_early_save(self):
@@ -183,6 +219,16 @@ class DataManager:
         self._stop_save_completed = False
         self._episode_reset()
         self._status = 'reset'
+
+    def record_skip_task(self):
+        self._stop_save_completed = False
+        self._episode_reset()
+        self._status = 'skip_task'
+        self._get_current_scenario_number()
+        self._current_task += 1
+
+    def record_next_episode(self):
+        self._status = 'save'
 
     def get_current_record_status(self):
         current_status = TaskStatus()
@@ -215,6 +261,7 @@ class DataManager:
             else:
                 current_status.phase = TaskStatus.STOPPED
 
+        current_status.current_task_instruction = self.current_instruction
         current_status.proceed_time = int(getattr(self, '_proceed_time', 0))
         current_status.current_episode_number = int(self._record_episode_count)
 
@@ -227,8 +274,18 @@ class DataManager:
         ram_total, ram_used = RAMChecker.get_ram_gb()
         current_status.used_ram_size = float(ram_used)
         current_status.total_ram_size = float(ram_total)
+        if not self._single_task:
+            current_status.current_scenario_number = self._current_scenario_number
 
         return current_status
+
+    def _get_current_scenario_number(self):
+        task_count = len(self._task_info.task_instruction)
+        if task_count == 0:
+            return
+        next_task_index = (self._current_task + 1) % task_count
+        if next_task_index == 0:
+            self._current_scenario_number += 1
 
     def _get_encoding_progress(self):
         min_encoding_percentage = 100
@@ -291,7 +348,11 @@ class DataManager:
             raise ValueError(f'Unsupported message type: {type(msg_data)}')
 
     def _episode_reset(self):
-        if self._lerobot_dataset and hasattr(self._lerobot_dataset, 'episode_buffer'):
+        if (
+            self._lerobot_dataset
+            and hasattr(self._lerobot_dataset, 'episode_buffer')
+            or self._current_task == 0
+        ):
             if self._lerobot_dataset.episode_buffer is not None:
                 for key, value in self._lerobot_dataset.episode_buffer.items():
                     if isinstance(value, list):
@@ -460,3 +521,8 @@ class DataManager:
         except FileNotFoundError:
             print('huggingface-cli not found. Please install package.')
             return False
+
+    def _init_task_limits(self):
+        if not self._single_task:
+            self._task_info.num_episodes = 1_000_000
+            self._task_info.episode_time_s = 1_000_000

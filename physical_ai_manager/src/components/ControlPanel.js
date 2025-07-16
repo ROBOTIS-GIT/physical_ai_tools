@@ -18,7 +18,7 @@ import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useSelector } from 'react-redux';
 import clsx from 'clsx';
 import toast, { useToasterStore } from 'react-hot-toast';
-import { MdPlayArrow, MdStop, MdReplay, MdSkipNext, MdCheck } from 'react-icons/md';
+import { MdPlayArrow, MdStop, MdReplay, MdSkipNext, MdCheck, MdNavigateNext } from 'react-icons/md';
 import { useRosServiceCaller } from '../hooks/useRosServiceCaller';
 import CompactSystemStatus from './CompactSystemStatus';
 import EpisodeStatus from './EpisodeStatus';
@@ -27,6 +27,7 @@ import SystemStatus from './SystemStatus';
 import Tooltip from './Tooltip';
 import PageType from '../constants/pageType';
 import TaskPhase from '../constants/taskPhases';
+import FullTaskStatus from './FullTaskStatus';
 
 const buttons = [
   {
@@ -42,6 +43,13 @@ const buttons = [
     color: '#d32f2f',
     description: 'Stop current task',
     shortcut: 'Space',
+  },
+  {
+    label: 'Skip\nTask',
+    icon: MdNavigateNext,
+    color: '#388e3c',
+    description: 'Skip current task',
+    shortcut: 'Ctrl+Shift+N',
   },
   {
     label: 'Retry',
@@ -111,6 +119,7 @@ export default function ControlPanel() {
   const taskStatus = useSelector((state) => state.tasks.taskStatus);
   const rosHost = useSelector((state) => state.ros.rosHost);
   const page = useSelector((state) => state.ui.currentPage);
+  const useMultiTaskMode = useSelector((state) => state.tasks.useMultiTaskMode);
 
   const [hovered, setHovered] = useState(null);
   const [pressed, setPressed] = useState(null);
@@ -118,6 +127,15 @@ export default function ControlPanel() {
   const [expandedSystemIndex, setExpandedSystemIndex] = useState(null);
   const [spinnerIndex, setSpinnerIndex] = useState(0);
   const startedRef = useRef(started);
+
+  const buttonEnabled = {
+    Start: true,
+    Stop: true,
+    Retry: true,
+    Next: true,
+    Finish: true,
+    'Skip\nTask': useMultiTaskMode && page === PageType.RECORD,
+  };
 
   const { sendRecordCommand } = useRosServiceCaller();
 
@@ -168,6 +186,7 @@ export default function ControlPanel() {
         return false;
       }
 
+      const isRecordTaskType = taskInfo?.taskType === 'record';
       const isInferenceTaskType = taskInfo?.taskType === 'inference';
 
       switch (label) {
@@ -175,23 +194,36 @@ export default function ControlPanel() {
           // Start button disabled when task is running or when running flag is true
           return !taskStatus.running;
         case 'Stop':
-          // Stop button enabled only when task is running
           if (isInferenceTaskType) {
             return taskStatus.running && taskInfo.recordInferenceMode;
           }
+          // Stop button enabled only when task is running
           return taskStatus.running;
         case 'Retry':
-          // Retry button enabled only when task is stopped
+          if (isRecordTaskType && useMultiTaskMode) {
+            return taskStatus.running;
+          }
+
           if (isInferenceTaskType) {
             return !isReadyState(taskStatus.phase) && taskInfo.recordInferenceMode;
           }
+          // Retry button enabled only when task is stopped
           return !isReadyState(taskStatus.phase);
         case 'Next':
-          // Next button enabled only when task is stopped
+          if (isRecordTaskType && useMultiTaskMode) {
+            return taskStatus.running;
+          }
+
           if (isInferenceTaskType) {
             return !isReadyState(taskStatus.phase) && taskInfo.recordInferenceMode;
           }
+          // Next button enabled only when task is stopped
           return !isReadyState(taskStatus.phase);
+        case 'Skip\nTask':
+          if (page === PageType.RECORD) {
+            return !isReadyState(taskStatus.phase) && taskStatus.running;
+          }
+          return false;
         case 'Finish':
           // Finish button enabled only when task is stopped
           return true; // Always enabled
@@ -199,7 +231,14 @@ export default function ControlPanel() {
           return false;
       }
     },
-    [taskStatus.phase, taskStatus.running, taskInfo.recordInferenceMode, taskInfo.taskType, page]
+    [
+      taskStatus.phase,
+      taskStatus.running,
+      taskInfo.recordInferenceMode,
+      taskInfo.taskType,
+      page,
+      useMultiTaskMode,
+    ]
   );
 
   const validateTaskInfo = useCallback(() => {
@@ -223,7 +262,9 @@ export default function ControlPanel() {
         value === undefined ||
         value === '' ||
         (typeof value === 'string' && value.trim() === '') ||
-        (typeof value === 'number' && (isNaN(value) || value <= 0))
+        (typeof value === 'number' && (isNaN(value) || value <= 0)) ||
+        (Array.isArray(value) && value.length === 0) ||
+        (Array.isArray(value) && value.every((item) => item.trim() === ''))
       ) {
         missingFields.push(field.label);
       }
@@ -269,6 +310,8 @@ export default function ControlPanel() {
           result = await sendRecordCommand('rerecord');
         } else if (cmd === 'Next') {
           result = await sendRecordCommand('next');
+        } else if (cmd === 'Skip\nTask') {
+          result = await sendRecordCommand('skip_task');
         } else if (cmd === 'Finish') {
           result = await sendRecordCommand('finish');
         } else {
@@ -438,20 +481,19 @@ export default function ControlPanel() {
       'font-extrabold',
       'w-full',
       'h-full',
-      'flex-grow',
-      'min-w-16',
+      'min-w-0',
       'rounded-2xl',
       'border-none',
       'cursor-pointer',
-      'mr-2',
+      'px-2',
       'flex',
       'items-center',
       'justify-center',
       'flex-col',
-      'gap-1',
       'bg-gray-100',
       'transition-all',
       'duration-200',
+      'overflow-hidden',
       {
         'bg-gray-300': pressed === label && !isDisabled,
         'bg-gray-200': hovered === label && pressed !== label && !isDisabled,
@@ -509,7 +551,7 @@ export default function ControlPanel() {
 
   return (
     <div className={classControlPanelBody}>
-      <div className="flex flex-[2] items-center w-full h-full gap-4">
+      <div className="flex flex-[2] w-full h-full gap-4">
         {buttons.map(({ label, icon: Icon, color, description, shortcut }) => {
           const isDisabled = !isButtonEnabled(label);
 
@@ -525,16 +567,23 @@ export default function ControlPanel() {
             </div>
           );
 
+          if (!buttonEnabled[label]) {
+            return null;
+          }
+
           return (
             <Tooltip
               key={label}
               content={tooltipContent}
               disabled={false}
-              className="whitespace-normal max-w-48"
+              className="relative h-full flex-1 min-w-0"
             >
               <button
                 className={classControlPanelButtons(label, isDisabled)}
-                style={{ fontFamily: 'Pretendard Variable', fontSize: 'clamp(1rem, 2vw, 2.2rem)' }}
+                style={{
+                  fontFamily: 'Pretendard Variable',
+                  fontSize: 'clamp(1rem, 1.5vw, 2.2rem)',
+                }}
                 tabIndex={isDisabled ? -1 : 0}
                 onClick={() => !isDisabled && handleCommand(label)}
                 onKeyUp={(e) => handleButtonKeyUp(e, label, isDisabled)}
@@ -545,13 +594,16 @@ export default function ControlPanel() {
                 onMouseUp={handleMouseUp}
                 disabled={isDisabled}
               >
+                <span className="h-[30%] w-full flex items-center justify-center"></span>
                 <span className={classControlPanelButtonIcon}>
                   <Icon
                     style={{ fontSize: 'clamp(1rem, 4vw, 4rem)' }}
                     color={isDisabled ? '#9ca3af' : color}
                   />
                 </span>
-                {label}
+                <span className="text-center whitespace-pre-line leading-tight text-ellipsis overflow-hidden block w-full h-full flex items-center justify-center">
+                  {label}
+                </span>
               </button>
             </Tooltip>
           );
@@ -574,17 +626,39 @@ export default function ControlPanel() {
             )}
           </div>
         </div>
-        <div className="w-full flex flex-col items-center gap-1">
-          <div className="w-full max-w-xl flex flex-col items-center gap-1">
-            <div className="flex px-3 w-full justify-end text-xl text-gray-500 font-bold whitespace-nowrap ">
-              {taskStatus.proceedTime} / {taskStatus.totalTime} (s)
+        {!useMultiTaskMode && (
+          <div className="w-full flex flex-col items-center gap-1">
+            <div className="w-full max-w-xl flex flex-col items-center gap-1">
+              <div className="flex px-3 w-full justify-end text-xl text-gray-500 font-bold whitespace-nowrap ">
+                {taskStatus.proceedTime} / {taskStatus.totalTime} (s)
+              </div>
+              <ProgressBar percent={taskStatus.progress} />
             </div>
-            <ProgressBar percent={taskStatus.progress} />
           </div>
-        </div>
+        )}
+        {useMultiTaskMode && (
+          <>
+            <div className="h-3"></div>
+            <div className="flex items-center justify-center gap-2">
+              <div className="flex w-full justify-center text-2xl text-gray-900 font-semibold whitespace-nowrap">
+                {taskStatus.proceedTime}
+              </div>
+              <div className="w-full justify-center text-2xl text-gray-500 font-semibold whitespace-nowrap">
+                seconds passed
+              </div>
+            </div>
+          </>
+        )}
       </div>
-      <div className="flex justify-end flex-[0.4] min-w-30 h-full p-1">
-        <EpisodeStatus />
+      <div className="flex justify-end flex-[0.4] min-w-30 h-full p-1 gap-2">
+        {useMultiTaskMode ? (
+          <div className="flex flex-col gap-2">
+            <FullTaskStatus />
+            <EpisodeStatus />
+          </div>
+        ) : (
+          <EpisodeStatus />
+        )}
       </div>
       <div className="flex flex-col gap-2">
         {expandedSystemIndex !== null ? (

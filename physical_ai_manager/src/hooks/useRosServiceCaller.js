@@ -91,6 +91,9 @@ export function useRosServiceCaller() {
           case 'next':
             command_enum = TaskCommand.NEXT;
             break;
+          case 'skip_task':
+            command_enum = TaskCommand.SKIP_TASK;
+            break;
           case 'rerecord':
             command_enum = TaskCommand.RERECORD;
             break;
@@ -109,12 +112,16 @@ export function useRosServiceCaller() {
           taskType = 'inference';
         }
 
+        const task_instruction = taskInfo.taskInstruction.filter(
+          (instruction) => instruction.trim() !== ''
+        );
+
         const request = {
           task_info: {
             task_name: String(taskInfo.taskName || ''),
             task_type: String(taskType),
             user_id: String(taskInfo.userId || ''),
-            task_instruction: String(taskInfo.taskInstruction || ''),
+            task_instruction: task_instruction,
             policy_path: String(taskInfo.policyPath || ''),
             record_inference_mode: Boolean(taskInfo.recordInferenceMode),
             fps: Number(taskInfo.fps) || 0,
@@ -129,6 +136,8 @@ export function useRosServiceCaller() {
           },
           command: Number(command_enum),
         };
+
+        console.log('request:', request);
 
         console.log(`Sending command '${command}' (${command_enum}) to service`);
         const result = await callService(

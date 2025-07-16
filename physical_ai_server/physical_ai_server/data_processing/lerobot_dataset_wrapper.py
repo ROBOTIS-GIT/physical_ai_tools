@@ -14,7 +14,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
-# Author: Dongyun Kim
+# Author: Dongyun Kim, Seongwoo Kim
 
 import threading
 
@@ -38,12 +38,92 @@ class LeRobotDatasetWrapper(LeRobotDataset):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.encoders = {}
+        self.total_frame_buffer = None
+        self.episode_ranges = []
+        self._append_in_progress = False
+
+    def video_encoding(self):
+        video_paths = {}
+        for episode_index, (start, end) in enumerate(self.episode_ranges):
+            episode_buffer = self._extract_episode_buffer(start, end, episode_index)
+            for key, ep in episode_buffer.items():
+                if 'observation.images' in key:
+                    video_path = self.root / self.meta.get_video_file_path(episode_index, key)
+                    video_paths[key] = str(video_path)
+                    self._create_video(ep, video_path)
+
+    def append_episode_buffer(self, episode_buffer: dict, episode_length) -> None:
+        self._append_in_progress = True
+
+        try:
+            if not hasattr(self, 'total_frame_buffer') or self.total_frame_buffer is None:
+                self.total_frame_buffer = self.create_episode_buffer()
+            if not hasattr(self, 'episode_ranges'):
+                self.episode_ranges = []
+
+            start_index = self.total_frame_buffer['size']
+            num_new_frames = episode_length
+            end_index = start_index + num_new_frames - 1
+
+            for key, value in episode_buffer.items():
+                if key == 'size':
+                    continue
+                if key not in self.total_frame_buffer:
+                    if isinstance(value, list):
+                        self.total_frame_buffer[key] = value.copy()
+                    elif hasattr(value, 'tolist'):
+                        self.total_frame_buffer[key] = value.tolist()
+                    else:
+                        self.total_frame_buffer[key] = [value]
+                else:
+                    if isinstance(self.total_frame_buffer[key], list):
+                        if isinstance(value, list):
+                            self.total_frame_buffer[key].extend(value)
+                        elif hasattr(value, 'tolist'):
+                            self.total_frame_buffer[key].extend(value.tolist())
+                        else:
+                            self.total_frame_buffer[key].append(value)
+
+            if 'frame_index' not in episode_buffer:
+                self.total_frame_buffer['frame_index'].extend(
+                    list(range(start_index, start_index + num_new_frames))
+                )
+
+            if 'timestamp' not in episode_buffer:
+                self.total_frame_buffer['timestamp'].extend(
+                    [(start_index + i) / self.fps for i in range(num_new_frames)]
+                )
+
+            self.total_frame_buffer['size'] += num_new_frames
+            self.episode_ranges.append((start_index, end_index))
+        finally:
+            self._append_in_progress = False
+
+    def _extract_episode_buffer(self, start: int, end: int, episode_index) -> dict:
+        episode_buffer = {}
+        for key, value in self.total_frame_buffer.items():
+            if isinstance(value, (list, np.ndarray)):
+                episode_buffer[key] = value[start:end + 1]
+            else:
+                episode_buffer[key] = value
+
+        episode_length = end - start + 1
+        episode_buffer['size'] = episode_length
+        episode_buffer['index'] = np.arange(start, end + 1)
+        episode_buffer['episode_index'] = np.full((episode_length,), episode_index)
+
+        return episode_buffer
 
     def add_frame_without_write_image(self, frame: dict) -> None:
         validate_frame(frame, self.features)
 
         if self.episode_buffer is None:
             self.episode_buffer = self.create_episode_buffer()
+
+        if 'task' in self.episode_buffer and self.episode_buffer['task']:
+            last_task = self.episode_buffer['task'][-1]
+            if frame.get('task') != last_task:
+                self.episode_buffer = self.create_episode_buffer()
 
         # Automatically add frame_index and timestamp to episode buffer
         frame_index = self.episode_buffer['size']
@@ -60,7 +140,7 @@ class LeRobotDatasetWrapper(LeRobotDataset):
 
         self.episode_buffer['size'] += 1
 
-    def save_episode_without_write_image(self):
+    def save_episode_without_video_encoding(self):
         episode_buffer = self.episode_buffer
         validate_episode_buffer(
             episode_buffer,
@@ -85,6 +165,66 @@ class LeRobotDatasetWrapper(LeRobotDataset):
 
         # Given tasks in natural language, find their corresponding task indices
         episode_buffer['task_index'] = np.array([self.meta.get_task_index(task) for task in tasks])
+
+        for key, ft in self.features.items():
+            if (key in ['index', 'episode_index', 'task_index'] or
+                    ft['dtype'] in ['image', 'video']):
+                continue
+            episode_buffer[key] = np.stack(episode_buffer[key])
+
+        self._save_episode_table(episode_buffer, episode_index)
+        ep_stats = self.compute_episode_stats_buffer(episode_buffer, self.features)
+
+        video_paths = {}
+        video_count = 0
+        for key, ep in self.episode_buffer.items():
+            if 'observation.images' in key:
+                video_path = self.root / self.meta.get_video_file_path(episode_index, key)
+                video_paths[key] = str(video_path)
+                video_count += 1
+                video_info = {
+                    'video.height': self.features[key]['shape'][0],
+                    'video.width': self.features[key]['shape'][1],
+                    'video.channels': self.features[key]['shape'][2],
+                    'video.codec': 'libx264',
+                    'video.pix_fmt': 'yuv420p',
+                }
+                self.meta.info['features'][key]['info'] = video_info
+
+        self.save_meta_info(
+            video_count,
+            episode_index,
+            episode_length,
+            episode_tasks,
+            ep_stats
+        )
+        self.append_episode_buffer(episode_buffer, episode_length)
+
+    def save_episode_without_write_image(self):
+        episode_buffer = self.episode_buffer
+        validate_episode_buffer(
+            episode_buffer,
+            self.meta.total_episodes,
+            self.features)
+
+        episode_length = episode_buffer.pop('size')
+        tasks = episode_buffer.pop('task')
+        episode_tasks = list(set(tasks))
+        episode_index = episode_buffer['episode_index']
+
+        episode_buffer['index'] = np.arange(
+            self.meta.total_frames,
+            self.meta.total_frames + episode_length)
+        episode_buffer['episode_index'] = np.full((episode_length,), episode_index)
+        # Add new tasks to the tasks dictionary
+        for task in episode_tasks:
+            task_index = self.meta.get_task_index(task)
+            if task_index is None:
+                self.meta.add_task(task)
+
+        # Given tasks in natural language, find their corresponding task indices
+        episode_buffer['task_index'] = np.array([self.meta.get_task_index(task) for task in tasks])
+
         for key, ft in self.features.items():
             if (key in ['index', 'episode_index', 'task_index'] or
                     ft['dtype'] in ['image', 'video']):
@@ -195,6 +335,9 @@ class LeRobotDatasetWrapper(LeRobotDataset):
                 return False
 
         return True
+
+    def check_append_buffer_completed(self) -> bool:
+        return not self._append_in_progress
 
     def compute_episode_stats_buffer(self, episode_buffer, features):
         ep_stats = {}

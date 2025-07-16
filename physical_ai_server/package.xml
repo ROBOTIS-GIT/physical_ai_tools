@@ -2,13 +2,14 @@
 <?xml-model href="http://download.ros.org/schema/package_format3.xsd" schematypens="http://www.w3.org/2001/XMLSchema"?>
 <package format="3">
   <name>physical_ai_server</name>
-  <version>0.5.9</version>
+  <version>0.5.10</version>
   <description>
     ROS 2 package for Open Platform AI Kit integration
   </description>
   <maintainer email="pyo@robotis.com">Pyo</maintainer>
   <license>Apache 2.0</license>
   <author email="kdy@robotis.com">Dongyun Kim</author>
+  <author email="kimsw@robotis.com">Seongwoo Kim</author>
   <depend>rclpy</depend>
   <depend>std_msgs</depend>
   <depend>sensor_msgs</depend>

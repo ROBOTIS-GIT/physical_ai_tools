@@ -21,25 +21,20 @@ const Tooltip = ({ children, content, disabled = false, className }) => {
   const [isVisible, setIsVisible] = useState(false);
 
   if (disabled) {
-    return children;
+    return <div className={className}>{children}</div>;
   }
 
   return (
     <div
-      className="relative flex-grow h-full"
+      className={clsx('relative', className)}
       onMouseEnter={() => setIsVisible(true)}
       onMouseLeave={() => setIsVisible(false)}
     >
       {children}
       {isVisible && (
         <div
-          className={clsx(
-            'absolute z-50 px-3 py-2 text-sm font-medium text-white bg-gray-900 rounded-lg shadow-lg',
-            'bottom-full left-1/2 transform -translate-x-1/2 mb-2',
-            'transition-opacity duration-200 opacity-100',
-            'whitespace-nowrap max-w-xs',
-            className
-          )}
+          className="absolute z-50 px-3 py-2 text-sm font-medium text-white bg-gray-900 rounded-lg shadow-lg bottom-full left-1/2 transform -translate-x-1/2 mb-2 transition-opacity duration-200 opacity-100 whitespace-nowrap max-w-xs"
+          style={{ pointerEvents: 'none' }}
         >
           {content}
           {/* Arrow */}

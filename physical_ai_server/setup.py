@@ -6,14 +6,15 @@ from setuptools import setup
 
 package_name = 'physical_ai_server'
 authors_info = [
-    ('Dongyun Kim', 'kdy@robotis.com')
+    ('Dongyun Kim', 'kdy@robotis.com'),
+    ('Seongwoo Kim', 'kimsw@robotis.com')
 ]
 authors = ', '.join(author for author, _ in authors_info)
 author_emails = ', '.join(email for _, email in authors_info)
 
 setup(
     name=package_name,
-    version='0.5.9',
+    version='0.5.10',
     packages=find_packages(),
     data_files=[
         ('share/ament_index/resource_index/packages', ['resource/' + package_name]),

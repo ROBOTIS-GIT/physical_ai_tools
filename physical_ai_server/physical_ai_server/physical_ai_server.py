@@ -14,7 +14,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
-# Author: Dongyun Kim
+# Author: Dongyun Kim, Seongwoo Kim
 
 import glob
 import os
@@ -108,7 +108,7 @@ class PhysicalAIServer(Node):
             'camera_topic_list',
             'joint_topic_list',
             'observation_list',
-            'joint_list'
+            'joint_list',
         ]
 
         # Declare parameters
@@ -444,7 +444,10 @@ class PhysicalAIServer(Node):
 
                     elif request.command == SendCommand.Request.MOVE_TO_NEXT:
                         self.get_logger().info('Moving to next episode')
-                        self.data_manager.record_early_save()
+                        if len(request.task_info.task_instruction) > 1:
+                            self.data_manager.record_next_episode()
+                        else:
+                            self.data_manager.record_early_save()
                         response.success = True
                         response.message = 'Moved to next episode'
 
@@ -460,6 +463,12 @@ class PhysicalAIServer(Node):
                         self.on_inference = False
                         response.success = True
                         response.message = 'All operations terminated'
+
+                    elif request.command == SendCommand.Request.SKIP_TASK:
+                        self.get_logger().info('Skipping task')
+                        self.data_manager.record_skip_task()
+                        response.success = True
+                        response.message = 'Task skipped successfully'
 
         except Exception as e:
             self.get_logger().error(f'Error in user interaction: {str(e)}')
