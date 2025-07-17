@@ -2,6 +2,10 @@
 Changelog for package physical_ai_manager
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
+0.5.11 (2025-07-16)
+------------------
+* None
+
 0.5.10 (2025-07-15)
 ------------------
 * Added multi-tasking data recording support in record page

@@ -2,6 +2,11 @@
 Changelog for package physical_ai_server
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
+0.5.11 (2025-07-16)
+------------------
+* Added functionality for evaluating trained models
+* Contributors: Dongyun Kim
+
 0.5.10 (2025-07-15)
 ------------------
 * Added multi-tasking data recording support to the Physical AI Server
