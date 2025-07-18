@@ -2,6 +2,11 @@
 Changelog for package physical_ai_server
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
+0.5.12 (2025-07-18)
+------------------
+* Enabled appending video encodings without overwriting existing data in multi-task mode
+* Contributors: Seongwoo Kim
+
 0.5.11 (2025-07-16)
 ------------------
 * Added functionality for evaluating trained models

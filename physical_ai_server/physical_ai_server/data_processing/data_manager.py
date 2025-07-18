@@ -452,7 +452,6 @@ class DataManager:
             'names': joint_list,
             'shape': (len(joint_list),)
         }
-
         return LeRobotDatasetWrapper.create(
                 repo_id=repo_id,
                 fps=self._task_info.fps,
