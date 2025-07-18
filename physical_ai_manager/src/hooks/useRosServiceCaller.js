@@ -19,10 +19,12 @@ import { useSelector } from 'react-redux';
 import ROSLIB from 'roslib';
 import PageType from '../constants/pageType';
 import TaskCommand from '../constants/taskCommand';
+import TrainingCommand from '../constants/trainingCommand';
 import rosConnectionManager from '../utils/rosConnectionManager';
 
 export function useRosServiceCaller() {
   const taskInfo = useSelector((state) => state.tasks.taskInfo);
+  const trainingInfo = useSelector((state) => state.training.trainingInfo);
   const page = useSelector((state) => state.ui.currentPage);
   const rosbridgeUrl = useSelector((state) => state.ros.rosbridgeUrl);
 
@@ -246,6 +248,134 @@ export function useRosServiceCaller() {
     }
   }, [callService]);
 
+  const getUserList = useCallback(async () => {
+    try {
+      console.log('Calling service /training/get_user_list with request:', {});
+
+      const result = await callService(
+        '/training/get_user_list',
+        'physical_ai_interfaces/srv/GetUserList',
+        {}
+      );
+
+      console.log('getUserList service response:', result);
+      return result;
+    } catch (error) {
+      console.error('Failed to get user list:', error);
+      throw new Error(`${error.message || error}`);
+    }
+  }, [callService]);
+
+  const getDatasetList = useCallback(
+    async (user_id) => {
+      try {
+        console.log('Calling service /training/get_dataset_list with request:', {
+          user_id: user_id,
+        });
+
+        const result = await callService(
+          '/training/get_dataset_list',
+          'physical_ai_interfaces/srv/GetDatasetList',
+          { user_id: user_id }
+        );
+
+        console.log('getDatasetList service response:', result);
+        return result;
+      } catch (error) {
+        console.error('Failed to get dataset list:', error);
+        throw new Error(`${error.message || error}`);
+      }
+    },
+    [callService]
+  );
+
+  const getPolicyList = useCallback(async () => {
+    try {
+      console.log('Calling service /training/get_policy_list with request:', {});
+
+      const result = await callService(
+        '/training/get_available_policy',
+        'physical_ai_interfaces/srv/GetPolicyList',
+        {}
+      );
+
+      console.log('getPolicyList service response:', result);
+      return result;
+    } catch (error) {
+      console.error('Failed to get policy list:', error);
+      throw new Error(`${error.message || error}`);
+    }
+  }, [callService]);
+
+  const getModelWeightList = useCallback(async () => {
+    try {
+      console.log('Calling service /training/get_model_weight_list with request:', {});
+
+      const result = await callService(
+        '/training/get_model_weight_list',
+        'physical_ai_interfaces/srv/GetModelWeightList',
+        {}
+      );
+
+      console.log('getModelWeightList service response:', result);
+      return result;
+    } catch (error) {
+      console.error('Failed to get model weight list:', error);
+      throw new Error(`${error.message || error}`);
+    }
+  }, [callService]);
+
+  const sendTrainingCommand = useCallback(
+    async (command) => {
+      try {
+        console.log('Calling service /training/send_training_command with request:', {
+          command: command,
+          training_info: trainingInfo,
+        });
+
+        let command_enum;
+        switch (command) {
+          case 'start':
+            command_enum = TrainingCommand.START;
+            break;
+          case 'finish':
+            command_enum = TrainingCommand.FINISH;
+            break;
+          default:
+            throw new Error(`Unknown command: ${command}`);
+        }
+
+        const result = await callService(
+          '/training/command',
+          'physical_ai_interfaces/srv/SendTrainingCommand',
+          {
+            command: command_enum,
+            training_info: {
+              dataset: trainingInfo.datasetRepoId,
+              policy_type: trainingInfo.policyType,
+              policy_device: trainingInfo.policyDevice,
+              output_folder_name: trainingInfo.outputFolderName,
+              seed: trainingInfo.seed,
+              num_workers: trainingInfo.numWorkers,
+              batch_size: trainingInfo.batchSize,
+              steps: trainingInfo.steps,
+              eval_freq: trainingInfo.evalFreq,
+              log_freq: trainingInfo.logFreq,
+              save_freq: trainingInfo.saveFreq,
+            },
+          }
+        );
+
+        console.log('sendTrainingCommand service response:', result);
+        return result;
+      } catch (error) {
+        console.error('Failed to send training command:', error);
+        throw new Error(`${error.message || error}`);
+      }
+    },
+    [callService, trainingInfo]
+  );
+
   return {
     callService,
     sendRecordCommand,
@@ -254,5 +384,10 @@ export function useRosServiceCaller() {
     setRobotType,
     registerHFUser,
     getRegisteredHFUser,
+    getUserList,
+    getDatasetList,
+    getPolicyList,
+    getModelWeightList,
+    sendTrainingCommand,
   };
 }
