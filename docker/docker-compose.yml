@@ -31,7 +31,7 @@ services:
       - /tmp/.X11-unix:/tmp/.X11-unix:rw
       - /tmp/.docker.xauth:/tmp/.docker.xauth:rw
       - ../:/root/ros2_ws/src/physical_ai_tools/
-      - /root/.cache/huggingface:/root/.cache/huggingface
+      - ${HOME}/.cache/huggingface:/root/.cache/huggingface
     privileged: true
     command: bash
     runtime: nvidia
