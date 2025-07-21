@@ -45,6 +45,7 @@ from physical_ai_server.utils.parameter_utils import (
 )
 
 import rclpy
+from rclpy.executors import MultiThreadedExecutor
 from rclpy.node import Node
 
 
@@ -581,10 +582,19 @@ class PhysicalAIServer(Node):
 def main(args=None):
     rclpy.init(args=args)
     node = PhysicalAIServer()
-    rclpy.spin(node)
-    node.destroy_node()
-    rclpy.shutdown()
-
+    
+    # 멀티스레드 실행기 사용
+    executor = MultiThreadedExecutor(num_threads=6)
+    executor.add_node(node)
+    
+    try:
+        executor.spin()
+    except KeyboardInterrupt:
+        pass
+    finally:
+        executor.shutdown()
+        node.destroy_node()
+        rclpy.shutdown()
 
 if __name__ == '__main__':
     main()

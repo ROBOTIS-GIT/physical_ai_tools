@@ -25,7 +25,7 @@ import time
 import cv2
 from geometry_msgs.msg import Twist
 from huggingface_hub import HfApi, snapshot_download
-from lerobot.common.datasets.utils import DEFAULT_FEATURES
+from lerobot.datasets.utils import DEFAULT_FEATURES
 from nav_msgs.msg import Odometry
 import numpy as np
 from physical_ai_interfaces.msg import TaskStatus

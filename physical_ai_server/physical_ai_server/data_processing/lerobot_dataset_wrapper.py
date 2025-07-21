@@ -18,11 +18,11 @@
 
 import threading
 
-from lerobot.common.datasets.compute_stats import (
+from lerobot.datasets.compute_stats import (
     get_feature_stats
 )
-from lerobot.common.datasets.lerobot_dataset import LeRobotDataset
-from lerobot.common.datasets.utils import (
+from lerobot.datasets.lerobot_dataset import LeRobotDataset
+from lerobot.datasets.utils import (
     validate_episode_buffer,
     validate_frame,
     write_episode,
@@ -114,7 +114,7 @@ class LeRobotDatasetWrapper(LeRobotDataset):
 
         return episode_buffer
 
-    def add_frame_without_write_image(self, frame: dict) -> None:
+    def add_frame_without_write_image(self, frame: dict, task: str) -> None:
         validate_frame(frame, self.features)
 
         if self.episode_buffer is None:
@@ -122,10 +122,11 @@ class LeRobotDatasetWrapper(LeRobotDataset):
 
         if 'task' in self.episode_buffer and self.episode_buffer['task']:
             last_task = self.episode_buffer['task'][-1]
-            if frame.get('task') != last_task:
+            if task != last_task:
                 self.episode_buffer = self.create_episode_buffer()
 
         # Automatically add frame_index and timestamp to episode buffer
+        self.episode_buffer['task'].append(task)
         frame_index = self.episode_buffer['size']
         timestamp = frame.pop('timestamp') if 'timestamp' in frame else frame_index / self.fps
         self.episode_buffer['frame_index'].append(frame_index)
