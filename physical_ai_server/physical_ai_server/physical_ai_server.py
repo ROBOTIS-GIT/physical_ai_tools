@@ -72,6 +72,11 @@ class PhysicalAIServer(Node):
 
         self._setup_timer_callbacks()
 
+        self._async_inference = True
+        self._used_action_count = 0
+        self._update_action_chunk = {'is_used': True, 'action_chunk': []}
+        self._remaining_action_chunk = []
+
     def _init_core_components(self):
         self.communicator: Optional[Communicator] = None
         self.data_manager: Optional[DataManager] = None
@@ -99,7 +104,8 @@ class PhysicalAIServer(Node):
     def _setup_timer_callbacks(self):
         self.timer_callback_dict = {
             'collection': self._data_collection_timer_callback,
-            'inference': self._inference_timer_callback
+            'inference': self._inference_timer_callback,
+            'async_action': self._async_action_publisher_timer_callback,
         }
 
     def init_ros_params(self, robot_type):
@@ -189,6 +195,15 @@ class PhysicalAIServer(Node):
             callback_function=self.timer_callback_dict[self.operation_mode]
         )
         self.timer_manager.start(timer_name=self.operation_mode)
+
+        if self._async_inference:
+            self.timer_manager.set_timer(
+                timer_name='async_action',
+                timer_frequency=15,
+                callback_function=self._async_action_publisher_timer_callback,
+                use_separate_thread=True
+            )
+            self.timer_manager.start(timer_name='async_action')
         self.get_logger().info(
             'Robot control parameters initialized successfully')
 
@@ -322,23 +337,18 @@ class PhysicalAIServer(Node):
         error_msg = ''
         current_status = TaskStatus()
         camera_msgs, follower_msgs, _ = self.communicator.get_latest_data()
-        camera_data, follower_data, _ = self.data_manager.convert_msgs_to_raw_datas(
+        self.camera_data, self.follower_data, _ = self.data_manager.convert_msgs_to_raw_datas(
             camera_msgs,
             follower_msgs,
             self.total_joint_order)
 
-        if (not camera_data or
-                len(camera_data) != len(self.params['camera_topic_list'])):
+        if (not self.camera_data or
+                len(self.camera_data) != len(self.params['camera_topic_list'])):
             self.get_logger().info('Waiting for camera data...')
             return
-        elif not follower_data or len(follower_data) != len(self.total_joint_order):
+        elif not self.follower_data or len(self.follower_data) != len(self.total_joint_order):
             self.get_logger().info('Waiting for follower data...')
             return
-
-        if self.inference_manager.policy is None:
-            if not self.inference_manager.load_policy():
-                self.get_logger().error('Failed to load policy')
-                return
 
         try:
             if not self.on_inference:
@@ -350,26 +360,31 @@ class PhysicalAIServer(Node):
                 self.timer_manager.stop(timer_name=self.operation_mode)
                 return
 
-            action = self.inference_manager.predict(
-                images=camera_data,
-                state=follower_data,
-                task_instruction=self.task_instruction
-            )
-
-            self.get_logger().info(
-                f'Action data: {action}')
-            action_pub_msgs = self.data_manager.data_converter.tensor_array2joint_msgs(
-                action,
-                self.joint_topic_types,
-                self.joint_order
-            )
-
-            self.communicator.publish_action(
-                joint_msg_datas=action_pub_msgs
-            )
             current_status = self.data_manager.get_current_record_status()
             current_status.phase = TaskStatus.INFERENCING
             self.communicator.publish_status(status=current_status)
+            
+            if not self._update_action_chunk['is_used']:
+                self.get_logger().info('Updating action chunk...')
+                self._update_action_chunk['is_used'] = True
+                self.remaining_actions = list(self._update_action_chunk['action_chunk'][self._used_action_count:])
+                self.get_logger().info(f'Remaining action chunk size: {len(self.remaining_actions)}')
+                self._used_action_count = 0
+
+            if len(self.remaining_actions) > 0:
+                action = self.remaining_actions.pop(0)
+                self.get_logger().info(
+                    f'Action data: {action}')
+                action_pub_msgs = self.data_manager.data_converter.tensor_array2joint_msgs(
+                    action,
+                    self.joint_topic_types,
+                    self.joint_order
+                )
+
+                self.communicator.publish_action(
+                    joint_msg_datas=action_pub_msgs
+                )
+                self._used_action_count += 1
 
         except Exception as e:
             self.get_logger().error(f'Inference failed, please check : {str(e)}')
@@ -383,6 +398,31 @@ class PhysicalAIServer(Node):
             self.inference_manager.clear_policy()
             self.timer_manager.stop(timer_name=self.operation_mode)
             return
+        
+    def _async_action_publisher_timer_callback(self):
+        if self.inference_manager.policy is None:
+            if not self.inference_manager.load_policy():
+                self.get_logger().error('Failed to load policy')
+                return
+            
+        if (not self.camera_data or
+                len(self.camera_data) != len(self.params['camera_topic_list'])):
+            self.get_logger().info('Waiting for camera data...')
+            return
+        elif not self.follower_data or len(self.follower_data) != len(self.total_joint_order):
+            self.get_logger().info('Waiting for follower data...')
+            return
+
+        action_chunk = self.inference_manager.predict_chunk(
+                images=self.camera_data,
+                state=self.follower_data,
+                task_instruction=self.task_instruction
+            )
+
+        self._update_action_chunk = {
+            'is_used': False,
+            'action_chunk': action_chunk
+        }
 
     def user_interaction_callback(self, request, response):
         try:

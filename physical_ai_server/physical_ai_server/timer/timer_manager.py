@@ -17,6 +17,7 @@
 # Author: Dongyun Kim
 
 from rclpy.node import Node
+from rclpy.callback_groups import ReentrantCallbackGroup
 
 
 class TimerManager:
@@ -26,12 +27,15 @@ class TimerManager:
         self._timer = {}
         self._timer_frequency = {}
         self._timer_callback = {}
+        self._callback_groups = {}
 
     def start(self, timer_name):
         if self._timer[timer_name] is None:
+            callback_group = self._callback_groups.get(timer_name, None)
             self._timer[timer_name] = self._node.create_timer(
                 1.0/self._timer_frequency[timer_name],
-                self._timer_callback[timer_name])
+                self._timer_callback[timer_name],
+                callback_group=callback_group)
 
     def stop(self, timer_name):
         if self._timer[timer_name] is not None:
@@ -42,7 +46,16 @@ class TimerManager:
         for timer_name in self._timer:
             self.stop(timer_name)
 
-    def set_timer(self, timer_name, timer_frequency, callback_function):
+    def set_timer(
+            self,
+            timer_name,
+            timer_frequency,
+            callback_function,
+            use_separate_thread=False):
         self._timer[timer_name] = None
         self._timer_frequency[timer_name] = timer_frequency
         self._timer_callback[timer_name] = callback_function
+        if use_separate_thread:
+            self._callback_groups[timer_name] = ReentrantCallbackGroup()
+        else:
+            self._callback_groups[timer_name] = None
