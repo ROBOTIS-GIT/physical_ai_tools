@@ -191,7 +191,6 @@ class Communicator:
         )
 
     def _camera_callback(self, name: str, msg: CompressedImage) -> None:
-        self.node.get_logger().info(f'Camera callback for {name}: {msg.header.stamp}')
         self.camera_topic_msgs[name] = msg
 
     def _follower_callback(self, name: str, msg: JointState) -> None:
