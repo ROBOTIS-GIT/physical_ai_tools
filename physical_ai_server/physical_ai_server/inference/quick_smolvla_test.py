@@ -35,7 +35,7 @@ async def quick_test():
         
         # Quick test
         images = {'top': np.random.randint(0, 255, (480, 640, 3), dtype=np.uint8)}
-        state = [0.0] * 8  # 7 joints + gripper
+        state = [0.0] * 7  # SmolVLA expects 7-dimensional state
         instruction = "turn the package around"
         
         print("\nTesting inference...")
