@@ -21,6 +21,7 @@ const PageType = {
   HOME: 'home',
   RECORD: 'record',
   INFERENCE: 'inference',
+  TRAINING: 'training',
 };
 
 export default PageType;

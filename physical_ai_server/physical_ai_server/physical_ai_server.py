@@ -19,17 +19,22 @@
 import glob
 import os
 from pathlib import Path
+import threading
 import time
 from typing import Optional
 
 from ament_index_python.packages import get_package_share_directory
-from physical_ai_interfaces.msg import TaskStatus
+from physical_ai_interfaces.msg import TaskStatus, TrainingStatus
 from physical_ai_interfaces.srv import (
+    GetDatasetList,
     GetHFUser,
+    GetModelWeightList,
     GetPolicyList,
     GetRobotTypeList,
     GetSavedPolicyList,
+    GetUserList,
     SendCommand,
+    SendTrainingCommand,
     SetHFUser,
     SetRobotType,
 )
@@ -38,6 +43,7 @@ from physical_ai_server.communication.communicator import Communicator
 from physical_ai_server.data_processing.data_manager import DataManager
 from physical_ai_server.inference.inference_manager import InferenceManager
 from physical_ai_server.timer.timer_manager import TimerManager
+from physical_ai_server.training.training_manager import TrainingManager
 from physical_ai_server.utils.parameter_utils import (
     declare_parameters,
     load_parameters,
@@ -53,6 +59,8 @@ class PhysicalAIServer(Node):
 
     DEFAULT_SAVE_ROOT_PATH = Path.home() / '.cache/huggingface/lerobot'
     DEFAULT_TOPIC_TIMEOUT = 5.0  # seconds
+    PUB_QOS_SIZE = 10
+    TRAINING_STATUS_TIMER_FREQUENCY = 0.5  # seconds
 
     def __init__(self):
         super().__init__('physical_ai_server')
@@ -66,6 +74,10 @@ class PhysicalAIServer(Node):
         self.robot_type_list = self.get_robot_type_list()
         self.start_recording_time: float = 0.0
 
+        self.training_thread = None
+        self.is_training = False
+        self.training_status_timer = None
+
         self._init_core_components()
 
         self._init_ros_service()
@@ -77,7 +89,9 @@ class PhysicalAIServer(Node):
         self.data_manager: Optional[DataManager] = None
         self.timer_manager: Optional[TimerManager] = None
         self.heartbeat_timer: Optional[TimerManager] = None
+        self.training_timer: Optional[TimerManager] = None
         self.inference_manager: Optional[InferenceManager] = None
+        self.training_manager: Optional[TrainingManager] = None
 
     def _init_ros_service(self):
         self.get_logger().info('Initializing ROS services...')
@@ -89,6 +103,15 @@ class PhysicalAIServer(Node):
             ('/get_registered_hf_user', GetHFUser, self.get_hf_user_callback),
             ('/get_policy_list', GetPolicyList, self.get_policy_list_callback),
             ('/get_saved_policies', GetSavedPolicyList, self.get_saved_policies_callback),
+            ('/training/command', SendTrainingCommand, self.user_training_interaction_callback),
+            ('/training/get_available_policy', GetPolicyList, self.get_available_list_callback),
+            ('/training/get_user_list', GetUserList, self.get_user_list_callback),
+            ('/training/get_dataset_list', GetDatasetList, self.get_dataset_list_callback),
+            (
+                '/training/get_model_weight_list',
+                GetModelWeightList,
+                self.get_model_weight_list_callback
+            ),
         ]
 
         for service_name, service_type, callback in service_definitions:
@@ -170,6 +193,25 @@ class PhysicalAIServer(Node):
         self.inference_manager = InferenceManager()
         self.get_logger().info(
             f'ROS parameters initialized successfully for robot type: {robot_type}')
+
+    def get_training_status(self):
+        msg = TrainingStatus()
+        if self.training_manager is None:
+            return
+        try:
+            current_status = self.training_manager.get_current_training_status()
+            training_info = current_status.training_info
+            current_step = current_status.current_step
+            msg.training_info = training_info
+            msg.current_step = current_step
+            msg.is_training = self.is_training
+            msg.error = ''
+        except Exception as e:
+            msg.current_step = 0
+            msg.error = str(e)
+            self.get_logger().error(f'Error publishing training status: {msg.error}')
+            return
+        return msg
 
     def init_robot_control_parameters_from_user_task(
             self,
@@ -353,7 +395,7 @@ class PhysicalAIServer(Node):
             action = self.inference_manager.predict(
                 images=camera_data,
                 state=follower_data,
-                task_instruction=self.task_instruction
+                task_instruction=self.task_instruction[0]
             )
 
             self.get_logger().info(
@@ -383,6 +425,87 @@ class PhysicalAIServer(Node):
             self.inference_manager.clear_policy()
             self.timer_manager.stop(timer_name=self.operation_mode)
             return
+
+    def user_training_interaction_callback(self, request, response):
+        try:
+            if request.command == SendTrainingCommand.Request.START:
+                self.training_manager = TrainingManager()
+                self.training_timer = TimerManager(node=self)
+                self.training_timer.set_timer(
+                    timer_name='training_status',
+                    timer_frequency=self.TRAINING_STATUS_TIMER_FREQUENCY,
+                    callback_function=lambda: self.communicator.publish_training_status(
+                        self.get_training_status()
+                    )
+                )
+                self.training_timer.start(timer_name='training_status')
+
+                if self.training_thread and self.training_thread.is_alive():
+                    response.success = False
+                    response.message = 'Training is already in progress'
+                    return response
+
+                output_folder_name = request.training_info.output_folder_name
+                weight_save_root_path = TrainingManager.get_weight_save_root_path()
+                output_path = weight_save_root_path / output_folder_name
+                if output_path.exists():
+                    response.success = False
+                    response.message = f'Output folder already exists: {output_path}'
+                    self.is_training = False
+                    self.communicator.publish_training_status(
+                        self.get_training_status()
+                    )
+
+                    self.training_manager.stop_event.set()
+                    self.training_timer.stop('training_status')
+                    return response
+
+                self.training_manager.training_info = request.training_info
+
+                def run_training():
+                    try:
+                        self.training_manager.train()
+                    finally:
+                        self.is_training = False
+                        self.get_logger().info('Training completed.')
+                        self.communicator.publish_training_status(
+                            self.get_training_status()
+                        )
+                        self.training_manager.stop_event.set()
+                        self.training_timer.stop('training_status')
+
+                self.training_thread = threading.Thread(target=run_training, daemon=True)
+                self.training_thread.start()
+                self.is_training = True
+
+                response.success = True
+                response.message = 'Training started successfully'
+
+            else:
+                if request.command == SendTrainingCommand.Request.FINISH:
+                    self.is_training = False
+                    self.communicator.publish_training_status(
+                        self.get_training_status()
+                    )
+                    self.training_timer.stop('training_status')
+                    if self.training_thread and self.training_thread.is_alive():
+                        self.training_manager.stop_event.set()
+                        self.training_thread.join()
+                        response.success = True
+                        response.message = 'Training stopped successfully'
+                    else:
+                        response.success = False
+                        response.message = 'No training in progress to stop'
+                # TODO: Uncomment when resume is implemented
+                # elif request.command == SendTrainingCommand.Request.RESUME:
+                #     pass
+
+        except Exception as e:
+            self.get_logger().error(f'Error in user_training_interaction: {str(e)}')
+            response.success = False
+            response.message = f'Error in user_training_interaction: {str(e)}'
+            return response
+        return response
 
     def user_interaction_callback(self, request, response):
         try:
@@ -502,6 +625,89 @@ class PhysicalAIServer(Node):
             response.success = True
             response.message = 'Policy list retrieved successfully'
         response.policy_list = policy_list
+        return response
+
+    def get_available_list_callback(self, request, response):
+        response.success = True
+        response.message = 'Policy and device lists retrieved successfully'
+        response.policy_list, response.device_list = TrainingManager.get_available_list()
+        return response
+
+    def get_user_list_callback(self, request, response):
+        try:
+            if not self.DEFAULT_SAVE_ROOT_PATH.exists():
+                response.user_list = []
+                response.success = False
+                response.message = f'Path {self.DEFAULT_SAVE_ROOT_PATH} does not exist.'
+                return response
+
+            folder_names = [
+                name for name in os.listdir(self.DEFAULT_SAVE_ROOT_PATH)
+                if (self.DEFAULT_SAVE_ROOT_PATH / name).is_dir()
+            ]
+
+            response.user_list = folder_names
+            response.success = True
+            response.message = f'Found {len(folder_names)} user(s).'
+
+        except Exception as e:
+            response.user_list = []
+            response.success = False
+            response.message = f'Error: {str(e)}'
+
+        return response
+
+    def get_dataset_list_callback(self, request, response):
+        user_id = request.user_id
+        user_path = self.DEFAULT_SAVE_ROOT_PATH / user_id
+
+        try:
+            if not user_path.exists() or not user_path.is_dir():
+                response.dataset_list = []
+                response.success = False
+                response.message = f"User ID '{user_id}' does not exist at path: {user_path}"
+                return response
+
+            dataset_names = [
+                name for name in os.listdir(user_path)
+                if (user_path / name).is_dir()
+            ]
+
+            response.dataset_list = dataset_names
+            response.success = True
+            response.message = f"Found {len(dataset_names)} dataset(s) for user '{user_id}'."
+
+        except Exception as e:
+            response.dataset_list = []
+            response.success = False
+            response.message = f'Error: {str(e)}'
+
+        return response
+
+    def get_model_weight_list_callback(self, request, response):
+        save_root_path = TrainingManager.get_weight_save_root_path()
+        self.get_logger().info(f'Getting model weight list from: {save_root_path}')
+        try:
+            if not save_root_path.exists():
+                response.success = False
+                response.message = f'Path does not exist: {save_root_path}'
+                response.model_weight_list = []
+                return response
+
+            model_folders = [
+                f.name for f in save_root_path.iterdir()
+                if f.is_dir()
+            ]
+
+            response.success = True
+            response.message = f'Found {len(model_folders)} model weights'
+            response.model_weight_list = model_folders
+
+        except Exception as e:
+            response.success = False
+            response.message = f'Error: {str(e)}'
+            response.model_weight_list = []
+
         return response
 
     def get_saved_policies_callback(self, request, response):

@@ -133,9 +133,13 @@ const InfoPanel = () => {
       console.log('getRegisteredHFUser result:', result);
 
       if (result && result.user_id_list) {
-        setUserIdList(result.user_id_list);
-        toast.success('User ID list loaded successfully!');
-        setShowUserIdDropdown(true);
+        if (result.success) {
+          setUserIdList(result.user_id_list);
+          toast.success('User ID list loaded successfully!');
+          setShowUserIdDropdown(true);
+        } else {
+          toast.error('Failed to get user ID list: ' + result.message);
+        }
       } else {
         toast.error('Failed to get user ID list from response');
       }

@@ -27,11 +27,21 @@ import {
   setUseMultiTaskMode,
   setMultiTaskIndex,
 } from '../features/tasks/taskSlice';
+import {
+  setIsTraining,
+  setTopicReceived,
+  setTrainingInfo,
+  setCurrentStep,
+  setLastUpdate,
+  setSelectedUser,
+  setSelectedDataset,
+} from '../features/training/trainingSlice';
 import rosConnectionManager from '../utils/rosConnectionManager';
 
-export function useRosTaskStatus() {
+export function useRosTopicSubscription() {
   const taskStatusTopicRef = useRef(null);
   const heartbeatTopicRef = useRef(null);
+  const trainingStatusTopicRef = useRef(null);
 
   const dispatch = useDispatch();
   const rosbridgeUrl = useSelector((state) => state.ros.rosbridgeUrl);
@@ -49,6 +59,11 @@ export function useRosTaskStatus() {
       heartbeatTopicRef.current.unsubscribe();
       heartbeatTopicRef.current = null;
       console.log('Heartbeat topic unsubscribed');
+    }
+    if (trainingStatusTopicRef.current) {
+      trainingStatusTopicRef.current.unsubscribe();
+      trainingStatusTopicRef.current = null;
+      console.log('Training status topic unsubscribed');
     }
     setConnected(false);
     dispatch(setHeartbeatStatus('disconnected'));
@@ -208,6 +223,7 @@ export function useRosTaskStatus() {
       try {
         await subscribeToTaskStatus();
         await subscribeToHeartbeat();
+        await subscribeToTrainingStatus();
       } catch (error) {
         console.error('Failed to initialize ROS subscriptions:', error);
       }
@@ -242,11 +258,70 @@ export function useRosTaskStatus() {
     }));
   }, []);
 
+  const subscribeToTrainingStatus = useCallback(async () => {
+    try {
+      const ros = await rosConnectionManager.getConnection(rosbridgeUrl);
+      if (!ros) return;
+
+      // Skip if already subscribed
+      if (trainingStatusTopicRef.current) {
+        console.log('Training status already subscribed, skipping...');
+        return;
+      }
+
+      setConnected(true);
+      trainingStatusTopicRef.current = new ROSLIB.Topic({
+        ros,
+        name: '/training/status',
+        messageType: 'physical_ai_interfaces/msg/TrainingStatus',
+      });
+
+      trainingStatusTopicRef.current.subscribe((msg) => {
+        console.log('Received training status:', msg);
+
+        if (msg.error !== '') {
+          console.log('error:', msg.error);
+          toast.error(msg.error);
+          return;
+        }
+
+        // ROS message to React state
+        dispatch(
+          setTrainingInfo({
+            datasetRepoId: msg.training_info.dataset || '',
+            policyType: msg.training_info.policy_type || '',
+            policyDevice: msg.training_info.policy_device || '',
+            outputFolderName: msg.training_info.output_folder_name || '',
+            resume: msg.training_info.resume || false,
+            seed: msg.training_info.seed || 0,
+            numWorkers: msg.training_info.num_workers || 0,
+            batchSize: msg.training_info.batch_size || 0,
+            steps: msg.training_info.steps || 0,
+            evalFreq: msg.training_info.eval_freq || 0,
+            logFreq: msg.training_info.log_freq || 0,
+            saveFreq: msg.training_info.save_freq || 0,
+          })
+        );
+
+        const datasetParts = msg.training_info.dataset.split('/');
+        dispatch(setSelectedUser(datasetParts[0] || ''));
+        dispatch(setSelectedDataset(datasetParts[1] || ''));
+        dispatch(setIsTraining(msg.is_training));
+        dispatch(setCurrentStep(msg.current_step || 0));
+        dispatch(setTopicReceived(true));
+        dispatch(setLastUpdate(Date.now()));
+      });
+    } catch (error) {
+      console.error('Failed to subscribe to training status topic:', error);
+    }
+  }, [dispatch, rosbridgeUrl]);
+
   return {
     connected,
     subscribeToTaskStatus,
     cleanup,
     getPhaseName,
     resetTaskToIdle,
+    subscribeToTrainingStatus,
   };
 }

@@ -1,0 +1,13 @@
+########################################
+# Constants
+########################################
+# command
+uint8 NONE = 0
+uint8 START = 1
+uint8 FINISH = 2
+
+uint8 command
+TrainingInfo training_info
+---
+bool success
+string message

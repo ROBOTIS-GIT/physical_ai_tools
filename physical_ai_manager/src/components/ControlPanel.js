@@ -29,51 +29,6 @@ import PageType from '../constants/pageType';
 import TaskPhase from '../constants/taskPhases';
 import FullTaskStatus from './FullTaskStatus';
 
-const buttons = [
-  {
-    label: 'Start',
-    icon: MdPlayArrow,
-    color: '#1976d2',
-    description: 'Start recording task',
-    shortcut: 'Space',
-  },
-  {
-    label: 'Stop',
-    icon: MdStop,
-    color: '#d32f2f',
-    description: 'Stop current task',
-    shortcut: 'Space',
-  },
-  {
-    label: 'Skip\nTask',
-    icon: MdNavigateNext,
-    color: '#388e3c',
-    description: 'Skip current task',
-    shortcut: 'Ctrl+Shift+N',
-  },
-  {
-    label: 'Retry',
-    icon: MdReplay,
-    color: '#fbc02d',
-    description: 'Retry current episode',
-    shortcut: '←',
-  },
-  {
-    label: 'Next',
-    icon: MdSkipNext,
-    color: '#388e3c',
-    description: 'Move to next episode',
-    shortcut: '→',
-  },
-  {
-    label: 'Finish',
-    icon: MdCheck,
-    color: '#388e3c',
-    description: 'Finish and save task',
-    shortcut: 'Ctrl+Shift+X',
-  },
-];
-
 const phaseGuideMessages = {
   [TaskPhase.READY]: '📍 Ready to start',
   [TaskPhase.WARMING_UP]: '🔥 Warmup in progress',
@@ -127,6 +82,51 @@ export default function ControlPanel() {
   const [expandedSystemIndex, setExpandedSystemIndex] = useState(null);
   const [spinnerIndex, setSpinnerIndex] = useState(0);
   const startedRef = useRef(started);
+
+  const buttons = [
+    {
+      label: 'Start',
+      icon: MdPlayArrow,
+      color: '#1976d2',
+      description: 'Start recording task',
+      shortcut: 'Space',
+    },
+    {
+      label: 'Stop',
+      icon: MdStop,
+      color: '#d32f2f',
+      description: useMultiTaskMode ? 'Stop current task' : 'Stop and save current episode',
+      shortcut: 'Space',
+    },
+    {
+      label: 'Skip\nTask',
+      icon: MdNavigateNext,
+      color: '#388e3c',
+      description: 'Skip current task',
+      shortcut: 'Ctrl+Shift+N',
+    },
+    {
+      label: 'Retry',
+      icon: MdReplay,
+      color: '#fbc02d',
+      description: useMultiTaskMode ? 'Retry current task' : 'Retry current episode',
+      shortcut: '←',
+    },
+    {
+      label: 'Next',
+      icon: MdSkipNext,
+      color: '#388e3c',
+      description: useMultiTaskMode ? 'Move to next task' : 'Move to next episode',
+      shortcut: '→',
+    },
+    {
+      label: 'Finish',
+      icon: MdCheck,
+      color: '#388e3c',
+      description: useMultiTaskMode ? 'Finish and save' : 'Finish and save task',
+      shortcut: 'Ctrl+Shift+X',
+    },
+  ];
 
   const buttonEnabled = {
     Start: true,

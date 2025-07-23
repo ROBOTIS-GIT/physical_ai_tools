@@ -20,12 +20,14 @@ import { configureStore } from '@reduxjs/toolkit';
 import taskSlice from '../features/tasks/taskSlice';
 import uiSlice from '../features/ui/uiSlice';
 import rosSlice from '../features/ros/rosSlice';
+import trainingSlice from '../features/training/trainingSlice';
 
 export const store = configureStore({
   reducer: {
     tasks: taskSlice,
     ros: rosSlice,
     ui: uiSlice,
+    training: trainingSlice,
   },
   middleware: (getDefaultMiddleware) =>
     getDefaultMiddleware({
