@@ -33,10 +33,17 @@ async def quick_test():
             print(f"❌ Failed: {msg}")
             return
         
-        # Quick test
-        images = {'top': np.random.randint(0, 255, (480, 640, 3), dtype=np.uint8)}
+        # Quick test with CORRECT camera names and image sizes
+        images = {
+            'cam_top': np.random.randint(0, 255, (240, 424, 3), dtype=np.uint8),
+            'cam_wrist': np.random.randint(0, 255, (240, 424, 3), dtype=np.uint8)
+        }
         state = [0.0] * 7  # SmolVLA expects 7-dimensional state
         instruction = "turn the package around"
+        
+        print(f"Image cameras: {list(images.keys())}")
+        print(f"Image shape: {images['cam_top'].shape}")
+        print(f"State dimension: {len(state)}")
         
         print("\nTesting inference...")
         action = await manager.predict_async(images, state, instruction)
