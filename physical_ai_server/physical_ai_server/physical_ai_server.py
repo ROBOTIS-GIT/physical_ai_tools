@@ -36,7 +36,7 @@ from physical_ai_interfaces.srv import (
 
 from physical_ai_server.communication.communicator import Communicator
 from physical_ai_server.data_processing.data_manager import DataManager
-from physical_ai_server.inference.inference_manager import InferenceManager
+from physical_ai_server.inference import InferenceFactory
 from physical_ai_server.timer.timer_manager import TimerManager
 from physical_ai_server.utils.parameter_utils import (
     declare_parameters,
@@ -75,8 +75,9 @@ class PhysicalAIServer(Node):
 
         self._async_inference = True
         self._used_action_count = 0
-        self._update_action_chunk = {'is_used': True, 'action_chunk': []}
-        self._remaining_action_chunk = []
+        self._update_action_chunk = {'is_used': True, 'action_chunk': [], 'inference_start_count': 0}
+        self.remaining_actions = []
+        self._async_inference_running = False
 
     def _init_core_components(self):
         self.communicator: Optional[Communicator] = None
@@ -106,7 +107,6 @@ class PhysicalAIServer(Node):
         self.timer_callback_dict = {
             'collection': self._data_collection_timer_callback,
             'inference': self._inference_timer_callback,
-            'async_action': self._async_action_publisher_timer_callback,
         }
 
     def init_ros_params(self, robot_type):
@@ -174,7 +174,7 @@ class PhysicalAIServer(Node):
             )
             self.heartbeat_timer.start(timer_name='heartbeat')
 
-        self.inference_manager = InferenceManager()
+        self.inference_manager = InferenceFactory.create_inference_manager('lerobot', device='cuda')
         self.get_logger().info(
             f'ROS parameters initialized successfully for robot type: {robot_type}')
 
@@ -198,13 +198,8 @@ class PhysicalAIServer(Node):
         self.timer_manager.start(timer_name=self.operation_mode)
 
         if self._async_inference:
-            self.timer_manager.set_timer(
-                timer_name='async_action',
-                timer_frequency=15,
-                callback_function=self._async_action_publisher_timer_callback,
-                use_separate_thread=True
-            )
-            self.timer_manager.start(timer_name='async_action')
+            # async_action 타이머는 더 이상 필요하지 않음 - 직접 비동기 처리
+            pass
         self.get_logger().info(
             'Robot control parameters initialized successfully')
 
@@ -335,6 +330,7 @@ class PhysicalAIServer(Node):
             return
 
     def _inference_timer_callback(self):
+        """Main inference timer callback - publishes actions at 33ms intervals"""
         error_msg = ''
         current_status = TaskStatus()
         camera_msgs, follower_msgs, _ = self.communicator.get_latest_data()
@@ -365,17 +361,50 @@ class PhysicalAIServer(Node):
             current_status.phase = TaskStatus.INFERENCING
             self.communicator.publish_status(status=current_status)
             
+            # Load policy if not loaded
+            if self.inference_manager.policy is None:
+                if not self.inference_manager.load_policy():
+                    self.get_logger().error('Failed to load policy')
+                    return
+            
+            # Start async inference if conditions are met
+            self._check_and_start_async_inference()
+            
+            # Update action chunk if new one is available
             if not self._update_action_chunk['is_used']:
                 self.get_logger().info('Updating action chunk...')
+                
+                # Calculate how many actions were executed during inference
+                inference_start_count = self._update_action_chunk['inference_start_count']
+                actions_executed_during_inference = self._used_action_count - inference_start_count
+                
+                self.get_logger().info(
+                    f'Actions executed during inference: {actions_executed_during_inference} '
+                    f'(from count {inference_start_count} to {self._used_action_count})')
+                
+                # Skip the actions that correspond to the executed steps
+                new_action_chunk = self._update_action_chunk['action_chunk']
+                skip_count = min(actions_executed_during_inference, len(new_action_chunk))
+                
+                if skip_count > 0:
+                    self.get_logger().info(f'Skipping {skip_count} actions from new chunk to maintain sync')
+                    remaining_new_actions = new_action_chunk[skip_count:]
+                else:
+                    remaining_new_actions = new_action_chunk
+                
+                # Update remaining actions with the synchronized chunk
+                self.remaining_actions = remaining_new_actions
                 self._update_action_chunk['is_used'] = True
-                self.remaining_actions = list(self._update_action_chunk['action_chunk'][self._used_action_count:])
-                self.get_logger().info(f'Remaining action chunk size: {len(self.remaining_actions)}')
-                self._used_action_count = 0
+                
+                self.get_logger().info(
+                    f'Updated action chunk: {len(self.remaining_actions)} actions remaining')
 
+            # Publish next action if available
             if len(self.remaining_actions) > 0:
                 action = self.remaining_actions.pop(0)
                 self.get_logger().info(
-                    f'Action data: {action}')
+                    f'Publishing action {self._used_action_count + 1}: {action[:3]}...')
+                
                 action_pub_msgs = self.data_manager.data_converter.tensor_array2joint_msgs(
                     action,
                     self.joint_topic_types,
@@ -386,6 +415,8 @@ class PhysicalAIServer(Node):
                     joint_msg_datas=action_pub_msgs
                 )
                 self._used_action_count += 1
+            else:
+                self.get_logger().warning('No actions available in chunk, waiting for new inference...')
 
         except Exception as e:
             self.get_logger().error(f'Inference failed, please check : {str(e)}')
@@ -399,31 +430,95 @@ class PhysicalAIServer(Node):
             self.inference_manager.clear_policy()
             self.timer_manager.stop(timer_name=self.operation_mode)
             return
+    
+    def _check_and_start_async_inference(self):
+        """Check if async inference should be started and start it if needed"""
+        # Start inference if:
+        # 1. No inference is currently running
+        # 2. We're running low on actions (less than 10 remaining)
+        # 3. Or no action chunk is available yet
         
-    def _async_action_publisher_timer_callback(self):
-        if self.inference_manager.policy is None:
-            if not self.inference_manager.load_policy():
-                self.get_logger().error('Failed to load policy')
-                return
-            
-        if (not self.camera_data or
-                len(self.camera_data) != len(self.params['camera_topic_list'])):
-            self.get_logger().info('Waiting for camera data...')
-            return
-        elif not self.follower_data or len(self.follower_data) != len(self.total_joint_order):
-            self.get_logger().info('Waiting for follower data...')
-            return
+        should_start_inference = (
+            not self._async_inference_running and (
+                len(self.remaining_actions) < 10 or  # Running low on actions
+                len(self.remaining_actions) == 0     # No actions available
+            )
+        )
+        
+        if should_start_inference:
+            self.get_logger().info(
+                f'Starting new async inference (remaining actions: {len(self.remaining_actions)})')
+            self._start_async_inference()
+        
+    def _start_async_inference(self):
+        """Start asynchronous inference process"""
+        import asyncio
+        import threading
+        
+        # Mark inference as running
+        self._async_inference_running = True
+        
+        # Record the action count when inference starts
+        inference_start_count = self._used_action_count
+        
+        self.get_logger().info(
+            f'Starting async inference at action count: {inference_start_count}')
 
-        action_chunk = self.inference_manager.predict_chunk(
+        def run_async_inference():
+            """Run inference in separate thread"""
+            try:
+                # Create new event loop for this thread
+                loop = asyncio.new_event_loop()
+                asyncio.set_event_loop(loop)
+                
+                # Run the async inference
+                result = loop.run_until_complete(self._perform_async_inference(inference_start_count))
+                
+                loop.close()
+                return result
+                
+            except Exception as e:
+                self.get_logger().error(f'Async inference error: {e}')
+                self._async_inference_running = False
+
+        # Start inference in background thread
+        thread = threading.Thread(target=run_async_inference, daemon=True)
+        thread.start()
+
+    async def _perform_async_inference(self, inference_start_count):
+        """Perform the actual async inference"""
+        try:
+            import time
+            start_time = time.time()
+            
+            # Perform async chunk inference
+            action_chunk = await self.inference_manager.predict_chunk_async(
                 images=self.camera_data,
                 state=self.follower_data,
                 task_instruction=self.task_instruction
             )
+            
+            inference_time = time.time() - start_time
+            self.get_logger().info(
+                f'Async inference completed in {inference_time*1000:.1f}ms, '
+                f'generated {len(action_chunk)} actions')
 
-        self._update_action_chunk = {
-            'is_used': False,
-            'action_chunk': action_chunk
-        }
+            # Update the action chunk with synchronization info
+            self._update_action_chunk = {
+                'is_used': False,
+                'action_chunk': action_chunk,
+                'inference_start_count': inference_start_count
+            }
+            
+            self.get_logger().info(
+                f'New action chunk ready for update '
+                f'(inference started at count {inference_start_count})')
+
+        except Exception as e:
+            self.get_logger().error(f'Async inference failed: {e}')
+        finally:
+            # Mark inference as completed
+            self._async_inference_running = False
 
     def user_interaction_callback(self, request, response):
         try:
@@ -461,6 +556,16 @@ class PhysicalAIServer(Node):
                     response.message = result_message
                     self.get_logger().error(response.message)
                     return response
+
+                # Initialize inference state
+                self._used_action_count = 0
+                self.remaining_actions = []
+                self._async_inference_running = False
+                self._update_action_chunk = {
+                    'is_used': True, 
+                    'action_chunk': [], 
+                    'inference_start_count': 0
+                }
 
                 self.init_robot_control_parameters_from_user_task(
                     task_info
@@ -533,7 +638,7 @@ class PhysicalAIServer(Node):
         return response
 
     def get_policy_list_callback(self, request, response):
-        policy_list = InferenceManager.get_available_policies()
+        policy_list = InferenceFactory.get_available_frameworks()
         if not policy_list:
             self.get_logger().warning('No policies available')
             response.success = False
@@ -546,19 +651,13 @@ class PhysicalAIServer(Node):
         return response
 
     def get_saved_policies_callback(self, request, response):
-        saved_policy_path, saved_policy_type = InferenceManager.get_saved_policies()
-        if not saved_policy_path and not saved_policy_type:
-            self.get_logger().warning('No saved policies found')
-            response.saved_policy_path = []
-            response.saved_policy_type = []
-            response.success = False
-            response.message = 'No saved policies found'
-        else:
-            self.get_logger().info(f'Saved policies path: {saved_policy_path}')
-            response.saved_policy_path = saved_policy_path
-            response.saved_policy_type = saved_policy_type
-            response.success = True
-            response.message = 'Saved policies retrieved successfully'
+        # For now, return empty list since we're using the new factory system
+        # You can implement saved policy discovery later
+        self.get_logger().warning('Saved policies not implemented in new system yet')
+        response.saved_policy_path = []
+        response.saved_policy_type = []
+        response.success = False
+        response.message = 'Saved policies not implemented in new system yet'
         return response
 
     def set_robot_type_callback(self, request, response):
