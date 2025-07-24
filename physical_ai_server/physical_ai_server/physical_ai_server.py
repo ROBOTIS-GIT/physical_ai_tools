@@ -296,12 +296,21 @@ class PhysicalAIServer(Node):
         error_msg = ''
         current_status = TaskStatus()
         camera_msgs, follower_msgs, leader_msgs = self.communicator.get_latest_data()
-        camera_data, follower_data, leader_data = self.data_manager.convert_msgs_to_raw_datas(
-            camera_msgs,
-            follower_msgs,
-            self.total_joint_order,
-            leader_msgs,
-            self.joint_order)
+        try:
+            camera_data, follower_data, leader_data = self.data_manager.convert_msgs_to_raw_datas(
+                camera_msgs,
+                follower_msgs,
+                self.total_joint_order,
+                leader_msgs,
+                self.joint_order)
+        except Exception as e:
+            error_msg = f'Failed to convert messages: {str(e)}, please check the robot type again!'
+            self.on_recording = False
+            current_status.phase = TaskStatus.READY
+            current_status.error = error_msg
+            self.communicator.publish_status(status=current_status)
+            self.timer_manager.stop(timer_name=self.operation_mode)
+            return
 
         if (not camera_data or
                 len(camera_data) != len(self.params['camera_topic_list'])):
