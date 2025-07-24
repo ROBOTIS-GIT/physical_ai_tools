@@ -10,9 +10,6 @@ services:
   physical_ai_server:
     container_name: physical_ai_server
     image: robotis/physical-ai-server:latest
-    build:
-      context: ../physical_ai_server
-      dockerfile: Dockerfile
     tty: true
     restart: always
     cap_add:

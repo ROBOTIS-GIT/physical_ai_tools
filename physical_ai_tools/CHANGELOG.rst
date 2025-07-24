@@ -2,6 +2,11 @@
 Changelog for package physical_ai_tools
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
+0.6.2 (2025-07-24)
+------------------
+* Updated Lerobot to the latest version and modified related functionalities.
+* Contributors: Dongyun Kim, Seongwoo Kim, Woojin Wie
+
 0.6.1 (2025-07-23)
 ------------------
 * Implemented robust error handling during data collection to prevent server crashes due to incorrect robot type configuration
