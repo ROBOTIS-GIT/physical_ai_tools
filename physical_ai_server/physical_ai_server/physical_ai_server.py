@@ -23,6 +23,7 @@ import time
 from typing import Optional
 
 from ament_index_python.packages import get_package_share_directory
+import numpy as np
 from physical_ai_interfaces.msg import TaskStatus
 from physical_ai_interfaces.srv import (
     GetHFUser,
