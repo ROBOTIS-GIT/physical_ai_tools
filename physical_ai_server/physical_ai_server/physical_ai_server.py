@@ -495,7 +495,7 @@ class PhysicalAIServer(Node):
             action_chunk = await self.inference_manager.predict_chunk_async(
                 images=self.camera_data,
                 state=self.follower_data,
-                task_instruction=self.task_instruction
+                task_instruction=self.task_instruction[0]
             )
             
             inference_time = time.time() - start_time
@@ -546,7 +546,7 @@ class PhysicalAIServer(Node):
                 self.joint_topic_types = self.communicator.get_publisher_msg_types()
                 self.operation_mode = 'inference'
                 task_info = request.task_info
-                self.task_instruction = task_info.task_instruction
+                self.task_instruction = task_info.task_instruction[0]
 
                 valid_result, result_message = self.inference_manager.validate_policy(
                     policy_path=task_info.policy_path)
