@@ -339,7 +339,7 @@ class PhysicalAIServer(Node):
             camera_msgs,
             follower_msgs,
             self.total_joint_order)
-        camera_data['cam_wrist'] = np.zeros((240, 424, 3), dtype=np.uint8)
+        self.camera_data['cam_wrist'] = np.zeros((240, 424, 3), dtype=np.uint8)
 
         if (not self.camera_data or
                 len(self.camera_data) != len(self.params['camera_topic_list'])):
