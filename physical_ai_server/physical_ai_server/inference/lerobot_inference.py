@@ -36,6 +36,7 @@ class LeRobotInference(InferenceBase):
     def __init__(self, device: str = 'cuda'):
         # Initialize LeRobot inference manager
         super().__init__(device)
+        self.policy = None
 
     def validate_policy(self, policy_path: str) -> Tuple[bool, str]:
         # Validate LeRobot policy at given path

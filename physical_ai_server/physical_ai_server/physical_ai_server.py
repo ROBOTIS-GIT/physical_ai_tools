@@ -338,7 +338,9 @@ class PhysicalAIServer(Node):
         self.camera_data, self.follower_data, _ = self.data_manager.convert_msgs_to_raw_datas(
             camera_msgs,
             follower_msgs,
-            self.total_joint_order)
+            self.total_joint_order,
+            leader_msgs=None,
+            leader_joint_order=self.joint_order)
         self.camera_data['cam_wrist'] = np.zeros((240, 424, 3), dtype=np.uint8)
 
         if (not self.camera_data or
@@ -386,6 +388,10 @@ class PhysicalAIServer(Node):
                 
                 # Skip the actions that correspond to the executed steps
                 new_action_chunk = self._update_action_chunk['action_chunk']
+                # Convert to list if it's a numpy array
+                if isinstance(new_action_chunk, np.ndarray):
+                    new_action_chunk = new_action_chunk.tolist()
+                
                 skip_count = min(actions_executed_during_inference, len(new_action_chunk))
                 
                 if skip_count > 0:
@@ -497,8 +503,12 @@ class PhysicalAIServer(Node):
             action_chunk = await self.inference_manager.predict_chunk_async(
                 images=self.camera_data,
                 state=self.follower_data,
-                task_instruction=self.task_instruction[0]
+                task_instruction=self.task_instruction[0] if isinstance(self.task_instruction, list) else self.task_instruction
             )
+            
+            # Convert to list if it's a numpy array
+            if isinstance(action_chunk, np.ndarray):
+                action_chunk = action_chunk.tolist()
             
             inference_time = time.time() - start_time
             self.get_logger().info(
@@ -548,7 +558,7 @@ class PhysicalAIServer(Node):
                 self.joint_topic_types = self.communicator.get_publisher_msg_types()
                 self.operation_mode = 'inference'
                 task_info = request.task_info
-                self.task_instruction = task_info.task_instruction[0]
+                self.task_instruction = task_info.task_instruction
 
                 valid_result, result_message = self.inference_manager.validate_policy(
                     policy_path=task_info.policy_path)
