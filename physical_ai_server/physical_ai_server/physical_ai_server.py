@@ -74,11 +74,9 @@ class PhysicalAIServer(Node):
 
         self._setup_timer_callbacks()
 
-        self._async_inference = True
+        # Timer-based inference state
         self._used_action_count = 0
-        self._update_action_chunk = {'is_used': True, 'action_chunk': [], 'inference_start_count': 0}
         self.remaining_actions = []
-        self._async_inference_running = False
 
     def _init_core_components(self):
         self.communicator: Optional[Communicator] = None
@@ -107,6 +105,7 @@ class PhysicalAIServer(Node):
     def _setup_timer_callbacks(self):
         self.timer_callback_dict = {
             'collection': self._data_collection_timer_callback,
+            'action': self._action_timer_callback,
             'inference': self._inference_timer_callback,
         }
 
@@ -191,16 +190,35 @@ class PhysicalAIServer(Node):
         )
 
         self.timer_manager = TimerManager(node=self)
-        self.timer_manager.set_timer(
-            timer_name=self.operation_mode,
-            timer_frequency=task_info.fps,
-            callback_function=self.timer_callback_dict[self.operation_mode]
-        )
-        self.timer_manager.start(timer_name=self.operation_mode)
+        
+        if self.operation_mode == 'inference':
+            # Set up two timers for inference mode
+            # 1. Action timer - publishes actions at high frequency (33ms)
+            self.timer_manager.set_timer(
+                timer_name='action',
+                timer_frequency=task_info.fps,
+                callback_function=self.timer_callback_dict['action']
+            )
+            
+            # 2. Inference timer - runs inference at lower frequency (200ms)
+            inference_frequency = 5.0  # 5Hz = 200ms interval
+            self.timer_manager.set_timer(
+                timer_name='inference',
+                timer_frequency=inference_frequency,
+                callback_function=self.timer_callback_dict['inference']
+            )
+            
+            self.timer_manager.start(timer_name='action')
+            self.timer_manager.start(timer_name='inference')
+        else:
+            # For collection mode, use single timer
+            self.timer_manager.set_timer(
+                timer_name=self.operation_mode,
+                timer_frequency=task_info.fps,
+                callback_function=self.timer_callback_dict[self.operation_mode]
+            )
+            self.timer_manager.start(timer_name=self.operation_mode)
 
-        if self._async_inference:
-            # async_action 타이머는 더 이상 필요하지 않음 - 직접 비동기 처리
-            pass
         self.get_logger().info(
             'Robot control parameters initialized successfully')
 
@@ -330,83 +348,12 @@ class PhysicalAIServer(Node):
             self.timer_manager.stop(timer_name=self.operation_mode)
             return
 
-    def _inference_timer_callback(self):
-        """Main inference timer callback - publishes actions at 33ms intervals"""
-        error_msg = ''
-        current_status = TaskStatus()
-        camera_msgs, follower_msgs, _ = self.communicator.get_latest_data()
-        self.camera_data, self.follower_data, _ = self.data_manager.convert_msgs_to_raw_datas(
-            camera_msgs,
-            follower_msgs,
-            self.total_joint_order,
-            leader_msgs=None,
-            leader_joint_order=self.joint_order)
-        self.camera_data['cam_wrist'] = np.zeros((240, 424, 3), dtype=np.uint8)
-
-        if (not self.camera_data or
-                len(self.camera_data) != len(self.params['camera_topic_list'])):
-            self.get_logger().info('Waiting for camera data...')
+    def _action_timer_callback(self):
+        """Action timer callback - publishes actions at 33ms intervals"""
+        if not self.on_inference:
             return
-        elif not self.follower_data or len(self.follower_data) != len(self.total_joint_order):
-            self.get_logger().info('Waiting for follower data...')
-            return
-
+            
         try:
-            if not self.on_inference:
-                self.get_logger().info('Inference mode is not active')
-                current_status = self.data_manager.get_current_record_status()
-                current_status.phase = TaskStatus.READY
-                self.communicator.publish_status(status=current_status)
-                self.inference_manager.clear_policy()
-                self.timer_manager.stop(timer_name=self.operation_mode)
-                return
-
-            current_status = self.data_manager.get_current_record_status()
-            current_status.phase = TaskStatus.INFERENCING
-            self.communicator.publish_status(status=current_status)
-            
-            # Load policy if not loaded
-            if self.inference_manager.policy is None:
-                if not self.inference_manager.load_policy():
-                    self.get_logger().error('Failed to load policy')
-                    return
-            
-            # Start async inference if conditions are met
-            self._check_and_start_async_inference()
-            
-            # Update action chunk if new one is available
-            if not self._update_action_chunk['is_used']:
-                self.get_logger().info('Updating action chunk...')
-                
-                # Calculate how many actions were executed during inference
-                inference_start_count = self._update_action_chunk['inference_start_count']
-                actions_executed_during_inference = self._used_action_count - inference_start_count
-                
-                self.get_logger().info(
-                    f'Actions executed during inference: {actions_executed_during_inference} '
-                    f'(from count {inference_start_count} to {self._used_action_count})')
-                
-                # Skip the actions that correspond to the executed steps
-                new_action_chunk = self._update_action_chunk['action_chunk']
-                # Convert to list if it's a numpy array
-                if isinstance(new_action_chunk, np.ndarray):
-                    new_action_chunk = new_action_chunk.tolist()
-                
-                skip_count = min(actions_executed_during_inference, len(new_action_chunk))
-                
-                if skip_count > 0:
-                    self.get_logger().info(f'Skipping {skip_count} actions from new chunk to maintain sync')
-                    remaining_new_actions = new_action_chunk[skip_count:]
-                else:
-                    remaining_new_actions = new_action_chunk
-                
-                # Update remaining actions with the synchronized chunk
-                self.remaining_actions = remaining_new_actions
-                self._update_action_chunk['is_used'] = True
-                
-                self.get_logger().info(
-                    f'Updated action chunk: {len(self.remaining_actions)} actions remaining')
-
             # Publish next action if available
             if len(self.remaining_actions) > 0:
                 action = self.remaining_actions.pop(0)
@@ -424,113 +371,94 @@ class PhysicalAIServer(Node):
                 )
                 self._used_action_count += 1
             else:
-                self.get_logger().warning('No actions available in chunk, waiting for new inference...')
+                self.get_logger().debug('No actions available, waiting for inference...')
 
         except Exception as e:
-            self.get_logger().error(f'Inference failed, please check : {str(e)}')
-            error_msg = f'Inference failed, please check : {str(e)}'
-            self.on_recording = False
-            self.on_inference = False
-            current_status = self.data_manager.get_current_record_status()
-            current_status.phase = TaskStatus.READY
-            current_status.error = error_msg
-            self.communicator.publish_status(status=current_status)
-            self.inference_manager.clear_policy()
-            self.timer_manager.stop(timer_name=self.operation_mode)
+            self.get_logger().error(f'Action publishing failed: {str(e)}')
+
+    def _inference_timer_callback(self):
+        """Inference timer callback - runs inference at 200ms intervals"""
+        if not self.on_inference:
             return
-    
-    def _check_and_start_async_inference(self):
-        """Check if async inference should be started and start it if needed"""
-        # Start inference if:
-        # 1. No inference is currently running
-        # 2. We're running low on actions (less than 10 remaining)
-        # 3. Or no action chunk is available yet
-        
-        should_start_inference = (
-            not self._async_inference_running and (
-                len(self.remaining_actions) < 10 or  # Running low on actions
-                len(self.remaining_actions) == 0     # No actions available
-            )
-        )
-        
-        if should_start_inference:
-            self.get_logger().info(
-                f'Starting new async inference (remaining actions: {len(self.remaining_actions)})')
-            self._start_async_inference()
-        
-    def _start_async_inference(self):
-        """Start asynchronous inference process"""
-        import asyncio
-        import threading
-        
-        # Mark inference as running
-        self._async_inference_running = True
-        
-        # Record the action count when inference starts
-        inference_start_count = self._used_action_count
-        
-        self.get_logger().info(
-            f'Starting async inference at action count: {inference_start_count}')
-
-        def run_async_inference():
-            """Run inference in separate thread"""
-            try:
-                # Create new event loop for this thread
-                loop = asyncio.new_event_loop()
-                asyncio.set_event_loop(loop)
-                
-                # Run the async inference
-                result = loop.run_until_complete(self._perform_async_inference(inference_start_count))
-                
-                loop.close()
-                return result
-                
-            except Exception as e:
-                self.get_logger().error(f'Async inference error: {e}')
-                self._async_inference_running = False
-
-        # Start inference in background thread
-        thread = threading.Thread(target=run_async_inference, daemon=True)
-        thread.start()
-
-    async def _perform_async_inference(self, inference_start_count):
-        """Perform the actual async inference"""
+            
         try:
-            import time
-            start_time = time.time()
-            
-            # Perform async chunk inference
-            action_chunk = await self.inference_manager.predict_chunk_async(
-                images=self.camera_data,
-                state=self.follower_data,
-                task_instruction=self.task_instruction[0] if isinstance(self.task_instruction, list) else self.task_instruction
-            )
-            
-            # Convert to list if it's a numpy array
-            if isinstance(action_chunk, np.ndarray):
-                action_chunk = action_chunk.tolist()
-            
-            inference_time = time.time() - start_time
-            self.get_logger().info(
-                f'Async inference completed in {inference_time*1000:.1f}ms, '
-                f'generated {len(action_chunk)} actions')
+            # Get latest sensor data
+            camera_msgs, follower_msgs, _ = self.communicator.get_latest_data()
+            self.camera_data, self.follower_data, _ = self.data_manager.convert_msgs_to_raw_datas(
+                camera_msgs,
+                follower_msgs,
+                self.total_joint_order,
+                leader_msgs=None,
+                leader_joint_order=self.joint_order)
+            self.camera_data['cam_wrist'] = np.zeros((240, 424, 3), dtype=np.uint8)
 
-            # Update the action chunk with synchronization info
-            self._update_action_chunk = {
-                'is_used': False,
-                'action_chunk': action_chunk,
-                'inference_start_count': inference_start_count
-            }
-            
-            self.get_logger().info(
-                f'New action chunk ready for update '
-                f'(inference started at count {inference_start_count})')
+            # Check if we have valid data
+            if (not self.camera_data or
+                    len(self.camera_data) != len(self.params['camera_topic_list'])):
+                self.get_logger().debug('Waiting for camera data...')
+                return
+            elif not self.follower_data or len(self.follower_data) != len(self.total_joint_order):
+                self.get_logger().debug('Waiting for follower data...')
+                return
+
+            # Load policy if not loaded
+            if self.inference_manager.policy is None:
+                if not self.inference_manager.load_policy():
+                    self.get_logger().error('Failed to load policy')
+                    return
+
+            # Run inference if we need more actions
+            if len(self.remaining_actions) < 10:  # Running low on actions
+                self.get_logger().info(
+                    f'Running inference (remaining actions: {len(self.remaining_actions)})')
+                
+                start_time = time.time()
+                
+                # Perform chunk inference
+                action_chunk = self.inference_manager.predict_chunk(
+                    images=self.camera_data,
+                    state=self.follower_data,
+                    task_instruction=self.task_instruction[0] if isinstance(self.task_instruction, list) else self.task_instruction
+                )
+                
+                # Convert to list if it's a numpy array
+                if isinstance(action_chunk, np.ndarray):
+                    action_chunk = action_chunk.tolist()
+                
+                inference_time = time.time() - start_time
+                self.get_logger().info(
+                    f'Inference completed in {inference_time*1000:.1f}ms, '
+                    f'generated {len(action_chunk)} actions')
+
+                # Add new actions to remaining actions
+                self.remaining_actions.extend(action_chunk)
+                
+                self.get_logger().info(
+                    f'Action buffer updated: {len(self.remaining_actions)} actions available')
+
+            # Update status
+            current_status = self.data_manager.get_current_record_status()
+            current_status.phase = TaskStatus.INFERENCING
+            self.communicator.publish_status(status=current_status)
 
         except Exception as e:
-            self.get_logger().error(f'Async inference failed: {e}')
-        finally:
-            # Mark inference as completed
-            self._async_inference_running = False
+            self.get_logger().error(f'Inference failed: {str(e)}')
+            self._stop_inference_with_error(str(e))
+
+    def _stop_inference_with_error(self, error_msg: str):
+        """Stop inference mode due to error"""
+        self.on_recording = False
+        self.on_inference = False
+        current_status = self.data_manager.get_current_record_status()
+        current_status.phase = TaskStatus.READY
+        current_status.error = error_msg
+        self.communicator.publish_status(status=current_status)
+        self.inference_manager.clear_policy()
+        
+        # Stop both timers for inference mode
+        if hasattr(self, 'timer_manager') and self.timer_manager:
+            self.timer_manager.stop(timer_name='action')
+            self.timer_manager.stop(timer_name='inference')
 
     def user_interaction_callback(self, request, response):
         try:
@@ -572,12 +500,6 @@ class PhysicalAIServer(Node):
                 # Initialize inference state
                 self._used_action_count = 0
                 self.remaining_actions = []
-                self._async_inference_running = False
-                self._update_action_chunk = {
-                    'is_used': True, 
-                    'action_chunk': [], 
-                    'inference_start_count': 0
-                }
 
                 self.init_robot_control_parameters_from_user_task(
                     task_info

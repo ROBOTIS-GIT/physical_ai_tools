@@ -77,30 +77,6 @@ class InferenceBase(ABC):
         # Returns: predicted action chunk as numpy array
         pass
 
-    @abstractmethod
-    async def predict_async(
-        self,
-        images: Dict[str, np.ndarray],
-        state: List[float],
-        task_instruction: Optional[str] = None
-    ) -> List[float]:
-        # Perform async single-step inference
-        # Args: images (camera dict), state (robot state), task_instruction (optional)
-        # Returns: predicted action as list
-        pass
-
-    @abstractmethod
-    async def predict_chunk_async(
-        self,
-        images: Dict[str, np.ndarray],
-        state: List[float],
-        task_instruction: Optional[str] = None
-    ) -> np.ndarray:
-        # Perform async chunk-based inference (multiple steps)
-        # Args: images (camera dict), state (robot state), task_instruction (optional)
-        # Returns: predicted action chunk as numpy array
-        pass
-
     @classmethod
     @abstractmethod
     def get_available_policies(cls) -> List[str]:

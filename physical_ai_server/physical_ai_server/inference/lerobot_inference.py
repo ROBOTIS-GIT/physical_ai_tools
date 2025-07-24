@@ -18,8 +18,6 @@
 
 import os
 import json
-import asyncio
-import concurrent.futures
 from typing import Dict, List, Optional, Tuple
 
 from lerobot.policies.pretrained import PreTrainedPolicy
@@ -122,72 +120,6 @@ class LeRobotInference(InferenceBase):
             action = self.policy.predict_action_chunk(observation)
             action = action.squeeze(0).to('cpu').numpy()
 
-        return action
-
-    async def predict_async(
-        self,
-        images: Dict[str, np.ndarray],
-        state: List[float],
-        task_instruction: Optional[str] = None
-    ) -> List[float]:
-        # Perform async single-step inference using LeRobot policy
-        loop = asyncio.get_event_loop()
-        with concurrent.futures.ThreadPoolExecutor() as executor:
-            result = await loop.run_in_executor(
-                executor,
-                self._complete_single_inference,
-                images, state, task_instruction
-            )
-        return result
-    
-    async def predict_chunk_async(
-        self,
-        images: Dict[str, np.ndarray],
-        state: List[float],
-        task_instruction: Optional[str] = None
-    ) -> np.ndarray:
-        # Perform async chunk-based inference using LeRobot policy
-        loop = asyncio.get_event_loop()
-        with concurrent.futures.ThreadPoolExecutor() as executor:
-            result = await loop.run_in_executor(
-                executor,
-                self._complete_chunk_inference,
-                images, state, task_instruction
-            )
-        return result
-
-    def _complete_single_inference(
-        self,
-        images: Dict[str, np.ndarray],
-        state: List[float],
-        task_instruction: Optional[str] = None
-    ) -> List[float]:
-        # Complete single-step inference pipeline for async execution
-        if self.policy is None:
-            raise RuntimeError("No policy loaded. Call load_policy() first.")
-        
-        observation = self._preprocess(images, state, task_instruction)
-        with torch.inference_mode():
-            action = self.policy.select_action(observation)
-            action = action.squeeze(0).to('cpu').numpy()
-        
-        return action.tolist()
-
-    def _complete_chunk_inference(
-        self,
-        images: Dict[str, np.ndarray],
-        state: List[float],
-        task_instruction: Optional[str] = None
-    ) -> np.ndarray:
-        # Complete chunk-based inference pipeline for async execution
-        if self.policy is None:
-            raise RuntimeError("No policy loaded. Call load_policy() first.")
-        
-        observation = self._preprocess(images, state, task_instruction)
-        with torch.inference_mode():
-            action = self.policy.predict_action_chunk(observation)
-            action = action.squeeze(0).to('cpu').numpy()
-        
         return action
 
     def _preprocess(
