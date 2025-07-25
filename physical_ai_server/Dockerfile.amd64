@@ -1,14 +1,5 @@
 FROM robotis/ros:jazzy-ros-base-torch2.7.0-cuda12.8.0 AS physical-ai-tools
 
-ARG TARGETARCH
-
-RUN if [ "$TARGETARCH" = "arm64" ]; then \
-    echo 'export PATH=/opt/venv/bin:$PATH' >> /root/.bashrc && \
-    echo 'export PYTHONPATH=/opt/venv/lib/python3.12/site-packages:$PYTHONPATH' >> /root/.bashrc && \
-    export PATH=/opt/venv/bin:$PATH && \
-    export PYTHONPATH=/opt/venv/lib/python3.12/site-packages:$PYTHONPATH; \
-    fi
-
 # Set environment variables
 ENV DEBIAN_FRONTEND=noninteractive
 
@@ -29,19 +20,19 @@ RUN mkdir -p ${COLCON_WS}/src && \
 RUN cd ${COLCON_WS} && \
     apt-get update && \
     rosdep update && \
-    rosdep install -i --from-path src --rosdistro $ROS_DISTRO --skip-keys="physical_ai_tools" -y && \
+    rosdep install -i --from-path src --rosdistro $ROS_DISTRO -y && \
     rm -rf /var/lib/apt/lists/*
 
 RUN cd ${COLCON_WS}/src/physical_ai_tools/lerobot && \
+    sed -i '/"torch[^\"]*",/d' pyproject.toml && \
+    sed -i '/"torchvision[^\"]*",/d' pyproject.toml && \
     pip install --ignore-installed -e .
+
+RUN cd ${COLCON_WS}/src/physical_ai_tools/lerobot && \
+    pip install -e ".[smolvla]"
 
 RUN pip install setuptools==68.1.2
 RUN pip install 'numpy<2'
-
-RUN if [ "$TARGETARCH" = "arm64" ]; then \
-    echo 'export PYTHONPATH=${COLCON_WS}/src/physical_ai_tools/lerobot:$PYTHONPATH' >> /root/.bashrc && \
-    export PYTHONPATH=${COLCON_WS}/src/physical_ai_tools/lerobot:$PYTHONPATH; \
-    fi
 
 RUN bash -c "source /opt/ros/${ROS_DISTRO}/setup.bash && \
     cd ${COLCON_WS} && \
@@ -50,4 +41,5 @@ RUN bash -c "source /opt/ros/${ROS_DISTRO}/setup.bash && \
 RUN echo "source /opt/ros/${ROS_DISTRO}/setup.bash" >> ~/.bashrc  && \
     echo "source ${COLCON_WS}/install/setup.bash" >> ~/.bashrc  && \
     echo "alias cb='colcon build --symlink-install --cmake-args -DCMAKE_BUILD_TYPE=Release'" >> ~/.bashrc && \
-    echo "alias ai_server='ros2 launch physical_ai_server physical_ai_server_bringup.launch.py'" >> ~/.bashrc
+    echo "alias ai_server='ros2 launch physical_ai_server physical_ai_server_bringup.launch.py'" >> ~/.bashrc && \
+    echo "export ROS_DOMAIN_ID=30" >> ~/.bashrc

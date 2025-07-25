@@ -1,0 +1,4 @@
+---
+string[] model_weight_list
+bool success
+string message

@@ -19,6 +19,7 @@
 import os
 
 from lerobot.policies.pretrained import PreTrainedPolicy
+from lerobot.policies.pretrained import PreTrainedPolicy
 import numpy as np
 from physical_ai_server.utils.read_file import read_json_file
 import torch
@@ -153,28 +154,37 @@ class InferenceManager:
     def _get_policy_class(self, name: str) -> PreTrainedPolicy:
         if name == 'tdmpc':
             from lerobot.policies.tdmpc.modeling_tdmpc import TDMPCPolicy
+            from lerobot.policies.tdmpc.modeling_tdmpc import TDMPCPolicy
 
             return TDMPCPolicy
         elif name == 'diffusion':
+            from lerobot.policies.diffusion.modeling_diffusion import DiffusionPolicy
             from lerobot.policies.diffusion.modeling_diffusion import DiffusionPolicy
 
             return DiffusionPolicy
         elif name == 'act':
             from lerobot.policies.act.modeling_act import ACTPolicy
+            from lerobot.policies.act.modeling_act import ACTPolicy
 
             return ACTPolicy
         elif name == 'vqbet':
+            from lerobot.policies.vqbet.modeling_vqbet import VQBeTPolicy
             from lerobot.policies.vqbet.modeling_vqbet import VQBeTPolicy
 
             return VQBeTPolicy
         elif name == 'pi0':
             from lerobot.policies.pi0.modeling_pi0 import PI0Policy
+            from lerobot.policies.pi0.modeling_pi0 import PI0Policy
 
             return PI0Policy
         elif name == 'pi0fast':
             from lerobot.policies.pi0fast.modeling_pi0fast import PI0FASTPolicy
+            from lerobot.policies.pi0fast.modeling_pi0fast import PI0FASTPolicy
             return PI0FASTPolicy
         elif name == "smolvla":
+            from lerobot.policies.smolvla.modeling_smolvla import SmolVLAPolicy
+            return SmolVLAPolicy
+        elif name == 'smolvla':
             from lerobot.policies.smolvla.modeling_smolvla import SmolVLAPolicy
             return SmolVLAPolicy
         # TODO: Uncomment when GrootN1Policy is implemented
@@ -195,6 +205,7 @@ class InferenceManager:
             'pi0',
             'pi0fast',
             'smolvla'
+            'smolvla',
         ]
 
     @staticmethod
