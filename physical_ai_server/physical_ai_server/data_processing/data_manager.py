@@ -325,12 +325,17 @@ class DataManager:
                 if value is not None:
                     follower_data.extend(self.joint_msgs2tensor_array(
                         value, total_joint_order))
-
         if leader_msgs is not None:
-            for key, value in leader_msgs.items():
-                if value is not None:
+            for key, value in leader_joint_order.items():
+                # remove joint_order. from key
+                prefix_key = key.replace('joint_order.', '')
+                if prefix_key not in leader_msgs:
+                    return camera_data, follower_data, None
+                elif leader_msgs[prefix_key] is not None:
                     leader_data.extend(self.joint_msgs2tensor_array(
-                        value, leader_joint_order[f'joint_order.{key}']))
+                        leader_msgs[prefix_key], value))
+                else:
+                    return camera_data, follower_data, None
 
         return camera_data, follower_data, leader_data
 

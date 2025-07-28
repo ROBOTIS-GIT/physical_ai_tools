@@ -2,6 +2,12 @@
 Changelog for package physical_ai_tools
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
+0.6.3 (2025-07-25)
+------------------
+* Fixed a bug to allow setting the output folder path to a specified location.
+* Fixed a bug that did not guarantee the order of messages.
+* Contributors: Dongyun Kim, Seongwoo Kim, Woojin Wie
+
 0.6.2 (2025-07-24)
 ------------------
 * Updated Lerobot to the latest version and modified related functionalities.
