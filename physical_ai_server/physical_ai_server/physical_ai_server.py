@@ -231,6 +231,7 @@ class PhysicalAIServer(Node):
             robot_type=self.robot_type,
             task_info=task_info
         )
+        self.communicator.clear_latest_data()
 
         self.timer_manager = TimerManager(node=self)
         
@@ -327,6 +328,30 @@ class PhysicalAIServer(Node):
         error_msg = ''
         current_status = TaskStatus()
         camera_msgs, follower_msgs, leader_msgs = self.communicator.get_latest_data()
+        if camera_msgs is None:
+            if time.perf_counter() - self.start_recording_time > self.DEFAULT_TOPIC_TIMEOUT:
+                error_msg = 'Camera data not received within timeout period'
+                self.get_logger().error(error_msg)
+            else:
+                self.get_logger().info('Waiting for camera data...')
+                return
+
+        elif follower_msgs is None:
+            if time.perf_counter() - self.start_recording_time > self.DEFAULT_TOPIC_TIMEOUT:
+                error_msg = 'Follower data not received within timeout period'
+                self.get_logger().error(error_msg)
+            else:
+                self.get_logger().info('Waiting for follower data...')
+                return
+
+        elif leader_msgs is None:
+            if time.perf_counter() - self.start_recording_time > self.DEFAULT_TOPIC_TIMEOUT:
+                error_msg = 'Leader data not received within timeout period'
+                self.get_logger().error(error_msg)
+            else:
+                self.get_logger().info('Waiting for leader data...')
+                return
+
         try:
             camera_data, follower_data, leader_data = self.data_manager.convert_msgs_to_raw_datas(
                 camera_msgs,
@@ -334,6 +359,7 @@ class PhysicalAIServer(Node):
                 self.total_joint_order,
                 leader_msgs,
                 self.joint_order)
+
         except Exception as e:
             error_msg = f'Failed to convert messages: {str(e)}, please check the robot type again!'
             self.on_recording = False
@@ -343,32 +369,7 @@ class PhysicalAIServer(Node):
             self.timer_manager.stop(timer_name=self.operation_mode)
             return
 
-        if (not camera_data or
-                len(camera_data) != len(self.params['camera_topic_list'])):
-            if time.perf_counter() - self.start_recording_time > self.DEFAULT_TOPIC_TIMEOUT:
-                error_msg = 'Camera data not received within timeout period'
-                self.get_logger().error(error_msg)
-            else:
-                self.get_logger().info('Waiting for camera data...')
-                return
-
-        elif not follower_data or len(follower_data) != len(self.total_joint_order):
-            if time.perf_counter() - self.start_recording_time > self.DEFAULT_TOPIC_TIMEOUT:
-                error_msg = 'Follower data not received within timeout period'
-                self.get_logger().error(error_msg)
-            else:
-                self.get_logger().info('Waiting for follower data...')
-                return
-
-        elif not leader_data or len(leader_data) != len(self.total_joint_order):
-            if time.perf_counter() - self.start_recording_time > self.DEFAULT_TOPIC_TIMEOUT:
-                error_msg = 'Leader data not received within timeout period'
-                self.get_logger().error(error_msg)
-            else:
-                self.get_logger().info('Waiting for leader data...')
-                return
-
-        elif not self.data_manager.check_lerobot_dataset(
+        if not self.data_manager.check_lerobot_dataset(
                 camera_data,
                 self.total_joint_order):
             error_msg = 'Invalid repository name, Please change the repository name'
@@ -429,35 +430,36 @@ class PhysicalAIServer(Node):
             self.get_logger().error(f'Action publishing failed: {str(e)}')
 
     def _inference_timer_callback(self):
-        """Inference timer callback - runs inference at 200ms intervals"""
-        if not self.on_inference:
+        error_msg = ''
+        current_status = TaskStatus()
+        camera_msgs, follower_msgs, _ = self.communicator.get_latest_data()
+        if (camera_msgs is None or
+                len(camera_msgs) != len(self.params['camera_topic_list'])):
+            self.get_logger().info('Waiting for camera data...')
             return
-            
+        elif follower_msgs is None:
+            self.get_logger().info('Waiting for follower data...')
+            return
+
         try:
-            # Get latest sensor data
-            camera_msgs, follower_msgs, _ = self.communicator.get_latest_data()
-            self.camera_data, self.follower_data, _ = self.data_manager.convert_msgs_to_raw_datas(
+            camera_data, follower_data, _ = self.data_manager.convert_msgs_to_raw_datas(
                 camera_msgs,
                 follower_msgs,
-                self.total_joint_order,
-                leader_msgs=None,
-                leader_joint_order=self.joint_order)
-            self.camera_data['cam_wrist'] = np.zeros((240, 424, 3), dtype=np.uint8)
+                self.total_joint_order)
+        except Exception as e:
+            error_msg = f'Failed to convert messages: {str(e)}, please check the robot type again!'
+            self.on_inference = False
+            current_status.phase = TaskStatus.READY
+            current_status.error = error_msg
+            self.communicator.publish_status(status=current_status)
+            self.inference_manager.clear_policy()
+            self.timer_manager.stop(timer_name=self.operation_mode)
+            return
 
-            # Check if we have valid data
-            if (not self.camera_data or
-                    len(self.camera_data) != len(self.params['camera_topic_list'])):
-                self.get_logger().debug('Waiting for camera data...')
+        if self.inference_manager.policy is None:
+            if not self.inference_manager.load_policy():
+                self.get_logger().error('Failed to load policy')
                 return
-            elif not self.follower_data or len(self.follower_data) != len(self.total_joint_order):
-                self.get_logger().debug('Waiting for follower data...')
-                return
-
-            # Load policy if not loaded
-            if self.inference_manager.policy is None:
-                if not self.inference_manager.load_policy():
-                    self.get_logger().error('Failed to load policy')
-                    return
 
             # Run inference if we need more actions
             if len(self.remaining_actions) < 10:  # Running low on actions

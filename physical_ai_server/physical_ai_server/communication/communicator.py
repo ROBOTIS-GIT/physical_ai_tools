@@ -118,6 +118,7 @@ class Communicator:
                 msg_type=CompressedImage,
                 callback=partial(self._camera_callback, name)
             )
+            self.camera_topic_msgs[name] = None
             self.node.get_logger().info(f'Camera subscriber: {name} -> {topic}')
 
         # Initialize joint subscribers with appropriate message types and callbacks
@@ -130,6 +131,7 @@ class Communicator:
                     msg_type = JointState
                 category = self.SOURCE_FOLLOWER
                 callback = partial(self._follower_callback, name)
+                self.follower_topic_msgs[name] = None
             elif 'leader' in name.lower():
                 if 'mobile' in name.lower():
                     msg_type = Twist
@@ -137,6 +139,7 @@ class Communicator:
                     msg_type = JointTrajectory
                 category = self.SOURCE_LEADER
                 callback = partial(self._leader_callback, name)
+                self.leader_topic_msgs[name] = None
             else:
                 # Log an error message if the topic name does not include 'follower' or 'leader'
                 self.node.get_logger().error(
@@ -206,12 +209,30 @@ class Communicator:
         self.leader_topic_msgs[name] = msg
 
     def get_latest_data(self) -> Optional[Tuple[Dict, Dict, Dict]]:
-        if not (self.camera_topic_msgs or self.follower_topic_msgs or self.leader_topic_msgs):
+        if any(msg is None for msg in self.camera_topic_msgs.values()):
             return None, None, None
+
+        if any(msg is None for msg in self.follower_topic_msgs.values()):
+            return self.camera_topic_msgs, None, None
+
         if self.operation_mode == self.MODE_COLLECTION:
+            if any(msg is None for msg in self.leader_topic_msgs.values()):
+                return self.camera_topic_msgs, self.follower_topic_msgs, None
             return self.camera_topic_msgs, self.follower_topic_msgs, self.leader_topic_msgs
         elif self.operation_mode == self.MODE_INFERENCE:
             return self.camera_topic_msgs, self.follower_topic_msgs, None
+        else:
+            raise NotImplementedError(
+                f'Operation mode {self.operation_mode} is not supported')
+
+    def clear_latest_data(self):
+        for key in self.camera_topic_msgs.keys():
+            self.camera_topic_msgs[key] = None
+        for key in self.follower_topic_msgs.keys():
+            self.follower_topic_msgs[key] = None
+        for key in self.leader_topic_msgs.keys():
+            self.leader_topic_msgs[key] = None
+        self.node.get_logger().info('Cleared latest data from communicator')
 
     def publish_action(self, joint_msg_datas: Dict[str, Any]):
         for name, joint_msg in joint_msg_datas.items():

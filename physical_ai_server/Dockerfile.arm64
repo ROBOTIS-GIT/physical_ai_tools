@@ -28,16 +28,19 @@ RUN cd ${COLCON_WS} && \
     rosdep install -i --from-path src --rosdistro $ROS_DISTRO -y && \
     rm -rf /var/lib/apt/lists/*
 
+ENV PIP_INDEX_URL=https://pypi.jetson-ai-lab.io/jp6/cu126/+simple
+ENV PIP_EXTRA_INDEX_URL=https://pypi.org/simple
+
 RUN cd ${COLCON_WS}/src/physical_ai_tools/lerobot && \
     sed -i '/"torch[^\"]*",/d' pyproject.toml && \
     sed -i '/"torchvision[^\"]*",/d' pyproject.toml && \
-    pip install --index-url https://pypi.jetson-ai-lab.io/jp6/cu126/+simple --extra-index-url https://pypi.org/simple --ignore-installed -e .
+    pip install --ignore-installed -e .
 
 RUN cd ${COLCON_WS}/src/physical_ai_tools/lerobot && \
-    pip install --index-url https://pypi.jetson-ai-lab.io/jp6/cu126/+simple --extra-index-url https://pypi.org/simple -e ".[smolvla]"
+    pip install -e ".[smolvla]"
 
-RUN pip install --index-url https://pypi.jetson-ai-lab.io/jp6/cu126/+simple --extra-index-url https://pypi.org/simple setuptools==68.1.2
-RUN pip install --index-url https://pypi.jetson-ai-lab.io/jp6/cu126/+simple --extra-index-url https://pypi.org/simple 'numpy<2'
+RUN pip install setuptools==68.1.2
+RUN pip install 'numpy<2'
 
 RUN echo 'export PYTHONPATH=${COLCON_WS}/src/physical_ai_tools/lerobot/src:$PYTHONPATH' >> /root/.bashrc && \
     export PYTHONPATH=${COLCON_WS}/src/physical_ai_tools/lerobot/src:$PYTHONPATH;
