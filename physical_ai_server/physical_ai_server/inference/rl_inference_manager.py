@@ -42,13 +42,17 @@ class RLInferenceManager:
 
     def __init__(
             self,
-            device: str = 'cuda'):
+            device: str = 'cuda',
+            inference_fps: int = 1000):
 
         self.device = device
+        self.inference_fps = inference_fps
         self.policy_type = None
         self.policy_path = None
         self.policy = None
         self.policy_environment = None
+        self.iteration = 0
+        self.target_command = np.zeros(7)  # [x, y, z, qw, qx, qy, qz]
 
     def validate_policy(self, policy_path: str) -> bool:
         result_message = ''
@@ -97,24 +101,12 @@ class RLInferenceManager:
             images: dict[str, np.ndarray],
             state: list[float],
             task_instruction: str = None,
-            additional_params: dict = None) -> dict:
-
-        action = {}
+            additional_params: dict = None) -> tuple[np.ndarray, list[str]]:
 
         observation = self._preprocess(images, state, task_instruction, additional_params)
+        action, action_joint_names = self._action_from_policy(observation, task_instruction)
 
-        with torch.inference_mode():
-            obs_tensor = torch.from_numpy(observation).view(1, -1).float().to(self.device)
-            raw_action = self.policy(obs_tensor).detach().view(-1).cpu().numpy()
-
-        self.previous_action = raw_action.copy()
-
-        for i, name in enumerate(self.arm_action_joint_names):
-            action[name] = self.default_joint_positions[i] + raw_action[i] * self.arm_action_scale
-        for i, name in enumerate(self.gripper_action_joint_names):
-            action[name] = raw_action[i + len(self.arm_action_joint_names)] * self.gripper_action_scale
-
-        return action
+        return action, action_joint_names
 
     def _preprocess(
             self,
@@ -132,6 +124,32 @@ class RLInferenceManager:
         else:
             raise NotImplementedError(f'Preprocessing for task {task_instruction} is not implemented.')
 
+    def _action_from_policy(self, observation: np.ndarray, task_instruction: str) -> np.ndarray:
+        """
+        Get action from the policy based on the observation.
+        This method should be overridden in subclasses if needed.
+        """
+        if self.policy is None:
+            raise ValueError("Policy is not loaded. Call `load_policy()` first.")
+
+        action = []
+        with torch.inference_mode():
+            obs_tensor = torch.from_numpy(observation).view(1, -1).float().to(self.device)
+            raw_action = self.policy(obs_tensor).detach().view(-1).cpu().numpy()
+
+        if task_instruction == "omy_reach":
+
+            self.previous_action = raw_action.copy()
+
+            for i, name in enumerate(self.arm_action_joint_names):
+                default_value = self.default_joint_positions.get(name)
+                if default_value is None:
+                    raise ValueError(f"Default joint position for '{name}' not found in YAML.")
+                action.append(default_value + raw_action[i] * self.arm_action_scale)
+
+            return action, self.arm_action_joint_names
+        else:
+            raise NotImplementedError(f'Action extraction for task {task_instruction} is not implemented.')
 
     def _preprocess_omy_reach(self, state: list[float], additional_params: dict) -> np.ndarray:
         """
@@ -152,25 +170,34 @@ class RLInferenceManager:
             [joint_position.get(name, 0.0) for name in self.observation_joint_names],
             dtype=np.float32
         )
+        joint_default_position_array = np.array(
+            [self.default_joint_positions.get(name, 0.0) for name in self.observation_joint_names],
+            dtype=np.float32
+        )
         joint_velocity_array = np.array(
             [joint_velocity.get(name, 0.0) for name in self.observation_joint_names],
             dtype=np.float32
         )
 
-        # Extract command (expected 7 values)
-        command_array = np.array(additional_params.get("command", [0.0] * 7), dtype=np.float32)
+        command_interval = int(3.0 * self.inference_fps)
+        phase = self.iteration % command_interval
+        self.iteration += 1
+
+        if phase == 0:
+            self.target_command = self._sample_reach_random_pose()
+            self.get_logger().info(f"New target command: {np.round(self.target_command, 4)}")
 
         # Ensure previous_action exists
         if not hasattr(self, "previous_action"):
             self.previous_action = np.zeros(len(self.arm_action_joint_names), dtype=np.float32)
 
         # Compute position offset
-        joint_pos_offset = joint_position_array - self.default_joint_positions
+        joint_pos_offset = joint_position_array - joint_default_position_array
 
         return np.concatenate([
             joint_pos_offset,
             joint_velocity_array,
-            command_array,
+            self.target_command,
             self.previous_action
         ], dtype=np.float32)
 
@@ -225,7 +252,7 @@ class RLInferenceManager:
         self.observation_joint_names = self._get_observation_joint_names()
         self.arm_action_joint_names = self._get_arm_action_joint_names()
         self.gripper_action_joint_names = self._get_gripper_action_joint_names()
-        self.default_joint_positions = self._get_default_joint_positions(self.observation_joint_names)
+        self.default_joint_positions = self._get_default_joint_positions()
 
     def _get_policy_environment_data(self, key_path: str, default=None):
         if self.policy_environment is None:
@@ -269,7 +296,7 @@ class RLInferenceManager:
             raise ValueError("YAML not loaded. Call `load_policy_yaml()` first.")
         return self._get_policy_environment_data("actions.gripper_action.joint_names", [])
 
-    def _get_default_joint_positions(self, joint_names: list) -> np.ndarray:
+    def _get_default_joint_positions(self) -> dict[str, float]:
         """Get the default joint positions from the YAML configuration for given joint names."""
         if self.policy_environment is None:
             raise ValueError("YAML not loaded. Call `load_policy_yaml()` first.")
@@ -278,20 +305,22 @@ class RLInferenceManager:
         if default_joint is None:
             raise ValueError("Default joint positions not found in YAML.")
 
-        try:
-            joint_pos_array = np.array(
-                [float(default_joint[name]) for name in joint_names],
-                dtype=np.float32
-            )
-        except KeyError as e:
-            raise KeyError(f"Joint name {e} not found in YAML joint_pos dict.")
+        return {str(k): float(v) for k, v in default_joint.items()} 
 
-        return joint_pos_array
+    def _sample_reach_random_pose(self) -> np.ndarray:
+        pos = np.random.uniform([0.25, -0.2, 0.3], [0.45, 0.2, 0.45])
+        roll = np.random.uniform(-math.pi / 4, math.pi / 4)
+        pitch = 0.0
+        yaw = np.random.uniform(math.pi / 4, math.pi * 3 / 4)
+        quat = Rotation.from_euler("zyx", [yaw, pitch, roll]).as_quat()  # [x, y, z, w]
+        return np.concatenate([pos, [quat[3], quat[0], quat[1], quat[2]]])  # [x, y, z, qw, qx, qy, qz]
 
 class RLControllerNode(Node, RLInferenceManager):
     def __init__(self, model_dir: str):
         Node.__init__(self, 'rl_controller_node')
-        RLInferenceManager.__init__(self)  # Init parent class
+        inference_fps = 1000  # Set the inference frequency
+
+        RLInferenceManager.__init__(self, inference_fps=inference_fps)  # Init parent class
 
         # Validate and load policy
         valid, msg = self.validate_policy(model_dir)
@@ -312,15 +341,12 @@ class RLControllerNode(Node, RLInferenceManager):
             JointTrajectory, "/arm_controller/joint_trajectory", 10
         )
 
-        self.iteration = 0
-        self.step_size = 1.0 / 1000  # 1000Hz
+        step_size = 1.0 / inference_fps  # 100Hz
         self.trajectory_time_from_start = 0.1
-        self.joint_command_timer = self.create_timer(self.step_size, self.timer_callback)
+        self.joint_command_timer = self.create_timer(step_size, self.timer_callback)
 
         self.has_joint_data = False
         self.joint_names = ['joint1', 'joint2', 'joint3', 'joint4', 'joint5', 'joint6', 'rh_r1_joint']
-
-        self.target_command = np.zeros(7)  # [x, y, z, qw, qx, qy, qz]
 
         self.get_logger().info("RL Controller Node initialized.")
 
@@ -337,34 +363,30 @@ class RLControllerNode(Node, RLInferenceManager):
 
         self.has_joint_data = True
 
-    def create_trajectory_command(self, joint_positions: dict) -> JointTrajectory:
+    def create_trajectory_command(self, joint_positions: list, joint_names: list[str]) -> JointTrajectory:
         """
-        Creates a JointTrajectory message from a dict of joint positions.
-        
+        Creates a JointTrajectory message from a list of joint positions.
+
         Args:
-            joint_positions (dict): {joint_name: position}
+            joint_positions (list): List of joint positions
         
         Returns:
             JointTrajectory: ROS2 JointTrajectory message
         """
         point = JointTrajectoryPoint()
+
+        if len(joint_positions) != len(joint_names):
+            raise ValueError(f"Expected {len(joint_names)} joint positions, got {len(joint_positions)}.")
+
+        point.positions = joint_positions
         
-        # Fill positions in the correct order
-        ordered_positions = []
-        for name in self.joint_names:
-            if name in joint_positions:
-                ordered_positions.append(joint_positions[name])
-            else:
-                ordered_positions.append(0.0)
-        
-        point.positions = ordered_positions
         point.time_from_start = Duration(
             sec=0,
             nanosec=int(self.trajectory_time_from_start * 1e9)
         )
 
         joint_trajectory = JointTrajectory()
-        joint_trajectory.joint_names = self.joint_names
+        joint_trajectory.joint_names = joint_names
         joint_trajectory.points.append(point)
         return joint_trajectory
 
@@ -372,36 +394,19 @@ class RLControllerNode(Node, RLInferenceManager):
         if not self.has_joint_data:
             return
 
-        command_interval = int(3.0 / self.step_size)
-        phase = self.iteration % command_interval
-
-        if phase == 0:
-            self.target_command = self.sample_random_pose()
-            self.get_logger().info(f"New target command: {np.round(self.target_command, 4)}")
-
         # Use predict() from RLInferenceManager
-        additional_params = {"command": self.target_command}
+        additional_params = {}
         additional_params['joint_velocity'] = self.current_joint_velocities
         additional_params['joint_names'] = self.joint_names
-        action = self.predict(
+        action, action_joint_names = self.predict(
             images={},  # No image input for this task
             state=self.current_joint_positions,
             task_instruction="omy_reach",
             additional_params=additional_params
         )
-        joint_positions = action
 
-        joint_trajectory_msg = self.create_trajectory_command(joint_positions)
+        joint_trajectory_msg = self.create_trajectory_command(action, action_joint_names)
         self.joint_trajectory_publisher.publish(joint_trajectory_msg)
-        self.iteration += 1
-
-    def sample_random_pose(self) -> np.ndarray:
-        pos = np.random.uniform([0.25, -0.2, 0.3], [0.45, 0.2, 0.45])
-        roll = np.random.uniform(-math.pi / 4, math.pi / 4)
-        pitch = 0.0
-        yaw = np.random.uniform(math.pi / 4, math.pi * 3 / 4)
-        quat = Rotation.from_euler("zyx", [yaw, pitch, roll]).as_quat()  # [x, y, z, w]
-        return np.concatenate([pos, [quat[3], quat[0], quat[1], quat[2]]])  # [x, y, z, qw, qx, qy, qz]
 
 
 def main(args=None):
