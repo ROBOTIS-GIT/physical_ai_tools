@@ -24,8 +24,16 @@ import queue
 import threading
 import time
 from typing import Optional
-import matplotlib.pyplot as plt
-import numpy as np
+try:
+    import matplotlib
+    matplotlib.use('Agg')  # Use non-interactive backend
+    import matplotlib.pyplot as plt
+    import numpy as np
+    MATPLOTLIB_AVAILABLE = True
+except ImportError:
+    MATPLOTLIB_AVAILABLE = False
+    plt = None
+    
 from collections import deque
 
 from ament_index_python.packages import get_package_share_directory
@@ -115,6 +123,9 @@ class PhysicalAIServer(Node):
             'chunk_sizes': [],  # Original chunk sizes
             'chunk_used_sizes': [],  # Actually used chunk sizes after offset
         }
+        
+        # Store raw inference results for plotting
+        self.raw_action_chunks = []  # Store original action chunks with metadata
 
     def _init_core_components(self):
         self.communicator: Optional[Communicator] = None
@@ -540,6 +551,16 @@ class PhysicalAIServer(Node):
                     }
                     self.inference_history.append(current_chunk_data)
                     
+                    # Store raw action chunk for plotting
+                    raw_chunk_data = {
+                        'chunk_id': len(self.raw_action_chunks),
+                        'inference_start_step': worker_start_count,
+                        'raw_actions': action_chunk.copy(),  # Store original actions before any processing
+                        'joint_count': len(action_chunk[0]) if action_chunk else 0,
+                        'timestamp': time.time()
+                    }
+                    self.raw_action_chunks.append(raw_chunk_data)
+                    
                     self.get_logger().info(
                         f'Worker reported start at action: {worker_start_count}, '
                         f'current action count: {self._used_action_count}, '
@@ -621,9 +642,12 @@ class PhysicalAIServer(Node):
                         f'Action buffer REPLACED: {old_count} -> {new_count} fresh actions '
                         f'(offset applied: {actions_executed_during_inference})')
 
-                    # Plot visualization every 5 chunks
-                    if len(self.inference_history) % 5 == 0:
-                        self._plot_action_chunk_analysis()
+                    # Plot visualization every 3 chunks for better analysis
+                    if len(self.inference_history) % 3 == 0:
+                        self._plot_action_chunk_curves()
+                    else:
+                        # Always print text analysis
+                        self._print_offset_analysis()
 
                     # Update status
                     current_status = self.data_manager.get_current_record_status()
@@ -1088,9 +1112,131 @@ class PhysicalAIServer(Node):
         # Skip ping/pong for now to avoid interference - just check if process is alive
         return True
 
+    def _plot_action_chunk_curves(self):
+        """Plot action chunk curves to visualize inference outputs vs actual execution"""
+        try:
+            if not MATPLOTLIB_AVAILABLE:
+                self.get_logger().warning('Matplotlib not available, skipping plot generation')
+                self._print_offset_analysis()
+                return
+                
+            if len(self.raw_action_chunks) < 2:
+                return
+            
+            # Determine how many joints we have
+            joint_count = self.raw_action_chunks[0]['joint_count'] if self.raw_action_chunks else 7
+            joint_count = min(joint_count, 4)  # Plot up to 4 joints to keep it readable
+            
+            fig, axes = plt.subplots(joint_count, 1, figsize=(16, 4*joint_count), sharex=True)
+            if joint_count == 1:
+                axes = [axes]
+            
+            fig.suptitle('Action Chunk Analysis: Inference Outputs vs Actual Execution', fontsize=16)
+            
+            # Plot actual executed actions as continuous line
+            if self.action_history:
+                action_numbers = [a['action_number'] for a in self.action_history]
+                
+                for joint_idx in range(joint_count):
+                    ax = axes[joint_idx]
+                    
+                    # Plot actual executed actions
+                    if len(self.action_history) > 0 and len(self.action_history[0]['action_values']) > joint_idx:
+                        actual_values = [a['action_values'][joint_idx] if len(a['action_values']) > joint_idx else 0 
+                                       for a in self.action_history]
+                        ax.plot(action_numbers, actual_values, 'k-', linewidth=2, 
+                               label='Actual Executed Actions', alpha=0.8)
+                    
+                    # Plot each inference chunk as separate colored curves
+                    colors = ['red', 'blue', 'green', 'orange', 'purple', 'brown', 'pink', 'gray']
+                    
+                    for chunk_idx, chunk_data in enumerate(self.raw_action_chunks):
+                        inference_start_step = chunk_data['inference_start_step']
+                        raw_actions = chunk_data['raw_actions']
+                        
+                        if not raw_actions or len(raw_actions[0]) <= joint_idx:
+                            continue
+                            
+                        # Extract joint values for this chunk
+                        joint_values = [action[joint_idx] for action in raw_actions]
+                        
+                        # Create step numbers starting from inference start
+                        chunk_steps = list(range(inference_start_step, 
+                                               inference_start_step + len(joint_values)))
+                        
+                        color = colors[chunk_idx % len(colors)]
+                        ax.plot(chunk_steps, joint_values, color=color, linestyle='--', 
+                               linewidth=1.5, alpha=0.7, 
+                               label=f'Inference {chunk_idx+1} (from step {inference_start_step})')
+                        
+                        # Mark the start point
+                        ax.scatter([inference_start_step], [joint_values[0]], 
+                                 color=color, s=50, marker='o', alpha=0.8)
+                    
+                    ax.set_ylabel(f'Joint {joint_idx} Value')
+                    ax.grid(True, alpha=0.3)
+                    ax.legend(bbox_to_anchor=(1.05, 1), loc='upper left')
+                    
+                    # Add vertical lines for chunk boundaries
+                    for chunk_data in self.raw_action_chunks:
+                        start_step = chunk_data['inference_start_step']
+                        if start_step <= max(action_numbers):
+                            ax.axvline(x=start_step, color='gray', linestyle=':', alpha=0.5)
+            
+            if joint_count > 0:
+                axes[-1].set_xlabel('Action Step Number')
+            
+            plt.tight_layout()
+            
+            # Save plot
+            plot_path = f'/tmp/action_chunk_curves_{len(self.raw_action_chunks)}.png'
+            plt.savefig(plot_path, dpi=150, bbox_inches='tight')
+            plt.close()
+            
+            self.get_logger().info(f'Action chunk curves plot saved to: {plot_path}')
+            
+            # Print detailed analysis
+            self._print_chunk_curve_analysis()
+            
+        except Exception as e:
+            self.get_logger().error(f'Error creating action chunk curves plot: {str(e)}')
+            # Always print text analysis even if plot fails
+            self._print_offset_analysis()
+
+    def _print_chunk_curve_analysis(self):
+        """Print analysis of action chunk curves"""
+        self.get_logger().info("=== ACTION CHUNK CURVE ANALYSIS ===")
+        
+        for chunk_idx, chunk_data in enumerate(self.raw_action_chunks[-3:], 
+                                             start=max(0, len(self.raw_action_chunks)-3)):
+            inference_start = chunk_data['inference_start_step']
+            raw_actions = chunk_data['raw_actions']
+            joint_count = chunk_data['joint_count']
+            
+            self.get_logger().info(
+                f"Chunk {chunk_idx}: Started from step {inference_start}, "
+                f"Generated {len(raw_actions)} actions for {joint_count} joints"
+            )
+            
+            # Show first and last action values
+            if raw_actions:
+                first_action = raw_actions[0][:3]  # First 3 joints
+                last_action = raw_actions[-1][:3]  # First 3 joints
+                self.get_logger().info(
+                    f"  First action: {first_action}")
+                self.get_logger().info(
+                    f"  Last action:  {last_action}")
+        
+        self.get_logger().info("=== END CHUNK CURVE ANALYSIS ===")
+
     def _plot_action_chunk_analysis(self):
         """Plot action chunk analysis to understand offset calculation"""
         try:
+            if not MATPLOTLIB_AVAILABLE:
+                self.get_logger().warning('Matplotlib not available, skipping plot generation')
+                self._print_offset_analysis()
+                return
+                
             if len(self.inference_history) < 2:
                 return
                 
@@ -1176,36 +1322,143 @@ class PhysicalAIServer(Node):
             
         except Exception as e:
             self.get_logger().error(f'Error creating action chunk plot: {str(e)}')
+            # Always print text analysis even if plot fails
+            self._print_offset_analysis()
 
     def _print_offset_analysis(self):
         """Print detailed offset analysis to help debug the issue"""
         self.get_logger().info("=== DETAILED OFFSET ANALYSIS ===")
         
-        for i, history in enumerate(self.inference_history[-5:], start=max(0, len(self.inference_history)-5)):
-            expected_next_action = history['inference_start_action'] + history['calculated_offset'] + 1
+        # Print recent history (last 3 chunks)
+        recent_chunks = self.inference_history[-3:] if len(self.inference_history) >= 3 else self.inference_history
+        
+        for i, history in enumerate(recent_chunks, start=max(0, len(self.inference_history)-len(recent_chunks))):
+            inference_start = history['inference_start_action']
+            completion_at = history['action_count_when_completed']
+            calc_offset = history['calculated_offset']
+            orig_size = history['original_chunk_size']
+            used_size = history['used_chunk_size']
             actual_start = history.get('action_start_from', 'Unknown')
+            
+            # Calculate expected values
+            expected_next_action = inference_start + calc_offset + 1
+            actions_during_inference = completion_at - inference_start
             
             self.get_logger().info(
                 f"Chunk {i}: "
-                f"InfStart={history['inference_start_action']}, "
-                f"CompletionAt={history['action_count_when_completed']}, "
-                f"CalcOffset={history['calculated_offset']}, "
-                f"OrigSize={history['original_chunk_size']}, "
-                f"UsedSize={history['used_chunk_size']}, "
+                f"InfStart={inference_start}, "
+                f"CompletionAt={completion_at}, "
+                f"ActionsDuring={actions_during_inference}, "
+                f"CalcOffset={calc_offset}, "
+                f"OrigSize={orig_size}, "
+                f"UsedSize={used_size}, "
                 f"ExpectedNext={expected_next_action}, "
                 f"ActualStart={actual_start}"
             )
             
-            # Check for discrepancy
+            # Detailed analysis
+            if calc_offset != actions_during_inference:
+                self.get_logger().warning(
+                    f"CALCULATION MISMATCH in Chunk {i}: "
+                    f"Calculated offset ({calc_offset}) != Actions during inference ({actions_during_inference})"
+                )
+            
+            # Check if offset makes sense
+            if calc_offset >= orig_size:
+                self.get_logger().warning(
+                    f"OFFSET TOO LARGE in Chunk {i}: "
+                    f"Offset ({calc_offset}) >= Original chunk size ({orig_size}), "
+                    f"all actions would be skipped!"
+                )
+            
+            # Check for discrepancy in expected vs actual
             if actual_start != 'Unknown' and expected_next_action != actual_start:
+                difference = actual_start - expected_next_action
                 self.get_logger().warning(
                     f"OFFSET MISMATCH in Chunk {i}: "
                     f"Expected next action {expected_next_action}, "
                     f"but actually started from {actual_start}. "
-                    f"Difference: {actual_start - expected_next_action}"
+                    f"Difference: {difference} actions"
                 )
+                
+                if difference < 0:
+                    self.get_logger().error(f"CRITICAL: Actions being REPEATED! Going backwards by {abs(difference)} actions")
+                elif difference > 0:
+                    self.get_logger().warning(f"Actions being SKIPPED! Missing {difference} actions")
+        
+        # Summary statistics
+        if len(self.inference_history) > 1:
+            avg_offset = sum(h['calculated_offset'] for h in self.inference_history) / len(self.inference_history)
+            avg_completion_time = sum(h['action_count_when_completed'] - h['inference_start_action'] 
+                                    for h in self.inference_history) / len(self.inference_history)
+            
+            self.get_logger().info(
+                f"SUMMARY: Total chunks: {len(self.inference_history)}, "
+                f"Avg offset: {avg_offset:.1f}, "
+                f"Avg actions during inference: {avg_completion_time:.1f}"
+            )
         
         self.get_logger().info("=== END OFFSET ANALYSIS ===")
+        
+        # Add pattern detection
+        self._detect_offset_patterns()
+
+    def _detect_offset_patterns(self):
+        """Detect patterns in offset calculation that might explain the issue"""
+        if len(self.inference_history) < 3:
+            return
+            
+        self.get_logger().info("=== PATTERN DETECTION ===")
+        
+        # Check if offsets are consistent
+        recent_offsets = [h['calculated_offset'] for h in self.inference_history[-5:]]
+        if len(set(recent_offsets)) <= 2:
+            self.get_logger().info(f"PATTERN: Offsets are quite consistent: {recent_offsets}")
+        else:
+            self.get_logger().info(f"PATTERN: Offsets vary: {recent_offsets}")
+        
+        # Check inference timing patterns
+        inference_times = [h['inference_time'] for h in self.inference_history[-5:]]
+        avg_inference_time = sum(inference_times) / len(inference_times)
+        self.get_logger().info(f"PATTERN: Avg inference time: {avg_inference_time*1000:.1f}ms")
+        
+        # Check action execution rate during inference
+        action_rates = []
+        for h in self.inference_history[-3:]:
+            actions_during = h['action_count_when_completed'] - h['inference_start_action']
+            time_taken = h['inference_time']
+            rate = actions_during / time_taken if time_taken > 0 else 0
+            action_rates.append(rate)
+        
+        if action_rates:
+            avg_rate = sum(action_rates) / len(action_rates)
+            self.get_logger().info(f"PATTERN: Actions executed during inference: {avg_rate:.1f} actions/sec")
+            
+            # Check if this matches our 10Hz expectation
+            expected_rate = 10.0  # 10Hz action timer
+            if abs(avg_rate - expected_rate) > 2.0:
+                self.get_logger().warning(
+                    f"PATTERN ANOMALY: Action rate ({avg_rate:.1f}) differs significantly from expected 10Hz"
+                )
+        
+        # Check for potential timing issues
+        for i, h in enumerate(self.inference_history[-3:], start=len(self.inference_history)-3):
+            start_action = h['inference_start_action']
+            completion_action = h['action_count_when_completed']
+            inference_time_ms = h['inference_time'] * 1000
+            
+            # Calculate theoretical actions that should have executed
+            theoretical_actions = int(inference_time_ms / 100)  # 100ms per action at 10Hz
+            actual_actions = completion_action - start_action
+            
+            self.get_logger().info(
+                f"Chunk {i}: Inference took {inference_time_ms:.0f}ms, "
+                f"theoretical actions: {theoretical_actions}, "
+                f"actual actions: {actual_actions}, "
+                f"difference: {actual_actions - theoretical_actions}"
+            )
+        
+        self.get_logger().info("=== END PATTERN DETECTION ===")
 
     def _stop_inference_with_error(self, error_msg):
         """Stop inference due to error"""
