@@ -512,7 +512,7 @@ class PhysicalAIServer(Node):
                     # Calculate offset based on actions executed DURING inference
                     # Use the start count that was actually sent to the worker
                     worker_start_count = result_data.get('inference_start_action_count', inference_start_count)
-                    actions_executed_during_inference = max(0, self._used_action_count - worker_start_count)
+                    actions_executed_during_inference = max(0, self._used_action_count - worker_start_count + 1)
                     
                     self.get_logger().info(
                         f'Worker reported start at action: {worker_start_count}, '
@@ -559,13 +559,13 @@ class PhysicalAIServer(Node):
                         self.get_logger().info(
                             f'Applied multi-step smoothing over {num_transition_steps} actions:')
                         self.get_logger().info(
-                            f'  last_executed={self.last_executed_action[:3]}...')
+                            f'  last_executed={self.last_executed_action[:]}')
                         self.get_logger().info(
-                            f'  first_original={action_chunk[actions_executed_during_inference][:3]}...')
+                            f'  first_original={action_chunk[actions_executed_during_inference][:]}')
                         self.get_logger().info(
-                            f'  first_smoothed={offset_action_chunk[0][:3]}...')
+                            f'  first_smoothed={offset_action_chunk[0][:]}')
                         self.get_logger().info(
-                            f'  final_smoothed={offset_action_chunk[num_transition_steps-1][:3]}...')
+                            f'  final_smoothed={offset_action_chunk[num_transition_steps-1][:]}')
                     else:
                         if self.last_executed_action is None:
                             self.get_logger().info('No last executed action available for smoothing')
