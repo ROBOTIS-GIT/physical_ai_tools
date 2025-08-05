@@ -250,7 +250,7 @@ class PhysicalAIServer(Node):
             # 1. Action timer - publishes actions at high frequency (33ms)
             self.timer_manager.set_timer(
                 timer_name='action',
-                timer_frequency=20,
+                timer_frequency=10,
                 callback_function=self.timer_callback_dict['action']
             )
             
@@ -258,7 +258,7 @@ class PhysicalAIServer(Node):
             inference_frequency = 5.0  # 5Hz = 200ms interval
             self.timer_manager.set_timer(
                 timer_name='inference',
-                timer_frequency=20,
+                timer_frequency=50,
                 callback_function=self.timer_callback_dict['inference']
             )
             
