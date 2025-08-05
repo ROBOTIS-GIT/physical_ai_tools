@@ -495,6 +495,7 @@ class PhysicalAIServer(Node):
                 status, result_data = result
                 
                 if status == 'success':
+                    self.updating_action_chunk = True
                     action_chunk = result_data['actions']
                     inference_time = result_data['inference_time']
                     inference_start_count = result_data.get('inference_start_action_count', 0)
@@ -569,6 +570,7 @@ class PhysicalAIServer(Node):
                         self.remaining_actions.extend(offset_action_chunk)
                         new_count = len(self.remaining_actions)
                         self.inference_pending = False
+                        self.updating_action_chunk = False
                     
                     self.get_logger().info(
                         f'Action buffer REPLACED: {old_count} -> {new_count} fresh actions '
@@ -599,7 +601,11 @@ class PhysicalAIServer(Node):
         """Action timer callback - publishes actions at high frequency"""
         if not self.on_inference:
             return
-            
+
+        if self.updating_action_chunk:
+            self.get_logger().debug("Waiting for action chunk update to complete")
+            return
+
         try:
             # Publish next action if available (thread-safe)
             with self.inference_lock:
