@@ -24,6 +24,9 @@ import queue
 import threading
 import time
 from typing import Optional
+import matplotlib.pyplot as plt
+import numpy as np
+from collections import deque
 
 from ament_index_python.packages import get_package_share_directory
 from physical_ai_interfaces.msg import TaskStatus, TrainingStatus
@@ -101,6 +104,17 @@ class PhysicalAIServer(Node):
         self.inference_start_action_count = 0  # Actions used when inference started
         self.last_executed_action = None  # Remember last executed action for smoothing
         self.updating_action_chunk = False
+        
+        # Action tracking for visualization
+        self.action_history = deque(maxlen=1000)  # Store action execution history
+        self.inference_history = []  # Store inference timing data
+        self.chunk_visualization_data = {
+            'chunk_start_actions': [],  # When each chunk starts being used
+            'chunk_inference_starts': [],  # When inference started for each chunk
+            'chunk_offsets': [],  # Applied offsets for each chunk
+            'chunk_sizes': [],  # Original chunk sizes
+            'chunk_used_sizes': [],  # Actually used chunk sizes after offset
+        }
 
     def _init_core_components(self):
         self.communicator: Optional[Communicator] = None
@@ -512,8 +526,19 @@ class PhysicalAIServer(Node):
                     # Calculate offset based on actions executed DURING inference
                     # Use the start count that was actually sent to the worker
                     worker_start_count = result_data.get('inference_start_action_count', inference_start_count)
-                    self._used_action_count += 2
                     actions_executed_during_inference = max(0, self._used_action_count - worker_start_count)
+                    
+                    # Store data for visualization
+                    current_chunk_data = {
+                        'chunk_id': len(self.inference_history),
+                        'inference_start_action': worker_start_count,
+                        'action_count_when_completed': self._used_action_count,
+                        'calculated_offset': actions_executed_during_inference,
+                        'original_chunk_size': len(action_chunk),
+                        'inference_time': inference_time,
+                        'timestamp': time.time()
+                    }
+                    self.inference_history.append(current_chunk_data)
                     
                     self.get_logger().info(
                         f'Worker reported start at action: {worker_start_count}, '
@@ -582,9 +607,23 @@ class PhysicalAIServer(Node):
                         self.inference_pending = False
                         self.updating_action_chunk = False
                     
+                    # Update visualization data
+                    current_chunk_data['used_chunk_size'] = len(offset_action_chunk)
+                    current_chunk_data['action_start_from'] = self._used_action_count + 1  # Next action to be executed
+                    
+                    self.chunk_visualization_data['chunk_start_actions'].append(self._used_action_count + 1)
+                    self.chunk_visualization_data['chunk_inference_starts'].append(worker_start_count)
+                    self.chunk_visualization_data['chunk_offsets'].append(actions_executed_during_inference)
+                    self.chunk_visualization_data['chunk_sizes'].append(len(action_chunk))
+                    self.chunk_visualization_data['chunk_used_sizes'].append(len(offset_action_chunk))
+                    
                     self.get_logger().info(
                         f'Action buffer REPLACED: {old_count} -> {new_count} fresh actions '
                         f'(offset applied: {actions_executed_during_inference})')
+
+                    # Plot visualization every 5 chunks
+                    if len(self.inference_history) % 5 == 0:
+                        self._plot_action_chunk_analysis()
 
                     # Update status
                     current_status = self.data_manager.get_current_record_status()
@@ -630,6 +669,15 @@ class PhysicalAIServer(Node):
             if action_available:
                 # IMPORTANT: Remember this action for smoothing next time
                 self.last_executed_action = action.copy() if isinstance(action, list) else list(action)
+                
+                # Store action execution data for visualization
+                action_data = {
+                    'action_number': self._used_action_count + 1,
+                    'timestamp': time.time(),
+                    'action_values': action[:3] if len(action) >= 3 else action,  # Store first 3 values for plotting
+                    'remaining_in_buffer': remaining_count
+                }
+                self.action_history.append(action_data)
                 
                 self.get_logger().info(
                     f'Publishing action {self._used_action_count + 1} '
@@ -1040,7 +1088,126 @@ class PhysicalAIServer(Node):
         # Skip ping/pong for now to avoid interference - just check if process is alive
         return True
 
-    def _stop_inference_with_error(self, error_msg):
+    def _plot_action_chunk_analysis(self):
+        """Plot action chunk analysis to understand offset calculation"""
+        try:
+            if len(self.inference_history) < 2:
+                return
+                
+            fig, ((ax1, ax2), (ax3, ax4)) = plt.subplots(2, 2, figsize=(15, 10))
+            fig.suptitle('Action Chunk Analysis - Offset Calculation Debug', fontsize=16)
+            
+            # Extract data for plotting
+            chunk_ids = list(range(len(self.inference_history)))
+            inference_starts = [h['inference_start_action'] for h in self.inference_history]
+            completion_actions = [h['action_count_when_completed'] for h in self.inference_history]
+            calculated_offsets = [h['calculated_offset'] for h in self.inference_history]
+            original_sizes = [h['original_chunk_size'] for h in self.inference_history]
+            used_sizes = [h['used_chunk_size'] for h in self.inference_history]
+            
+            # Plot 1: Inference timing vs action execution
+            ax1.plot(chunk_ids, inference_starts, 'b-o', label='Inference Start Action', markersize=4)
+            ax1.plot(chunk_ids, completion_actions, 'r-s', label='Action Count at Completion', markersize=4)
+            ax1.set_xlabel('Chunk ID')
+            ax1.set_ylabel('Action Number')
+            ax1.set_title('Inference Timing vs Action Execution')
+            ax1.legend()
+            ax1.grid(True, alpha=0.3)
+            
+            # Plot 2: Offset calculation
+            ax2.bar(chunk_ids, calculated_offsets, alpha=0.7, color='orange')
+            ax2.set_xlabel('Chunk ID')
+            ax2.set_ylabel('Calculated Offset')
+            ax2.set_title('Applied Offsets for Each Chunk')
+            ax2.grid(True, alpha=0.3)
+            
+            # Add text annotations for offsets
+            for i, offset in enumerate(calculated_offsets):
+                if offset > 0:
+                    ax2.text(i, offset + 0.5, str(offset), ha='center', va='bottom')
+            
+            # Plot 3: Chunk sizes (original vs used)
+            x_pos = np.arange(len(chunk_ids))
+            width = 0.35
+            ax3.bar(x_pos - width/2, original_sizes, width, label='Original Size', alpha=0.7, color='lightblue')
+            ax3.bar(x_pos + width/2, used_sizes, width, label='Used Size (after offset)', alpha=0.7, color='darkblue')
+            ax3.set_xlabel('Chunk ID')
+            ax3.set_ylabel('Chunk Size')
+            ax3.set_title('Chunk Sizes: Original vs Used')
+            ax3.set_xticks(x_pos)
+            ax3.set_xticklabels(chunk_ids)
+            ax3.legend()
+            ax3.grid(True, alpha=0.3)
+            
+            # Plot 4: Action values over time (first 3 dimensions)
+            if self.action_history:
+                action_numbers = [a['action_number'] for a in self.action_history]
+                action_vals_0 = [a['action_values'][0] if len(a['action_values']) > 0 else 0 for a in self.action_history]
+                action_vals_1 = [a['action_values'][1] if len(a['action_values']) > 1 else 0 for a in self.action_history]
+                action_vals_2 = [a['action_values'][2] if len(a['action_values']) > 2 else 0 for a in self.action_history]
+                
+                ax4.plot(action_numbers, action_vals_0, 'r-', alpha=0.7, label='Joint 0', linewidth=1)
+                ax4.plot(action_numbers, action_vals_1, 'g-', alpha=0.7, label='Joint 1', linewidth=1)
+                ax4.plot(action_numbers, action_vals_2, 'b-', alpha=0.7, label='Joint 2', linewidth=1)
+                
+                # Mark chunk boundaries
+                chunk_starts = self.chunk_visualization_data['chunk_start_actions']
+                for start in chunk_starts:
+                    if start <= max(action_numbers):
+                        ax4.axvline(x=start, color='black', linestyle='--', alpha=0.5)
+                
+                ax4.set_xlabel('Action Number')
+                ax4.set_ylabel('Joint Values')
+                ax4.set_title('Action Values Over Time (with chunk boundaries)')
+                ax4.legend()
+                ax4.grid(True, alpha=0.3)
+            
+            plt.tight_layout()
+            
+            # Save plot
+            plot_path = f'/tmp/action_chunk_analysis_{len(self.inference_history)}.png'
+            plt.savefig(plot_path, dpi=150, bbox_inches='tight')
+            plt.close()
+            
+            self.get_logger().info(f'Action chunk analysis plot saved to: {plot_path}')
+            
+            # Print detailed analysis
+            self._print_offset_analysis()
+            
+        except Exception as e:
+            self.get_logger().error(f'Error creating action chunk plot: {str(e)}')
+
+    def _print_offset_analysis(self):
+        """Print detailed offset analysis to help debug the issue"""
+        self.get_logger().info("=== DETAILED OFFSET ANALYSIS ===")
+        
+        for i, history in enumerate(self.inference_history[-5:], start=max(0, len(self.inference_history)-5)):
+            expected_next_action = history['inference_start_action'] + history['calculated_offset'] + 1
+            actual_start = history.get('action_start_from', 'Unknown')
+            
+            self.get_logger().info(
+                f"Chunk {i}: "
+                f"InfStart={history['inference_start_action']}, "
+                f"CompletionAt={history['action_count_when_completed']}, "
+                f"CalcOffset={history['calculated_offset']}, "
+                f"OrigSize={history['original_chunk_size']}, "
+                f"UsedSize={history['used_chunk_size']}, "
+                f"ExpectedNext={expected_next_action}, "
+                f"ActualStart={actual_start}"
+            )
+            
+            # Check for discrepancy
+            if actual_start != 'Unknown' and expected_next_action != actual_start:
+                self.get_logger().warning(
+                    f"OFFSET MISMATCH in Chunk {i}: "
+                    f"Expected next action {expected_next_action}, "
+                    f"but actually started from {actual_start}. "
+                    f"Difference: {actual_start - expected_next_action}"
+                )
+        
+        self.get_logger().info("=== END OFFSET ANALYSIS ===")
+
+    def _stop_inference_with_error(self, error_msg)::
         """Stop inference due to error"""
         self.get_logger().error(f"Stopping inference due to error: {error_msg}")
         self.on_inference = False
