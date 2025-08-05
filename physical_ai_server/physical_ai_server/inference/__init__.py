@@ -16,21 +16,5 @@
 #
 # Author: Dongyun Kim
 
-from .inference_base import InferenceBase
-from .lerobot_inference import LeRobotInference
-# from .physical_intelligence_inference import PhysicalIntelligenceInference
-# from .groot_inference import GrootInference
-from .inference_factory import InferenceFactory, create_inference_manager
 
-# For backward compatibility, import old InferenceManager as alias
-from .lerobot_inference import LeRobotInference as InferenceManager
-
-__all__ = [
-    'InferenceBase',
-    'LeRobotInference', 
-    # 'PhysicalIntelligenceInference',
-    # 'GrootInference',
-    'InferenceFactory',
-    'create_inference_manager',
-    'InferenceManager',  # Backward compatibility
-]
+# This file makes the directory a Python package
