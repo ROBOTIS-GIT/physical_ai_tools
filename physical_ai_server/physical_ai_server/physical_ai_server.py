@@ -552,12 +552,54 @@ class PhysicalAIServer(Node):
                     }
                     self.inference_history.append(current_chunk_data)
                     
-                    # Store raw action chunk for plotting
+                    # Store raw action chunk for plotting with detailed validation
+                    if not action_chunk:
+                        self.get_logger().warning("Received empty action chunk!")
+                        return
+                    
+                    # Validate action chunk structure and data types
+                    if not isinstance(action_chunk, (list, np.ndarray)):
+                        self.get_logger().error(f"Invalid action chunk type: {type(action_chunk)}")
+                        return
+                    
+                    if len(action_chunk) == 0:
+                        self.get_logger().warning("Received action chunk with 0 length!")
+                        return
+                    
+                    # Check first few actions for validation
+                    first_action = action_chunk[0]
+                    if not isinstance(first_action, (list, np.ndarray)):
+                        self.get_logger().error(f"Invalid action type in chunk: {type(first_action)}")
+                        return
+                    
+                    joint_count = len(first_action) if first_action else 0
+                    chunk_id = len(self.raw_action_chunks)
+                    
+                    # Convert to standard list format for consistency
+                    if isinstance(action_chunk, np.ndarray):
+                        action_chunk_list = action_chunk.tolist()
+                    else:
+                        action_chunk_list = [list(action) if isinstance(action, np.ndarray) else action for action in action_chunk]
+                    
+                    # Log detailed statistics for debugging
+                    if len(action_chunk_list) > 0 and len(action_chunk_list[0]) > 0:
+                        joint_0_values = [action[0] for action in action_chunk_list if len(action) > 0]
+                        joint_0_min = min(joint_0_values) if joint_0_values else 0
+                        joint_0_max = max(joint_0_values) if joint_0_values else 0
+                        joint_0_mean = sum(joint_0_values) / len(joint_0_values) if joint_0_values else 0
+                        
+                        self.get_logger().info(f"CHUNK {chunk_id} ANALYSIS:")
+                        self.get_logger().info(f"  Size: {len(action_chunk_list)} actions")
+                        self.get_logger().info(f"  Joint count: {joint_count}")
+                        self.get_logger().info(f"  Joint 0 range: [{joint_0_min:.4f}, {joint_0_max:.4f}], mean: {joint_0_mean:.4f}")
+                        self.get_logger().info(f"  First action: {action_chunk_list[0][:3]}")
+                        self.get_logger().info(f"  Last action: {action_chunk_list[-1][:3]}")
+                    
                     raw_chunk_data = {
-                        'chunk_id': len(self.raw_action_chunks),
+                        'chunk_id': chunk_id,
                         'inference_start_step': worker_start_count,
-                        'raw_actions': action_chunk.copy(),  # Store original actions before any processing
-                        'joint_count': len(action_chunk[0]) if action_chunk else 0,
+                        'raw_actions': action_chunk_list,  # Store validated and converted actions
+                        'joint_count': joint_count,
                         'timestamp': time.time()
                     }
                     self.raw_action_chunks.append(raw_chunk_data)

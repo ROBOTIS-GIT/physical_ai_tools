@@ -192,10 +192,62 @@ class InferenceWorker:
                         inference_time = time.time() - start_time
                         logger.info(f"Inference completed in {inference_time*1000:.1f}ms")
                         
+                        # Detailed validation and logging before sending result
+                        if action_chunk is None:
+                            error_msg = "Inference returned None action chunk"
+                            logger.error(error_msg)
+                            output_queue.put(('error', error_msg))
+                            continue
+                        
+                        # Check data type and structure
+                        logger.info(f"Raw inference result type: {type(action_chunk)}")
+                        if hasattr(action_chunk, 'shape'):
+                            logger.info(f"Raw inference result shape: {action_chunk.shape}")
+                        elif hasattr(action_chunk, '__len__'):
+                            logger.info(f"Raw inference result length: {len(action_chunk)}")
+                        
                         # Convert to list if it's a numpy array
                         if isinstance(action_chunk, np.ndarray):
+                            original_shape = action_chunk.shape
                             action_chunk = action_chunk.tolist()
-                            logger.info(f"Converted numpy array to list, length: {len(action_chunk)}")
+                            logger.info(f"Converted numpy array {original_shape} to list, length: {len(action_chunk)}")
+                        
+                        # Validate the converted result
+                        if not action_chunk or len(action_chunk) == 0:
+                            error_msg = f"Invalid action chunk after conversion: empty or None"
+                            logger.error(error_msg)
+                            output_queue.put(('error', error_msg))
+                            continue
+                        
+                        # Check first action for structure validation
+                        first_action = action_chunk[0]
+                        if not isinstance(first_action, (list, tuple)) and not hasattr(first_action, '__len__'):
+                            error_msg = f"Invalid first action structure: {type(first_action)}, value: {first_action}"
+                            logger.error(error_msg)
+                            output_queue.put(('error', error_msg))
+                            continue
+                        
+                        joint_count = len(first_action)
+                        logger.info(f"Action chunk validation successful:")
+                        logger.info(f"  - Chunk size: {len(action_chunk)} actions")
+                        logger.info(f"  - Joint count: {joint_count}")
+                        logger.info(f"  - First action: {first_action}")
+                        logger.info(f"  - Last action: {action_chunk[-1]}")
+                        
+                        # Additional statistics for Joint 0 analysis
+                        if joint_count > 0:
+                            joint_0_values = [action[0] for action in action_chunk if len(action) > 0]
+                            if joint_0_values:
+                                joint_0_min = min(joint_0_values)
+                                joint_0_max = max(joint_0_values)
+                                joint_0_mean = sum(joint_0_values) / len(joint_0_values)
+                                logger.info(f"  - Joint 0 statistics: min={joint_0_min:.4f}, max={joint_0_max:.4f}, mean={joint_0_mean:.4f}")
+                                
+                                # Check for unusual values
+                                if abs(joint_0_max - joint_0_min) > 1.0:  # Large range
+                                    logger.warning(f"  - LARGE Joint 0 range detected: {joint_0_max - joint_0_min:.4f}")
+                                if abs(joint_0_mean) > 1.0:  # Large mean
+                                    logger.warning(f"  - LARGE Joint 0 mean detected: {joint_0_mean:.4f}")
                         
                         # Send result back with inference start action count for offset calculation
                         result = {
