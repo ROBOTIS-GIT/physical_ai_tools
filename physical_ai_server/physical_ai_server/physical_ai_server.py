@@ -23,6 +23,7 @@ import multiprocessing
 import queue
 import threading
 import time
+import traceback
 from typing import Optional
 try:
     import matplotlib
@@ -1068,8 +1069,11 @@ class PhysicalAIServer(Node):
                 return False
             
             # Wait for worker to be ready
-            timeout = 30.0  # 30 seconds timeout
+            timeout = 120.0  # 2 minutes timeout for large VLM models
             start_time = time.time()
+            last_log_time = start_time
+            
+            self.get_logger().info(f'Waiting for inference worker to be ready (timeout: {timeout}s)...')
             
             while time.time() - start_time < timeout:
                 try:
@@ -1077,15 +1081,29 @@ class PhysicalAIServer(Node):
                     if result:
                         status, message = result
                         if status == 'ready':
-                            self.get_logger().info('Inference worker started successfully')
+                            elapsed = time.time() - start_time
+                            self.get_logger().info(f'Inference worker started successfully in {elapsed:.1f}s')
                             return True
+                        elif status == 'loading':
+                            self.get_logger().info(f'Model loading in progress: {message}')
+                            # Continue waiting, just update the last log time
+                            last_log_time = time.time()
                         elif status == 'error':
                             self.get_logger().error(f'Inference worker failed to start: {message}')
                             return False
                 except:
                     continue
+                
+                # Log progress every 10 seconds
+                current_time = time.time()
+                if current_time - last_log_time >= 10.0:
+                    elapsed = current_time - start_time
+                    remaining = timeout - elapsed
+                    self.get_logger().info(f'Still waiting for worker... ({elapsed:.1f}s elapsed, {remaining:.1f}s remaining)')
+                    last_log_time = current_time
                     
-            self.get_logger().error('Inference worker startup timeout')
+            elapsed = time.time() - start_time
+            self.get_logger().error(f'Inference worker startup timeout after {elapsed:.1f}s')
             return False
             
         except Exception as e:
@@ -1175,6 +1193,26 @@ class PhysicalAIServer(Node):
                                label=f'Inference {chunk_idx+1} (from step {inference_start_step})')
                         
                         # Mark the start point
+                        ax.scatter([inference_start_step], [joint_values[0]], 
+                                 color=color, s=50, marker='o', alpha=0.8)
+                    
+                    ax.set_ylabel(f'Joint {joint_idx} Value')
+                    ax.grid(True, alpha=0.3)
+                    
+                    # Limit legend entries to avoid overcrowding
+                    handles, labels = ax.get_legend_handles_labels()
+                    if len(handles) > 8:  # Limit to 8 entries
+                        handles = handles[:8]
+                        labels = labels[:8]
+                        labels[-1] = f"... and {len(ax.get_legend_handles_labels()[0]) - 7} more"
+                    
+                    ax.legend(handles, labels, bbox_to_anchor=(1.05, 1), loc='upper left', fontsize=8)
+                    
+                    # Add vertical lines for chunk boundaries
+                    for chunk_data in self.raw_action_chunks:
+                        start_step = chunk_data['inference_start_step']
+                        if start_step <= max(action_numbers):
+                            ax.axvline(x=start_step, color='gray', linestyle=':', alpha=0.5)
                         ax.scatter([inference_start_step], [joint_values[0]], 
                                  color=color, s=50, marker='o', alpha=0.8)
                     

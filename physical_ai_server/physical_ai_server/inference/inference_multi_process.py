@@ -109,7 +109,10 @@ class InferenceWorker:
                 return
             logger.info("Policy validation successful")
                 
-            logger.info("Loading policy...")
+            logger.info("Loading policy... (This may take a while for large VLM models)")
+            # Send loading status to main process
+            output_queue.put(('loading', 'Policy loading in progress...'))
+            
             if not inference_manager.load_policy():
                 error_msg = 'Failed to load policy'
                 logger.error(error_msg)
