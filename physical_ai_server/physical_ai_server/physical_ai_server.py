@@ -512,7 +512,7 @@ class PhysicalAIServer(Node):
                     # Calculate offset based on actions executed DURING inference
                     # Use the start count that was actually sent to the worker
                     worker_start_count = result_data.get('inference_start_action_count', inference_start_count)
-                    actions_executed_during_inference = max(0, self._used_action_count - worker_start_count + 2)
+                    actions_executed_during_inference = max(0, self._used_action_count - worker_start_count + 3)
                     
                     self.get_logger().info(
                         f'Worker reported start at action: {worker_start_count}, '
