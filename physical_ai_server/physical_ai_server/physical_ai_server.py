@@ -523,7 +523,34 @@ class PhysicalAIServer(Node):
                         self.total_joint_order)
                     
                     # Track observation changes for debugging
-                    self._track_observation_changes(follower_data, self.inference_start_action_count)
+                    observation_changed = self._track_observation_changes(follower_data, self.inference_start_action_count)
+                    
+                    # CRITICAL: Skip inference if observation hasn't changed
+                    if not observation_changed and len(self.raw_action_chunks) > 0:
+                        self.get_logger().warning(f"BLOCKING INFERENCE: Observation unchanged at action {self.inference_start_action_count}")
+                        self.get_logger().warning("Waiting for fresh observation data before next inference...")
+                        
+                        # Force a small delay to allow new observations to arrive
+                        # This gives the robot's sensors time to update after the robot moves
+                        self.get_logger().info("Delaying inference by 100ms to allow observation updates...")
+                        time.sleep(0.1)  # 100ms delay
+                        
+                        # Try getting data again after delay
+                        camera_msgs, follower_msgs, _ = self.communicator.get_latest_data()
+                        if camera_msgs and follower_msgs:
+                            camera_data, follower_data, _ = self.data_manager.convert_msgs_to_raw_datas(
+                                camera_msgs, follower_msgs, self.total_joint_order)
+                            observation_changed_after_delay = self._track_observation_changes(
+                                follower_data, self.inference_start_action_count)
+                            
+                            if not observation_changed_after_delay:
+                                self.get_logger().warning("Still no observation change after delay - SKIPPING INFERENCE")
+                                return
+                            else:
+                                self.get_logger().info("Observation updated after delay - proceeding with inference")
+                        else:
+                            self.get_logger().warning("No data available after delay - SKIPPING INFERENCE")
+                            return
 
                     inference_data = (camera_data, follower_data, self.task_instruction[0], self.inference_start_action_count)
                     try:
@@ -1636,6 +1663,9 @@ class PhysicalAIServer(Node):
                         current_observation[key] = list(value[:5])
                     else:
                         current_observation[key] = str(value)
+            elif isinstance(follower_data, (list, tuple)):
+                # If follower_data is a list (joint positions), use first 5 values
+                current_observation['joint_positions'] = list(follower_data[:5])
             
             # Check if observation has changed since last inference
             observation_changed = True
@@ -1667,11 +1697,14 @@ class PhysicalAIServer(Node):
             # Keep only recent history (last 10 observations)
             if len(self.observation_change_history) > 10:
                 self.observation_change_history.pop(0)
+            
+            return observation_changed
                 
         except Exception as e:
             self.get_logger().error(f"Error tracking observation changes: {str(e)}")
             import traceback
             self.get_logger().error(f"Traceback: {traceback.format_exc()}")
+            return True  # Default to allowing inference if tracking fails
 
 
 def main(args=None):
