@@ -434,7 +434,7 @@ class PhysicalAIServer(Node):
                 self.inference_worker and 
                 self.inference_worker.is_alive()):
                 
-                # Record the action count when inference starts (but DON'T clear actions yet)
+                # Record the CURRENT action count when inference starts
                 self.inference_start_action_count = self._used_action_count
                 
                 # Get current data for fresh inference
@@ -505,11 +505,14 @@ class PhysicalAIServer(Node):
                         f'Inference completed in {inference_time*1000:.1f}ms, '
                         f'generated {len(action_chunk)} actions')
 
-                    # Calculate offset
-                    actions_executed_during_inference = self._used_action_count
+                    # Calculate offset based on actions executed DURING inference
+                    # inference_start_count should be the action count when inference started
+                    actions_executed_during_inference = max(0, self._used_action_count - inference_start_count)
                     
                     self.get_logger().info(
-                        f'Actions executed during inference: {actions_executed_during_inference} ')
+                        f'Inference started at action: {inference_start_count}, '
+                        f'current action count: {self._used_action_count}, '
+                        f'actions executed during inference: {actions_executed_during_inference}')
                     
                     # Apply offset first
                     if actions_executed_during_inference > 0:
@@ -527,7 +530,7 @@ class PhysicalAIServer(Node):
                         self.get_logger().info(
                             f'No actions executed during inference, using all {len(action_chunk)} actions')
 
-                    self._used_action_count = 0
+                    # Don't reset action count here - let it continue incrementing
 
                     # Apply smoothing using LAST EXECUTED ACTION (not remaining actions)
                     if self.last_executed_action is not None and offset_action_chunk:
@@ -624,7 +627,8 @@ class PhysicalAIServer(Node):
                 
                 self.get_logger().info(
                     f'Publishing action {self._used_action_count + 1} '
-                    f'(remaining: {remaining_count}): {action[:3]}... ')
+                    f'(remaining: {remaining_count}): {action[:3]}... '
+                    f'[Current total actions executed: {self._used_action_count + 1}]')
                 
                 action_pub_msgs = self.data_manager.data_converter.tensor_array2joint_msgs(
                     action,
