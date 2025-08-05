@@ -527,6 +527,8 @@ class PhysicalAIServer(Node):
                             self.get_logger().info(
                                 f'No actions executed during inference, using all {len(action_chunk)} actions')
 
+                        self._used_action_count = 0
+
                         # Apply smoothing using LAST EXECUTED ACTION (not remaining actions)
                         if self.last_executed_action is not None and offset_action_chunk:
                             # Create multiple transition steps for smoother blending
