@@ -181,6 +181,24 @@ class InferenceWorker:
                                   f"Follower: {follower_info}, Task: {task_instruction}, "
                                   f"Inference start action count: {inference_start_action_count}")
                         
+                        # Log observation characteristics for debugging stale data issues
+                        if isinstance(follower_data, dict):
+                            for key, value in follower_data.items():
+                                if hasattr(value, 'shape'):
+                                    logger.info(f"  Follower[{key}] shape: {value.shape}, sample: {value.flatten()[:3]}")
+                                elif isinstance(value, (list, tuple)):
+                                    logger.info(f"  Follower[{key}] length: {len(value)}, sample: {value[:3]}")
+                        
+                        if isinstance(camera_data, dict):
+                            for key, value in camera_data.items():
+                                if hasattr(value, 'shape'):
+                                    logger.info(f"  Camera[{key}] shape: {value.shape}")
+                                    # Log some pixel statistics to detect static images
+                                    if len(value.shape) >= 2:
+                                        pixel_mean = np.mean(value) if hasattr(value, 'mean') else 0
+                                        pixel_std = np.std(value) if hasattr(value, 'std') else 0
+                                        logger.info(f"    Pixel stats - mean: {pixel_mean:.2f}, std: {pixel_std:.2f}")
+                        
                         # Run inference
                         logger.info("Starting inference...")
                         start_time = time.time()

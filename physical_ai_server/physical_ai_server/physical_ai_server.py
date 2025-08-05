@@ -127,6 +127,10 @@ class PhysicalAIServer(Node):
         
         # Store raw inference results for plotting
         self.raw_action_chunks = []  # Store original action chunks with metadata
+        
+        # Observation tracking for debugging stale data issues
+        self.last_observation_data = None  # Store last converted observation data
+        self.observation_change_history = []  # Track observation changes over time
 
     def _init_core_components(self):
         self.communicator: Optional[Communicator] = None
@@ -467,9 +471,10 @@ class PhysicalAIServer(Node):
                 
                 self.get_logger().info(f"Starting new inference at action count: {self.inference_start_action_count}")
                 
-                # Get current data for fresh inference
+                # Get current data for fresh inference with freshness validation
                 camera_msgs, follower_msgs, _ = self.communicator.get_latest_data()
                 
+                # Validate data availability
                 if (camera_msgs is None or
                         len(camera_msgs) != len(self.params['camera_topic_list'])):
                     self.get_logger().info('Waiting for camera data')
@@ -479,11 +484,46 @@ class PhysicalAIServer(Node):
                     self.get_logger().info('Waiting for follower data')
                     return
 
+                # Check data freshness - ensure observations are recent
+                current_time = time.time()
+                camera_freshness_ok = True
+                follower_freshness_ok = True
+                
+                # Check camera data timestamps
+                for camera_name, camera_msg in camera_msgs.items():
+                    if camera_msg is not None:
+                        msg_time = camera_msg.header.stamp.sec + camera_msg.header.stamp.nanosec / 1e9
+                        age = current_time - msg_time
+                        if age > 1.0:  # More than 1 second old
+                            self.get_logger().warning(f"Camera {camera_name} data is {age:.2f}s old")
+                            camera_freshness_ok = False
+                        else:
+                            self.get_logger().debug(f"Camera {camera_name} data is {age:.3f}s old (fresh)")
+                
+                # Check follower data timestamps
+                for follower_name, follower_msg in follower_msgs.items():
+                    if follower_msg is not None:
+                        msg_time = follower_msg.header.stamp.sec + follower_msg.header.stamp.nanosec / 1e9
+                        age = current_time - msg_time
+                        if age > 1.0:  # More than 1 second old
+                            self.get_logger().warning(f"Follower {follower_name} data is {age:.2f}s old")
+                            follower_freshness_ok = False
+                        else:
+                            self.get_logger().debug(f"Follower {follower_name} data is {age:.3f}s old (fresh)")
+                
+                # Skip inference if data is too old
+                if not camera_freshness_ok or not follower_freshness_ok:
+                    self.get_logger().warning("Skipping inference due to stale observation data")
+                    return
+
                 try:
                     camera_data, follower_data, _ = self.data_manager.convert_msgs_to_raw_datas(
                         camera_msgs,
                         follower_msgs,
                         self.total_joint_order)
+                    
+                    # Track observation changes for debugging
+                    self._track_observation_changes(follower_data, self.inference_start_action_count)
 
                     inference_data = (camera_data, follower_data, self.task_instruction[0], self.inference_start_action_count)
                     try:
@@ -1581,6 +1621,57 @@ class PhysicalAIServer(Node):
                 self.communicator.publish_status(status=current_status)
             except Exception as e:
                 self.get_logger().error(f"Failed to publish error status: {str(e)}")
+
+    def _track_observation_changes(self, follower_data, action_count):
+        """Track observation changes to detect stale data issues"""
+        try:
+            # Convert follower data to a hashable representation for comparison
+            current_observation = {}
+            if isinstance(follower_data, dict):
+                for key, value in follower_data.items():
+                    if hasattr(value, 'flatten'):
+                        # Take first few values for comparison
+                        current_observation[key] = value.flatten()[:5].tolist()
+                    elif isinstance(value, (list, tuple)):
+                        current_observation[key] = list(value[:5])
+                    else:
+                        current_observation[key] = str(value)
+            
+            # Check if observation has changed since last inference
+            observation_changed = True
+            if self.last_observation_data is not None:
+                observation_changed = current_observation != self.last_observation_data
+            
+            # Log observation change status
+            change_info = {
+                'action_count': action_count,
+                'timestamp': time.time(),
+                'observation_changed': observation_changed,
+                'observation_sample': current_observation
+            }
+            
+            if observation_changed:
+                self.get_logger().info(f"OBSERVATION CHANGED at action {action_count}")
+                for key, value in current_observation.items():
+                    self.get_logger().info(f"  {key}: {value}")
+            else:
+                self.get_logger().warning(f"OBSERVATION UNCHANGED at action {action_count} - POTENTIAL STALE DATA!")
+                if self.last_observation_data:
+                    for key in current_observation.keys():
+                        self.get_logger().warning(f"  {key}: same as previous")
+            
+            # Store for next comparison
+            self.last_observation_data = current_observation.copy()
+            self.observation_change_history.append(change_info)
+            
+            # Keep only recent history (last 10 observations)
+            if len(self.observation_change_history) > 10:
+                self.observation_change_history.pop(0)
+                
+        except Exception as e:
+            self.get_logger().error(f"Error tracking observation changes: {str(e)}")
+            import traceback
+            self.get_logger().error(f"Traceback: {traceback.format_exc()}")
 
 
 def main(args=None):
