@@ -1125,13 +1125,18 @@ class PhysicalAIServer(Node):
             
             # Determine how many joints we have
             joint_count = self.raw_action_chunks[0]['joint_count'] if self.raw_action_chunks else 7
-            joint_count = min(joint_count, 4)  # Plot up to 4 joints to keep it readable
+            joint_count = min(joint_count, 3)  # Limit to 3 joints to avoid layout issues
             
-            fig, axes = plt.subplots(joint_count, 1, figsize=(16, 4*joint_count), sharex=True)
+            # Calculate figure size to accommodate all subplots properly
+            subplot_height = 3.5  # Height per subplot
+            total_height = max(subplot_height * joint_count + 2, 10)  # Minimum 10 inches
+            
+            fig, axes = plt.subplots(joint_count, 1, figsize=(16, total_height), sharex=True)
             if joint_count == 1:
                 axes = [axes]
             
-            fig.suptitle('Action Chunk Analysis: Inference Outputs vs Actual Execution', fontsize=16)
+            fig.suptitle('Action Chunk Analysis: Inference Outputs vs Actual Execution', 
+                        fontsize=14, y=0.98)  # Adjust title position
             
             # Plot actual executed actions as continuous line
             if self.action_history:
@@ -1175,7 +1180,15 @@ class PhysicalAIServer(Node):
                     
                     ax.set_ylabel(f'Joint {joint_idx} Value')
                     ax.grid(True, alpha=0.3)
-                    ax.legend(bbox_to_anchor=(1.05, 1), loc='upper left')
+                    
+                    # Limit legend entries to avoid overcrowding
+                    handles, labels = ax.get_legend_handles_labels()
+                    if len(handles) > 8:  # Limit to 8 entries
+                        handles = handles[:8]
+                        labels = labels[:8]
+                        labels[-1] = f"... and {len(ax.get_legend_handles_labels()[0]) - 7} more"
+                    
+                    ax.legend(handles, labels, bbox_to_anchor=(1.05, 1), loc='upper left', fontsize=8)
                     
                     # Add vertical lines for chunk boundaries
                     for chunk_data in self.raw_action_chunks:
@@ -1186,11 +1199,12 @@ class PhysicalAIServer(Node):
             if joint_count > 0:
                 axes[-1].set_xlabel('Action Step Number')
             
-            plt.tight_layout()
+            # Use subplots_adjust instead of tight_layout for better control
+            plt.subplots_adjust(left=0.08, right=0.75, top=0.95, bottom=0.08, hspace=0.3)
             
-            # Save plot
+            # Save plot with better bbox handling
             plot_path = f'/tmp/action_chunk_curves_{len(self.raw_action_chunks)}.png'
-            plt.savefig(plot_path, dpi=150, bbox_inches='tight')
+            plt.savefig(plot_path, dpi=120, bbox_inches='tight', pad_inches=0.2)
             plt.close()
             
             self.get_logger().info(f'Action chunk curves plot saved to: {plot_path}')
@@ -1200,6 +1214,7 @@ class PhysicalAIServer(Node):
             
         except Exception as e:
             self.get_logger().error(f'Error creating action chunk curves plot: {str(e)}')
+            self.get_logger().error(f'Traceback: {traceback.format_exc()}')
             # Always print text analysis even if plot fails
             self._print_offset_analysis()
 
@@ -1240,8 +1255,9 @@ class PhysicalAIServer(Node):
             if len(self.inference_history) < 2:
                 return
                 
-            fig, ((ax1, ax2), (ax3, ax4)) = plt.subplots(2, 2, figsize=(15, 10))
-            fig.suptitle('Action Chunk Analysis - Offset Calculation Debug', fontsize=16)
+            # Use larger figure size for better layout
+            fig, ((ax1, ax2), (ax3, ax4)) = plt.subplots(2, 2, figsize=(16, 10))
+            fig.suptitle('Action Chunk Analysis - Offset Calculation Debug', fontsize=14)
             
             # Extract data for plotting
             chunk_ids = list(range(len(self.inference_history)))
@@ -1257,7 +1273,7 @@ class PhysicalAIServer(Node):
             ax1.set_xlabel('Chunk ID')
             ax1.set_ylabel('Action Number')
             ax1.set_title('Inference Timing vs Action Execution')
-            ax1.legend()
+            ax1.legend(fontsize=8)
             ax1.grid(True, alpha=0.3)
             
             # Plot 2: Offset calculation
@@ -1270,7 +1286,7 @@ class PhysicalAIServer(Node):
             # Add text annotations for offsets
             for i, offset in enumerate(calculated_offsets):
                 if offset > 0:
-                    ax2.text(i, offset + 0.5, str(offset), ha='center', va='bottom')
+                    ax2.text(i, offset + 0.5, str(offset), ha='center', va='bottom', fontsize=8)
             
             # Plot 3: Chunk sizes (original vs used)
             x_pos = np.arange(len(chunk_ids))
@@ -1282,7 +1298,7 @@ class PhysicalAIServer(Node):
             ax3.set_title('Chunk Sizes: Original vs Used')
             ax3.set_xticks(x_pos)
             ax3.set_xticklabels(chunk_ids)
-            ax3.legend()
+            ax3.legend(fontsize=8)
             ax3.grid(True, alpha=0.3)
             
             # Plot 4: Action values over time (first 3 dimensions)
@@ -1305,14 +1321,15 @@ class PhysicalAIServer(Node):
                 ax4.set_xlabel('Action Number')
                 ax4.set_ylabel('Joint Values')
                 ax4.set_title('Action Values Over Time (with chunk boundaries)')
-                ax4.legend()
+                ax4.legend(fontsize=8)
                 ax4.grid(True, alpha=0.3)
             
-            plt.tight_layout()
+            # Use subplots_adjust instead of tight_layout
+            plt.subplots_adjust(left=0.08, right=0.95, top=0.92, bottom=0.08, wspace=0.3, hspace=0.3)
             
             # Save plot
             plot_path = f'/tmp/action_chunk_analysis_{len(self.inference_history)}.png'
-            plt.savefig(plot_path, dpi=150, bbox_inches='tight')
+            plt.savefig(plot_path, dpi=120, bbox_inches='tight', pad_inches=0.2)
             plt.close()
             
             self.get_logger().info(f'Action chunk analysis plot saved to: {plot_path}')
@@ -1322,6 +1339,7 @@ class PhysicalAIServer(Node):
             
         except Exception as e:
             self.get_logger().error(f'Error creating action chunk plot: {str(e)}')
+            self.get_logger().error(f'Traceback: {traceback.format_exc()}')
             # Always print text analysis even if plot fails
             self._print_offset_analysis()
 
