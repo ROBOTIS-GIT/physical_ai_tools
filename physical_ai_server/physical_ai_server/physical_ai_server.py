@@ -504,7 +504,7 @@ class PhysicalAIServer(Node):
                         f'generated {len(action_chunk)} actions')
 
                     # Calculate offset
-                    actions_executed_during_inference = self._used_action_count + 2
+                    actions_executed_during_inference = self._used_action_count
                     
                     self.get_logger().info(
                         f'Actions executed during inference: {actions_executed_during_inference} ')
