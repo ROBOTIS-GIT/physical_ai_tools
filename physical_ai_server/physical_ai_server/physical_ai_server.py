@@ -472,7 +472,7 @@ class PhysicalAIServer(Node):
                     self._stop_inference_with_error(error_msg)
                     return
             else:
-                elif self.inference_pending:
+                if self.inference_pending:
                     self.get_logger().debug(f"Inference already pending, continuing with {remaining_count} actions")
                 elif not self.inference_worker or not self.inference_worker.is_alive():
                     self.get_logger().warning("Inference worker is not alive")
