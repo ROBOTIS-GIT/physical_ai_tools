@@ -100,6 +100,7 @@ class PhysicalAIServer(Node):
         # Track inference timing for proper action offset
         self.inference_start_action_count = 0  # Actions used when inference started
         self.last_executed_action = None  # Remember last executed action for smoothing
+        self.updating_action_chunk = False
 
     def _init_core_components(self):
         self.communicator: Optional[Communicator] = None
