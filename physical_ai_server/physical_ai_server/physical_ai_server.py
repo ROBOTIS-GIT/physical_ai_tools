@@ -1163,12 +1163,19 @@ class PhysicalAIServer(Node):
                 for joint_idx in range(joint_count):
                     ax = axes[joint_idx]
                     
-                    # Plot actual executed actions
+                    # Plot actual executed actions - ensure data consistency
                     if len(self.action_history) > 0 and len(self.action_history[0]['action_values']) > joint_idx:
-                        actual_values = [a['action_values'][joint_idx] if len(a['action_values']) > joint_idx else 0 
-                                       for a in self.action_history]
-                        ax.plot(action_numbers, actual_values, 'k-', linewidth=2, 
-                               label='Actual Executed Actions', alpha=0.8)
+                        actual_values = []
+                        valid_action_numbers = []
+                        
+                        for i, action_data in enumerate(self.action_history):
+                            if len(action_data['action_values']) > joint_idx:
+                                actual_values.append(action_data['action_values'][joint_idx])
+                                valid_action_numbers.append(action_data['action_number'])
+                        
+                        if len(valid_action_numbers) == len(actual_values) and len(actual_values) > 0:
+                            ax.plot(valid_action_numbers, actual_values, 'k-', linewidth=2, 
+                                   label='Actual Executed Actions', alpha=0.8)
                     
                     # Plot each inference chunk as separate colored curves
                     colors = ['red', 'blue', 'green', 'orange', 'purple', 'brown', 'pink', 'gray']
@@ -1204,41 +1211,38 @@ class PhysicalAIServer(Node):
                     if len(handles) > 8:  # Limit to 8 entries
                         handles = handles[:8]
                         labels = labels[:8]
-                        labels[-1] = f"... and {len(ax.get_legend_handles_labels()[0]) - 7} more"
+                        labels[-1] = f"... and {len(handles) - 7} more"
                     
                     ax.legend(handles, labels, bbox_to_anchor=(1.05, 1), loc='upper left', fontsize=8)
                     
                     # Add vertical lines for chunk boundaries
-                    for chunk_data in self.raw_action_chunks:
-                        start_step = chunk_data['inference_start_step']
-                        if start_step <= max(action_numbers):
-                            ax.axvline(x=start_step, color='gray', linestyle=':', alpha=0.5)
-                        ax.scatter([inference_start_step], [joint_values[0]], 
-                                 color=color, s=50, marker='o', alpha=0.8)
-                    
-                    ax.set_ylabel(f'Joint {joint_idx} Value')
-                    ax.grid(True, alpha=0.3)
-                    
-                    # Limit legend entries to avoid overcrowding
-                    handles, labels = ax.get_legend_handles_labels()
-                    if len(handles) > 8:  # Limit to 8 entries
-                        handles = handles[:8]
-                        labels = labels[:8]
-                        labels[-1] = f"... and {len(ax.get_legend_handles_labels()[0]) - 7} more"
-                    
-                    ax.legend(handles, labels, bbox_to_anchor=(1.05, 1), loc='upper left', fontsize=8)
-                    
-                    # Add vertical lines for chunk boundaries
-                    for chunk_data in self.raw_action_chunks:
-                        start_step = chunk_data['inference_start_step']
-                        if start_step <= max(action_numbers):
-                            ax.axvline(x=start_step, color='gray', linestyle=':', alpha=0.5)
+                    if valid_action_numbers:  # Only if we have valid data
+                        for chunk_data in self.raw_action_chunks:
+                            start_step = chunk_data['inference_start_step']
+                            if start_step <= max(valid_action_numbers):
+                                ax.axvline(x=start_step, color='gray', linestyle=':', alpha=0.5)
             
             if joint_count > 0:
                 axes[-1].set_xlabel('Action Step Number')
             
             # Use subplots_adjust instead of tight_layout for better control
             plt.subplots_adjust(left=0.08, right=0.75, top=0.95, bottom=0.08, hspace=0.3)
+            
+            # Save plot with better bbox handling
+            plot_path = f'/tmp/action_chunk_curves_{len(self.raw_action_chunks)}.png'
+            plt.savefig(plot_path, dpi=120, bbox_inches='tight', pad_inches=0.2)
+            plt.close()
+            
+            self.get_logger().info(f'Action chunk curves plot saved to: {plot_path}')
+            
+            # Print detailed analysis
+            self._print_chunk_curve_analysis()
+            
+        except Exception as e:
+            self.get_logger().error(f'Error creating action chunk curves plot: {str(e)}')
+            self.get_logger().error(f'Traceback: {traceback.format_exc()}')
+            # Always print text analysis even if plot fails
+            self._print_offset_analysis()
             
             # Save plot with better bbox handling
             plot_path = f'/tmp/action_chunk_curves_{len(self.raw_action_chunks)}.png'
