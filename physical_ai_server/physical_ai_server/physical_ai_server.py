@@ -100,11 +100,6 @@ class PhysicalAIServer(Node):
         # Track inference timing for proper action offset
         self.inference_start_action_count = 0  # Actions used when inference started
         self.last_executed_action = None  # Remember last executed action for smoothing
-        
-        # Action data collection for visualization
-        self.action_history = []  # Store executed actions for plotting
-        self.max_action_history = 300  # Number of actions to collect
-        self.plot_enabled = True  # Enable/disable plotting
 
     def _init_core_components(self):
         self.communicator: Optional[Communicator] = None
@@ -344,106 +339,6 @@ class PhysicalAIServer(Node):
         self.get_logger().info(f'Available robot types: {robot_type_list}')
         return robot_type_list
 
-    def _plot_action_graphs(self):
-        """Plot action data for each joint"""
-        try:
-            import matplotlib.pyplot as plt
-            import numpy as np
-            from datetime import datetime
-            
-            if not self.action_history:
-                self.get_logger().warning("No action history to plot")
-                return
-            
-            # Extract data
-            action_counts = [entry['action_count'] for entry in self.action_history]
-            timestamps = [entry['timestamp'] for entry in self.action_history]
-            actions = [entry['action'] for entry in self.action_history]
-            
-            # Convert to numpy array for easier manipulation
-            actions_array = np.array(actions)
-            num_joints = actions_array.shape[1]
-            
-            self.get_logger().info(f"Plotting {len(self.action_history)} actions with {num_joints} joints")
-            
-            # Create subplots - arrange in a grid
-            if num_joints <= 4:
-                rows, cols = 2, 2
-            elif num_joints <= 6:
-                rows, cols = 2, 3
-            elif num_joints <= 9:
-                rows, cols = 3, 3
-            else:
-                rows, cols = 4, 3
-            
-            fig, axes = plt.subplots(rows, cols, figsize=(15, 10))
-            fig.suptitle(f'Joint Actions Over Time (Actions {action_counts[0]}-{action_counts[-1]})', 
-                        fontsize=16)
-            
-            # Flatten axes for easier indexing
-            if rows * cols > 1:
-                axes_flat = axes.flatten()
-            else:
-                axes_flat = [axes]
-            
-            # Plot each joint
-            for joint_idx in range(num_joints):
-                ax = axes_flat[joint_idx]
-                joint_values = actions_array[:, joint_idx]
-                
-                # Plot the joint values
-                ax.plot(action_counts, joint_values, 'b-', linewidth=1.5, alpha=0.8)
-                ax.set_title(f'Joint {joint_idx + 1}', fontsize=12, fontweight='bold')
-                ax.set_xlabel('Action Count')
-                ax.set_ylabel('Joint Value (radians)')
-                ax.grid(True, alpha=0.3)
-                
-                # Add statistics
-                mean_val = np.mean(joint_values)
-                std_val = np.std(joint_values)
-                min_val = np.min(joint_values)
-                max_val = np.max(joint_values)
-                
-                # Add text box with statistics
-                stats_text = f'μ={mean_val:.3f}\nσ={std_val:.3f}\nmin={min_val:.3f}\nmax={max_val:.3f}'
-                ax.text(0.02, 0.98, stats_text, transform=ax.transAxes, 
-                       verticalalignment='top', bbox=dict(boxstyle='round', facecolor='wheat', alpha=0.8),
-                       fontsize=8)
-                
-                # Highlight smoothing transitions (find large jumps)
-                if len(joint_values) > 1:
-                    diff = np.abs(np.diff(joint_values))
-                    threshold = 3 * np.std(diff)  # 3 sigma threshold
-                    large_jumps = np.where(diff > threshold)[0]
-                    
-                    for jump_idx in large_jumps:
-                        ax.axvline(x=action_counts[jump_idx], color='red', linestyle='--', alpha=0.5)
-                        ax.axvline(x=action_counts[jump_idx + 1], color='red', linestyle='--', alpha=0.5)
-            
-            # Hide unused subplots
-            for joint_idx in range(num_joints, len(axes_flat)):
-                axes_flat[joint_idx].set_visible(False)
-            
-            plt.tight_layout()
-            
-            # Save the plot
-            timestamp_str = datetime.now().strftime("%Y%m%d_%H%M%S")
-            filename = f"/tmp/action_plot_{timestamp_str}.png"
-            plt.savefig(filename, dpi=300, bbox_inches='tight')
-            self.get_logger().info(f"Action plot saved to: {filename}")
-            
-            # Optionally show the plot (comment out if running headless)
-            # plt.show()
-            
-            plt.close()
-            
-        except ImportError:
-            self.get_logger().error("matplotlib not available. Install with: pip install matplotlib")
-        except Exception as e:
-            self.get_logger().error(f"Failed to plot action graphs: {str(e)}")
-            import traceback
-            self.get_logger().error(f"Traceback: {traceback.format_exc()}")
-
     def _data_collection_timer_callback(self):
         error_msg = ''
         current_status = TaskStatus()
@@ -522,7 +417,6 @@ class PhysicalAIServer(Node):
             return
 
     def _inference_timer_callback(self):
-        """Inference timer callback - manages communication with inference process"""
         if not self.on_inference:
             return
             
@@ -534,113 +428,42 @@ class PhysicalAIServer(Node):
             
             # Check current state
             remaining_count = len(self.remaining_actions)
-            self.get_logger().debug(f"Current state - Remaining actions: {remaining_count}, "
-                                   f"Inference pending: {self.inference_pending}")
             
-            # Request inference when running low on actions (but keep using current ones)
-            if (remaining_count < 50 and  # Running low on actions
-                not self.inference_pending and  # No pending inference request
+            if (not self.inference_pending and
                 self.inference_worker and 
                 self.inference_worker.is_alive()):
-                
-                self.get_logger().info(f"Running low on actions ({remaining_count}), requesting fresh inference...")
                 
                 # Record the action count when inference starts (but DON'T clear actions yet)
                 self.inference_start_action_count = self._used_action_count
                 
                 # Get current data for fresh inference
-                self.get_logger().info("Step 1: Getting latest data from communicator...")
                 camera_msgs, follower_msgs, _ = self.communicator.get_latest_data()
-                
-                self.get_logger().info(f"Step 2: Data check - Camera msgs: {camera_msgs is not None}, "
-                                       f"Follower msgs: {follower_msgs is not None}")
-                
-                if camera_msgs is not None:
-                    self.get_logger().info(f"Camera msgs count: {len(camera_msgs)}, "
-                                           f"Expected: {len(self.params['camera_topic_list'])}")
                 
                 if (camera_msgs is None or
                         len(camera_msgs) != len(self.params['camera_topic_list'])):
-                    self.get_logger().info('Step 3: Waiting for camera data - RETURNING')
+                    self.get_logger().info('Waiting for camera data')
                     return
                         
                 elif follower_msgs is None:
-                    self.get_logger().info('Step 3: Waiting for follower data - RETURNING')
+                    self.get_logger().info('Waiting for follower data')
                     return
 
-                self.get_logger().info("Step 3: Data validation passed, proceeding to conversion...")
-
                 try:
-                    self.get_logger().info("Step 4: Converting messages to raw data...")
-                    start_convert_time = time.time()
-                    
                     camera_data, follower_data, _ = self.data_manager.convert_msgs_to_raw_datas(
                         camera_msgs,
                         follower_msgs,
                         self.total_joint_order)
-                    
-                    convert_time = time.time() - start_convert_time
-                    
-                    # Handle different data types for logging
-                    camera_info = ""
-                    follower_info = ""
-                    
-                    if isinstance(camera_data, dict):
-                        camera_info = f"Dict with keys: {list(camera_data.keys())}"
-                        if camera_data:
-                            first_key = list(camera_data.keys())[0]
-                            first_value = camera_data[first_key]
-                            if hasattr(first_value, 'shape'):
-                                camera_info += f", first item shape: {first_value.shape}"
-                    elif hasattr(camera_data, 'shape'):
-                        camera_info = f"Array shape: {camera_data.shape}"
-                    else:
-                        camera_info = f"Type: {type(camera_data)}"
-                    
-                    if isinstance(follower_data, dict):
-                        follower_info = f"Dict with keys: {list(follower_data.keys())}"
-                        if follower_data:
-                            first_key = list(follower_data.keys())[0]
-                            first_value = follower_data[first_key]
-                            if hasattr(first_value, 'shape'):
-                                follower_info += f", first item shape: {first_value.shape}"
-                    elif hasattr(follower_data, 'shape'):
-                        follower_info = f"Array shape: {follower_data.shape}"
-                    else:
-                        follower_info = f"Type: {type(follower_data)}"
-                    
-                    self.get_logger().info(f"Step 5: Data converted in {convert_time*1000:.1f}ms - "
-                                         f"Camera: {camera_info}, Follower: {follower_info}")
-                    
-                    # Check queue status before sending
-                    self.get_logger().info(f"Step 6: Preparing to send inference request")
-                    
-                    # Send inference request to worker process
-                    task_instruction = (self.task_instruction[0] 
-                                      if isinstance(self.task_instruction, list) 
-                                      else self.task_instruction)
-                    
-                    self.get_logger().info(f"Step 7: Preparing inference data - Task: {task_instruction}")
-                    # Include the action count when inference starts for proper offset calculation
-                    inference_data = (camera_data, follower_data, task_instruction, self.inference_start_action_count)
-                    
-                    self.get_logger().info("Step 8: Sending inference request to worker process...")
-                    send_start_time = time.time()
-                    
+
+                    inference_data = (camera_data, follower_data, self.task_instruction[0], self.inference_start_action_count)
                     try:
                         if self.inference_worker.send_request(inference_data):
-                            send_time = time.time() - send_start_time
                             self.inference_pending = True
-                            
-                            self.get_logger().info(f'Step 9: SUCCESS - Sent inference request in {send_time*1000:.1f}ms '
-                                                 f'(inference started at action count: {self.inference_start_action_count})')
-                            self.get_logger().info(f'Current actions will continue executing during inference')
                         else:
-                            self.get_logger().error("Step 8 FAILED: Failed to send inference request")
+                            self.get_logger().error('Failed to send inference request')
                     except Exception as put_error:
-                        self.get_logger().error(f"Step 8 FAILED: Exception during send - {str(put_error)}")
+                        self.get_logger().error(f'Exception during send - {str(put_error)}')
                         raise put_error
-                    
+
                 except Exception as e:
                     error_msg = f'Step 4-8 FAILED: {str(e)}'
                     self.get_logger().error(error_msg)
@@ -649,8 +472,6 @@ class PhysicalAIServer(Node):
                     self._stop_inference_with_error(error_msg)
                     return
             else:
-                if remaining_count >= 50:
-                    self.get_logger().debug(f"Sufficient actions available ({remaining_count}), no inference needed")
                 elif self.inference_pending:
                     self.get_logger().debug(f"Inference already pending, continuing with {remaining_count} actions")
                 elif not self.inference_worker or not self.inference_worker.is_alive():
@@ -685,11 +506,10 @@ class PhysicalAIServer(Node):
                             f'generated {len(action_chunk)} actions')
 
                         # Calculate offset
-                        actions_executed_during_inference = self._used_action_count - inference_start_count
+                        actions_executed_during_inference = self._used_action_count
                         
                         self.get_logger().info(
-                            f'Actions executed during inference: {actions_executed_during_inference} '
-                            f'(from {inference_start_count} to {self._used_action_count})')
+                            f'Actions executed during inference: {actions_executed_during_inference} ')
                         
                         # Apply offset first
                         if actions_executed_during_inference > 0:
@@ -798,28 +618,9 @@ class PhysicalAIServer(Node):
                 # IMPORTANT: Remember this action for smoothing next time
                 self.last_executed_action = action.copy() if isinstance(action, list) else list(action)
                 
-                # Collect action data for visualization
-                if self.plot_enabled:
-                    self.action_history.append({
-                        'action_count': self._used_action_count + 1,
-                        'timestamp': time.time(),
-                        'action': action.copy() if isinstance(action, list) else list(action)
-                    })
-                    
-                    # Keep only the last max_action_history actions
-                    if len(self.action_history) > self.max_action_history:
-                        self.action_history.pop(0)
-                    
-                    # Plot when we have enough data
-                    if len(self.action_history) == self.max_action_history:
-                        self._plot_action_graphs()
-                        # Reset for next batch
-                        self.action_history = []
-                
                 self.get_logger().info(
                     f'Publishing action {self._used_action_count + 1} '
-                    f'(remaining: {remaining_count}): {action[:3]}... '
-                    f'[History: {len(self.action_history)}/{self.max_action_history}]')
+                    f'(remaining: {remaining_count}): {action[:3]}... ')
                 
                 action_pub_msgs = self.data_manager.data_converter.tensor_array2joint_msgs(
                     action,
