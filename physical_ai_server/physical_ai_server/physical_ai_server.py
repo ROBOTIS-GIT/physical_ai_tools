@@ -1207,7 +1207,7 @@ class PhysicalAIServer(Node):
         
         self.get_logger().info("=== END OFFSET ANALYSIS ===")
 
-    def _stop_inference_with_error(self, error_msg)::
+    def _stop_inference_with_error(self, error_msg):
         """Stop inference due to error"""
         self.get_logger().error(f"Stopping inference due to error: {error_msg}")
         self.on_inference = False
