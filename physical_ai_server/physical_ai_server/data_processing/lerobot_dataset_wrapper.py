@@ -19,11 +19,8 @@
 import threading
 
 from lerobot.datasets.compute_stats import (
-from lerobot.datasets.compute_stats import (
     get_feature_stats
 )
-from lerobot.datasets.lerobot_dataset import LeRobotDataset
-from lerobot.datasets.utils import (
 from lerobot.datasets.lerobot_dataset import LeRobotDataset
 from lerobot.datasets.utils import (
     validate_episode_buffer,
@@ -159,7 +156,6 @@ class LeRobotDatasetWrapper(LeRobotDataset):
 
         return episode_buffer
 
-    def add_frame_without_write_image(self, frame: dict, task: str) -> None:
     def add_frame_without_write_image(self, frame: dict, task: str) -> None:
         validate_frame(frame, self.features)
 

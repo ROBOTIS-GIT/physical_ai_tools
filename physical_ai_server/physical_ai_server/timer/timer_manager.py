@@ -17,7 +17,7 @@
 # Author: Dongyun Kim
 
 from rclpy.node import Node
-from rclpy.callback_groups import ReentrantCallbackGroup
+from rclpy.callback_groups import MutuallyExclusiveCallbackGroup
 
 
 class TimerManager:
@@ -51,11 +51,11 @@ class TimerManager:
             timer_name,
             timer_frequency,
             callback_function,
-            use_separate_thread=False):
+            use_separate_thread=True):
         self._timer[timer_name] = None
         self._timer_frequency[timer_name] = timer_frequency
         self._timer_callback[timer_name] = callback_function
         if use_separate_thread:
-            self._callback_groups[timer_name] = ReentrantCallbackGroup()
+            self._callback_groups[timer_name] = MutuallyExclusiveCallbackGroup()
         else:
             self._callback_groups[timer_name] = None
