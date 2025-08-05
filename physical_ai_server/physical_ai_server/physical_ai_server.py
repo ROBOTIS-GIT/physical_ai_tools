@@ -435,7 +435,11 @@ class PhysicalAIServer(Node):
                 self.inference_worker.is_alive()):
                 
                 # Record the CURRENT action count when inference starts
-                self.inference_start_action_count = self._used_action_count
+                # Use a lock to ensure consistency with action timer
+                with self.inference_lock:
+                    self.inference_start_action_count = self._used_action_count
+                
+                self.get_logger().info(f"Starting new inference at action count: {self.inference_start_action_count}")
                 
                 # Get current data for fresh inference
                 camera_msgs, follower_msgs, _ = self.communicator.get_latest_data()
@@ -506,11 +510,12 @@ class PhysicalAIServer(Node):
                         f'generated {len(action_chunk)} actions')
 
                     # Calculate offset based on actions executed DURING inference
-                    # inference_start_count should be the action count when inference started
-                    actions_executed_during_inference = max(0, self._used_action_count - inference_start_count)
+                    # Use the start count that was actually sent to the worker
+                    worker_start_count = result_data.get('inference_start_action_count', inference_start_count)
+                    actions_executed_during_inference = max(0, self._used_action_count - worker_start_count)
                     
                     self.get_logger().info(
-                        f'Inference started at action: {inference_start_count}, '
+                        f'Worker reported start at action: {worker_start_count}, '
                         f'current action count: {self._used_action_count}, '
                         f'actions executed during inference: {actions_executed_during_inference}')
                     
