@@ -254,11 +254,11 @@ class PhysicalAIServer(Node):
                 callback_function=self.timer_callback_dict['action']
             )
             
-            # 2. Inference timer - runs inference at lower frequency (200ms)
-            inference_frequency = 5.0  # 5Hz = 200ms interval
+            # 2. Inference timer - runs at high frequency to process results quickly
+            inference_frequency = 50.0  # 50Hz = 20ms interval for responsive result processing
             self.timer_manager.set_timer(
                 timer_name='inference',
-                timer_frequency=50,
+                timer_frequency=inference_frequency,
                 callback_function=self.timer_callback_dict['inference']
             )
             
@@ -484,118 +484,113 @@ class PhysicalAIServer(Node):
             self._stop_inference_with_error(f'Inference timer error: {str(e)}')
 
     def _process_inference_results(self):
-        """Process inference results from the worker process"""
+        """Process inference results from the worker process - one result per call"""
         try:
-            results_processed = 0
-            while True:
-                try:
-                    result = self.inference_worker.get_result(block=False)
-                    if not result:
-                        break
-                        
-                    status, result_data = result
-                    results_processed += 1
+            # Process only one result per timer callback to avoid blocking
+            try:
+                result = self.inference_worker.get_result(block=False)
+                if not result:
+                    return  # No results available
                     
-                    if status == 'success':
-                        action_chunk = result_data['actions']
-                        inference_time = result_data['inference_time']
-                        inference_start_count = result_data.get('inference_start_action_count', 0)
-                        
-                        self.get_logger().info(
-                            f'Inference completed in {inference_time*1000:.1f}ms, '
-                            f'generated {len(action_chunk)} actions')
+                status, result_data = result
+                
+                if status == 'success':
+                    action_chunk = result_data['actions']
+                    inference_time = result_data['inference_time']
+                    inference_start_count = result_data.get('inference_start_action_count', 0)
+                    
+                    self.get_logger().info(
+                        f'Inference completed in {inference_time*1000:.1f}ms, '
+                        f'generated {len(action_chunk)} actions')
 
-                        # Calculate offset
-                        actions_executed_during_inference = self._used_action_count + 4
-                        
-                        self.get_logger().info(
-                            f'Actions executed during inference: {actions_executed_during_inference} ')
-                        
-                        # Apply offset first
-                        if actions_executed_during_inference > 0:
-                            if actions_executed_during_inference < len(action_chunk):
-                                offset_action_chunk = action_chunk[actions_executed_during_inference:]
-                                self.get_logger().info(
-                                    f'Applied offset: skipped first {actions_executed_during_inference} actions, '
-                                    f'using {len(offset_action_chunk)} remaining actions')
-                            else:
-                                self.get_logger().warning(
-                                    f'All {len(action_chunk)} actions were already executed during inference!')
-                                offset_action_chunk = []
+                    # Calculate offset
+                    actions_executed_during_inference = self._used_action_count + 2
+                    
+                    self.get_logger().info(
+                        f'Actions executed during inference: {actions_executed_during_inference} ')
+                    
+                    # Apply offset first
+                    if actions_executed_during_inference > 0:
+                        if actions_executed_during_inference < len(action_chunk):
+                            offset_action_chunk = action_chunk[actions_executed_during_inference:]
+                            self.get_logger().info(
+                                f'Applied offset: skipped first {actions_executed_during_inference} actions, '
+                                f'using {len(offset_action_chunk)} remaining actions')
                         else:
-                            offset_action_chunk = action_chunk
-                            self.get_logger().info(
-                                f'No actions executed during inference, using all {len(action_chunk)} actions')
+                            self.get_logger().warning(
+                                f'All {len(action_chunk)} actions were already executed during inference!')
+                            offset_action_chunk = []
+                    else:
+                        offset_action_chunk = action_chunk
+                        self.get_logger().info(
+                            f'No actions executed during inference, using all {len(action_chunk)} actions')
 
-                        self._used_action_count = 0
+                    self._used_action_count = 0
 
-                        # Apply smoothing using LAST EXECUTED ACTION (not remaining actions)
-                        if self.last_executed_action is not None and offset_action_chunk:
-                            # Create multiple transition steps for smoother blending
-                            num_transition_steps = min(5, len(offset_action_chunk))  # 5단계 전환
+                    # Apply smoothing using LAST EXECUTED ACTION (not remaining actions)
+                    if self.last_executed_action is not None and offset_action_chunk:
+                        # Create multiple transition steps for smoother blending
+                        num_transition_steps = min(5, len(offset_action_chunk))  # 5단계 전환
+                        
+                        for step in range(num_transition_steps):
+                            # 점진적으로 가중치를 변경: 0.8, 0.6, 0.4, 0.2, 0.0
+                            old_weight = 0.8 - (step * 0.2)  
+                            new_weight = 1.0 - old_weight
                             
-                            for step in range(num_transition_steps):
-                                # 점진적으로 가중치를 변경: 0.8, 0.6, 0.4, 0.2, 0.0
-                                old_weight = 0.8 - (step * 0.2)  
-                                new_weight = 1.0 - old_weight
-                                
-                                transition_action = []
-                                for i in range(len(self.last_executed_action)):
-                                    blended = (old_weight * self.last_executed_action[i] + 
-                                             new_weight * offset_action_chunk[step][i])
-                                    transition_action.append(blended)
-                                
-                                # Replace with smoothed version
-                                offset_action_chunk[step] = transition_action
+                            transition_action = []
+                            for i in range(len(self.last_executed_action)):
+                                blended = (old_weight * self.last_executed_action[i] + 
+                                         new_weight * offset_action_chunk[step][i])
+                                transition_action.append(blended)
                             
-                            self.get_logger().info(
-                                f'Applied multi-step smoothing over {num_transition_steps} actions:')
-                            self.get_logger().info(
-                                f'  last_executed={self.last_executed_action[:3]}...')
-                            self.get_logger().info(
-                                f'  first_original={action_chunk[actions_executed_during_inference][:3]}...')
-                            self.get_logger().info(
-                                f'  first_smoothed={offset_action_chunk[0][:3]}...')
-                            self.get_logger().info(
-                                f'  final_smoothed={offset_action_chunk[num_transition_steps-1][:3]}...')
-                        else:
-                            if self.last_executed_action is None:
-                                self.get_logger().info('No last executed action available for smoothing')
-                            if not offset_action_chunk:
-                                self.get_logger().info('No offset actions to smooth')
-
-                        # Replace actions
-                        with self.inference_lock:
-                            old_count = len(self.remaining_actions)
-                            self.remaining_actions.clear()
-                            self.remaining_actions.extend(offset_action_chunk)
-                            new_count = len(self.remaining_actions)
-                            self.inference_pending = False
+                            # Replace with smoothed version
+                            offset_action_chunk[step] = transition_action
                         
                         self.get_logger().info(
-                            f'Action buffer REPLACED: {old_count} -> {new_count} fresh actions '
-                            f'(offset applied: {actions_executed_during_inference})')
+                            f'Applied multi-step smoothing over {num_transition_steps} actions:')
+                        self.get_logger().info(
+                            f'  last_executed={self.last_executed_action[:3]}...')
+                        self.get_logger().info(
+                            f'  first_original={action_chunk[actions_executed_during_inference][:3]}...')
+                        self.get_logger().info(
+                            f'  first_smoothed={offset_action_chunk[0][:3]}...')
+                        self.get_logger().info(
+                            f'  final_smoothed={offset_action_chunk[num_transition_steps-1][:3]}...')
+                    else:
+                        if self.last_executed_action is None:
+                            self.get_logger().info('No last executed action available for smoothing')
+                        if not offset_action_chunk:
+                            self.get_logger().info('No offset actions to smooth')
 
-                        # Update status
-                        current_status = self.data_manager.get_current_record_status()
-                        current_status.phase = TaskStatus.INFERENCING
-                        self.communicator.publish_status(status=current_status)
-                        
-                    elif status == 'error':
+                    # Replace actions
+                    with self.inference_lock:
+                        old_count = len(self.remaining_actions)
+                        self.remaining_actions.clear()
+                        self.remaining_actions.extend(offset_action_chunk)
+                        new_count = len(self.remaining_actions)
                         self.inference_pending = False
-                        self.get_logger().error(f'Received error from inference worker: {result_data}')
-                        self._stop_inference_with_error(f'Inference process error: {result_data}')
-                        return
-                        
-                    elif status == 'pong':
-                        self.get_logger().debug("Received health check pong")
-                        continue
-                        
-                except:
-                    break
-            
-            if results_processed > 0:
-                self.get_logger().debug(f"Processed {results_processed} results from inference worker")
+                    
+                    self.get_logger().info(
+                        f'Action buffer REPLACED: {old_count} -> {new_count} fresh actions '
+                        f'(offset applied: {actions_executed_during_inference})')
+
+                    # Update status
+                    current_status = self.data_manager.get_current_record_status()
+                    current_status.phase = TaskStatus.INFERENCING
+                    self.communicator.publish_status(status=current_status)
+                    
+                elif status == 'error':
+                    self.inference_pending = False
+                    self.get_logger().error(f'Received error from inference worker: {result_data}')
+                    self._stop_inference_with_error(f'Inference process error: {result_data}')
+                    return
+                    
+                elif status == 'pong':
+                    self.get_logger().debug("Received health check pong")
+                    return
+                    
+            except Exception as inner_e:
+                self.get_logger().error(f'Error processing single result: {str(inner_e)}')
                     
         except Exception as e:
             self.get_logger().error(f'Error processing inference results: {str(e)}')
