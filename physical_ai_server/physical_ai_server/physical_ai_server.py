@@ -45,6 +45,7 @@ from physical_ai_interfaces.srv import (
 
 from physical_ai_server.communication.communicator import Communicator
 from physical_ai_server.data_processing.data_manager import DataManager
+from physical_ai_server.inference import InferenceFactory
 from physical_ai_server.inference.inference_multi_process import InferenceWorker
 from physical_ai_server.timer.timer_manager import TimerManager
 from physical_ai_server.training.training_manager import TrainingManager
