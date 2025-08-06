@@ -480,13 +480,17 @@ class PhysicalAIServer(Node):
                 for camera_name, camera_msg in camera_msgs.items():
                     if camera_msg is not None:
                         msg_time = camera_msg.header.stamp.sec + camera_msg.header.stamp.nanosec / 1e9
-                        age = time.time() - msg_time
+                        now = self.get_clock().now().seconds_nanoseconds()
+                        now_sec = now[0] + now[1] / 1e9
+                        age = now_sec - msg_time
                         self.get_logger().info(f"Camera {camera_name} data is {age:.3f}s old (fresh)")
 
                 for follower_name, follower_msg in follower_msgs.items():
                     if follower_msg is not None:
                         msg_time = follower_msg.header.stamp.sec + follower_msg.header.stamp.nanosec / 1e9
-                        age = time.time() - msg_time
+                        now = self.get_clock().now().seconds_nanoseconds()
+                        now_sec = now[0] + now[1] / 1e9
+                        age = now_sec - msg_time
                         self.get_logger().info(f"Follower {follower_name} data is {age:.3f}s old (fresh)")
                 
                 # Validate data availability
