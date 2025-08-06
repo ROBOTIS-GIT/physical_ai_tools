@@ -127,6 +127,9 @@ class PhysicalAIServer(Node):
         
         # Initialize inference result visualizer
         self.visualizer = InferenceResultVisualizer(logger=self.get_logger())
+        
+        # Visualization control flag - set to False to disable plotting for better performance
+        self.enable_inference_visualization = False  # Change to False to disable plotting
 
     def _init_core_components(self):
         self.communicator: Optional[Communicator] = None
@@ -811,8 +814,8 @@ class PhysicalAIServer(Node):
                         f'Action buffer REPLACED: {old_count} -> {new_count} fresh actions '
                         f'(final offset applied: {actions_executed_during_inference})')
 
-                    # Plot visualization every 10 chunks for comprehensive analysis
-                    if len(self.inference_history) % 20 == 0:
+                    # Plot visualization every 20 chunks for comprehensive analysis (if enabled)
+                    if self.enable_inference_visualization and len(self.inference_history) % 20 == 0:
                         self.get_logger().info(f"📊 Drawing comprehensive chunk analysis graph (total chunks: {len(self.inference_history)})")
                         self.visualizer.create_comprehensive_analysis(
                             self.raw_action_chunks, 
@@ -820,9 +823,22 @@ class PhysicalAIServer(Node):
                             self.inference_history, 
                             self.chunk_visualization_data
                         )
-                    else:
-                        # Always print text analysis
+                    elif self.enable_inference_visualization:
+                        # Always print text analysis when visualization is enabled
                         self.visualizer.print_offset_analysis(self.inference_history)
+                    else:
+                        # When visualization is disabled, only log basic info
+                        if len(self.inference_history) % 20 == 0:
+                            self.get_logger().info(f"📈 Chunk analysis: {len(self.inference_history)} chunks processed (visualization disabled)")
+                        else:
+                            # Print simplified offset analysis
+                            if len(self.inference_history) > 0:
+                                latest_chunk = self.inference_history[-1]
+                                self.get_logger().info(
+                                    f"Chunk #{latest_chunk['chunk_id']}: "
+                                    f"offset={latest_chunk['calculated_offset']}, "
+                                    f"used={latest_chunk.get('used_chunk_size', 0)}/{latest_chunk['original_chunk_size']} actions"
+                                )
 
                     # Update status
                     current_status = self.data_manager.get_current_record_status()
