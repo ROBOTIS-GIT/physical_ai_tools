@@ -476,14 +476,23 @@ class PhysicalAIServer(Node):
                 # Get current data for fresh inference with freshness validation
                 camera_msgs, follower_msgs, _ = self.communicator.get_latest_data()
 
-                # check timestamp of camera_msgs and follower_msgs using log
+                # Enhanced timestamp logging with age analysis
                 for camera_name, camera_msg in camera_msgs.items():
                     if camera_msg is not None:
                         msg_time = camera_msg.header.stamp.sec + camera_msg.header.stamp.nanosec / 1e9
                         now = self.get_clock().now().seconds_nanoseconds()
                         now_sec = now[0] + now[1] / 1e9
                         age = now_sec - msg_time
-                        self.get_logger().info(f"Camera {camera_name} data is {age:.3f}s old (fresh)")
+                        
+                        # Color-code the logging based on age thresholds
+                        if age < -0.1:
+                            self.get_logger().warning(f"Camera {camera_name} data is {age:.3f}s old (FUTURE TIMESTAMP - clock sync issue!)")
+                        elif age > 0.2:
+                            self.get_logger().warning(f"Camera {camera_name} data is {age:.3f}s old (HIGH LATENCY)")
+                        elif age > 0.1:
+                            self.get_logger().info(f"Camera {camera_name} data is {age:.3f}s old (moderate latency)")
+                        else:
+                            self.get_logger().info(f"Camera {camera_name} data is {age:.3f}s old (fresh)")
 
                 for follower_name, follower_msg in follower_msgs.items():
                     if follower_msg is not None:
@@ -491,7 +500,16 @@ class PhysicalAIServer(Node):
                         now = self.get_clock().now().seconds_nanoseconds()
                         now_sec = now[0] + now[1] / 1e9
                         age = now_sec - msg_time
-                        self.get_logger().info(f"Follower {follower_name} data is {age:.3f}s old (fresh)")
+                        
+                        # Color-code the logging based on age thresholds
+                        if age < -0.05:
+                            self.get_logger().warning(f"Follower {follower_name} data is {age:.3f}s old (FUTURE TIMESTAMP - clock sync issue!)")
+                        elif age > 0.1:
+                            self.get_logger().warning(f"Follower {follower_name} data is {age:.3f}s old (HIGH LATENCY)")
+                        elif age > 0.05:
+                            self.get_logger().info(f"Follower {follower_name} data is {age:.3f}s old (moderate latency)")
+                        else:
+                            self.get_logger().info(f"Follower {follower_name} data is {age:.3f}s old (fresh)")
                 
                 # Validate data availability
                 if (camera_msgs is None or
@@ -508,24 +526,36 @@ class PhysicalAIServer(Node):
                 camera_freshness_ok = True
                 follower_freshness_ok = True
                 
-                # Check camera data timestamps
+                # Check camera data timestamps - stricter thresholds for real-time control
+                camera_age_threshold = 0.2  # 200ms threshold for camera data
                 for camera_name, camera_msg in camera_msgs.items():
                     if camera_msg is not None:
                         msg_time = camera_msg.header.stamp.sec + camera_msg.header.stamp.nanosec / 1e9
                         age = current_time - msg_time
-                        if age > 1.0:  # More than 1 second old
-                            self.get_logger().warning(f"Camera {camera_name} data is {age:.2f}s old")
+                        
+                        # Handle negative timestamps (clock sync issues)
+                        if age < -0.1:  # More than 100ms in future - likely clock sync issue
+                            self.get_logger().warning(f"Camera {camera_name} timestamp is {abs(age):.3f}s in future - clock sync issue!")
+                            camera_freshness_ok = False
+                        elif age > camera_age_threshold:
+                            self.get_logger().warning(f"Camera {camera_name} data is {age:.3f}s old (exceeds {camera_age_threshold}s threshold)")
                             camera_freshness_ok = False
                         else:
                             self.get_logger().debug(f"Camera {camera_name} data is {age:.3f}s old (fresh)")
                 
-                # Check follower data timestamps
+                # Check follower data timestamps - stricter thresholds for joint states
+                follower_age_threshold = 0.1  # 100ms threshold for joint state data
                 for follower_name, follower_msg in follower_msgs.items():
                     if follower_msg is not None:
                         msg_time = follower_msg.header.stamp.sec + follower_msg.header.stamp.nanosec / 1e9
                         age = current_time - msg_time
-                        if age > 1.0:  # More than 1 second old
-                            self.get_logger().warning(f"Follower {follower_name} data is {age:.2f}s old")
+                        
+                        # Handle negative timestamps (clock sync issues)
+                        if age < -0.05:  # More than 50ms in future - likely clock sync issue
+                            self.get_logger().warning(f"Follower {follower_name} timestamp is {abs(age):.3f}s in future - clock sync issue!")
+                            follower_freshness_ok = False
+                        elif age > follower_age_threshold:
+                            self.get_logger().warning(f"Follower {follower_name} data is {age:.3f}s old (exceeds {follower_age_threshold}s threshold)")
                             follower_freshness_ok = False
                         else:
                             self.get_logger().debug(f"Follower {follower_name} data is {age:.3f}s old (fresh)")
