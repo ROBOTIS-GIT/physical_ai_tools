@@ -1262,7 +1262,8 @@ class PhysicalAIServer(Node):
             if joint_count == 1:
                 axes = [axes]
             
-            fig.suptitle('Action Chunk Analysis: Inference Outputs vs Actual Execution', 
+            fig.suptitle('Action Chunk Analysis: Inference Outputs vs Actual Execution\n' +
+                        '(○: Inference Request, ×: Inference Complete)', 
                         fontsize=14, y=0.98)  # Adjust title position
             
             # Plot actual executed actions as continuous line
@@ -1306,11 +1307,23 @@ class PhysicalAIServer(Node):
                         color = colors[chunk_idx % len(colors)]
                         ax.plot(chunk_steps, joint_values, color=color, linestyle='--', 
                                linewidth=1.5, alpha=0.7, 
-                               label=f'Inference {chunk_idx+1} (from step {inference_start_step})')
+                               label=f'Inference {chunk_idx+1} (req@{inference_start_step})')
                         
-                        # Mark the start point
+                        # Mark the start point (when inference was requested)
                         ax.scatter([inference_start_step], [joint_values[0]], 
-                                 color=color, s=50, marker='o', alpha=0.8)
+                                 color=color, s=50, marker='o', alpha=0.8,
+                                 label=f'Inf{chunk_idx+1} Start' if chunk_idx < 3 else None)
+                        
+                        # Mark completion point (when this chunk was actually processed)
+                        # Find the corresponding completion action from inference_history
+                        if chunk_idx < len(self.inference_history):
+                            completion_action = self.inference_history[chunk_idx]['action_count_when_completed']
+                            if completion_action < len(joint_values) + inference_start_step:
+                                completion_idx = completion_action - inference_start_step
+                                if 0 <= completion_idx < len(joint_values):
+                                    ax.scatter([completion_action], [joint_values[completion_idx]], 
+                                             color=color, s=50, marker='x', alpha=0.8,
+                                             label=f'Inf{chunk_idx+1} Complete' if chunk_idx < 3 else None)
                     
                     ax.set_ylabel(f'Joint {joint_idx} Value')
                     ax.grid(True, alpha=0.3)
