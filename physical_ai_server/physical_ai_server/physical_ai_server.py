@@ -796,7 +796,7 @@ class PhysicalAIServer(Node):
                         f'(offset applied: {actions_executed_during_inference})')
 
                     # Plot visualization every 10 chunks for comprehensive analysis
-                    if len(self.inference_history) % 10 == 0:
+                    if len(self.inference_history) % 30 == 0:
                         self.get_logger().info(f"📊 Drawing comprehensive chunk analysis graph (total chunks: {len(self.inference_history)})")
                         self.visualizer.create_comprehensive_analysis(
                             self.raw_action_chunks, 
@@ -813,10 +813,8 @@ class PhysicalAIServer(Node):
                     current_status.phase = TaskStatus.INFERENCING
                     self.communicator.publish_status(status=current_status)
                     
-                    # CRITICAL: Immediately check if we need to start new inference
-                    # This prevents long gaps between inference completions
-                    self.get_logger().info(f"Inference completed, immediately checking if new inference needed...")
-                    self._check_and_start_new_inference_immediately()
+                    # Let the inference timer handle starting new inference based on threshold
+                    self.get_logger().info(f"Inference completed. Next inference will start when remaining actions <= {20}")
                     
                 elif status == 'error':
                     self.inference_pending = False
@@ -1463,74 +1461,6 @@ class PhysicalAIServer(Node):
         except Exception as e:
             self.get_logger().error(f"Error checking camera data freshness: {str(e)}")
             return False  # Assume stale if we can't check
-
-    def _check_and_start_new_inference_immediately(self):
-        """Immediately check if we need to start new inference after current one completes"""
-        try:
-            remaining_count = len(self.remaining_actions)
-            
-            # Start immediately if no inference is pending and worker is alive
-            if (not self.inference_pending and
-                self.inference_worker and 
-                self.inference_worker.is_alive()):
-                
-                self.get_logger().info(f"⚡ IMMEDIATE START: Starting next inference immediately (remaining: {remaining_count})")
-                
-                # Use the same inference starting logic as in timer callback
-                with self.inference_lock:
-                    self.inference_start_action_count = self._used_action_count
-                
-                # Record inference start time for data freshness validation
-                inference_start_time = time.time()
-                
-                # Get fresh data with retry mechanism
-                camera_msgs, follower_msgs, fresh_data_available = self._get_fresh_data_with_retry(
-                    inference_start_time, max_retries=3, retry_delay_ms=15)
-
-                if not fresh_data_available:
-                    self.get_logger().warning("Failed to get fresh camera data for immediate inference, using latest available")
-                    camera_msgs, follower_msgs, _ = self.communicator.get_latest_data()
-                
-                if (camera_msgs and follower_msgs and 
-                    len(camera_msgs) == len(self.params['camera_topic_list'])):
-                    
-                    try:
-                        camera_data, follower_data, _ = self.data_manager.convert_msgs_to_raw_datas(
-                            camera_msgs, follower_msgs, self.total_joint_order)
-                        
-                        # More permissive observation check for immediate inference
-                        observation_changed = self._track_observation_changes(follower_data, self.inference_start_action_count)
-                        
-                        # Allow immediate inference if:
-                        # 1. This is the first inference
-                        # 2. Observation has changed
-                        # (Remove emergency threshold - always try if no pending inference)
-                        allow_inference = (
-                            len(self.raw_action_chunks) == 0 or
-                            observation_changed
-                        )
-                        
-                        if allow_inference:
-                            self.get_logger().info(f"✅ Starting immediate inference (changed: {observation_changed}, first: {len(self.raw_action_chunks) == 0})")
-                            inference_data = (camera_data, follower_data, self.task_instruction[0], self.inference_start_action_count)
-                            if self.inference_worker.send_request(inference_data):
-                                self.inference_pending = True
-                                self.get_logger().info("🚀 Next inference started immediately!")
-                            else:
-                                self.get_logger().warning("❌ Failed to start immediate inference")
-                        else:
-                            self.get_logger().warning("⚠️ Observation unchanged - skipping immediate inference")
-                            
-                    except Exception as e:
-                        self.get_logger().error(f"Error in immediate inference start: {str(e)}")
-                else:
-                    self.get_logger().warning("📷 No fresh data available for immediate inference")
-            else:
-                self.get_logger().debug(f"✋ No immediate inference needed: pending={self.inference_pending}, worker_alive={self.inference_worker and self.inference_worker.is_alive()}")
-                
-        except Exception as e:
-            self.get_logger().error(f"Error checking for immediate inference: {str(e)}")
-
 
 def main(args=None):
     # Set multiprocessing start method to 'spawn' for better compatibility
