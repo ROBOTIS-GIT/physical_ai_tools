@@ -1260,33 +1260,51 @@ class PhysicalAIServer(Node):
                         if not raw_actions or len(raw_actions[0]) <= joint_idx:
                             continue
                             
-                        # Extract joint values for this chunk
-                        joint_values = [action[joint_idx] for action in raw_actions]
-                        
-                        # Create step numbers starting from inference start
-                        chunk_steps = list(range(inference_start_step, 
-                                               inference_start_step + len(joint_values)))
-                        
-                        color = colors[chunk_idx % len(colors)]
-                        ax.plot(chunk_steps, joint_values, color=color, linestyle='--', 
-                               linewidth=1.5, alpha=0.7, 
-                               label=f'Inference {chunk_idx+1} (req@{inference_start_step})')
-                        
-                        # Mark the start point (when inference was requested)
-                        ax.scatter([inference_start_step], [joint_values[0]], 
-                                 color=color, s=50, marker='o', alpha=0.8,
-                                 label=f'Inf{chunk_idx+1} Start' if chunk_idx < 3 else None)
-                        
-                        # Mark completion point (when this chunk was actually processed)
-                        # Find the corresponding completion action from inference_history
+                        # Get offset information from inference history
+                        applied_offset = 0
+                        used_chunk_size = len(raw_actions)
                         if chunk_idx < len(self.inference_history):
-                            completion_action = self.inference_history[chunk_idx]['action_count_when_completed']
-                            if completion_action < len(joint_values) + inference_start_step:
-                                completion_idx = completion_action - inference_start_step
-                                if 0 <= completion_idx < len(joint_values):
-                                    ax.scatter([completion_action], [joint_values[completion_idx]], 
-                                             color=color, s=50, marker='x', alpha=0.8,
-                                             label=f'Inf{chunk_idx+1} Complete' if chunk_idx < 3 else None)
+                            applied_offset = self.inference_history[chunk_idx]['calculated_offset']
+                            used_chunk_size = self.inference_history[chunk_idx].get('used_chunk_size', len(raw_actions))
+                        
+                        # Only plot the ACTUALLY USED portion of the chunk (after offset)
+                        if applied_offset < len(raw_actions):
+                            used_actions = raw_actions[applied_offset:applied_offset + used_chunk_size]
+                            
+                            if not used_actions:
+                                continue
+                                
+                            # Extract joint values for the used portion only
+                            joint_values = [action[joint_idx] for action in used_actions]
+                            
+                            # Create step numbers for the actually used actions
+                            # These would start from when the chunk actually started being executed
+                            actual_start_step = inference_start_step + applied_offset
+                            chunk_steps = list(range(actual_start_step, 
+                                                   actual_start_step + len(joint_values)))
+                            
+                            color = colors[chunk_idx % len(colors)]
+                            ax.plot(chunk_steps, joint_values, color=color, linestyle='--', 
+                                   linewidth=1.5, alpha=0.7, 
+                                   label=f'Inference {chunk_idx+1} (used: {len(joint_values)}/{len(raw_actions)} actions)')
+                            
+                            # Mark the start point (when inference was requested - for reference)
+                            ax.scatter([inference_start_step], [raw_actions[0][joint_idx]], 
+                                     color=color, s=50, marker='o', alpha=0.8,
+                                     label=f'Inf{chunk_idx+1} Request' if chunk_idx < 3 else None)
+                            
+                            # Mark the actual usage start point (after offset)
+                            if applied_offset > 0:
+                                ax.scatter([actual_start_step], [joint_values[0]], 
+                                         color=color, s=50, marker='>', alpha=0.8,
+                                         label=f'Inf{chunk_idx+1} Used Start' if chunk_idx < 3 else None)
+                            
+                            # Mark completion point (when this chunk was actually processed)
+                            if chunk_idx < len(self.inference_history):
+                                completion_action = self.inference_history[chunk_idx]['action_count_when_completed']
+                                ax.scatter([completion_action], [raw_actions[min(applied_offset, len(raw_actions)-1)][joint_idx]], 
+                                         color=color, s=50, marker='x', alpha=0.8,
+                                         label=f'Inf{chunk_idx+1} Complete' if chunk_idx < 3 else None)
                     
                     ax.set_ylabel(f'Joint {joint_idx} Value')
                     ax.grid(True, alpha=0.3)
