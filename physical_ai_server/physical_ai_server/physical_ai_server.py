@@ -609,7 +609,7 @@ class PhysicalAIServer(Node):
                 status, result_data = result
                 
                 if status == 'success':
-                    self.updating_action_chunk = True
+                    # NOTE: updating_action_chunk will be set inside the lock during atomic replacement
                     action_chunk = result_data['actions']
                     inference_time = result_data['inference_time']
                     inference_start_count = result_data.get('inference_start_action_count', 0)
@@ -618,17 +618,15 @@ class PhysicalAIServer(Node):
                         f'Inference completed in {inference_time*1000:.1f}ms, '
                         f'generated {len(action_chunk)} actions')
 
-                    # Calculate offset based on actions executed DURING inference
-                    # Use the start count that was actually sent to the worker
+                    # Get worker start count for later offset calculation
                     worker_start_count = result_data.get('inference_start_action_count', inference_start_count)
-                    actions_executed_during_inference = max(0, self._used_action_count - worker_start_count)
                     
-                    # Store data for visualization
+                    # Store data for visualization (offset will be calculated later)
                     current_chunk_data = {
                         'chunk_id': len(self.inference_history),
                         'inference_start_action': worker_start_count,
-                        'action_count_when_completed': self._used_action_count,
-                        'calculated_offset': actions_executed_during_inference,
+                        'action_count_when_completed': 0,  # Will be updated later
+                        'calculated_offset': 0,  # Will be calculated later
                         'original_chunk_size': len(action_chunk),
                         'inference_time': inference_time,
                         'timestamp': time.time()
@@ -640,8 +638,7 @@ class PhysicalAIServer(Node):
                     self.get_logger().info(f"  Generated {len(action_chunk)} actions")
                     self.get_logger().info(f"  Worker Start Count: {worker_start_count}")
                     self.get_logger().info(f"  Current Action Count: {self._used_action_count}")
-                    self.get_logger().info(f"  Calculated Offset: {actions_executed_during_inference}")
-                    self.get_logger().info(f"  Will Use: {max(0, len(action_chunk) - actions_executed_during_inference)}/{len(action_chunk)} actions")
+                    self.get_logger().info(f"  Offset calculation will be done just before chunk replacement")
                     
                     # Log first few actions as fingerprint
                     if action_chunk and len(action_chunk) > 0:
@@ -654,11 +651,8 @@ class PhysicalAIServer(Node):
                                 self.get_logger().info(f"    Action {i}: {action}")
                     
                     # Check for potential issues
-                    if actions_executed_during_inference > 20:
-                        self.get_logger().warning(f"⚠️ LARGE OFFSET DETECTED: {actions_executed_during_inference} - This might cause discontinuity!")
-                    
-                    if max(0, len(action_chunk) - actions_executed_during_inference) < 10:
-                        self.get_logger().warning(f"⚠️ VERY SMALL CHUNK USAGE: Only {max(0, len(action_chunk) - actions_executed_during_inference)} actions will be used!")
+                    if len(action_chunk) == 0:
+                        self.get_logger().warning("⚠️ EMPTY ACTION CHUNK: No actions to use!")
                     
                     self.inference_history.append(current_chunk_data)
                     
@@ -714,74 +708,61 @@ class PhysicalAIServer(Node):
                     }
                     self.raw_action_chunks.append(raw_chunk_data)
                     
-                    self.get_logger().info(
-                        f'Worker reported start at action: {worker_start_count}, '
-                        f'current action count: {self._used_action_count}, '
-                        f'actions executed during inference: {actions_executed_during_inference}')
-                    
-                    # Apply offset first
-                    if actions_executed_during_inference > 0:
-                        if actions_executed_during_inference < len(action_chunk):
-                            offset_action_chunk = action_chunk[actions_executed_during_inference:]
-                            self.get_logger().info(
-                                f'Applied offset: skipped first {actions_executed_during_inference} actions, '
-                                f'using {len(offset_action_chunk)} remaining actions')
-                        else:
-                            self.get_logger().warning(
-                                f'All {len(action_chunk)} actions were already executed during inference!')
-                            offset_action_chunk = []
-                    else:
-                        offset_action_chunk = action_chunk
-                        self.get_logger().info(
-                            f'No actions executed during inference, using all {len(action_chunk)} actions')
-
-                    # Don't reset action count here - let it continue incrementing
-
-                    # # Apply smoothing using LAST EXECUTED ACTION (not remaining actions)
-                    # if self.last_executed_action is not None and offset_action_chunk:
-                    #     # Create multiple transition steps for smoother blending
-                    #     num_transition_steps = min(5, len(offset_action_chunk))  # 5단계 전환
-                        
-                    #     for step in range(num_transition_steps):
-                    #         # 점진적으로 가중치를 변경: 0.8, 0.6, 0.4, 0.2, 0.0
-                    #         old_weight = 0.8 - (step * 0.2)  
-                    #         new_weight = 1.0 - old_weight
-                            
-                    #         transition_action = []
-                    #         for i in range(len(self.last_executed_action)):
-                    #             blended = (old_weight * self.last_executed_action[i] + 
-                    #                      new_weight * offset_action_chunk[step][i])
-                    #             transition_action.append(blended)
-                            
-                    #         # Replace with smoothed version
-                    #         offset_action_chunk[step] = transition_action
-                        
-                    #     self.get_logger().info(
-                    #         f'Applied multi-step smoothing over {num_transition_steps} actions:')
-                    #     self.get_logger().info(
-                    #         f'  last_executed={self.last_executed_action[:]}')
-                    #     self.get_logger().info(
-                    #         f'  first_original={action_chunk[actions_executed_during_inference][:]}')
-                    #     self.get_logger().info(
-                    #         f'  first_smoothed={offset_action_chunk[0][:]}')
-                    #     self.get_logger().info(
-                    #         f'  final_smoothed={offset_action_chunk[num_transition_steps-1][:]}')
-                    # else:
-                    #     if self.last_executed_action is None:
-                    #         self.get_logger().info('No last executed action available for smoothing')
-                    #     if not offset_action_chunk:
-                    #         self.get_logger().info('No offset actions to smooth')
-
-                    # Replace actions
+                    # Replace actions with ATOMIC operation to prevent race conditions
+                    # CALCULATE OFFSET AT THE LAST MOMENT for maximum accuracy
+                    self.get_logger().info("🔒 STARTING ATOMIC ACTION CHUNK REPLACEMENT")
                     with self.inference_lock:
+                        # CRITICAL: Set updating flag first to block action timer
+                        self.updating_action_chunk = True
+                        
+                        # Calculate offset NOW - at the exact moment of replacement for maximum accuracy
+                        actions_executed_during_inference = max(0, self._used_action_count - worker_start_count)
+                        
+                        # Update current_chunk_data with final accurate values
+                        current_chunk_data['action_count_when_completed'] = self._used_action_count
+                        current_chunk_data['calculated_offset'] = actions_executed_during_inference
+                        
+                        self.get_logger().info(
+                            f'🎯 FINAL OFFSET CALCULATION: '
+                            f'Worker started at action {worker_start_count}, '
+                            f'current action count: {self._used_action_count}, '
+                            f'actions executed during inference: {actions_executed_during_inference}')
+                        
+                        # Apply offset immediately after calculation
+                        if actions_executed_during_inference > 0:
+                            if actions_executed_during_inference < len(action_chunk):
+                                offset_action_chunk = action_chunk[actions_executed_during_inference:]
+                                self.get_logger().info(
+                                    f'✂️ Applied offset: skipped first {actions_executed_during_inference} actions, '
+                                    f'using {len(offset_action_chunk)} remaining actions')
+                            else:
+                                self.get_logger().warning(
+                                    f'🚫 All {len(action_chunk)} actions were already executed during inference!')
+                                offset_action_chunk = []
+                        else:
+                            offset_action_chunk = action_chunk
+                            self.get_logger().info(
+                                f'✅ No actions executed during inference, using all {len(action_chunk)} actions')
+                        
+                        # Check for potential issues AFTER final calculation
+                        if actions_executed_during_inference > 20:
+                            self.get_logger().warning(f"⚠️ LARGE OFFSET DETECTED: {actions_executed_during_inference} - This might cause discontinuity!")
+                        
+                        if len(offset_action_chunk) < 10 and len(offset_action_chunk) > 0:
+                            self.get_logger().warning(f"⚠️ VERY SMALL CHUNK USAGE: Only {len(offset_action_chunk)} actions will be used!")
+                        
                         old_count = len(self.remaining_actions)
                         self.remaining_actions.clear()
                         self.remaining_actions.extend(offset_action_chunk)
                         new_count = len(self.remaining_actions)
                         self.inference_pending = False
+                        
+                        # CRITICAL: Clear updating flag LAST to minimize blocking time
                         self.updating_action_chunk = False
                     
-                    # Update visualization data
+                    self.get_logger().info(f"🔓 ATOMIC REPLACEMENT COMPLETE: {old_count} -> {new_count} actions")
+                    
+                    # Update visualization data with final accurate values
                     current_chunk_data['used_chunk_size'] = len(offset_action_chunk)
                     current_chunk_data['action_start_from'] = self._used_action_count + 1  # Next action to be executed
                     
@@ -793,7 +774,7 @@ class PhysicalAIServer(Node):
                     
                     self.get_logger().info(
                         f'Action buffer REPLACED: {old_count} -> {new_count} fresh actions '
-                        f'(offset applied: {actions_executed_during_inference})')
+                        f'(final offset applied: {actions_executed_during_inference})')
 
                     # Plot visualization every 10 chunks for comprehensive analysis
                     if len(self.inference_history) % 20 == 0:
@@ -814,7 +795,7 @@ class PhysicalAIServer(Node):
                     self.communicator.publish_status(status=current_status)
                     
                     # Let the inference timer handle starting new inference based on threshold
-                    self.get_logger().info(f"Inference completed. Next inference will start when remaining actions <= {20}")
+                    self.get_logger().info(f"Inference completed. Next inference will start when remaining actions <= 30")
                     
                 elif status == 'error':
                     self.inference_pending = False
@@ -837,13 +818,20 @@ class PhysicalAIServer(Node):
         if not self.on_inference:
             return
 
+        # NOTE: updating_action_chunk check is commented out to prevent robot from stopping
+        # during chunk updates. This may cause 1-2 extra actions but keeps robot moving.
         # if self.updating_action_chunk:
-        #     self.get_logger().debug("Waiting for action chunk update to complete")
+        #     self.get_logger().debug("🔒 Blocking action execution during chunk update")
         #     return
 
         try:
             # Publish next action if available (thread-safe)
             with self.inference_lock:
+                # NOTE: Double check also commented out for same reason
+                # if self.updating_action_chunk:
+                #     self.get_logger().debug("🔒 Chunk update detected inside lock, skipping action")
+                #     return
+                    
                 if len(self.remaining_actions) > 0:
                     action = self.remaining_actions.pop(0)
                     action_available = True
