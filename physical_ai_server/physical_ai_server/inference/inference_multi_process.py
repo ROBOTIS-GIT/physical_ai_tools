@@ -182,39 +182,24 @@ class InferenceWorker:
                             camera_data, follower_data, task_instruction = data
                             inference_start_action_count = 0
 
-                        # *** DEBUGGING: Log detailed input validation ***
-                        logger.info(f'🧪 INFERENCE WORKER INPUT VALIDATION #{request_count}:')
-                        logger.info(f'  Inference Start Action Count: {inference_start_action_count}')
-                        logger.info(f'  Task Instruction: {task_instruction}')
+                        # *** SIMPLIFIED: Log key input validation info ***
+                        logger.info(f'🧪 INFERENCE WORKER INPUT #{request_count}:')
+                        logger.info(f'  Start Action: {inference_start_action_count}, Task: {task_instruction}')
                         
-                        # Validate and log camera data
-                        if camera_data is not None:
-                            if hasattr(camera_data, 'shape'):
-                                logger.info(f'  Camera Data Shape: {camera_data.shape}')
-                                logger.info(f'  Camera Data Type: {camera_data.dtype}')
-                                # Log pixel statistics
-                                logger.info(f'  Camera Stats: min={camera_data.min():.3f}, max={camera_data.max():.3f}, mean={camera_data.mean():.3f}')
-                                # Log corner pixels as fingerprint
-                                if camera_data.size > 100:
-                                    flat_data = camera_data.flatten()
-                                    logger.info(f'  Pixel Sample (first 5): {flat_data[:5]}')
-                                    logger.info(f'  Pixel Sample (last 5): {flat_data[-5:]}')
-                            else:
-                                logger.info(f'  Camera Data Type: {type(camera_data)}')
-                        else:
-                            logger.warning('  Camera Data: None')
+                        # Log camera data freshness
+                        if isinstance(camera_data, dict):
+                            logger.info(f'  Camera: dict with {len(camera_data)} cameras')
+                            for cam_name, cam_msg in camera_data.items():
+                                if hasattr(cam_msg, 'header') and hasattr(cam_msg.header, 'stamp'):
+                                    cam_timestamp = cam_msg.header.stamp.sec + cam_msg.header.stamp.nanosec * 1e-9
+                                    current_time = time.time()
+                                    age_ms = (current_time - cam_timestamp) * 1000
+                                    freshness = "FRESH" if age_ms <= 50 else "STALE"
+                                    logger.info(f'    📸 {cam_name}: {freshness} (age: {age_ms:.1f}ms)')
                         
-                        # Validate and log follower data  
-                        if follower_data is not None:
-                            if isinstance(follower_data, (list, tuple)):
-                                logger.info(f'  Follower Data (joints): {follower_data[:7]}')  # First 7 joints
-                            elif hasattr(follower_data, 'shape'):
-                                logger.info(f'  Follower Data Shape: {follower_data.shape}')
-                                logger.info(f'  Follower Data Values: {follower_data.flatten()[:7]}')
-                            else:
-                                logger.info(f'  Follower Data: {follower_data}')
-                        else:
-                            logger.warning('  Follower Data: None')
+                        # Log follower data  
+                        if isinstance(follower_data, (list, tuple)):
+                            logger.info(f'  🤖 Joints: {follower_data[:7]}')  # First 7 joints
 
                         # Run inference
                         logger.info('Starting inference...')
@@ -233,27 +218,23 @@ class InferenceWorker:
                             action_chunk = action_chunk.tolist()
                             logger.info(f'Converted numpy array {original_shape} to list, length: {len(action_chunk)}')
 
-                        # *** DEBUGGING: Log detailed output validation ***
-                        logger.info(f'🧪 INFERENCE WORKER OUTPUT VALIDATION #{request_count}:')
-                        logger.info(f'  Generated Actions Count: {len(action_chunk) if action_chunk else 0}')
+                        # *** SIMPLIFIED: Log key output validation info ***
+                        logger.info(f'🧪 INFERENCE WORKER OUTPUT #{request_count}:')
+                        logger.info(f'  Generated {len(action_chunk)} actions in {inference_time*1000:.1f}ms')
                         
                         if action_chunk and len(action_chunk) > 0:
-                            # Log first few actions as fingerprint
-                            first_actions = action_chunk[:3]
-                            logger.info(f'  First 3 Generated Actions:')
-                            for i, action in enumerate(first_actions):
-                                if hasattr(action, '__len__') and len(action) >= 7:
-                                    logger.info(f'    Action {i}: {action[:7]}')
-                                else:
-                                    logger.info(f'    Action {i}: {action}')
+                            # Log first action as fingerprint
+                            first_action = action_chunk[0]
+                            if hasattr(first_action, '__len__') and len(first_action) >= 7:
+                                logger.info(f'  🎯 First Action: {first_action[:7]}')
                             
-                            # Log action statistics
+                            # Log action statistics for first 3 joints only
                             if hasattr(action_chunk[0], '__len__') and len(action_chunk[0]) > 0:
                                 actions_array = np.array(action_chunk)
-                                logger.info(f'  Action Stats: shape={actions_array.shape}')
-                                for joint_idx in range(min(3, actions_array.shape[1])):  # First 3 joints
+                                logger.info(f'  📊 Stats: shape={actions_array.shape}')
+                                for joint_idx in range(min(3, actions_array.shape[1])):
                                     joint_values = actions_array[:, joint_idx]
-                                    logger.info(f'    Joint {joint_idx}: min={joint_values.min():.3f}, max={joint_values.max():.3f}, mean={joint_values.mean():.3f}')
+                                    logger.info(f'    J{joint_idx}: [{joint_values.min():.3f}, {joint_values.max():.3f}] mean={joint_values.mean():.3f}')
 
                         # Validate the converted result
                         if not action_chunk or len(action_chunk) == 0:

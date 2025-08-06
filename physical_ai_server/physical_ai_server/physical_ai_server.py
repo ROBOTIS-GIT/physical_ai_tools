@@ -26,14 +26,12 @@ import time
 import traceback
 from typing import Optional
 
-import matplotlib.pyplot as plt
 import numpy as np
     
 from collections import deque
 
 from ament_index_python.packages import get_package_share_directory
 from physical_ai_interfaces.msg import TaskStatus, TrainingStatus
-import numpy as np
 from physical_ai_interfaces.msg import TaskStatus
 from physical_ai_interfaces.srv import (
     GetDatasetList,
@@ -53,6 +51,7 @@ from physical_ai_server.communication.communicator import Communicator
 from physical_ai_server.data_processing.data_manager import DataManager
 from physical_ai_server.inference import InferenceFactory
 from physical_ai_server.inference.inference_multi_process import InferenceWorker
+from physical_ai_server.inference.visualize_inference_result import InferenceResultVisualizer
 from physical_ai_server.timer.timer_manager import TimerManager
 from physical_ai_server.training.training_manager import TrainingManager
 from physical_ai_server.utils.parameter_utils import (
@@ -125,6 +124,9 @@ class PhysicalAIServer(Node):
         # Observation tracking for debugging stale data issues
         self.last_observation_data = None  # Store last converted observation data
         self.observation_change_history = []  # Track observation changes over time
+        
+        # Initialize inference result visualizer
+        self.visualizer = InferenceResultVisualizer(logger=self.get_logger())
 
     def _init_core_components(self):
         self.communicator: Optional[Communicator] = None
@@ -472,10 +474,17 @@ class PhysicalAIServer(Node):
                 with self.inference_lock:
                     self.inference_start_action_count = self._used_action_count
                 
+                # Record inference start time for data freshness validation
+                inference_start_time = time.time()
                 self.get_logger().info(f"Starting new inference at action count: {self.inference_start_action_count}")
                 
                 # Get current data for fresh inference with freshness validation
-                camera_msgs, follower_msgs, _ = self.communicator.get_latest_data()
+                camera_msgs, follower_msgs, fresh_data_available = self._get_fresh_data_with_retry(
+                    inference_start_time, max_retries=5, retry_delay_ms=20)
+
+                if not fresh_data_available:
+                    self.get_logger().warning("Failed to get fresh camera data after retries, using latest available")
+                    camera_msgs, follower_msgs, _ = self.communicator.get_latest_data()
 
                 # Validate data availability
                 if (camera_msgs is None or
@@ -509,12 +518,20 @@ class PhysicalAIServer(Node):
                         self.get_logger().warning("Waiting for fresh observation data before next inference...")
                         return  # Skip this inference attempt
 
-                    inference_data = (camera_data, follower_data, self.task_instruction[0], self.inference_start_action_count)
-                    
                     # *** DEBUGGING: Log detailed inference input data ***
                     self.get_logger().info(f"🧪 INFERENCE #{len(self.raw_action_chunks)+1} INPUT DEBUG:")
                     self.get_logger().info(f"  Action Count: {self.inference_start_action_count}")
                     self.get_logger().info(f"  Observation Changed: {observation_changed}")
+                    self.get_logger().info(f"  Fresh Data Available: {fresh_data_available}")
+                    
+                    # Log camera data freshness and summary
+                    if camera_msgs is not None:
+                        for cam_name, cam_msg in camera_msgs.items():
+                            if hasattr(cam_msg, 'header') and hasattr(cam_msg.header, 'stamp'):
+                                cam_timestamp = cam_msg.header.stamp.sec + cam_msg.header.stamp.nanosec * 1e-9
+                                age_ms = (inference_start_time - cam_timestamp) * 1000
+                                freshness = "FRESH" if age_ms <= 50 else "STALE"
+                                self.get_logger().info(f"  📸 {cam_name}: {freshness} (age: {age_ms:.1f}ms)")
                     
                     # Log camera data summary
                     if camera_data is not None:
@@ -769,10 +786,15 @@ class PhysicalAIServer(Node):
                     # Plot visualization every 10 chunks for comprehensive analysis
                     if len(self.inference_history) % 10 == 0:
                         self.get_logger().info(f"📊 Drawing comprehensive chunk analysis graph (total chunks: {len(self.inference_history)})")
-                        self._plot_action_chunk_curves()
+                        self.visualizer.create_comprehensive_analysis(
+                            self.raw_action_chunks, 
+                            list(self.action_history), 
+                            self.inference_history, 
+                            self.chunk_visualization_data
+                        )
                     else:
                         # Always print text analysis
-                        self._print_offset_analysis()
+                        self.visualizer.print_offset_analysis(self.inference_history)
 
                     # Update status
                     current_status = self.data_manager.get_current_record_status()
@@ -1263,416 +1285,6 @@ class PhysicalAIServer(Node):
         # Skip ping/pong for now to avoid interference - just check if process is alive
         return True
 
-    def _plot_action_chunk_curves(self):
-        try:
-            if len(self.raw_action_chunks) < 2:
-                return
-            # Determine how many joints we have
-            joint_count = self.raw_action_chunks[0]['joint_count'] if self.raw_action_chunks else 7
-            joint_count = min(joint_count, 3)  # Limit to 3 joints to avoid layout issues
-
-            # Calculate figure size to accommodate all subplots properly
-            subplot_height = 3.5  # Height per subplot
-            total_height = max(subplot_height * joint_count + 2, 10)  # Minimum 10 inches
-
-            fig, axes = plt.subplots(joint_count, 1, figsize=(16, total_height), sharex=True)
-            if joint_count == 1:
-                axes = [axes]
-
-            fig.suptitle(f'Action Chunk Analysis: Comprehensive View ({len(self.raw_action_chunks)} chunks)\n' +
-                        'Inference Outputs vs Actual Execution (○: Inference Request, ×: Inference Complete)', 
-                        fontsize=14, y=0.98)  # Adjust title position
-            
-            # Plot actual executed actions as continuous line
-            if self.action_history:
-                action_numbers = [a['action_number'] for a in self.action_history]
-                
-                for joint_idx in range(joint_count):
-                    ax = axes[joint_idx]
-                    
-                    # Plot actual executed actions - ensure data consistency
-                    if len(self.action_history) > 0 and len(self.action_history[0]['action_values']) > joint_idx:
-                        actual_values = []
-                        valid_action_numbers = []
-                        
-                        for i, action_data in enumerate(self.action_history):
-                            if len(action_data['action_values']) > joint_idx:
-                                actual_values.append(action_data['action_values'][joint_idx])
-                                valid_action_numbers.append(action_data['action_number'])
-                        
-                        if len(valid_action_numbers) == len(actual_values) and len(actual_values) > 0:
-                            ax.plot(valid_action_numbers, actual_values, 'k-', linewidth=2, 
-                                   label='Actual Executed Actions', alpha=0.8)
-                    
-                    # Plot each inference chunk as separate colored curves with extended color palette
-                    colors = ['red', 'blue', 'green', 'orange', 'purple', 'brown', 'pink', 'gray', 
-                             'olive', 'cyan', 'magenta', 'yellow', 'navy', 'lime', 'teal', 'maroon']
-                    
-                    for chunk_idx, chunk_data in enumerate(self.raw_action_chunks):
-                        inference_start_step = chunk_data['inference_start_step']
-                        raw_actions = chunk_data['raw_actions']
-                        
-                        if not raw_actions or len(raw_actions[0]) <= joint_idx:
-                            continue
-                            
-                        # Get offset information from inference history
-                        applied_offset = 0
-                        used_chunk_size = len(raw_actions)
-                        if chunk_idx < len(self.inference_history):
-                            applied_offset = self.inference_history[chunk_idx]['calculated_offset']
-                            used_chunk_size = self.inference_history[chunk_idx].get('used_chunk_size', len(raw_actions))
-                        
-                        # Only plot the ACTUALLY USED portion of the chunk (after offset)
-                        if applied_offset < len(raw_actions):
-                            used_actions = raw_actions[applied_offset:applied_offset + used_chunk_size]
-                            
-                            if not used_actions:
-                                continue
-                                
-                            # Extract joint values for the used portion only
-                            joint_values = [action[joint_idx] for action in used_actions]
-                            
-                            # Create step numbers for the actually used actions
-                            # These would start from when the chunk actually started being executed
-                            actual_start_step = inference_start_step + applied_offset
-                            chunk_steps = list(range(actual_start_step, 
-                                                   actual_start_step + len(joint_values)))
-                            
-                            color = colors[chunk_idx % len(colors)]
-                            ax.plot(chunk_steps, joint_values, color=color, linestyle='--', 
-                                   linewidth=1.5, alpha=0.7, 
-                                   label=f'Inference {chunk_idx+1} (used: {len(joint_values)}/{len(raw_actions)} actions)')
-                            
-                            # Mark the start point (when inference was requested - for reference)
-                            ax.scatter([inference_start_step], [raw_actions[0][joint_idx]], 
-                                     color=color, s=50, marker='o', alpha=0.8,
-                                     label=f'Inf{chunk_idx+1} Request' if chunk_idx < 3 else None)
-                            
-                            # Mark the actual usage start point (after offset)
-                            if applied_offset > 0:
-                                ax.scatter([actual_start_step], [joint_values[0]], 
-                                         color=color, s=50, marker='>', alpha=0.8,
-                                         label=f'Inf{chunk_idx+1} Used Start' if chunk_idx < 3 else None)
-                            
-                            # Mark completion point (when this chunk was actually processed)
-                            if chunk_idx < len(self.inference_history):
-                                completion_action = self.inference_history[chunk_idx]['action_count_when_completed']
-                                ax.scatter([completion_action], [raw_actions[min(applied_offset, len(raw_actions)-1)][joint_idx]], 
-                                         color=color, s=50, marker='x', alpha=0.8,
-                                         label=f'Inf{chunk_idx+1} Complete' if chunk_idx < 3 else None)
-                    
-                    ax.set_ylabel(f'Joint {joint_idx} Value')
-                    ax.grid(True, alpha=0.3)
-                    
-                    # Limit legend entries to avoid overcrowding
-                    handles, labels = ax.get_legend_handles_labels()
-                    if len(handles) > 12:  # Limit to 12 entries for 10 chunks
-                        handles = handles[:12]
-                        labels = labels[:12]
-                        labels[-1] = f"... and {len(handles) - 11} more"
-                    
-                    ax.legend(handles, labels, bbox_to_anchor=(1.05, 1), loc='upper left', fontsize=8)
-                    
-                    # Add vertical lines for chunk boundaries
-                    if valid_action_numbers:  # Only if we have valid data
-                        for chunk_data in self.raw_action_chunks:
-                            start_step = chunk_data['inference_start_step']
-                            if start_step <= max(valid_action_numbers):
-                                ax.axvline(x=start_step, color='gray', linestyle=':', alpha=0.5)
-            
-            if joint_count > 0:
-                axes[-1].set_xlabel('Action Step Number')
-            
-            # Use subplots_adjust instead of tight_layout for better control
-            plt.subplots_adjust(left=0.08, right=0.75, top=0.95, bottom=0.08, hspace=0.3)
-            
-            # Save plot with better bbox handling
-            plot_path = f'/tmp/action_chunk_curves_{len(self.raw_action_chunks)}.png'
-            plt.savefig(plot_path, dpi=120, bbox_inches='tight', pad_inches=0.2)
-            plt.close()
-            
-            self.get_logger().info(f'Action chunk curves plot saved to: {plot_path}')
-            
-            # Print detailed analysis
-            self._print_chunk_curve_analysis()
-            
-        except Exception as e:
-            self.get_logger().error(f'Error creating action chunk curves plot: {str(e)}')
-            self.get_logger().error(f'Traceback: {traceback.format_exc()}')
-            # Always print text analysis even if plot fails
-            self._print_offset_analysis()
-            
-            # Save plot with better bbox handling
-            plot_path = f'/tmp/action_chunk_curves_{len(self.raw_action_chunks)}.png'
-            plt.savefig(plot_path, dpi=120, bbox_inches='tight', pad_inches=0.2)
-            plt.close()
-            
-            self.get_logger().info(f'Action chunk curves plot saved to: {plot_path}')
-            
-            # Print detailed analysis
-            self._print_chunk_curve_analysis()
-            
-        except Exception as e:
-            self.get_logger().error(f'Error creating action chunk curves plot: {str(e)}')
-            self.get_logger().error(f'Traceback: {traceback.format_exc()}')
-            # Always print text analysis even if plot fails
-            self._print_offset_analysis()
-
-    def _print_chunk_curve_analysis(self):
-        """Print analysis of action chunk curves"""
-        self.get_logger().info("=== ACTION CHUNK CURVE ANALYSIS ===")
-        
-        for chunk_idx, chunk_data in enumerate(self.raw_action_chunks[-3:], 
-                                             start=max(0, len(self.raw_action_chunks)-3)):
-            inference_start = chunk_data['inference_start_step']
-            raw_actions = chunk_data['raw_actions']
-            joint_count = chunk_data['joint_count']
-            
-            self.get_logger().info(
-                f"Chunk {chunk_idx}: Started from step {inference_start}, "
-                f"Generated {len(raw_actions)} actions for {joint_count} joints"
-            )
-            
-            # Show first and last action values
-            if raw_actions:
-                first_action = raw_actions[0][:3]  # First 3 joints
-                last_action = raw_actions[-1][:3]  # First 3 joints
-                self.get_logger().info(
-                    f"  First action: {first_action}")
-                self.get_logger().info(
-                    f"  Last action:  {last_action}")
-        
-        self.get_logger().info("=== END CHUNK CURVE ANALYSIS ===")
-
-    def _plot_action_chunk_analysis(self):
-        """Plot action chunk analysis to understand offset calculation"""
-        try:
-            if len(self.inference_history) < 2:
-                return
-                
-            # Use larger figure size for better layout
-            fig, ((ax1, ax2), (ax3, ax4)) = plt.subplots(2, 2, figsize=(16, 10))
-            fig.suptitle('Action Chunk Analysis - Offset Calculation Debug', fontsize=14)
-            
-            # Extract data for plotting
-            chunk_ids = list(range(len(self.inference_history)))
-            inference_starts = [h['inference_start_action'] for h in self.inference_history]
-            completion_actions = [h['action_count_when_completed'] for h in self.inference_history]
-            calculated_offsets = [h['calculated_offset'] for h in self.inference_history]
-            original_sizes = [h['original_chunk_size'] for h in self.inference_history]
-            used_sizes = [h['used_chunk_size'] for h in self.inference_history]
-            
-            # Plot 1: Inference timing vs action execution
-            ax1.plot(chunk_ids, inference_starts, 'b-o', label='Inference Start Action', markersize=4)
-            ax1.plot(chunk_ids, completion_actions, 'r-s', label='Action Count at Completion', markersize=4)
-            ax1.set_xlabel('Chunk ID')
-            ax1.set_ylabel('Action Number')
-            ax1.set_title('Inference Timing vs Action Execution')
-            ax1.legend(fontsize=8)
-            ax1.grid(True, alpha=0.3)
-            
-            # Plot 2: Offset calculation
-            ax2.bar(chunk_ids, calculated_offsets, alpha=0.7, color='orange')
-            ax2.set_xlabel('Chunk ID')
-            ax2.set_ylabel('Calculated Offset')
-            ax2.set_title('Applied Offsets for Each Chunk')
-            ax2.grid(True, alpha=0.3)
-            
-            # Add text annotations for offsets
-            for i, offset in enumerate(calculated_offsets):
-                if offset > 0:
-                    ax2.text(i, offset + 0.5, str(offset), ha='center', va='bottom', fontsize=8)
-            
-            # Plot 3: Chunk sizes (original vs used)
-            x_pos = np.arange(len(chunk_ids))
-            width = 0.35
-            ax3.bar(x_pos - width/2, original_sizes, width, label='Original Size', alpha=0.7, color='lightblue')
-            ax3.bar(x_pos + width/2, used_sizes, width, label='Used Size (after offset)', alpha=0.7, color='darkblue')
-            ax3.set_xlabel('Chunk ID')
-            ax3.set_ylabel('Chunk Size')
-            ax3.set_title('Chunk Sizes: Original vs Used')
-            ax3.set_xticks(x_pos)
-            ax3.set_xticklabels(chunk_ids)
-            ax3.legend(fontsize=8)
-            ax3.grid(True, alpha=0.3)
-            
-            # Plot 4: Action values over time (first 3 dimensions)
-            if self.action_history:
-                action_numbers = [a['action_number'] for a in self.action_history]
-                action_vals_0 = [a['action_values'][0] if len(a['action_values']) > 0 else 0 for a in self.action_history]
-                action_vals_1 = [a['action_values'][1] if len(a['action_values']) > 1 else 0 for a in self.action_history]
-                action_vals_2 = [a['action_values'][2] if len(a['action_values']) > 2 else 0 for a in self.action_history]
-                
-                ax4.plot(action_numbers, action_vals_0, 'r-', alpha=0.7, label='Joint 0', linewidth=1)
-                ax4.plot(action_numbers, action_vals_1, 'g-', alpha=0.7, label='Joint 1', linewidth=1)
-                ax4.plot(action_numbers, action_vals_2, 'b-', alpha=0.7, label='Joint 2', linewidth=1)
-                
-                # Mark chunk boundaries
-                chunk_starts = self.chunk_visualization_data['chunk_start_actions']
-                for start in chunk_starts:
-                    if start <= max(action_numbers):
-                        ax4.axvline(x=start, color='black', linestyle='--', alpha=0.5)
-                
-                ax4.set_xlabel('Action Number')
-                ax4.set_ylabel('Joint Values')
-                ax4.set_title('Action Values Over Time (with chunk boundaries)')
-                ax4.legend(fontsize=8)
-                ax4.grid(True, alpha=0.3)
-            
-            # Use subplots_adjust instead of tight_layout
-            plt.subplots_adjust(left=0.08, right=0.95, top=0.92, bottom=0.08, wspace=0.3, hspace=0.3)
-            
-            # Save plot
-            plot_path = f'/tmp/action_chunk_analysis_{len(self.inference_history)}.png'
-            plt.savefig(plot_path, dpi=120, bbox_inches='tight', pad_inches=0.2)
-            plt.close()
-            
-            self.get_logger().info(f'Action chunk analysis plot saved to: {plot_path}')
-            
-            # Print detailed analysis
-            self._print_offset_analysis()
-            
-        except Exception as e:
-            self.get_logger().error(f'Error creating action chunk plot: {str(e)}')
-            self.get_logger().error(f'Traceback: {traceback.format_exc()}')
-            # Always print text analysis even if plot fails
-            self._print_offset_analysis()
-
-    def _print_offset_analysis(self):
-        """Print detailed offset analysis to help debug the issue"""
-        self.get_logger().info("=== DETAILED OFFSET ANALYSIS ===")
-        
-        # Print recent history (last 3 chunks)
-        recent_chunks = self.inference_history[-3:] if len(self.inference_history) >= 3 else self.inference_history
-        
-        for i, history in enumerate(recent_chunks, start=max(0, len(self.inference_history)-len(recent_chunks))):
-            inference_start = history['inference_start_action']
-            completion_at = history['action_count_when_completed']
-            calc_offset = history['calculated_offset']
-            orig_size = history['original_chunk_size']
-            used_size = history['used_chunk_size']
-            actual_start = history.get('action_start_from', 'Unknown')
-            
-            # Calculate expected values
-            expected_next_action = inference_start + calc_offset + 1
-            actions_during_inference = completion_at - inference_start
-            
-            self.get_logger().info(
-                f"Chunk {i}: "
-                f"InfStart={inference_start}, "
-                f"CompletionAt={completion_at}, "
-                f"ActionsDuring={actions_during_inference}, "
-                f"CalcOffset={calc_offset}, "
-                f"OrigSize={orig_size}, "
-                f"UsedSize={used_size}, "
-                f"ExpectedNext={expected_next_action}, "
-                f"ActualStart={actual_start}"
-            )
-            
-            # Detailed analysis
-            if calc_offset != actions_during_inference:
-                self.get_logger().warning(
-                    f"CALCULATION MISMATCH in Chunk {i}: "
-                    f"Calculated offset ({calc_offset}) != Actions during inference ({actions_during_inference})"
-                )
-            
-            # Check if offset makes sense
-            if calc_offset >= orig_size:
-                self.get_logger().warning(
-                    f"OFFSET TOO LARGE in Chunk {i}: "
-                    f"Offset ({calc_offset}) >= Original chunk size ({orig_size}), "
-                    f"all actions would be skipped!"
-                )
-            
-            # Check for discrepancy in expected vs actual
-            if actual_start != 'Unknown' and expected_next_action != actual_start:
-                difference = actual_start - expected_next_action
-                self.get_logger().warning(
-                    f"OFFSET MISMATCH in Chunk {i}: "
-                    f"Expected next action {expected_next_action}, "
-                    f"but actually started from {actual_start}. "
-                    f"Difference: {difference} actions"
-                )
-                
-                if difference < 0:
-                    self.get_logger().error(f"CRITICAL: Actions being REPEATED! Going backwards by {abs(difference)} actions")
-                elif difference > 0:
-                    self.get_logger().warning(f"Actions being SKIPPED! Missing {difference} actions")
-        
-        # Summary statistics
-        if len(self.inference_history) > 1:
-            avg_offset = sum(h['calculated_offset'] for h in self.inference_history) / len(self.inference_history)
-            avg_completion_time = sum(h['action_count_when_completed'] - h['inference_start_action'] 
-                                    for h in self.inference_history) / len(self.inference_history)
-            
-            self.get_logger().info(
-                f"SUMMARY: Total chunks: {len(self.inference_history)}, "
-                f"Avg offset: {avg_offset:.1f}, "
-                f"Avg actions during inference: {avg_completion_time:.1f}"
-            )
-        
-        self.get_logger().info("=== END OFFSET ANALYSIS ===")
-        
-        # Add pattern detection
-        self._detect_offset_patterns()
-
-    def _detect_offset_patterns(self):
-        """Detect patterns in offset calculation that might explain the issue"""
-        if len(self.inference_history) < 3:
-            return
-            
-        self.get_logger().info("=== PATTERN DETECTION ===")
-        
-        # Check if offsets are consistent
-        recent_offsets = [h['calculated_offset'] for h in self.inference_history[-5:]]
-        if len(set(recent_offsets)) <= 2:
-            self.get_logger().info(f"PATTERN: Offsets are quite consistent: {recent_offsets}")
-        else:
-            self.get_logger().info(f"PATTERN: Offsets vary: {recent_offsets}")
-        
-        # Check inference timing patterns
-        inference_times = [h['inference_time'] for h in self.inference_history[-5:]]
-        avg_inference_time = sum(inference_times) / len(inference_times)
-        self.get_logger().info(f"PATTERN: Avg inference time: {avg_inference_time*1000:.1f}ms")
-        
-        # Check action execution rate during inference
-        action_rates = []
-        for h in self.inference_history[-3:]:
-            actions_during = h['action_count_when_completed'] - h['inference_start_action']
-            time_taken = h['inference_time']
-            rate = actions_during / time_taken if time_taken > 0 else 0
-            action_rates.append(rate)
-        
-        if action_rates:
-            avg_rate = sum(action_rates) / len(action_rates)
-            self.get_logger().info(f"PATTERN: Actions executed during inference: {avg_rate:.1f} actions/sec")
-            
-            # Check if this matches our 10Hz expectation
-            expected_rate = 10.0  # 10Hz action timer
-            if abs(avg_rate - expected_rate) > 2.0:
-                self.get_logger().warning(
-                    f"PATTERN ANOMALY: Action rate ({avg_rate:.1f}) differs significantly from expected 10Hz"
-                )
-        
-        # Check for potential timing issues
-        for i, h in enumerate(self.inference_history[-3:], start=len(self.inference_history)-3):
-            start_action = h['inference_start_action']
-            completion_action = h['action_count_when_completed']
-            inference_time_ms = h['inference_time'] * 1000
-            
-            # Calculate theoretical actions that should have executed
-            theoretical_actions = int(inference_time_ms / 100)  # 100ms per action at 10Hz
-            actual_actions = completion_action - start_action
-            
-            self.get_logger().info(
-                f"Chunk {i}: Inference took {inference_time_ms:.0f}ms, "
-                f"theoretical actions: {theoretical_actions}, "
-                f"actual actions: {actual_actions}, "
-                f"difference: {actual_actions - theoretical_actions}"
-            )
-        
-        self.get_logger().info("=== END PATTERN DETECTION ===")
-
     def _stop_inference_with_error(self, error_msg):
         """Stop inference due to error"""
         self.get_logger().error(f"Stopping inference due to error: {error_msg}")
@@ -1750,6 +1362,96 @@ class PhysicalAIServer(Node):
             self.get_logger().error(f"Traceback: {traceback.format_exc()}")
             return True  # Default to allowing inference if tracking fails
 
+    def _get_fresh_data_with_retry(self, inference_start_time, max_retries=5, retry_delay_ms=20):
+        """
+        Get fresh data that was captured AFTER the inference start time.
+        Retries if data is stale (older than inference start time).
+        
+        Args:
+            inference_start_time: Unix timestamp when inference started
+            max_retries: Maximum number of retry attempts
+            retry_delay_ms: Delay between retries in milliseconds
+            
+        Returns:
+            Tuple: (camera_msgs, follower_msgs, fresh_data_available)
+        """
+        try:
+            for attempt in range(max_retries + 1):
+                camera_msgs, follower_msgs, _ = self.communicator.get_latest_data()
+                
+                if camera_msgs is None or follower_msgs is None:
+                    return None, None, False
+                
+                # Check if camera data is fresh (captured after inference start)
+                is_fresh = self._is_camera_data_fresh(camera_msgs, inference_start_time)
+                
+                if is_fresh or attempt == max_retries:
+                    if is_fresh:
+                        self.get_logger().info(f"✅ Got fresh camera data on attempt {attempt + 1}")
+                    else:
+                        self.get_logger().warning(f"⚠️ Using stale camera data after {max_retries} retries")
+                    return camera_msgs, follower_msgs, is_fresh
+                
+                # Data is stale, wait a bit and retry
+                self.get_logger().debug(f"🔄 Camera data is stale, retrying... (attempt {attempt + 1}/{max_retries})")
+                time.sleep(retry_delay_ms / 1000.0)
+            
+            return camera_msgs, follower_msgs, False
+            
+        except Exception as e:
+            self.get_logger().error(f"Error getting fresh data: {str(e)}")
+            return None, None, False
+
+    def _is_camera_data_fresh(self, camera_msgs, inference_start_time):
+        """
+        Check if camera data was captured after the inference start time.
+        
+        Args:
+            camera_msgs: Dictionary of camera messages
+            inference_start_time: Unix timestamp when inference started
+            
+        Returns:
+            bool: True if all camera data is fresh, False otherwise
+        """
+        try:
+            # Convert inference start time to ROS2 time for comparison
+            inference_start_ros_time = inference_start_time
+            
+            all_fresh = True
+            oldest_camera_time = float('inf')
+            
+            for camera_name, camera_msg in camera_msgs.items():
+                if camera_msg is None:
+                    continue
+                    
+                # Get timestamp from ROS2 message header
+                if hasattr(camera_msg, 'header') and hasattr(camera_msg.header, 'stamp'):
+                    # Convert ROS2 timestamp to Unix timestamp
+                    camera_timestamp = camera_msg.header.stamp.sec + camera_msg.header.stamp.nanosec * 1e-9
+                    oldest_camera_time = min(oldest_camera_time, camera_timestamp)
+                    
+                    # Check if this camera data is fresh
+                    time_diff = camera_timestamp - inference_start_ros_time
+                    
+                    if time_diff < -0.050:  # Allow 50ms tolerance for timing differences
+                        self.get_logger().debug(f"📸 {camera_name}: STALE (captured {-time_diff*1000:.1f}ms before inference)")
+                        all_fresh = False
+                    else:
+                        self.get_logger().debug(f"📸 {camera_name}: FRESH (captured {time_diff*1000:.1f}ms after inference)")
+                else:
+                    self.get_logger().warning(f"📸 {camera_name}: No timestamp available")
+                    all_fresh = False
+            
+            if oldest_camera_time != float('inf'):
+                age_ms = (inference_start_ros_time - oldest_camera_time) * 1000
+                self.get_logger().debug(f"📸 Oldest camera data age: {age_ms:.1f}ms")
+                
+            return all_fresh
+            
+        except Exception as e:
+            self.get_logger().error(f"Error checking camera data freshness: {str(e)}")
+            return False  # Assume stale if we can't check
+
     def _check_and_start_new_inference_immediately(self):
         """Immediately check if we need to start new inference after current one completes"""
         try:
@@ -1766,8 +1468,16 @@ class PhysicalAIServer(Node):
                 with self.inference_lock:
                     self.inference_start_action_count = self._used_action_count
                 
-                # Get fresh data
-                camera_msgs, follower_msgs, _ = self.communicator.get_latest_data()
+                # Record inference start time for data freshness validation
+                inference_start_time = time.time()
+                
+                # Get fresh data with retry mechanism
+                camera_msgs, follower_msgs, fresh_data_available = self._get_fresh_data_with_retry(
+                    inference_start_time, max_retries=3, retry_delay_ms=15)
+
+                if not fresh_data_available:
+                    self.get_logger().warning("Failed to get fresh camera data for immediate inference, using latest available")
+                    camera_msgs, follower_msgs, _ = self.communicator.get_latest_data()
                 
                 if (camera_msgs and follower_msgs and 
                     len(camera_msgs) == len(self.params['camera_topic_list'])):
