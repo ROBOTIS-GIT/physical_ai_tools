@@ -460,14 +460,21 @@ class PhysicalAIServer(Node):
             
             # Start new inference if:
             # 1. No inference is currently pending
-            # 2. Worker is alive and ready  
-            # (No threshold check - start immediately when possible)
+            # 2. Worker is alive and ready
+            # 3. Remaining actions are 35 or fewer
             
-            if (not self.inference_pending and
+            inference_threshold = 35  # Start inference when actions drop to this level
+            
+            should_start_inference = (
+                not self.inference_pending and
                 self.inference_worker and 
-                self.inference_worker.is_alive()):
+                self.inference_worker.is_alive() and
+                remaining_count <= inference_threshold
+            )
+            
+            if should_start_inference:
                 
-                self.get_logger().info(f"🚀 Starting new inference (remaining actions: {remaining_count})")
+                self.get_logger().info(f"🚀 Starting new inference (remaining actions: {remaining_count} <= {inference_threshold})")
                 
                 # Record the CURRENT action count when inference starts
                 # Use a lock to ensure consistency with action timer
@@ -579,6 +586,8 @@ class PhysicalAIServer(Node):
                     self.get_logger().debug(f"⏳ Inference already pending, waiting... (remaining: {remaining_count} actions)")
                 elif not self.inference_worker or not self.inference_worker.is_alive():
                     self.get_logger().warning("💀 Inference worker is not alive")
+                elif remaining_count > inference_threshold:
+                    self.get_logger().debug(f"⏰ Sufficient actions available ({remaining_count} > {inference_threshold}), waiting...")
                 else:
                     self.get_logger().debug("❓ Unknown reason for not starting inference")
                     
