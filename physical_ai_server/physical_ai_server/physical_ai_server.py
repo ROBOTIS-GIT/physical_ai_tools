@@ -904,11 +904,6 @@ class PhysicalAIServer(Node):
                 }
                 self.action_history.append(action_data)
                 
-                self.get_logger().info(
-                    f'Publishing action {self._used_action_count + 1} '
-                    f'(remaining: {remaining_count}): {action[:]} '
-                    f'[Current total actions executed: {self._used_action_count + 1}]')
-                
                 action_pub_msgs = self.data_manager.data_converter.tensor_array2joint_msgs(
                     action,
                     self.joint_topic_types,
