@@ -554,6 +554,9 @@ class PhysicalAIServer(Node):
                         else:
                             self.get_logger().info(f"  Follower Data: {follower_data}")
                     
+                    # Prepare inference data
+                    inference_data = (camera_data, follower_data, self.task_instruction[0], self.inference_start_action_count)
+                    
                     try:
                         if self.inference_worker.send_request(inference_data):
                             self.inference_pending = True
