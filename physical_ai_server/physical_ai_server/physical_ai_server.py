@@ -463,7 +463,7 @@ class PhysicalAIServer(Node):
             # 2. Worker is alive and ready
             # 3. Remaining actions are 35 or fewer
             
-            inference_threshold = 35  # Start inference when actions drop to this level
+            inference_threshold = 20  # Start inference when actions drop to this level
             
             should_start_inference = (
                 not self.inference_pending and
