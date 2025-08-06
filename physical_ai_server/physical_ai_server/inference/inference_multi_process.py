@@ -249,7 +249,6 @@ class InferenceWorker:
                             
                             # Log action statistics
                             if hasattr(action_chunk[0], '__len__') and len(action_chunk[0]) > 0:
-                                import numpy as np
                                 actions_array = np.array(action_chunk)
                                 logger.info(f'  Action Stats: shape={actions_array.shape}')
                                 for joint_idx in range(min(3, actions_array.shape[1])):  # First 3 joints
