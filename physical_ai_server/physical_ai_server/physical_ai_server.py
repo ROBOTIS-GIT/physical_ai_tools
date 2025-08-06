@@ -25,15 +25,9 @@ import threading
 import time
 import traceback
 from typing import Optional
-try:
-    import matplotlib
-    matplotlib.use('Agg')  # Use non-interactive backend
-    import matplotlib.pyplot as plt
-    import numpy as np
-    MATPLOTLIB_AVAILABLE = True
-except ImportError:
-    MATPLOTLIB_AVAILABLE = False
-    plt = None
+
+import matplotlib.pyplot as plt
+import numpy as np
     
 from collections import deque
 
@@ -459,12 +453,19 @@ class PhysicalAIServer(Node):
             # Process any pending inference results first
             self._process_inference_results()
             
-            # Check current state
+            # Check current state and remaining actions
             remaining_count = len(self.remaining_actions)
+            
+            # Start new inference if:
+            # 1. No inference is currently pending
+            # 2. Worker is alive and ready  
+            # (No threshold check - start immediately when possible)
             
             if (not self.inference_pending and
                 self.inference_worker and 
                 self.inference_worker.is_alive()):
+                
+                self.get_logger().info(f"🚀 Starting new inference (remaining actions: {remaining_count})")
                 
                 # Record the CURRENT action count when inference starts
                 # Use a lock to ensure consistency with action timer
@@ -476,41 +477,6 @@ class PhysicalAIServer(Node):
                 # Get current data for fresh inference with freshness validation
                 camera_msgs, follower_msgs, _ = self.communicator.get_latest_data()
 
-                # Enhanced timestamp logging with age analysis
-                for camera_name, camera_msg in camera_msgs.items():
-                    if camera_msg is not None:
-                        msg_time = camera_msg.header.stamp.sec + camera_msg.header.stamp.nanosec / 1e9
-                        now = self.get_clock().now().seconds_nanoseconds()
-                        now_sec = now[0] + now[1] / 1e9
-                        age = now_sec - msg_time
-                        
-                        # Color-code the logging based on age thresholds
-                        if age < -0.1:
-                            self.get_logger().warning(f"Camera {camera_name} data is {age:.3f}s old (FUTURE TIMESTAMP - clock sync issue!)")
-                        elif age > 0.2:
-                            self.get_logger().warning(f"Camera {camera_name} data is {age:.3f}s old (HIGH LATENCY)")
-                        elif age > 0.1:
-                            self.get_logger().info(f"Camera {camera_name} data is {age:.3f}s old (moderate latency)")
-                        else:
-                            self.get_logger().info(f"Camera {camera_name} data is {age:.3f}s old (fresh)")
-
-                for follower_name, follower_msg in follower_msgs.items():
-                    if follower_msg is not None:
-                        msg_time = follower_msg.header.stamp.sec + follower_msg.header.stamp.nanosec / 1e9
-                        now = self.get_clock().now().seconds_nanoseconds()
-                        now_sec = now[0] + now[1] / 1e9
-                        age = now_sec - msg_time
-                        
-                        # Color-code the logging based on age thresholds
-                        if age < -0.05:
-                            self.get_logger().warning(f"Follower {follower_name} data is {age:.3f}s old (FUTURE TIMESTAMP - clock sync issue!)")
-                        elif age > 0.1:
-                            self.get_logger().warning(f"Follower {follower_name} data is {age:.3f}s old (HIGH LATENCY)")
-                        elif age > 0.05:
-                            self.get_logger().info(f"Follower {follower_name} data is {age:.3f}s old (moderate latency)")
-                        else:
-                            self.get_logger().info(f"Follower {follower_name} data is {age:.3f}s old (fresh)")
-                
                 # Validate data availability
                 if (camera_msgs is None or
                         len(camera_msgs) != len(self.params['camera_topic_list'])):
@@ -521,85 +487,27 @@ class PhysicalAIServer(Node):
                     self.get_logger().info('Waiting for follower data')
                     return
 
-                # Check data freshness - ensure observations are recent
-                current_time = time.time()
-                camera_freshness_ok = True
-                follower_freshness_ok = True
-                
-                # Check camera data timestamps - stricter thresholds for real-time control
-                camera_age_threshold = 0.2  # 200ms threshold for camera data
-                for camera_name, camera_msg in camera_msgs.items():
-                    if camera_msg is not None:
-                        msg_time = camera_msg.header.stamp.sec + camera_msg.header.stamp.nanosec / 1e9
-                        age = current_time - msg_time
-                        
-                        # Handle negative timestamps (clock sync issues)
-                        if age < -0.1:  # More than 100ms in future - likely clock sync issue
-                            self.get_logger().warning(f"Camera {camera_name} timestamp is {abs(age):.3f}s in future - clock sync issue!")
-                            camera_freshness_ok = False
-                        elif age > camera_age_threshold:
-                            self.get_logger().warning(f"Camera {camera_name} data is {age:.3f}s old (exceeds {camera_age_threshold}s threshold)")
-                            camera_freshness_ok = False
-                        else:
-                            self.get_logger().debug(f"Camera {camera_name} data is {age:.3f}s old (fresh)")
-                
-                # Check follower data timestamps - stricter thresholds for joint states
-                follower_age_threshold = 0.1  # 100ms threshold for joint state data
-                for follower_name, follower_msg in follower_msgs.items():
-                    if follower_msg is not None:
-                        msg_time = follower_msg.header.stamp.sec + follower_msg.header.stamp.nanosec / 1e9
-                        age = current_time - msg_time
-                        
-                        # Handle negative timestamps (clock sync issues)
-                        if age < -0.05:  # More than 50ms in future - likely clock sync issue
-                            self.get_logger().warning(f"Follower {follower_name} timestamp is {abs(age):.3f}s in future - clock sync issue!")
-                            follower_freshness_ok = False
-                        elif age > follower_age_threshold:
-                            self.get_logger().warning(f"Follower {follower_name} data is {age:.3f}s old (exceeds {follower_age_threshold}s threshold)")
-                            follower_freshness_ok = False
-                        else:
-                            self.get_logger().debug(f"Follower {follower_name} data is {age:.3f}s old (fresh)")
-                
-                # Skip inference if data is too old
-                if not camera_freshness_ok or not follower_freshness_ok:
-                    self.get_logger().warning("Skipping inference due to stale observation data")
-                    return
-
                 try:
                     camera_data, follower_data, _ = self.data_manager.convert_msgs_to_raw_datas(
                         camera_msgs,
                         follower_msgs,
                         self.total_joint_order)
                     
-                    # Track observation changes for debugging
+                    # Check observation changes but be more permissive for continuous inference
                     observation_changed = self._track_observation_changes(follower_data, self.inference_start_action_count)
                     
-                    # CRITICAL: Skip inference if observation hasn't changed
-                    if not observation_changed and len(self.raw_action_chunks) > 0:
-                        self.get_logger().warning(f"BLOCKING INFERENCE: Observation unchanged at action {self.inference_start_action_count}")
+                    # Allow inference if:
+                    # 1. This is the first inference (no previous chunks)
+                    # 2. Observation has changed
+                    allow_inference = (
+                        len(self.raw_action_chunks) == 0 or  # First inference
+                        observation_changed                   # Normal case: observation changed
+                    )
+                    
+                    if not allow_inference:
+                        self.get_logger().warning(f"🛑 BLOCKING INFERENCE: Observation unchanged at action {self.inference_start_action_count}")
                         self.get_logger().warning("Waiting for fresh observation data before next inference...")
-                        
-                        # Force a small delay to allow new observations to arrive
-                        # This gives the robot's sensors time to update after the robot moves
-                        self.get_logger().info("Delaying inference by 100ms to allow observation updates...")
-                        time.sleep(0.1)  # 100ms delay
-                        
-                        # Try getting data again after delay
-                        camera_msgs, follower_msgs, _ = self.communicator.get_latest_data()
-                        if camera_msgs and follower_msgs:
-                            camera_data, follower_data, _ = self.data_manager.convert_msgs_to_raw_datas(
-                                camera_msgs, follower_msgs, self.total_joint_order)
-                            observation_changed_after_delay = self._track_observation_changes(
-                                follower_data, self.inference_start_action_count)
-                            
-                            if not observation_changed_after_delay:
-                                self.get_logger().warning("Still no observation change after delay - SKIPPING INFERENCE")
-                                return
-                            else:
-                                self.get_logger().info("Observation updated after delay - proceeding with inference")
-                        else:
-                            self.get_logger().warning("No data available after delay - SKIPPING INFERENCE")
-                            return
+                        return  # Skip this inference attempt
 
                     inference_data = (camera_data, follower_data, self.task_instruction[0], self.inference_start_action_count)
                     try:
@@ -620,9 +528,11 @@ class PhysicalAIServer(Node):
                     return
             else:
                 if self.inference_pending:
-                    self.get_logger().debug(f"Inference already pending, continuing with {remaining_count} actions")
+                    self.get_logger().debug(f"⏳ Inference already pending, waiting... (remaining: {remaining_count} actions)")
                 elif not self.inference_worker or not self.inference_worker.is_alive():
-                    self.get_logger().warning("Inference worker is not alive")
+                    self.get_logger().warning("💀 Inference worker is not alive")
+                else:
+                    self.get_logger().debug("❓ Unknown reason for not starting inference")
                     
         except Exception as e:
             self.get_logger().error(f'Inference timer callback error: {str(e)}')
@@ -801,8 +711,9 @@ class PhysicalAIServer(Node):
                         f'Action buffer REPLACED: {old_count} -> {new_count} fresh actions '
                         f'(offset applied: {actions_executed_during_inference})')
 
-                    # Plot visualization every 3 chunks for better analysis
-                    if len(self.inference_history) % 3 == 0:
+                    # Plot visualization every 10 chunks for comprehensive analysis
+                    if len(self.inference_history) % 10 == 0:
+                        self.get_logger().info(f"📊 Drawing comprehensive chunk analysis graph (total chunks: {len(self.inference_history)})")
                         self._plot_action_chunk_curves()
                     else:
                         # Always print text analysis
@@ -812,6 +723,11 @@ class PhysicalAIServer(Node):
                     current_status = self.data_manager.get_current_record_status()
                     current_status.phase = TaskStatus.INFERENCING
                     self.communicator.publish_status(status=current_status)
+                    
+                    # CRITICAL: Immediately check if we need to start new inference
+                    # This prevents long gaps between inference completions
+                    self.get_logger().info(f"Inference completed, immediately checking if new inference needed...")
+                    self._check_and_start_new_inference_immediately()
                     
                 elif status == 'error':
                     self.inference_pending = False
@@ -878,9 +794,13 @@ class PhysicalAIServer(Node):
                 )
                 self._used_action_count += 1
                 
-                # Log when we're running very low
-                if remaining_count <= 2:
-                    self.get_logger().info(f"Very low on actions ({remaining_count}), inference should complete soon")
+                # Log when we're running very low with urgency levels
+                if remaining_count <= 1:
+                    self.get_logger().error(f"🚨 CRITICAL: Only {remaining_count} actions left! Robot will stop soon!")
+                elif remaining_count <= 5:
+                    self.get_logger().warning(f"⚠️ URGENT: Only {remaining_count} actions remaining!")
+                elif remaining_count <= 10:
+                    self.get_logger().info(f"🔔 LOW: {remaining_count} actions remaining, inference should complete soon")
                     
             else:
                 # Only warn occasionally to avoid spam
@@ -1289,30 +1209,23 @@ class PhysicalAIServer(Node):
         return True
 
     def _plot_action_chunk_curves(self):
-        """Plot action chunk curves to visualize inference outputs vs actual execution"""
         try:
-            if not MATPLOTLIB_AVAILABLE:
-                self.get_logger().warning('Matplotlib not available, skipping plot generation')
-                self._print_offset_analysis()
-                return
-                
             if len(self.raw_action_chunks) < 2:
                 return
-            
             # Determine how many joints we have
             joint_count = self.raw_action_chunks[0]['joint_count'] if self.raw_action_chunks else 7
             joint_count = min(joint_count, 3)  # Limit to 3 joints to avoid layout issues
-            
+
             # Calculate figure size to accommodate all subplots properly
             subplot_height = 3.5  # Height per subplot
             total_height = max(subplot_height * joint_count + 2, 10)  # Minimum 10 inches
-            
+
             fig, axes = plt.subplots(joint_count, 1, figsize=(16, total_height), sharex=True)
             if joint_count == 1:
                 axes = [axes]
-            
-            fig.suptitle('Action Chunk Analysis: Inference Outputs vs Actual Execution\n' +
-                        '(○: Inference Request, ×: Inference Complete)', 
+
+            fig.suptitle(f'Action Chunk Analysis: Comprehensive View ({len(self.raw_action_chunks)} chunks)\n' +
+                        'Inference Outputs vs Actual Execution (○: Inference Request, ×: Inference Complete)', 
                         fontsize=14, y=0.98)  # Adjust title position
             
             # Plot actual executed actions as continuous line
@@ -1336,8 +1249,9 @@ class PhysicalAIServer(Node):
                             ax.plot(valid_action_numbers, actual_values, 'k-', linewidth=2, 
                                    label='Actual Executed Actions', alpha=0.8)
                     
-                    # Plot each inference chunk as separate colored curves
-                    colors = ['red', 'blue', 'green', 'orange', 'purple', 'brown', 'pink', 'gray']
+                    # Plot each inference chunk as separate colored curves with extended color palette
+                    colors = ['red', 'blue', 'green', 'orange', 'purple', 'brown', 'pink', 'gray', 
+                             'olive', 'cyan', 'magenta', 'yellow', 'navy', 'lime', 'teal', 'maroon']
                     
                     for chunk_idx, chunk_data in enumerate(self.raw_action_chunks):
                         inference_start_step = chunk_data['inference_start_step']
@@ -1379,10 +1293,10 @@ class PhysicalAIServer(Node):
                     
                     # Limit legend entries to avoid overcrowding
                     handles, labels = ax.get_legend_handles_labels()
-                    if len(handles) > 8:  # Limit to 8 entries
-                        handles = handles[:8]
-                        labels = labels[:8]
-                        labels[-1] = f"... and {len(handles) - 7} more"
+                    if len(handles) > 12:  # Limit to 12 entries for 10 chunks
+                        handles = handles[:12]
+                        labels = labels[:12]
+                        labels[-1] = f"... and {len(handles) - 11} more"
                     
                     ax.legend(handles, labels, bbox_to_anchor=(1.05, 1), loc='upper left', fontsize=8)
                     
@@ -1460,11 +1374,6 @@ class PhysicalAIServer(Node):
     def _plot_action_chunk_analysis(self):
         """Plot action chunk analysis to understand offset calculation"""
         try:
-            if not MATPLOTLIB_AVAILABLE:
-                self.get_logger().warning('Matplotlib not available, skipping plot generation')
-                self._print_offset_analysis()
-                return
-                
             if len(self.inference_history) < 2:
                 return
                 
@@ -1767,6 +1676,65 @@ class PhysicalAIServer(Node):
             import traceback
             self.get_logger().error(f"Traceback: {traceback.format_exc()}")
             return True  # Default to allowing inference if tracking fails
+
+    def _check_and_start_new_inference_immediately(self):
+        """Immediately check if we need to start new inference after current one completes"""
+        try:
+            remaining_count = len(self.remaining_actions)
+            
+            # Start immediately if no inference is pending and worker is alive
+            if (not self.inference_pending and
+                self.inference_worker and 
+                self.inference_worker.is_alive()):
+                
+                self.get_logger().info(f"⚡ IMMEDIATE START: Starting next inference immediately (remaining: {remaining_count})")
+                
+                # Use the same inference starting logic as in timer callback
+                with self.inference_lock:
+                    self.inference_start_action_count = self._used_action_count
+                
+                # Get fresh data
+                camera_msgs, follower_msgs, _ = self.communicator.get_latest_data()
+                
+                if (camera_msgs and follower_msgs and 
+                    len(camera_msgs) == len(self.params['camera_topic_list'])):
+                    
+                    try:
+                        camera_data, follower_data, _ = self.data_manager.convert_msgs_to_raw_datas(
+                            camera_msgs, follower_msgs, self.total_joint_order)
+                        
+                        # More permissive observation check for immediate inference
+                        observation_changed = self._track_observation_changes(follower_data, self.inference_start_action_count)
+                        
+                        # Allow immediate inference if:
+                        # 1. This is the first inference
+                        # 2. Observation has changed
+                        # (Remove emergency threshold - always try if no pending inference)
+                        allow_inference = (
+                            len(self.raw_action_chunks) == 0 or
+                            observation_changed
+                        )
+                        
+                        if allow_inference:
+                            self.get_logger().info(f"✅ Starting immediate inference (changed: {observation_changed}, first: {len(self.raw_action_chunks) == 0})")
+                            inference_data = (camera_data, follower_data, self.task_instruction[0], self.inference_start_action_count)
+                            if self.inference_worker.send_request(inference_data):
+                                self.inference_pending = True
+                                self.get_logger().info("🚀 Next inference started immediately!")
+                            else:
+                                self.get_logger().warning("❌ Failed to start immediate inference")
+                        else:
+                            self.get_logger().warning("⚠️ Observation unchanged - skipping immediate inference")
+                            
+                    except Exception as e:
+                        self.get_logger().error(f"Error in immediate inference start: {str(e)}")
+                else:
+                    self.get_logger().warning("📷 No fresh data available for immediate inference")
+            else:
+                self.get_logger().debug(f"✋ No immediate inference needed: pending={self.inference_pending}, worker_alive={self.inference_worker and self.inference_worker.is_alive()}")
+                
+        except Exception as e:
+            self.get_logger().error(f"Error checking for immediate inference: {str(e)}")
 
 
 def main(args=None):
