@@ -463,7 +463,7 @@ class PhysicalAIServer(Node):
             # 2. Worker is alive and ready
             # 3. Remaining actions are 35 or fewer
             
-            inference_threshold = 35  # Start inference when actions drop to this level
+            inference_threshold = 40  # Start inference when actions drop to this level
             
             should_start_inference = (
                 not self.inference_pending and
@@ -750,6 +750,41 @@ class PhysicalAIServer(Node):
                         
                         if len(offset_action_chunk) < 10 and len(offset_action_chunk) > 0:
                             self.get_logger().warning(f"⚠️ VERY SMALL CHUNK USAGE: Only {len(offset_action_chunk)} actions will be used!")
+                        
+                        # Apply smoothing using LAST EXECUTED ACTION (not remaining actions)
+                        if self.last_executed_action is not None and offset_action_chunk:
+                            # Create multiple transition steps for smoother blending
+                            num_transition_steps = min(5, len(offset_action_chunk))  # 5단계 전환
+                            
+                            for step in range(num_transition_steps):
+                                # 점진적으로 가중치를 변경: 0.8, 0.6, 0.4, 0.2, 0.0
+                                old_weight = 0.8 - (step * 0.2)  
+                                new_weight = 1.0 - old_weight
+                                
+                                transition_action = []
+                                for i in range(len(self.last_executed_action)):
+                                    blended = (old_weight * self.last_executed_action[i] + 
+                                             new_weight * offset_action_chunk[step][i])
+                                    transition_action.append(blended)
+                                
+                                # Replace with smoothed version
+                                offset_action_chunk[step] = transition_action
+                            
+                            self.get_logger().info(
+                                f'Applied multi-step smoothing over {num_transition_steps} actions:')
+                            self.get_logger().info(
+                                f'  last_executed={self.last_executed_action[:3]}')
+                            self.get_logger().info(
+                                f'  first_original={action_chunk[actions_executed_during_inference][:3] if actions_executed_during_inference < len(action_chunk) else "N/A"}')
+                            self.get_logger().info(
+                                f'  first_smoothed={offset_action_chunk[0][:3]}')
+                            self.get_logger().info(
+                                f'  final_smoothed={offset_action_chunk[num_transition_steps-1][:3]}')
+                        else:
+                            if self.last_executed_action is None:
+                                self.get_logger().info('No last executed action available for smoothing')
+                            if not offset_action_chunk:
+                                self.get_logger().info('No offset actions to smooth')
                         
                         old_count = len(self.remaining_actions)
                         self.remaining_actions.clear()
