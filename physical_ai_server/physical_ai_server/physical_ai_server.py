@@ -510,9 +510,37 @@ class PhysicalAIServer(Node):
                         return  # Skip this inference attempt
 
                     inference_data = (camera_data, follower_data, self.task_instruction[0], self.inference_start_action_count)
+                    
+                    # *** DEBUGGING: Log detailed inference input data ***
+                    self.get_logger().info(f"🧪 INFERENCE #{len(self.raw_action_chunks)+1} INPUT DEBUG:")
+                    self.get_logger().info(f"  Action Count: {self.inference_start_action_count}")
+                    self.get_logger().info(f"  Observation Changed: {observation_changed}")
+                    
+                    # Log camera data summary
+                    if camera_data is not None:
+                        if hasattr(camera_data, 'shape'):
+                            self.get_logger().info(f"  Camera Data Shape: {camera_data.shape}")
+                            # Log a few pixel values as fingerprint
+                            if camera_data.size > 100:
+                                pixel_sample = camera_data.flatten()[:10]
+                                self.get_logger().info(f"  Camera Pixel Sample: {pixel_sample}")
+                        else:
+                            self.get_logger().info(f"  Camera Data Type: {type(camera_data)}")
+                    
+                    # Log follower data (joint positions)
+                    if follower_data is not None:
+                        if isinstance(follower_data, (list, tuple)):
+                            self.get_logger().info(f"  Joint Positions: {follower_data[:7]}")  # First 7 joints
+                        elif hasattr(follower_data, 'shape'):
+                            self.get_logger().info(f"  Follower Data Shape: {follower_data.shape}")
+                            self.get_logger().info(f"  Follower Data Values: {follower_data.flatten()[:7]}")
+                        else:
+                            self.get_logger().info(f"  Follower Data: {follower_data}")
+                    
                     try:
                         if self.inference_worker.send_request(inference_data):
                             self.inference_pending = True
+                            self.get_logger().info(f"✅ Inference #{len(self.raw_action_chunks)+1} request sent successfully")
                         else:
                             self.get_logger().error('Failed to send inference request')
                     except Exception as put_error:
@@ -576,6 +604,33 @@ class PhysicalAIServer(Node):
                         'inference_time': inference_time,
                         'timestamp': time.time()
                     }
+                    
+                    # *** DEBUGGING: Log detailed inference output data ***
+                    chunk_id = len(self.inference_history) + 1
+                    self.get_logger().info(f"🧪 INFERENCE #{chunk_id} OUTPUT DEBUG:")
+                    self.get_logger().info(f"  Generated {len(action_chunk)} actions")
+                    self.get_logger().info(f"  Worker Start Count: {worker_start_count}")
+                    self.get_logger().info(f"  Current Action Count: {self._used_action_count}")
+                    self.get_logger().info(f"  Calculated Offset: {actions_executed_during_inference}")
+                    self.get_logger().info(f"  Will Use: {max(0, len(action_chunk) - actions_executed_during_inference)}/{len(action_chunk)} actions")
+                    
+                    # Log first few actions as fingerprint
+                    if action_chunk and len(action_chunk) > 0:
+                        first_actions = action_chunk[:3]  # First 3 actions
+                        self.get_logger().info(f"  First 3 Generated Actions:")
+                        for i, action in enumerate(first_actions):
+                            if hasattr(action, '__len__') and len(action) >= 7:
+                                self.get_logger().info(f"    Action {i}: {action[:7]}")  # First 7 joints
+                            else:
+                                self.get_logger().info(f"    Action {i}: {action}")
+                    
+                    # Check for potential issues
+                    if actions_executed_during_inference > 20:
+                        self.get_logger().warning(f"⚠️ LARGE OFFSET DETECTED: {actions_executed_during_inference} - This might cause discontinuity!")
+                    
+                    if max(0, len(action_chunk) - actions_executed_during_inference) < 10:
+                        self.get_logger().warning(f"⚠️ VERY SMALL CHUNK USAGE: Only {max(0, len(action_chunk) - actions_executed_during_inference)} actions will be used!")
+                    
                     self.inference_history.append(current_chunk_data)
                     
                     # Store raw action chunk for plotting with detailed validation
