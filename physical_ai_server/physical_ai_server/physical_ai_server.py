@@ -463,7 +463,7 @@ class PhysicalAIServer(Node):
             # 2. Worker is alive and ready
             # 3. Remaining actions are 35 or fewer
             
-            inference_threshold = 20  # Start inference when actions drop to this level
+            inference_threshold = 25  # Start inference when actions drop to this level
             
             should_start_inference = (
                 not self.inference_pending and
@@ -796,7 +796,7 @@ class PhysicalAIServer(Node):
                         f'(offset applied: {actions_executed_during_inference})')
 
                     # Plot visualization every 10 chunks for comprehensive analysis
-                    if len(self.inference_history) % 30 == 0:
+                    if len(self.inference_history) % 20 == 0:
                         self.get_logger().info(f"📊 Drawing comprehensive chunk analysis graph (total chunks: {len(self.inference_history)})")
                         self.visualizer.create_comprehensive_analysis(
                             self.raw_action_chunks, 
@@ -837,9 +837,9 @@ class PhysicalAIServer(Node):
         if not self.on_inference:
             return
 
-        if self.updating_action_chunk:
-            self.get_logger().debug("Waiting for action chunk update to complete")
-            return
+        # if self.updating_action_chunk:
+        #     self.get_logger().debug("Waiting for action chunk update to complete")
+        #     return
 
         try:
             # Publish next action if available (thread-safe)
