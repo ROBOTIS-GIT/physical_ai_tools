@@ -2,6 +2,11 @@
 Changelog for package physical_ai_manager
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
+0.6.4 (2025-08-07)
+------------------
+* Added training loss display
+* Contributors: Kiwoong Park
+
 0.6.3 (2025-07-25)
 ------------------
 * None
