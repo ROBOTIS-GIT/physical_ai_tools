@@ -18,19 +18,15 @@
 
 from .inference_base import InferenceBase
 from .lerobot_inference import LeRobotInference
+from .inference_factory import InferenceFactory
 # from .physical_intelligence_inference import PhysicalIntelligenceInference
 # from .groot_inference import GrootInference
-from .inference_factory import InferenceFactory, create_inference_manager
 
-# For backward compatibility, import old InferenceManager as alias
-from .lerobot_inference import LeRobotInference as InferenceManager
 
 __all__ = [
     'InferenceBase',
+    'InferenceFactory',
     'LeRobotInference', 
     # 'PhysicalIntelligenceInference',
     # 'GrootInference',
-    'InferenceFactory',
-    'create_inference_manager',
-    'InferenceManager',  # Backward compatibility
 ]

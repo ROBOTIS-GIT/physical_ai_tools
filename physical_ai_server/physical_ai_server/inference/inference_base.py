@@ -59,7 +59,7 @@ class InferenceBase(ABC):
         images: Dict[str, np.ndarray],
         state: List[float],
         task_instruction: Optional[str] = None
-    ) -> List[float]:
+    ) -> np.ndarray:
         # Perform single-step inference
         # Args: images (camera dict), state (robot state), task_instruction (optional)
         # Returns: predicted action as list
@@ -81,13 +81,6 @@ class InferenceBase(ABC):
     @abstractmethod
     def get_available_policies(cls) -> List[str]:
         # Get list of available policy types for this inference manager
-        pass
-
-    @classmethod
-    @abstractmethod
-    def get_saved_policies(cls) -> Tuple[List[str], List[str]]:
-        # Get list of saved/cached policies
-        # Returns: (policy_paths, policy_types)
         pass
 
     @abstractmethod

@@ -89,11 +89,11 @@ class LeRobotInference(InferenceBase):
         return self.policy.config
 
     def predict(
-        self,
-        images: Dict[str, np.ndarray],
-        state: List[float],
-        task_instruction: Optional[str] = None
-    ) -> List[float]:
+            self,
+            images: Dict[str, np.ndarray],
+            state: List[float],
+            task_instruction: Optional[str] = None
+        ) -> np.ndarray:
         # Perform single-step inference using LeRobot policy
         if self.policy is None:
             raise RuntimeError("No policy loaded. Call load_policy() first.")
@@ -103,24 +103,23 @@ class LeRobotInference(InferenceBase):
             action = self.policy.select_action(observation)
             action = action.squeeze(0).to('cpu').numpy()
 
-        return action.tolist()
+        return action
     
     def predict_chunk(
-        self,
-        images: Dict[str, np.ndarray],
-        state: List[float],
-        task_instruction: Optional[str] = None
-    ) -> np.ndarray:
-        # Perform chunk-based inference using LeRobot policy
+            self,
+            images: Dict[str, np.ndarray],
+            state: List[float],
+            task_instruction: Optional[str] = None
+        ) -> np.ndarray:
         if self.policy is None:
             raise RuntimeError("No policy loaded. Call load_policy() first.")
 
         observation = self._preprocess(images, state, task_instruction)
         with torch.inference_mode():
-            action = self.policy.predict_action_chunk(observation)
-            action = action.squeeze(0).to('cpu').numpy()
+            action_chunk = self.policy.predict_action_chunk(observation)
+            action_chunk = action_chunk.squeeze(0).to('cpu').numpy()
 
-        return action
+        return action_chunk
 
     def _preprocess(
         self,
@@ -189,10 +188,6 @@ class LeRobotInference(InferenceBase):
         elif name == "smolvla":
             from lerobot.policies.smolvla.modeling_smolvla import SmolVLAPolicy
             return SmolVLAPolicy
-        # TODO: Uncomment when GrootN1Policy is implemented
-        # elif name == 'groot-n1':
-        #     from Isaac.groot_n1.policies.groot_n1 import GrootN1Policy
-        #     return GrootN1Policy
         else:
             raise NotImplementedError(
                 f'Policy with name {name} is not implemented.')
@@ -209,53 +204,3 @@ class LeRobotInference(InferenceBase):
             'pi0fast',
             'smolvla'
         ]
-
-    @classmethod
-    def get_saved_policies(cls) -> Tuple[List[str], List[str]]:
-        # Get list of saved/cached LeRobot policies
-        home_dir = os.path.expanduser('~')
-        hub_dir = os.path.join(home_dir, '.cache/huggingface/hub')
-        
-        if not os.path.exists(hub_dir):
-            return [], []
-            
-        models_folder_list = [d for d in os.listdir(hub_dir) if d.startswith('models--')]
-
-        saved_policy_path = []
-        saved_policy_type = []
-
-        for model_folder in models_folder_list:
-            model_path = os.path.join(hub_dir, model_folder)
-            snapshots_path = os.path.join(model_path, 'snapshots')
-
-            # Check if snapshots directory exists
-            if os.path.exists(snapshots_path) and os.path.isdir(snapshots_path):
-                # Get list of folders inside snapshots directory
-                snapshot_folders = [
-                    d for d in os.listdir(snapshots_path)
-                    if os.path.isdir(os.path.join(snapshots_path, d))
-                ]
-
-                # Check if pretrained_model folder exists in each snapshot folder
-                for snapshot_folder in snapshot_folders:
-                    snapshot_path = os.path.join(snapshots_path, snapshot_folder)
-                    pretrained_model_path = os.path.join(snapshot_path, 'pretrained_model')
-
-                    # If pretrained_model folder exists, add to saved_policies
-                    if os.path.exists(pretrained_model_path) and os.path.isdir(pretrained_model_path):
-                        config_path = os.path.join(pretrained_model_path, 'config.json')
-                        if os.path.exists(config_path):
-                            try:
-                                with open(config_path, 'r') as f:
-                                    config = json.load(f)
-                                    if 'type' in config:
-                                        saved_policy_path.append(pretrained_model_path)
-                                        saved_policy_type.append(config['type'])
-                                    elif 'model_type' in config:
-                                        saved_policy_path.append(pretrained_model_path)
-                                        saved_policy_type.append(config['model_type'])
-                            except (json.JSONDecodeError, IOError) as e:
-                                # If config.json cannot be read, skip this policy
-                                print(f'File IO Error: {e}')
-
-        return saved_policy_path, saved_policy_type
