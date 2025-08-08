@@ -1,0 +1,6 @@
+# Request to start recording to a given bag URI with specific topics
+string uri
+string[] topics
+---
+bool success
+string message
