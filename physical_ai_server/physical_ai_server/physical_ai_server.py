@@ -561,7 +561,7 @@ class PhysicalAIServer(Node):
                     # Calculate offset and apply smoothing
                     with self.inference_lock:
                         actions_executed_during_inference = max(
-                            0, self._used_action_count - worker_start_count)
+                            0, self._used_action_count - worker_start_count - 2)
 
                         # Apply offset and smoothing
                         offset_action_chunk = self._apply_offset_and_smoothing(
