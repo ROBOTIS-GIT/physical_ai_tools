@@ -113,7 +113,7 @@ class PhysicalAIServer(Node):
         self.observation_change_history = []
 
         # Initialize inference result visualizer
-        self.enable_inference_visualization = False
+        self.enable_inference_visualization = True
 
         if self.enable_inference_visualization:
             self.visualizer = InferenceResultVisualizer(logger=self.get_logger())
