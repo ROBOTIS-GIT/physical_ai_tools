@@ -684,11 +684,11 @@ class PhysicalAIServer(Node):
         try:
             # Determine number of interpolation steps based on gap size
             if gap_size > 0.8:  # Very large gap (>45 degrees)
-                num_steps = 6  # Large gap - more steps
+                num_steps = 12  # Large gap - more steps
             elif gap_size > 0.5:  # Large gap (>30 degrees)
-                num_steps = 4  # Medium gap
+                num_steps = 8  # Medium gap
             elif gap_size > 0.3:  # Medium gap (>17 degrees)
-                num_steps = 2  # Small gap
+                num_steps = 4  # Small gap
             else:
                 return []  # No interpolation needed
             
