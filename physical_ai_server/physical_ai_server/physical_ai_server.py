@@ -677,37 +677,49 @@ class PhysicalAIServer(Node):
         
         return offset_action_chunk
 
-    def _was_robot_static_during_inference(self, actions_executed_during_inference, position_threshold=0.005):
+    def _was_robot_static_during_inference(self, actions_executed_during_inference, position_threshold=0.02):
         """
         Check if robot was static during the inference period by analyzing 
         the actions executed during that time.
         """
         if actions_executed_during_inference <= 0:
+            self.get_logger().info('Robot was static during inference: No actions executed')
             return True  # No actions executed, so robot was static
             
         if len(self.action_history) < actions_executed_during_inference:
+            self.get_logger().info(
+                f'Robot static analysis: Not enough history ({len(self.action_history)} < {actions_executed_during_inference})')
             return False  # Not enough history to analyze
             
         # Get actions executed during inference time
         inference_period_actions = list(self.action_history)[-actions_executed_during_inference:]
         
         if len(inference_period_actions) < 2:
+            self.get_logger().info('Robot was static during inference: Too few actions to analyze')
             return True  # Too few actions to determine motion
             
         # Calculate position variations during inference period
         max_variation = 0.0
+        joint_variations = []
         if self.last_executed_action is not None:
             for joint_idx in range(len(self.last_executed_action)):
                 joint_positions = [action['action_values'][joint_idx] for action in inference_period_actions]
                 joint_max = max(joint_positions)
                 joint_min = min(joint_positions)
                 variation = joint_max - joint_min
+                joint_variations.append(variation)
                 max_variation = max(max_variation, variation)
         
         is_static = max_variation < position_threshold
-        self.get_logger().debug(
-            f'Robot static during inference ({actions_executed_during_inference} actions): {is_static} '
-            f'(max_variation: {max_variation:.4f})')
+        
+        # Detailed logging for debugging
+        self.get_logger().info(
+            f'Static analysis during inference ({actions_executed_during_inference} actions): '
+            f'is_static={is_static}, max_variation={max_variation:.6f}, threshold={position_threshold:.6f}')
+        
+        if len(joint_variations) > 0:
+            self.get_logger().info(
+                f'Joint variations: {[f"{v:.6f}" for v in joint_variations[:3]]}...')  # Show first 3 joints
         
         return is_static
 
