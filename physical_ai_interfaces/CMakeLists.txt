@@ -5,10 +5,12 @@ find_package(ament_cmake REQUIRED)
 find_package(rosidl_default_generators REQUIRED)
 
 rosidl_generate_interfaces(${PROJECT_NAME}
+  "msg/BrowserItem.msg"
   "msg/TaskInfo.msg"
   "msg/TaskStatus.msg"
   "msg/TrainingInfo.msg"
   "msg/TrainingStatus.msg"
+  "srv/BrowseFile.srv"
   "srv/GetDatasetList.srv"
   "srv/GetHFUser.srv"
   "srv/GetImageTopicList.srv"
