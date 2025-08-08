@@ -643,39 +643,79 @@ class PhysicalAIServer(Node):
             self.get_logger().info(
                 f'No offset applied - using all {len(action_chunk)} actions')
 
-        # Step 5: Apply smoothing only if needed
+        # Step 5: Apply trajectory interpolation if needed instead of simple smoothing
         if (
                 self.last_executed_action is not None and
                 offset_action_chunk and
-                self.inference_smoothing and
                 len(offset_action_chunk) > 0
             ):
-            # Check if smoothing is actually needed
+            # Check if trajectory interpolation is needed
             first_new_action = offset_action_chunk[0]
             max_position_diff = max(
                 abs(first_new_action[i] - self.last_executed_action[i]) 
                 for i in range(len(self.last_executed_action))
             )
             
-            if max_position_diff > 0.02:  # Only smooth if there's significant difference
-                num_transition_steps = min(3, len(offset_action_chunk))  # Minimal smoothing
-                self.get_logger().info(f'Applying minimal smoothing for {num_transition_steps} steps')
+            gap_threshold = 0.3  # Threshold for significant gap (about 17 degrees)
+            if max_position_diff > gap_threshold:
+                # Generate interpolated actions to bridge the gap
+                interpolated_actions = self._generate_interpolated_actions(
+                    self.last_executed_action, first_new_action, max_position_diff)
                 
-                for step in range(num_transition_steps):
-                    old_weight = 0.6 - (step * 0.2)  # Less aggressive smoothing
-                    new_weight = 1.0 - old_weight
-                    transition_action = []
-                    for i in range(len(self.last_executed_action)):
-                        blended = (
-                            old_weight * self.last_executed_action[i] +
-                            new_weight * offset_action_chunk[step][i]
-                        )
-                        transition_action.append(blended)
-                    offset_action_chunk[step] = transition_action
+                if interpolated_actions:
+                    # Insert interpolated actions at the beginning
+                    offset_action_chunk = interpolated_actions + offset_action_chunk
+                    self.get_logger().info(
+                        f'Applied trajectory interpolation: added {len(interpolated_actions)} bridge actions '
+                        f'for gap of {max_position_diff:.4f}')
+                else:
+                    self.get_logger().info(
+                        f'Gap detected ({max_position_diff:.4f}) but no interpolation generated')
             else:
-                self.get_logger().debug('No smoothing needed - positions already aligned')
+                self.get_logger().debug(
+                    f'No interpolation needed - gap is small ({max_position_diff:.4f})')
         
         return offset_action_chunk
+
+    def _generate_interpolated_actions(self, start_action, end_action, gap_size):
+        """
+        Generate interpolated actions to create smooth trajectory between two actions.
+        """
+        try:
+            # Determine number of interpolation steps based on gap size
+            if gap_size > 0.8:  # Very large gap (>45 degrees)
+                num_steps = 6  # Large gap - more steps
+            elif gap_size > 0.5:  # Large gap (>30 degrees)
+                num_steps = 4  # Medium gap
+            elif gap_size > 0.3:  # Medium gap (>17 degrees)
+                num_steps = 2  # Small gap
+            else:
+                return []  # No interpolation needed
+            
+            interpolated_actions = []
+            
+            for step in range(1, num_steps + 1):
+                # Linear interpolation factor (0 to 1)
+                t = step / (num_steps + 1)
+                
+                # Create interpolated action
+                interpolated_action = []
+                for i in range(len(start_action)):
+                    # Linear interpolation between start and end
+                    interpolated_value = start_action[i] + t * (end_action[i] - start_action[i])
+                    interpolated_action.append(interpolated_value)
+                
+                interpolated_actions.append(interpolated_action)
+            
+            self.get_logger().debug(
+                f'Generated {len(interpolated_actions)} interpolated actions '
+                f'(gap: {gap_size:.4f}, steps: {num_steps})')
+            
+            return interpolated_actions
+            
+        except Exception as e:
+            self.get_logger().error(f'Error generating interpolated actions: {str(e)}')
+            return []
 
     def _was_robot_static_during_inference(self, actions_executed_during_inference, position_threshold=0.02):
         """
