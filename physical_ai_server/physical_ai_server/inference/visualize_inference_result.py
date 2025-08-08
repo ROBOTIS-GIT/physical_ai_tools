@@ -187,7 +187,10 @@ class InferenceResultVisualizer:
         inference_history.append(current_chunk_data)
 
         # Convert to standard list format for consistency
-        action_chunk_list = action_chunk.tolist()
+        if hasattr(action_chunk, 'tolist'):
+            action_chunk_list = action_chunk.tolist()
+        else:
+            action_chunk_list = list(action_chunk) if action_chunk is not None else []
 
         # Get first action for joint count calculation
         first_action = action_chunk_list[0] if action_chunk_list else None
