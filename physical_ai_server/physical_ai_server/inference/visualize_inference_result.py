@@ -47,8 +47,8 @@ class InferenceResultVisualizer:
                 axes = [axes]
 
             fig.suptitle(
-                f'Action Chunk Analysis: Comprehensive View ({len(raw_action_chunks)} chunks)\n' +
-                'Inference Outputs vs Actual Execution (○: Inference Request, ×: Inference Complete)',
+                f'Comprehensive View ({len(raw_action_chunks)} chunks)\n' +
+                'Outputs vs Actual (○: Inference Request, ×: Inference Complete)',
                 fontsize=14, y=0.98)
 
             # Plot actual executed actions as continuous line
@@ -96,8 +96,9 @@ class InferenceResultVisualizer:
 
                             # Create step numbers for the actually used actions
                             actual_start_step = inference_start_step + applied_offset
-                            chunk_steps = list(range(actual_start_step, 
-                                                   actual_start_step + len(joint_values)))
+                            chunk_steps = list(
+                                range(actual_start_step, actual_start_step + len(joint_values))
+                            )
 
                             color = colors[chunk_idx % len(colors)]
                             ax.plot(chunk_steps, joint_values, color=color, linestyle='--', 
@@ -105,22 +106,28 @@ class InferenceResultVisualizer:
                                    label=f'Inference {chunk_idx+1} (used: {len(joint_values)}/{len(raw_actions)} actions)')
 
                             # Mark the start point (when inference was requested)
-                            ax.scatter([inference_start_step], [raw_actions[0][joint_idx]], 
-                                     color=color, s=50, marker='o', alpha=0.8,
-                                     label=f'Inf{chunk_idx+1} Request' if chunk_idx < 3 else None)
+                            ax.scatter(
+                                [inference_start_step], [raw_actions[0][joint_idx]], 
+                                color=color, s=50, marker='o', alpha=0.8,
+                                label=f'Inf{chunk_idx+1} Request' if chunk_idx < 3 else None)
 
                             # Mark the actual usage start point (after offset)
                             if applied_offset > 0:
-                                ax.scatter([actual_start_step], [joint_values[0]], 
-                                         color=color, s=50, marker='>', alpha=0.8,
-                                         label=f'Inf{chunk_idx+1} Used Start' if chunk_idx < 3 else None)
+                                ax.scatter(
+                                    [actual_start_step], [joint_values[0]], 
+                                    color=color, s=50, marker='>', alpha=0.8,
+                                    label=f'Inf{chunk_idx+1} Used Start' if chunk_idx < 3 else None)
 
                             # Mark completion point (when this chunk was processed)
                             if chunk_idx < len(inference_history):
-                                completion_action = inference_history[chunk_idx]['action_count_when_completed']
-                                ax.scatter([completion_action], [raw_actions[min(applied_offset, len(raw_actions)-1)][joint_idx]], 
-                                         color=color, s=50, marker='x', alpha=0.8,
-                                         label=f'Inf{chunk_idx+1} Complete' if chunk_idx < 3 else None)
+                                completion_action = inference_history[chunk_idx][
+                                    'action_count_when_completed']
+                                ax.scatter(
+                                    [completion_action],
+                                    [raw_actions[
+                                        min(applied_offset, len(raw_actions)-1)][joint_idx]], 
+                                    color=color, s=50, marker='x', alpha=0.8,
+                                    label=f'Inf{chunk_idx+1} Complete' if chunk_idx < 3 else None)
 
                     ax.set_ylabel(f'Joint {joint_idx} Value')
                     ax.grid(True, alpha=0.3)
@@ -130,9 +137,10 @@ class InferenceResultVisualizer:
                     if len(handles) > 12:  # Limit to 12 entries for 10 chunks
                         handles = handles[:12]
                         labels = labels[:12]
-                        labels[-1] = f"... and {len(handles) - 11} more"
+                        labels[-1] = f'... and {len(handles) - 11} more'
 
-                    ax.legend(handles, labels, bbox_to_anchor=(1.05, 1), loc='upper left', fontsize=8)
+                    ax.legend(
+                        handles, labels, bbox_to_anchor=(1.05, 1), loc='upper left', fontsize=8)
 
                     # Add vertical lines for chunk boundaries
                     if valid_action_numbers:  # Only if we have valid data
@@ -163,11 +171,10 @@ class InferenceResultVisualizer:
                 self.logger.error(f'Traceback: {traceback.format_exc()}')
             return None
 
-    def process_visualization_data(self, action_chunk, inference_time, worker_start_count, 
-                                  inference_history, raw_action_chunks):
-        """Process initial visualization data when inference completes"""
-        import time
-        
+    def process_visualization_data(
+            self, action_chunk, inference_time, worker_start_count,
+            inference_history, raw_action_chunks):
+
         current_chunk_data = {
             'chunk_id': len(inference_history),
             'inference_start_action': worker_start_count,
@@ -181,10 +188,10 @@ class InferenceResultVisualizer:
 
         # Convert to standard list format for consistency
         action_chunk_list = action_chunk.tolist()
-        
+
         # Get first action for joint count calculation
         first_action = action_chunk_list[0] if action_chunk_list else None
-        
+
         raw_chunk_data = {
             'chunk_id': len(raw_action_chunks),
             'inference_start_step': worker_start_count,
@@ -194,47 +201,54 @@ class InferenceResultVisualizer:
         }
         raw_action_chunks.append(raw_chunk_data)
 
-    def process_complete_inference_visualization(self, action_chunk, inference_time, worker_start_count,
-                                               offset_action_chunk, used_action_count, actions_executed_during_inference,
-                                               inference_history, raw_action_chunks, action_history, 
-                                               chunk_visualization_data, logger=None):
-        """Complete visualization processing for one inference cycle"""
-        # Step 1: Process initial visualization data
+    def process_complete_inference_visualization(
+            self,
+            action_chunk,
+            inference_time, worker_start_count,
+            offset_action_chunk, used_action_count, actions_executed_during_inference,
+            inference_history, raw_action_chunks, action_history,
+            chunk_visualization_data, logger=None):
+
         self.process_visualization_data(
-            action_chunk, inference_time, worker_start_count, 
+            action_chunk, inference_time, worker_start_count,
             inference_history, raw_action_chunks
         )
-        
-        # Step 2: Update with final accurate values
+
         self.update_visualization_data_with_final_values(
             inference_history, used_action_count, actions_executed_during_inference
         )
-        
-        # Step 3: Update final visualization data
+
         self.update_final_visualization_data(
-            offset_action_chunk, used_action_count, worker_start_count, 
-            actions_executed_during_inference, len(action_chunk), 
+            offset_action_chunk, used_action_count, worker_start_count,
+            actions_executed_during_inference, len(action_chunk),
             inference_history, chunk_visualization_data
         )
-        
-        # Step 4: Generate visualization output
+
         self.generate_visualization_output(
-            inference_history, raw_action_chunks, 
+            inference_history, raw_action_chunks,
             action_history, chunk_visualization_data, logger
         )
 
-    def update_visualization_data_with_final_values(self, inference_history, used_action_count, 
-                                                   actions_executed_during_inference):
-        """Update visualization data with final accurate values"""
+    def update_visualization_data_with_final_values(
+            self, inference_history, used_action_count,
+            actions_executed_during_inference):
+
         if inference_history:
             current_chunk_data = inference_history[-1]
             current_chunk_data['action_count_when_completed'] = used_action_count
             current_chunk_data['calculated_offset'] = actions_executed_during_inference
 
-    def update_final_visualization_data(self, offset_action_chunk, used_action_count, 
-                                       worker_start_count, actions_executed_during_inference, 
-                                       original_chunk_size, inference_history, chunk_visualization_data):
-        """Update final visualization data after processing"""
+    def update_final_visualization_data(
+                self,
+                offset_action_chunk,
+                used_action_count,
+                worker_start_count,
+                actions_executed_during_inference,
+                original_chunk_size,
+                inference_history,
+                chunk_visualization_data
+            ):
+
         if inference_history:
             current_chunk_data = inference_history[-1]
             current_chunk_data['used_chunk_size'] = len(offset_action_chunk)
@@ -246,31 +260,43 @@ class InferenceResultVisualizer:
         chunk_visualization_data['chunk_sizes'].append(original_chunk_size)
         chunk_visualization_data['chunk_used_sizes'].append(len(offset_action_chunk))
 
-    def generate_visualization_output(self, inference_history, raw_action_chunks, action_history, 
-                                    chunk_visualization_data, logger=None):
-        """Generate visualization output (graphs or text analysis)"""
+    def generate_visualization_output(
+                self,
+                inference_history,
+                raw_action_chunks,
+                action_history,
+                chunk_visualization_data,
+                logger=None
+            ):
         if len(inference_history) % 20 == 0:
             if logger:
-                logger.info(f"📊 Starting comprehensive chunk analysis graph generation in background (total chunks: {len(inference_history)})")
-            
+                logger.info(
+                    f'Starting comprehensive chunk analysis graph {len(inference_history)})')
+
             # Start plot generation in background thread
             self._start_plot_generation_thread(
-                raw_action_chunks, 
-                list(action_history), 
-                inference_history, 
+                raw_action_chunks,
+                list(action_history),
+                inference_history,
                 chunk_visualization_data
             )
 
-    def _start_plot_generation_thread(self, raw_action_chunks, action_history, inference_history, chunk_visualization_data):
-        """Start plot generation in a background thread"""
+    def _start_plot_generation_thread(
+                self,
+                raw_action_chunks,
+                action_history,
+                inference_history,
+                chunk_visualization_data
+            ):
         with self.plot_lock:
             if self.is_plotting:
                 if self.logger:
-                    self.logger.info("📊 Plot generation already in progress, skipping this request")
+                    self.logger.info(
+                        '📊 Plot generation already in progress, skipping this request')
                 return
-            
+
             self.is_plotting = True
-        
+
         # Create deep copies of data to avoid race conditions
         try:
             import copy
@@ -278,85 +304,101 @@ class InferenceResultVisualizer:
             action_history_copy = copy.deepcopy(action_history)
             inference_history_copy = copy.deepcopy(inference_history)
             chunk_visualization_data_copy = copy.deepcopy(chunk_visualization_data)
-            
+
             # Start background thread
             self.plot_thread = threading.Thread(
                 target=self._generate_plot_in_background,
-                args=(raw_action_chunks_copy, action_history_copy, inference_history_copy, chunk_visualization_data_copy),
+                args=(
+                    raw_action_chunks_copy,
+                    action_history_copy,
+                    inference_history_copy,
+                    chunk_visualization_data_copy
+                ),
                 daemon=True  # Thread will be killed when main program exits
             )
             self.plot_thread.start()
-            
+
             if self.logger:
-                self.logger.info("📊 Plot generation thread started successfully")
-                
+                self.logger.info('Plot generation thread started successfully')
+
         except Exception as e:
             with self.plot_lock:
                 self.is_plotting = False
             if self.logger:
-                self.logger.error(f"Failed to start plot generation thread: {str(e)}")
+                self.logger.error(f'Failed to start plot generation thread: {str(e)}')
 
-    def _generate_plot_in_background(self, raw_action_chunks, action_history, inference_history, chunk_visualization_data):
-        """Generate plot in background thread"""
+    def _generate_plot_in_background(
+                self,
+                raw_action_chunks,
+                action_history,
+                inference_history,
+                chunk_visualization_data
+            ):
         try:
             start_time = time.time()
             if self.logger:
-                self.logger.info("📊 Background plot generation started")
-            
+                self.logger.info('Background plot generation started')
+
             results = self.create_comprehensive_analysis(
                 raw_action_chunks,
                 action_history,
                 inference_history,
                 chunk_visualization_data
             )
-            
+
             elapsed_time = time.time() - start_time
             if self.logger:
                 if results['success']:
-                    self.logger.info(f"📊 Background plot generation completed successfully in {elapsed_time:.2f}s")
+                    self.logger.info(
+                        f'Background plot generation completed successfully in {elapsed_time:.2f}s')
                     if results['curves_plot']:
-                        self.logger.info(f"📊 Plot saved to: {results['curves_plot']}")
+                        self.logger.info(
+                            f'Plot saved to: {results['curves_plot']}')
                 else:
-                    self.logger.error(f"📊 Background plot generation failed after {elapsed_time:.2f}s")
-                    
+                    self.logger.error(
+                        f'Background plot generation failed after {elapsed_time:.2f}s')
+
         except Exception as e:
             if self.logger:
-                self.logger.error(f"📊 Error in background plot generation: {str(e)}")
-                self.logger.error(f"📊 Traceback: {traceback.format_exc()}")
+                self.logger.error(
+                    f'Error in background plot generation: {str(e)}')
+                self.logger.error(
+                    f'Traceback: {traceback.format_exc()}')
         finally:
             # Always reset the plotting flag
             with self.plot_lock:
                 self.is_plotting = False
 
     def is_plot_generation_active(self):
-        """Check if plot generation is currently active"""
         with self.plot_lock:
             return self.is_plotting
 
     def wait_for_plot_completion(self, timeout=30.0):
-        """Wait for current plot generation to complete (useful for testing or shutdown)"""
         if self.plot_thread and self.plot_thread.is_alive():
             if self.logger:
-                self.logger.info(f"Waiting for plot generation to complete (timeout: {timeout}s)")
+                self.logger.info(
+                    f'Waiting for plot generation to complete (timeout: {timeout}s)')
             self.plot_thread.join(timeout=timeout)
-            
+
             if self.plot_thread.is_alive():
                 if self.logger:
-                    self.logger.warning("Plot generation thread did not complete within timeout")
+                    self.logger.warning(
+                        'Plot generation thread did not complete within timeout')
                 return False
             else:
                 if self.logger:
-                    self.logger.info("Plot generation completed")
+                    self.logger.info(
+                        'Plot generation completed')
                 return True
         return True
 
     def create_comprehensive_analysis(
-            self,
-            raw_action_chunks,
-            action_history,
-            inference_history,
-            chunk_visualization_data
-        ):
+                self,
+                raw_action_chunks,
+                action_history,
+                inference_history,
+                chunk_visualization_data
+            ):
 
         results = {
             'curves_plot': None,

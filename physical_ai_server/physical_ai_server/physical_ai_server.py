@@ -16,23 +16,17 @@
 #
 # Author: Dongyun Kim, Seongwoo Kim
 
+from collections import deque
 import glob
+import multiprocessing
 import os
 from pathlib import Path
-import multiprocessing
-import queue
 import threading
 import time
-import traceback
 from typing import Optional
-
-import numpy as np
-    
-from collections import deque
 
 from ament_index_python.packages import get_package_share_directory
 from physical_ai_interfaces.msg import TaskStatus, TrainingStatus
-from physical_ai_interfaces.msg import TaskStatus
 from physical_ai_interfaces.srv import (
     GetDatasetList,
     GetHFUser,
@@ -48,7 +42,7 @@ from physical_ai_interfaces.srv import (
 
 from physical_ai_server.communication.communicator import Communicator
 from physical_ai_server.data_processing.data_manager import DataManager
-from physical_ai_server.inference import InferenceFactory
+from physical_ai_server.inference import InferenceBase, InferenceFactory
 from physical_ai_server.inference.inference_multi_process import InferenceWorker
 from physical_ai_server.inference.visualize_inference_result import InferenceResultVisualizer
 from physical_ai_server.timer.timer_manager import TimerManager
@@ -112,7 +106,7 @@ class PhysicalAIServer(Node):
         self.inference_start_action_count = 0
         self.last_executed_action = None
         self.inference_threshold = 20
-        
+
         # Observation tracking for debugging stale data issues
         self.last_observation_data = None
         self.observation_change_history = []
@@ -238,7 +232,8 @@ class PhysicalAIServer(Node):
             )
             self.heartbeat_timer.start(timer_name='heartbeat')
 
-        self.inference_manager = InferenceFactory.create_inference_manager('lerobot', device='cuda')
+        self.inference_manager = InferenceFactory.create_inference_manager(
+            'lerobot', device='cuda')
         self.get_logger().info(
             f'ROS parameters initialized successfully for robot type: {robot_type}')
 
@@ -274,7 +269,7 @@ class PhysicalAIServer(Node):
         self.communicator.clear_latest_data()
 
         self.timer_manager = TimerManager(node=self)
-        
+
         if self.operation_mode == 'inference':
             # Set up two timers for inference mode
             # 1. Action timer - publishes actions at high frequency (33ms)
@@ -283,7 +278,7 @@ class PhysicalAIServer(Node):
                 timer_frequency=10,
                 callback_function=self.timer_callback_dict['action']
             )
-            
+
             # 2. Inference timer - runs at high frequency to process results quickly
             inference_frequency = 50.0  # 50Hz = 20ms interval for responsive result processing
             self.timer_manager.set_timer(
@@ -291,7 +286,7 @@ class PhysicalAIServer(Node):
                 timer_frequency=inference_frequency,
                 callback_function=self.timer_callback_dict['inference']
             )
-            
+
             self.timer_manager.start(timer_name='action')
             self.timer_manager.start(timer_name='inference')
         else:
@@ -313,7 +308,7 @@ class PhysicalAIServer(Node):
 
         if self.timer_manager is not None:
             self.timer_manager = None
-            
+
         # Stop inference worker if running
         if self.inference_worker:
             self.inference_worker.stop()
@@ -373,7 +368,6 @@ class PhysicalAIServer(Node):
         error_msg = ''
         current_status = TaskStatus()
         camera_msgs, follower_msgs, leader_msgs = self.communicator.get_latest_data()
-
 
         if camera_msgs is None:
             if time.perf_counter() - self.start_recording_time > self.DEFAULT_TOPIC_TIMEOUT:
@@ -461,14 +455,14 @@ class PhysicalAIServer(Node):
             # Only proceed if worker is ready
             if not self.inference_worker_ready:
                 return
-            
+
             self._process_inference_results()
 
             remaining_count = len(self.remaining_actions)
 
             should_start_inference = (
                 not self.inference_pending and
-                self.inference_worker and 
+                self.inference_worker and
                 self.inference_worker.is_alive() and
                 self.inference_worker_ready and
                 remaining_count <= self.inference_threshold
@@ -479,8 +473,8 @@ class PhysicalAIServer(Node):
                     self.inference_start_action_count = self._used_action_count
 
                 # Record inference start time for data freshness validation
-                inference_start_time = time.time()
-                self.get_logger().info(f"Starting new inference at action count: {self.inference_start_action_count}")
+                self.get_logger().info(
+                    f'Starting new inference at action count: {self.inference_start_action_count}')
 
                 camera_msgs, follower_msgs, _ = self.communicator.get_latest_data()
 
@@ -489,7 +483,7 @@ class PhysicalAIServer(Node):
                         len(camera_msgs) != len(self.params['camera_topic_list'])):
                     self.get_logger().info('Waiting for camera data')
                     return
-                        
+
                 elif follower_msgs is None:
                     self.get_logger().info('Waiting for follower data')
                     return
@@ -525,21 +519,19 @@ class PhysicalAIServer(Node):
             else:
                 if self.inference_pending:
                     self.get_logger().debug(
-                        f"Inference already pending, waiting... (remaining: {remaining_count} actions)")
+                        f'Inference already pending, waiting...')
                 elif not self.inference_worker or not self.inference_worker.is_alive():
                     self.get_logger().warning(
-                        "Inference worker is not alive")
+                        'Inference worker is not alive')
                 elif remaining_count > self.inference_threshold:
                     self.get_logger().debug(
-                        f"Sufficient actions available ({remaining_count} > {self.inference_threshold}), waiting...")
+                        f'Sufficient actions available, waiting...')
                 else:
                     self.get_logger().debug(
-                        "Unknown reason for not starting inference")
+                        'Unknown reason for not starting inference')
 
         except Exception as e:
             self.get_logger().error(f'Inference timer callback error: {str(e)}')
-            import traceback
-            self.get_logger().error(f'Traceback: {traceback.format_exc()}')
             self._stop_inference_with_error(f'Inference timer error: {str(e)}')
 
     def _process_inference_results(self):
@@ -561,12 +553,13 @@ class PhysicalAIServer(Node):
                         f'Inference completed in {inference_time*1000:.1f}ms')
 
                     if not action_chunk:
-                        self.get_logger().warning("Received empty action chunk!")
+                        self.get_logger().warning('Received empty action chunk!')
                         return
 
                     # Calculate offset and apply smoothing
                     with self.inference_lock:
-                        actions_executed_during_inference = max(0, self._used_action_count - worker_start_count)
+                        actions_executed_during_inference = max(
+                            0, self._used_action_count - worker_start_count)
 
                         # Apply offset and smoothing
                         offset_action_chunk = self._apply_offset_and_smoothing(
@@ -580,8 +573,9 @@ class PhysicalAIServer(Node):
                     if self.enable_inference_visualization:
                         self.visualizer.process_complete_inference_visualization(
                             action_chunk, inference_time, worker_start_count,
-                            offset_action_chunk, self._used_action_count, actions_executed_during_inference,
-                            self.inference_history, self.raw_action_chunks, self.action_history, 
+                            offset_action_chunk, self._used_action_count,
+                            actions_executed_during_inference,
+                            self.inference_history, self.raw_action_chunks, self.action_history,
                             self.chunk_visualization_data, self.get_logger())
 
                     # Update status
@@ -596,7 +590,7 @@ class PhysicalAIServer(Node):
                     return
 
                 elif status == 'pong':
-                    self.get_logger().debug("Received health check pong")
+                    self.get_logger().debug('Received health check pong')
                     return
 
             except Exception as inner_e:
@@ -628,8 +622,10 @@ class PhysicalAIServer(Node):
                 new_weight = 1.0 - old_weight
                 transition_action = []
                 for i in range(len(self.last_executed_action)):
-                    blended = (old_weight * self.last_executed_action[i] + 
-                             new_weight * offset_action_chunk[step][i])
+                    blended = (
+                        old_weight * self.last_executed_action[i] +
+                        new_weight * offset_action_chunk[step][i]
+                    )
                     transition_action.append(blended)
 
                 offset_action_chunk[step] = transition_action
@@ -855,11 +851,11 @@ class PhysicalAIServer(Node):
                         self.get_logger().info('Terminating all operations')
                         self.data_manager.record_finish()
                         self.on_inference = False
-                        
+
                         # Stop inference worker if running
                         if self.inference_worker:
                             self._stop_inference_process()
-                            
+
                         response.success = True
                         response.message = 'All operations terminated'
 
@@ -941,7 +937,7 @@ class PhysicalAIServer(Node):
             if not user_path.exists() or not user_path.is_dir():
                 response.dataset_list = []
                 response.success = False
-                response.message = f"User ID '{user_id}' does not exist at path: {user_path}"
+                response.message = f'User ID {user_id} does not exist at path: {user_path}'
                 return response
 
             dataset_names = [
@@ -951,7 +947,7 @@ class PhysicalAIServer(Node):
 
             response.dataset_list = dataset_names
             response.success = True
-            response.message = f"Found {len(dataset_names)} dataset(s) for user '{user_id}'."
+            response.message = f'Found {len(dataset_names)} dataset(s) for user {user_id}.'
 
         except Exception as e:
             response.dataset_list = []
@@ -1003,9 +999,9 @@ class PhysicalAIServer(Node):
             return response
 
     def _start_inference_process(self, policy_path, device='cuda'):
-        """Start the inference worker (non-blocking)"""
         try:
-            self.get_logger().info(f'Starting inference worker initialization for policy: {policy_path}')
+            self.get_logger().info(
+                f'Starting inference worker initialization for policy: {policy_path}')
 
             # Create and start inference worker
             self.inference_worker = InferenceWorker(policy_path, device)
@@ -1018,39 +1014,37 @@ class PhysicalAIServer(Node):
             self.inference_worker_ready = False
             self.inference_worker_start_time = time.time()
             self.inference_worker_last_log_time = self.inference_worker_start_time
-
-            self.get_logger().info(f'Inference worker process started, initialization will be checked by inference timer (timeout: {self.inference_worker_timeout}s)')
             return True
-            
+
         except Exception as e:
             self.get_logger().error(f'Failed to start inference worker: {str(e)}')
             self.inference_worker_initializing = False
             return False
 
     def _stop_inference_process(self):
-        """Stop the inference worker"""
         try:
             if self.inference_worker:
                 self.inference_worker.stop()
                 self.inference_worker = None
                 self.get_logger().info('Inference worker stopped')
-            
+
             # Reset initialization state
             self.inference_worker_initializing = False
             self.inference_worker_ready = False
             self.inference_worker_start_time = None
             self.inference_worker_last_log_time = None
-            
+
         except Exception as e:
             self.get_logger().error(f'Error stopping inference worker: {str(e)}')
 
     def _check_inference_worker_initialization(self):
-        """Check inference worker initialization status (non-blocking)"""
         if not self.inference_worker or not self.inference_worker.is_alive():
-            self.get_logger().error("Inference worker process died during initialization")
-            self._stop_inference_with_error("Inference worker process died during initialization")
+            self.get_logger().error(
+                'Inference worker process died during initialization')
+            self._stop_inference_with_error(
+                'Inference worker process died during initialization')
             return False
-        
+
         try:
             # Check for initialization result
             result = self.inference_worker.get_result(block=False, timeout=0.1)
@@ -1058,7 +1052,8 @@ class PhysicalAIServer(Node):
                 status, message = result
                 if status == 'ready':
                     elapsed = time.time() - self.inference_worker_start_time
-                    self.get_logger().info(f'✅ Inference worker initialized successfully in {elapsed:.1f}s')
+                    self.get_logger().info(
+                        f'✅ Inference worker initialized successfully in {elapsed:.1f}s')
                     self.inference_worker_initializing = False
                     self.inference_worker_ready = True
                     return True
@@ -1067,40 +1062,43 @@ class PhysicalAIServer(Node):
                     current_time = time.time()
                     if current_time - self.inference_worker_last_log_time >= 10.0:
                         elapsed = current_time - self.inference_worker_start_time
-                        remaining = self.inference_worker_timeout - elapsed
-                        self.get_logger().info(f'⏳ Model loading in progress: {message} ({elapsed:.1f}s elapsed, {remaining:.1f}s remaining)')
+                        self.get_logger().info(
+                            f'⏳ Model loading in progress: {message} ({elapsed:.1f}s')
                         self.inference_worker_last_log_time = current_time
                     return False  # Still loading
                 elif status == 'error':
-                    self.get_logger().error(f'❌ Inference worker failed to initialize: {message}')
-                    self._stop_inference_with_error(f'Inference worker initialization error: {message}')
+                    self.get_logger().error(
+                        f'❌ Inference worker failed to initialize: {message}')
+                    self._stop_inference_with_error(
+                        f'Inference worker initialization error: {message}')
                     return False
-            
+
             # Check timeout
             if time.time() - self.inference_worker_start_time > self.inference_worker_timeout:
                 elapsed = time.time() - self.inference_worker_start_time
-                self.get_logger().error(f'⏰ Inference worker initialization timeout after {elapsed:.1f}s')
-                self._stop_inference_with_error(f'Inference worker initialization timeout after {elapsed:.1f}s')
+                self.get_logger().error(
+                    f'Inference worker initialization timeout after {elapsed:.1f}s')
+                self._stop_inference_with_error(
+                    f'Inference worker initialization timeout after {elapsed:.1f}s')
                 return False
-                
+
             return False  # Still waiting
-            
+
         except Exception as e:
-            self.get_logger().error(f'Error checking inference worker initialization: {str(e)}')
-            self._stop_inference_with_error(f'Error checking inference worker initialization: {str(e)}')
+            self.get_logger().error(
+                f'Error checking inference worker initialization: {str(e)}')
+            self._stop_inference_with_error(
+                f'Error checking inference worker initialization: {str(e)}')
             return False
 
     def _check_inference_process_health(self):
-        """Check if the inference worker is still alive and responsive"""
         if not self.inference_worker or not self.inference_worker.is_alive():
-            self.get_logger().warning("Inference worker is not alive")
+            self.get_logger().warning('Inference worker is not alive')
             return False
-            
-        # Skip ping/pong for now to avoid interference - just check if process is alive
         return True
 
     def _stop_inference_with_error(self, error_msg):
-        self.get_logger().error(f"Stopping inference due to error: {error_msg}")
+        self.get_logger().error(f'Stopping inference due to error: {error_msg}')
         self.on_inference = False
         self.inference_pending = False
 
@@ -1117,32 +1115,30 @@ class PhysicalAIServer(Node):
                 self.communicator.publish_status(status=current_status)
             except Exception as e:
                 self.get_logger().error(
-                    f"Failed to publish error status: {str(e)}")
+                    f'Failed to publish error status: {str(e)}')
 
 
 def main(args=None):
-    # Set multiprocessing start method to 'spawn' for better compatibility
     multiprocessing.set_start_method('spawn', force=True)
-    
+
     rclpy.init(args=args)
     node = PhysicalAIServer()
-    
-    # 멀티스레드 실행기 사용
+
     executor = MultiThreadedExecutor(num_threads=6)
     executor.add_node(node)
-    
+
     try:
         executor.spin()
     except KeyboardInterrupt:
         pass
     finally:
-        # Clean up inference worker
         if hasattr(node, 'inference_worker') and node.inference_worker:
             node._stop_inference_process()
-            
+
         executor.shutdown()
         node.destroy_node()
         rclpy.shutdown()
+
 
 if __name__ == '__main__':
     main()

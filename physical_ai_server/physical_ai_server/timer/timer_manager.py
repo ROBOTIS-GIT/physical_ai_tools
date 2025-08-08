@@ -16,8 +16,8 @@
 #
 # Author: Dongyun Kim
 
-from rclpy.node import Node
 from rclpy.callback_groups import MutuallyExclusiveCallbackGroup
+from rclpy.node import Node
 
 
 class TimerManager:
