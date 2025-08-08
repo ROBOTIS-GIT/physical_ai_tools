@@ -720,6 +720,14 @@ class PhysicalAIServer(Node):
         if len(joint_variations) > 0:
             self.get_logger().info(
                 f'Joint variations: {[f"{v:.6f}" for v in joint_variations[:3]]}...')  # Show first 3 joints
+            
+        # Show actual position values for debugging
+        if len(inference_period_actions) > 0 and self.last_executed_action is not None:
+            first_action_pos = inference_period_actions[0]['action_values'][:3]  # First 3 joints
+            last_action_pos = inference_period_actions[-1]['action_values'][:3]   # First 3 joints
+            self.get_logger().info(
+                f'Position range - First: {[f"{p:.6f}" for p in first_action_pos]}, '
+                f'Last: {[f"{p:.6f}" for p in last_action_pos]}')
         
         return is_static
 
@@ -754,12 +762,17 @@ class PhysicalAIServer(Node):
         
         if was_robot_static_during_inference:
             # Robot was static during inference - we need to be smarter about when to start motion
-            if motion_start_index < time_offset:
-                # Motion should have started during inference time
-                # Use the original time offset but with awareness
-                smart_offset = time_offset
+            if motion_start_index <= 3:  # Motion starts very early in chunk
+                # When robot was static but motion starts immediately, use minimal offset
+                smart_offset = max(0, motion_start_index)
                 self.get_logger().info(
-                    f'Static robot during inference: Motion was scheduled during inference time, using time offset')
+                    f'Static robot during inference: Motion starts early (index {motion_start_index}), using motion-aligned offset')
+            elif motion_start_index < time_offset:
+                # Motion should have started during inference time, but not immediately
+                # Use a compromise between motion start and time offset
+                smart_offset = min(time_offset, motion_start_index + 2)
+                self.get_logger().info(
+                    f'Static robot during inference: Motion scheduled during inference, using compromise offset (motion@{motion_start_index}, time@{time_offset}, using {smart_offset})')
             elif motion_start_index >= time_offset:
                 # Motion starts after inference time - align with motion start
                 # But don't go beyond reasonable bounds

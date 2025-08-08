@@ -317,7 +317,7 @@ class InferenceResultVisualizer:
                 chunk_visualization_data,
                 logger=None
             ):
-        if len(inference_history) % 20 == 0:
+        if len(inference_history) % 10 == 0:
             if logger:
                 logger.info(
                     f'Starting comprehensive chunk analysis graph {len(inference_history)})')
