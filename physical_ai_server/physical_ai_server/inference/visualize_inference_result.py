@@ -37,7 +37,29 @@ class InferenceResultVisualizer:
             import matplotlib
             matplotlib.use('Agg')
             
-            joint_count = raw_action_chunks[0]['joint_count']
+            # Validate input data
+            if not raw_action_chunks:
+                if self.logger:
+                    self.logger.warning('No raw action chunks available for plotting')
+                return None
+                
+            if not isinstance(raw_action_chunks, list) or len(raw_action_chunks) == 0:
+                if self.logger:
+                    self.logger.warning('Raw action chunks is not a valid list or is empty')
+                return None
+                
+            # Check if first chunk has required keys
+            first_chunk = raw_action_chunks[0]
+            if not isinstance(first_chunk, dict) or 'joint_count' not in first_chunk:
+                if self.logger:
+                    self.logger.error('First chunk missing required "joint_count" key')
+                return None
+                
+            joint_count = first_chunk['joint_count']
+            if not isinstance(joint_count, int) or joint_count <= 0:
+                if self.logger:
+                    self.logger.error(f'Invalid joint_count: {joint_count}')
+                return None
 
             subplot_height = 3.5
             total_height = max(subplot_height * joint_count + 2, 10)  # Minimum 10 inches
@@ -175,6 +197,12 @@ class InferenceResultVisualizer:
             self, action_chunk, inference_time, worker_start_count,
             inference_history, raw_action_chunks):
 
+        # Validate input data
+        if action_chunk is None:
+            if self.logger:
+                self.logger.warning('action_chunk is None, cannot process visualization data')
+            return
+
         current_chunk_data = {
             'chunk_id': len(inference_history),
             'inference_start_action': worker_start_count,
@@ -187,19 +215,25 @@ class InferenceResultVisualizer:
         inference_history.append(current_chunk_data)
 
         # Convert to standard list format for consistency
-        if hasattr(action_chunk, 'tolist'):
-            action_chunk_list = action_chunk.tolist()
-        else:
-            action_chunk_list = list(action_chunk) if action_chunk is not None else []
+        try:
+            if hasattr(action_chunk, 'tolist'):
+                action_chunk_list = action_chunk.tolist()
+            else:
+                action_chunk_list = list(action_chunk) if action_chunk is not None else []
+        except Exception as e:
+            if self.logger:
+                self.logger.error(f'Error converting action_chunk to list: {str(e)}')
+            action_chunk_list = []
 
         # Get first action for joint count calculation
         first_action = action_chunk_list[0] if action_chunk_list else None
+        joint_count = len(first_action) if first_action and isinstance(first_action, (list, tuple)) else 0
 
         raw_chunk_data = {
             'chunk_id': len(raw_action_chunks),
             'inference_start_step': worker_start_count,
             'raw_actions': action_chunk_list,
-            'joint_count': len(first_action) if first_action else 0,
+            'joint_count': joint_count,
             'timestamp': time.time()
         }
         raw_action_chunks.append(raw_chunk_data)
@@ -256,6 +290,18 @@ class InferenceResultVisualizer:
             current_chunk_data = inference_history[-1]
             current_chunk_data['used_chunk_size'] = len(offset_action_chunk)
             current_chunk_data['action_start_from'] = used_action_count + 1
+
+        # Ensure all required keys exist in chunk_visualization_data
+        required_keys = [
+            'chunk_start_actions', 'chunk_inference_starts', 
+            'chunk_offsets', 'chunk_sizes', 'chunk_used_sizes'
+        ]
+        
+        for key in required_keys:
+            if key not in chunk_visualization_data:
+                chunk_visualization_data[key] = []
+                if self.logger:
+                    self.logger.warning(f'Missing key "{key}" in chunk_visualization_data, initialized as empty list')
 
         chunk_visualization_data['chunk_start_actions'].append(used_action_count + 1)
         chunk_visualization_data['chunk_inference_starts'].append(worker_start_count)

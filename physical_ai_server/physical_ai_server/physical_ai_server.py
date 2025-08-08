@@ -124,6 +124,7 @@ class PhysicalAIServer(Node):
                 'chunk_inference_starts': [],
                 'chunk_offsets': [],
                 'chunk_used_sizes': [],
+                'chunk_sizes': [],
             }
             self.raw_action_chunks = []
 

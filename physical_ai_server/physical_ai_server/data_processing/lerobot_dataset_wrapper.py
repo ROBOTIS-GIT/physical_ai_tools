@@ -141,21 +141,6 @@ class LeRobotDatasetWrapper(LeRobotDataset):
         finally:
             self._append_in_progress = False
 
-    def _extract_episode_buffer(self, start: int, end: int, episode_index) -> dict:
-        episode_buffer = {}
-        for key, value in self.total_frame_buffer.items():
-            if isinstance(value, (list, np.ndarray)):
-                episode_buffer[key] = value[start:end + 1]
-            else:
-                episode_buffer[key] = value
-
-        episode_length = end - start + 1
-        episode_buffer['size'] = episode_length
-        episode_buffer['index'] = np.arange(start, end + 1)
-        episode_buffer['episode_index'] = np.full((episode_length,), episode_index)
-
-        return episode_buffer
-
     def add_frame_without_write_image(self, frame: dict, task: str) -> None:
         validate_frame(frame, self.features)
 
@@ -176,7 +161,6 @@ class LeRobotDatasetWrapper(LeRobotDataset):
             else:
                 self.episode_buffer[key].append(frame[key])
 
-        self.episode_buffer['task'].append(task)
         self.episode_buffer['size'] += 1
 
     def save_episode_without_video_encoding(self):
