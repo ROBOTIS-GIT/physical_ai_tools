@@ -43,6 +43,7 @@ from physical_ai_interfaces.srv import (
 from physical_ai_server.communication.communicator import Communicator
 from physical_ai_server.data_processing.data_manager import DataManager
 from physical_ai_server.inference import InferenceBase, InferenceFactory
+from physical_ai_server.inference.action_chunk_processor import ActionChunkProcessor
 from physical_ai_server.inference.inference_multi_process import InferenceWorker
 from physical_ai_server.inference.visualize_inference_result import InferenceResultVisualizer
 from physical_ai_server.timer.timer_manager import TimerManager
@@ -127,6 +128,9 @@ class PhysicalAIServer(Node):
                 'chunk_sizes': [],
             }
             self.raw_action_chunks = []
+            
+        # Initialize action chunk processor
+        self.action_chunk_processor = ActionChunkProcessor(logger=self.get_logger())
 
     def _init_core_components(self):
         self.communicator: Optional[Communicator] = None
@@ -564,8 +568,9 @@ class PhysicalAIServer(Node):
                             0, self._used_action_count - worker_start_count)
 
                         # Apply offset and smoothing
-                        offset_action_chunk = self._apply_offset_and_smoothing(
-                            action_chunk, actions_executed_during_inference)
+                        offset_action_chunk = self.action_chunk_processor.apply_offset_and_smoothing(
+                            action_chunk, actions_executed_during_inference, 
+                            self.action_history, self.last_executed_action)
 
                         self.remaining_actions.clear()
                         self.remaining_actions.extend(offset_action_chunk)
@@ -600,235 +605,6 @@ class PhysicalAIServer(Node):
 
         except Exception as e:
             self.get_logger().error(f'Error processing inference results: {str(e)}')
-
-    def _apply_offset_and_smoothing(self, action_chunk, actions_executed_during_inference):
-        """
-        Apply smart offset based on robot state to prevent discontinuous motion.
-        This addresses the issue where robot stays still during inference but 
-        the new action chunk starts with motion, causing sudden jumps.
-        """
-        
-        # Step 1: Analyze robot state during inference time
-        is_robot_static_during_inference = self._was_robot_static_during_inference(actions_executed_during_inference)
-        
-        # Step 2: Find motion start point in new action chunk
-        motion_start_index = self._find_motion_start_in_chunk(action_chunk)
-        
-        # Step 3: Calculate smart offset
-        smart_offset = self._calculate_smart_offset(
-            actions_executed_during_inference, 
-            is_robot_static_during_inference, 
-            motion_start_index,
-            len(action_chunk)
-        )
-        
-        self.get_logger().info(
-            f'Smart offset analysis: robot_static_during_inference={is_robot_static_during_inference}, '
-            f'motion_starts_at={motion_start_index}, time_offset={actions_executed_during_inference}, '
-            f'smart_offset={smart_offset}')
-        
-        # Step 4: Apply smart offset
-        if smart_offset > 0:
-            if smart_offset < len(action_chunk):
-                offset_action_chunk = action_chunk[smart_offset:]
-                self.get_logger().info(
-                    f'Applied smart offset: skipped first {smart_offset} actions '
-                    f'(time: {actions_executed_during_inference}, motion-aware: {smart_offset - actions_executed_during_inference})')
-            else:
-                self.get_logger().warning(
-                    f'Smart offset ({smart_offset}) exceeds chunk length ({len(action_chunk)})!')
-                offset_action_chunk = []
-        else:
-            offset_action_chunk = action_chunk.copy()
-            self.get_logger().info(
-                f'No offset applied - using all {len(action_chunk)} actions')
-
-        # Step 5: Apply trajectory interpolation if needed instead of simple smoothing
-        if (
-                self.last_executed_action is not None and
-                offset_action_chunk and
-                len(offset_action_chunk) > 0
-            ):
-            # Check if trajectory interpolation is needed
-            first_new_action = offset_action_chunk[0]
-            max_position_diff = max(
-                abs(first_new_action[i] - self.last_executed_action[i]) 
-                for i in range(len(self.last_executed_action))
-            )
-            
-            gap_threshold = 0.3  # Threshold for significant gap (about 17 degrees)
-            if max_position_diff > gap_threshold:
-                # Generate interpolated actions to bridge the gap
-                interpolated_actions = self._generate_interpolated_actions(
-                    self.last_executed_action, first_new_action, max_position_diff)
-                
-                if interpolated_actions:
-                    # Insert interpolated actions at the beginning
-                    offset_action_chunk = interpolated_actions + offset_action_chunk
-                    self.get_logger().info(
-                        f'Applied trajectory interpolation: added {len(interpolated_actions)} bridge actions '
-                        f'for gap of {max_position_diff:.4f}')
-                else:
-                    self.get_logger().info(
-                        f'Gap detected ({max_position_diff:.4f}) but no interpolation generated')
-            else:
-                self.get_logger().debug(
-                    f'No interpolation needed - gap is small ({max_position_diff:.4f})')
-        
-        return offset_action_chunk
-
-    def _generate_interpolated_actions(self, start_action, end_action, gap_size):
-        """
-        Generate interpolated actions to create smooth trajectory between two actions.
-        """
-        try:
-            # Determine number of interpolation steps based on gap size
-            if gap_size > 0.8:  # Very large gap (>45 degrees)
-                num_steps = 9  # Large gap - more steps
-            elif gap_size > 0.5:  # Large gap (>30 degrees)
-                num_steps = 6  # Medium gap
-            elif gap_size > 0.3:  # Medium gap (>17 degrees)
-                num_steps = 3  # Small gap
-            else:
-                return []  # No interpolation needed
-            
-            interpolated_actions = []
-            
-            for step in range(1, num_steps + 1):
-                # Linear interpolation factor (0 to 1)
-                t = step / (num_steps + 1)
-                
-                # Create interpolated action
-                interpolated_action = []
-                for i in range(len(start_action)):
-                    # Linear interpolation between start and end
-                    interpolated_value = start_action[i] + t * (end_action[i] - start_action[i])
-                    interpolated_action.append(interpolated_value)
-                
-                interpolated_actions.append(interpolated_action)
-            
-            self.get_logger().debug(
-                f'Generated {len(interpolated_actions)} interpolated actions '
-                f'(gap: {gap_size:.4f}, steps: {num_steps})')
-            
-            return interpolated_actions
-            
-        except Exception as e:
-            self.get_logger().error(f'Error generating interpolated actions: {str(e)}')
-            return []
-
-    def _was_robot_static_during_inference(self, actions_executed_during_inference, position_threshold=0.02):
-        """
-        Check if robot was static during the inference period by analyzing 
-        the actions executed during that time.
-        """
-        if actions_executed_during_inference <= 0:
-            self.get_logger().info('Robot was static during inference: No actions executed')
-            return True  # No actions executed, so robot was static
-            
-        if len(self.action_history) < actions_executed_during_inference:
-            self.get_logger().info(
-                f'Robot static analysis: Not enough history ({len(self.action_history)} < {actions_executed_during_inference})')
-            return False  # Not enough history to analyze
-            
-        # Get actions executed during inference time
-        inference_period_actions = list(self.action_history)[-actions_executed_during_inference:]
-        
-        if len(inference_period_actions) < 2:
-            self.get_logger().info('Robot was static during inference: Too few actions to analyze')
-            return True  # Too few actions to determine motion
-            
-        # Calculate position variations during inference period
-        max_variation = 0.0
-        joint_variations = []
-        if self.last_executed_action is not None:
-            for joint_idx in range(len(self.last_executed_action)):
-                joint_positions = [action['action_values'][joint_idx] for action in inference_period_actions]
-                joint_max = max(joint_positions)
-                joint_min = min(joint_positions)
-                variation = joint_max - joint_min
-                joint_variations.append(variation)
-                max_variation = max(max_variation, variation)
-        
-        is_static = max_variation < position_threshold
-        
-        # Detailed logging for debugging
-        self.get_logger().info(
-            f'Static analysis during inference ({actions_executed_during_inference} actions): '
-            f'is_static={is_static}, max_variation={max_variation:.6f}, threshold={position_threshold:.6f}')
-        
-        if len(joint_variations) > 0:
-            self.get_logger().info(
-                f'Joint variations: {[f"{v:.6f}" for v in joint_variations[:3]]}...')  # Show first 3 joints
-            
-        # Show actual position values for debugging
-        if len(inference_period_actions) > 0 and self.last_executed_action is not None:
-            first_action_pos = inference_period_actions[0]['action_values'][:3]  # First 3 joints
-            last_action_pos = inference_period_actions[-1]['action_values'][:3]   # First 3 joints
-            self.get_logger().info(
-                f'Position range - First: {[f"{p:.6f}" for p in first_action_pos]}, '
-                f'Last: {[f"{p:.6f}" for p in last_action_pos]}')
-        
-        return is_static
-
-    def _find_motion_start_in_chunk(self, action_chunk, motion_threshold=0.02):
-        """
-        Find the index where significant motion starts in the action chunk.
-        Compares each action with the current robot position.
-        """
-        if self.last_executed_action is None or not action_chunk:
-            return 0
-            
-        for idx, action in enumerate(action_chunk):
-            max_position_diff = max(
-                abs(action[i] - self.last_executed_action[i]) 
-                for i in range(len(self.last_executed_action))
-            )
-            
-            if max_position_diff > motion_threshold:
-                self.get_logger().debug(f'Motion detected at index {idx} (diff: {max_position_diff:.4f})')
-                return idx
-                
-        # No significant motion found
-        self.get_logger().debug('No significant motion detected in chunk')
-        return len(action_chunk)
-
-    def _calculate_smart_offset(self, time_offset, was_robot_static_during_inference, motion_start_index, chunk_length):
-        """
-        Calculate smart offset that considers both time and robot state during inference.
-        """
-        # Base case: use time offset
-        smart_offset = time_offset
-        
-        if was_robot_static_during_inference:
-            # Robot was static during inference - we need to be smarter about when to start motion
-            if motion_start_index <= 3:  # Motion starts very early in chunk
-                # When robot was static but motion starts immediately, use minimal offset
-                smart_offset = max(0, motion_start_index)
-                self.get_logger().info(
-                    f'Static robot during inference: Motion starts early (index {motion_start_index}), using motion-aligned offset')
-            elif motion_start_index < time_offset:
-                # Motion should have started during inference time, but not immediately
-                # Use a compromise between motion start and time offset
-                smart_offset = min(time_offset, motion_start_index + 2)
-                self.get_logger().info(
-                    f'Static robot during inference: Motion scheduled during inference, using compromise offset (motion@{motion_start_index}, time@{time_offset}, using {smart_offset})')
-            elif motion_start_index >= time_offset:
-                # Motion starts after inference time - align with motion start
-                # But don't go beyond reasonable bounds
-                motion_aligned_offset = max(0, motion_start_index - 1)  # Start just before motion
-                smart_offset = min(motion_aligned_offset, time_offset + 2)  # Limit the adjustment
-                self.get_logger().info(
-                    f'Static robot during inference: Aligning with motion start (motion@{motion_start_index}, offset: {smart_offset})')
-        else:
-            # Robot was already moving during inference - use time-based offset as usual
-            smart_offset = time_offset
-            self.get_logger().info(f'Moving robot during inference: Using standard time offset')
-        
-        # Safety bounds
-        smart_offset = max(0, min(smart_offset, chunk_length - 1))
-        
-        return smart_offset
 
     def _action_timer_callback(self):
         if not self.on_inference:
