@@ -106,6 +106,7 @@ class PhysicalAIServer(Node):
         self.inference_start_action_count = 0
         self.last_executed_action = None
         self.inference_threshold = 20
+        self.inference_smoothing = False
 
         # Observation tracking for debugging stale data issues
         self.last_observation_data = None
@@ -615,7 +616,11 @@ class PhysicalAIServer(Node):
                 f'No actions executed during inference, using all {len(action_chunk)} actions')
 
         # Apply smoothing using LAST EXECUTED ACTION (not remaining actions)
-        if self.last_executed_action is not None and offset_action_chunk:
+        if (
+                self.last_executed_action is not None and
+                offset_action_chunk and
+                self.inference_smoothing
+            ):
             num_transition_steps = min(5, len(offset_action_chunk))
             for step in range(num_transition_steps):
                 old_weight = 0.8 - (step * 0.2)
@@ -634,6 +639,8 @@ class PhysicalAIServer(Node):
                 self.get_logger().info('No last executed action available for smoothing')
             if not offset_action_chunk:
                 self.get_logger().info('No offset actions to smooth')
+            if not self.inference_smoothing:
+                self.get_logger().info('Inference smoothing is disabled')
 
         return offset_action_chunk
 
