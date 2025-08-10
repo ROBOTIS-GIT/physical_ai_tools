@@ -16,10 +16,10 @@
 #
 # Author: Dongyun Kim
 
-import os
-import json
 import asyncio
 import concurrent.futures
+import json
+import os
 from typing import Dict, List, Optional, Tuple
 
 import numpy as np
@@ -43,13 +43,13 @@ class GrootInference(InferenceBase):
         # Check for GR00T specific config files
         config_files = ['groot_config.json', 'model_config.json', 'config.json']
         config_path = None
-        
+
         for config_file in config_files:
             potential_path = os.path.join(policy_path, config_file)
             if os.path.exists(potential_path):
                 config_path = potential_path
                 break
-        
+
         if config_path is None:
             return False, f'No valid config file found in {policy_path}.'
 
@@ -75,7 +75,7 @@ class GrootInference(InferenceBase):
             if os.path.exists(os.path.join(policy_path, required_file)):
                 model_file_found = True
                 break
-        
+
         if not model_file_found:
             return False, f'No valid model file found in {policy_path}.'
 
@@ -87,22 +87,22 @@ class GrootInference(InferenceBase):
         # Load GR00T policy from validated path
         # TODO: Implement actual loading logic for GR00T models
         try:
-            print(f"Loading GR00T policy from {self.policy_path}")
-            print(f"Policy type: {self.policy_type}")
-            
+            print(f'Loading GR00T policy from {self.policy_path}')
+            print(f'Policy type: {self.policy_type}')
+
             # Check for TensorRT optimization if available
             tensorrt_path = os.path.join(self.policy_path, 'model.tensorrt')
             if os.path.exists(tensorrt_path) and self.device == 'cuda':
-                print("Using TensorRT optimized model for faster inference")
+                print('Using TensorRT optimized model for faster inference')
             else:
                 onnx_path = os.path.join(self.policy_path, 'model.onnx')
                 if os.path.exists(onnx_path):
-                    print("Using ONNX model")
+                    print('Using ONNX model')
                 else:
                     pytorch_path = os.path.join(self.policy_path, 'model.pth')
                     if os.path.exists(pytorch_path):
-                        print("Using PyTorch model")
-            
+                        print('Using PyTorch model')
+
             # TODO: Replace with actual implementation
             # Example pseudocode:
             # if self.policy_type == 'groot-n1':
@@ -111,11 +111,11 @@ class GrootInference(InferenceBase):
             # elif self.policy_type == 'groot-n1.5':
             #     from isaac_groot import GrootN15Model
             #     self.policy = GrootN15Model.load(self.policy_path)
-            
+
             self.policy = {
-                "type": self.policy_type, 
-                "path": self.policy_path,
-                "runtime": "tensorrt" if os.path.exists(tensorrt_path) else "onnx"
+                'type': self.policy_type,
+                'path': self.policy_path,
+                'runtime': 'tensorrt' if os.path.exists(tensorrt_path) else 'onnx'
             }
             return True
         except Exception as e:
@@ -135,10 +135,10 @@ class GrootInference(InferenceBase):
     def get_policy_config(self):
         # Get configuration of loaded GR00T policy
         if self.policy is None:
-            raise RuntimeError("No policy loaded. Call load_policy() first.")
-        
+            raise RuntimeError('No policy loaded. Call load_policy() first.')
+
         # TODO: Return actual config from loaded model
-        return {"policy_type": self.policy_type, "policy_path": self.policy_path}
+        return {'policy_type': self.policy_type, 'policy_path': self.policy_path}
 
     def predict(
         self,
@@ -148,7 +148,7 @@ class GrootInference(InferenceBase):
     ) -> List[float]:
         # Perform single-step inference using GR00T policy
         if self.policy is None:
-            raise RuntimeError("No policy loaded. Call load_policy() first.")
+            raise RuntimeError('No policy loaded. Call load_policy() first.')
 
         # TODO: Implement actual inference logic
         # observation = self._preprocess(images, state, task_instruction)
@@ -159,10 +159,10 @@ class GrootInference(InferenceBase):
         # else:
         #     action = self.policy.forward(observation)
         # return action.tolist()
-        
-        print(f"TODO: Implement GR00T inference for {self.policy_type}")
+
+        print(f'TODO: Implement GR00T inference for {self.policy_type}')
         return [0.0] * len(state)  # Same dimension as input state
-    
+
     def predict_chunk(
         self,
         images: Dict[str, np.ndarray],
@@ -171,15 +171,15 @@ class GrootInference(InferenceBase):
     ) -> np.ndarray:
         # Perform chunk-based inference using GR00T policy
         if self.policy is None:
-            raise RuntimeError("No policy loaded. Call load_policy() first.")
+            raise RuntimeError('No policy loaded. Call load_policy() first.')
 
         # TODO: Implement actual chunk prediction logic
         # observation = self._preprocess(images, state, task_instruction)
         # GR00T models might support temporal action sequences
         # action_chunk = self.policy.predict_sequence(observation, horizon=10)
         # return action_chunk
-        
-        print(f"TODO: Implement GR00T chunk inference for {self.policy_type}")
+
+        print(f'TODO: Implement GR00T chunk inference for {self.policy_type}')
         return np.zeros((10, len(state)))  # 10 steps, same dimension as state
 
     async def predict_async(
@@ -197,7 +197,7 @@ class GrootInference(InferenceBase):
                 images, state, task_instruction
             )
         return result
-    
+
     async def predict_chunk_async(
         self,
         images: Dict[str, np.ndarray],
@@ -244,7 +244,7 @@ class GrootInference(InferenceBase):
         # TODO: Implement GR00T specific preprocessing
         # This might involve specific image resizing, normalization,
         # state vector formatting, etc.
-        
+
         # GR00T models might expect specific image sizes and formats
         processed_images = {}
         for key, image in images.items():
@@ -254,20 +254,20 @@ class GrootInference(InferenceBase):
                 processed_image = image  # Placeholder
             else:
                 processed_image = image
-            
+
             # Normalize to [0, 1] or [-1, 1] as required by model
             processed_image = processed_image.astype(np.float32) / 255.0
             processed_images[key] = processed_image
-        
+
         observation = {
             'images': processed_images,
             'robot_state': np.array(state, dtype=np.float32),
         }
-        
+
         if task_instruction is not None:
             # GR00T models might use natural language instructions
             observation['language_instruction'] = task_instruction
-            
+
         return observation
 
     @classmethod

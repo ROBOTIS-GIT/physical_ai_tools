@@ -16,10 +16,10 @@
 #
 # Author: Dongyun Kim
 
-import os
-import json
 import asyncio
 import concurrent.futures
+import json
+import os
 from typing import Dict, List, Optional, Tuple
 
 import numpy as np
@@ -43,13 +43,13 @@ class PhysicalIntelligenceInference(InferenceBase):
         # Check for Physical Intelligence specific config files
         config_files = ['config.json', 'model_config.json', 'pi0_config.json']
         config_path = None
-        
+
         for config_file in config_files:
             potential_path = os.path.join(policy_path, config_file)
             if os.path.exists(potential_path):
                 config_path = potential_path
                 break
-        
+
         if config_path is None:
             return False, f'No valid config file found in {policy_path}.'
 
@@ -76,9 +76,9 @@ class PhysicalIntelligenceInference(InferenceBase):
         # Load Physical Intelligence policy from validated path
         # TODO: Implement actual loading logic for Physical Intelligence models
         try:
-            print(f"Loading Physical Intelligence policy from {self.policy_path}")
-            print(f"Policy type: {self.policy_type}")
-            
+            print(f'Loading Physical Intelligence policy from {self.policy_path}')
+            print(f'Policy type: {self.policy_type}')
+
             # TODO: Replace with actual implementation
             # Example pseudocode:
             # if self.policy_type == 'pi0':
@@ -87,8 +87,8 @@ class PhysicalIntelligenceInference(InferenceBase):
             # elif self.policy_type == 'pi0_jax':
             #     from pi_zero_jax import PI0JAXModel
             #     self.policy = PI0JAXModel.load(self.policy_path)
-            
-            self.policy = {"type": self.policy_type, "path": self.policy_path}
+
+            self.policy = {'type': self.policy_type, 'path': self.policy_path}
             return True
         except Exception as e:
             print(f'Failed to load Physical Intelligence policy from {self.policy_path}: {e}')
@@ -106,10 +106,10 @@ class PhysicalIntelligenceInference(InferenceBase):
     def get_policy_config(self):
         # Get configuration of loaded Physical Intelligence policy
         if self.policy is None:
-            raise RuntimeError("No policy loaded. Call load_policy() first.")
-        
+            raise RuntimeError('No policy loaded. Call load_policy() first.')
+
         # TODO: Return actual config from loaded model
-        return {"policy_type": self.policy_type, "policy_path": self.policy_path}
+        return {'policy_type': self.policy_type, 'policy_path': self.policy_path}
 
     def predict(
         self,
@@ -119,16 +119,15 @@ class PhysicalIntelligenceInference(InferenceBase):
     ) -> List[float]:
         # Perform single-step inference using Physical Intelligence policy
         if self.policy is None:
-            raise RuntimeError("No policy loaded. Call load_policy() first.")
+            raise RuntimeError('No policy loaded. Call load_policy() first.')
 
         # TODO: Implement actual inference logic
         # observation = self._preprocess(images, state, task_instruction)
         # action = self.policy.predict(observation)
         # return action.tolist()
-        
-        print(f"TODO: Implement PI inference for {self.policy_type}")
+        print(f'TODO: Implement PI inference for {self.policy_type}')
         return [0.0] * 7  # Placeholder
-    
+
     def predict_chunk(
         self,
         images: Dict[str, np.ndarray],
@@ -137,14 +136,14 @@ class PhysicalIntelligenceInference(InferenceBase):
     ) -> np.ndarray:
         # Perform chunk-based inference using Physical Intelligence policy
         if self.policy is None:
-            raise RuntimeError("No policy loaded. Call load_policy() first.")
+            raise RuntimeError('No policy loaded. Call load_policy() first.')
 
         # TODO: Implement actual chunk prediction logic
         # observation = self._preprocess(images, state, task_instruction)
         # action_chunk = self.policy.predict_chunk(observation)
         # return action_chunk
-        
-        print(f"TODO: Implement PI chunk inference for {self.policy_type}")
+
+        print(f'TODO: Implement PI chunk inference for {self.policy_type}')
         return np.zeros((10, 7))  # Placeholder
 
     async def predict_async(
@@ -162,7 +161,7 @@ class PhysicalIntelligenceInference(InferenceBase):
                 images, state, task_instruction
             )
         return result
-    
+
     async def predict_chunk_async(
         self,
         images: Dict[str, np.ndarray],
@@ -208,15 +207,15 @@ class PhysicalIntelligenceInference(InferenceBase):
         # Preprocess inputs for Physical Intelligence policy
         # TODO: Implement Physical Intelligence specific preprocessing
         # This might involve different image normalization, JAX arrays, etc.
-        
+
         observation = {
             'images': images,
             'state': np.array(state),
         }
-        
+
         if task_instruction is not None:
             observation['task'] = task_instruction
-            
+
         return observation
 
     @classmethod

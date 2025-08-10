@@ -128,7 +128,7 @@ class PhysicalAIServer(Node):
                 'chunk_sizes': [],
             }
             self.raw_action_chunks = []
-            
+
         # Initialize action chunk processor
         self.action_chunk_processor = ActionChunkProcessor(logger=self.get_logger())
 
@@ -525,13 +525,13 @@ class PhysicalAIServer(Node):
             else:
                 if self.inference_pending:
                     self.get_logger().debug(
-                        f'Inference already pending, waiting...')
+                        'Inference already pending, waiting...')
                 elif not self.inference_worker or not self.inference_worker.is_alive():
                     self.get_logger().warning(
                         'Inference worker is not alive')
                 elif remaining_count > self.inference_threshold:
                     self.get_logger().debug(
-                        f'Sufficient actions available, waiting...')
+                        'Sufficient actions available, waiting...')
                 else:
                     self.get_logger().debug(
                         'Unknown reason for not starting inference')
@@ -559,7 +559,8 @@ class PhysicalAIServer(Node):
                         f'Inference completed in {inference_time*1000:.1f}ms')
 
                     if not action_chunk:
-                        self.get_logger().warning('Received empty action chunk!')
+                        self.get_logger().warning(
+                            'Received empty action chunk!')
                         return
 
                     # Calculate offset and apply smoothing
@@ -568,19 +569,19 @@ class PhysicalAIServer(Node):
                             0, self._used_action_count - worker_start_count)
 
                         # Apply offset and smoothing
-                        offset_action_chunk = self.action_chunk_processor.apply_offset_and_smoothing(
-                            action_chunk, actions_executed_during_inference, 
+                        new_action_chunk = self.action_chunk_processor.apply_offset_and_smoothing(
+                            action_chunk, actions_executed_during_inference,
                             self.action_history, self.last_executed_action)
 
                         self.remaining_actions.clear()
-                        self.remaining_actions.extend(offset_action_chunk)
+                        self.remaining_actions.extend(new_action_chunk)
                         self.inference_pending = False
 
                     # Process all visualization data if enabled
                     if self.enable_inference_visualization:
                         self.visualizer.process_complete_inference_visualization(
                             action_chunk, inference_time, worker_start_count,
-                            offset_action_chunk, self._used_action_count,
+                            new_action_chunk, self._used_action_count,
                             actions_executed_during_inference,
                             self.inference_history, self.raw_action_chunks, self.action_history,
                             self.chunk_visualization_data, self.get_logger())
@@ -592,8 +593,10 @@ class PhysicalAIServer(Node):
 
                 elif status == 'error':
                     self.inference_pending = False
-                    self.get_logger().error(f'Received error from inference worker: {result_data}')
-                    self._stop_inference_with_error(f'Inference process error: {result_data}')
+                    self.get_logger().error(
+                        f'Received error from inference worker: {result_data}')
+                    self._stop_inference_with_error(
+                        f'Inference process error: {result_data}')
                     return
 
                 elif status == 'pong':
@@ -601,10 +604,12 @@ class PhysicalAIServer(Node):
                     return
 
             except Exception as inner_e:
-                self.get_logger().error(f'Error processing single result: {str(inner_e)}')
+                self.get_logger().error(
+                    f'Error processing single result: {str(inner_e)}')
 
         except Exception as e:
-            self.get_logger().error(f'Error processing inference results: {str(e)}')
+            self.get_logger().error(
+                f'Error processing inference results: {str(e)}')
 
     def _action_timer_callback(self):
         if not self.on_inference:
@@ -788,7 +793,7 @@ class PhysicalAIServer(Node):
                 self.start_recording_time = time.perf_counter()
 
                 response.success = True
-                response.message = 'Inference initialization started (worker will be ready soon)'
+                response.message = 'Inference initialization started'
 
             else:
                 if not self.on_recording and not self.on_inference:

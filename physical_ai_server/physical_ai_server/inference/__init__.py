@@ -17,8 +17,8 @@
 # Author: Dongyun Kim
 
 from .inference_base import InferenceBase
-from .lerobot_inference import LeRobotInference
 from .inference_factory import InferenceFactory
+from .lerobot_inference import LeRobotInference
 # from .physical_intelligence_inference import PhysicalIntelligenceInference
 # from .groot_inference import GrootInference
 
@@ -26,7 +26,7 @@ from .inference_factory import InferenceFactory
 __all__ = [
     'InferenceBase',
     'InferenceFactory',
-    'LeRobotInference', 
+    'LeRobotInference',
     # 'PhysicalIntelligenceInference',
     # 'GrootInference',
 ]

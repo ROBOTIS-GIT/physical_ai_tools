@@ -16,11 +16,11 @@
 #
 # Author: Dongyun Kim
 
-import matplotlib.pyplot as plt
-import numpy as np
-import traceback
 import threading
 import time
+import traceback
+
+import matplotlib.pyplot as plt
 
 
 class InferenceResultVisualizer:
@@ -36,25 +36,25 @@ class InferenceResultVisualizer:
             # Set matplotlib to use Agg backend for thread safety
             import matplotlib
             matplotlib.use('Agg')
-            
+
             # Validate input data
             if not raw_action_chunks:
                 if self.logger:
                     self.logger.warning('No raw action chunks available for plotting')
                 return None
-                
+
             if not isinstance(raw_action_chunks, list) or len(raw_action_chunks) == 0:
                 if self.logger:
                     self.logger.warning('Raw action chunks is not a valid list or is empty')
                 return None
-                
+
             # Check if first chunk has required keys
             first_chunk = raw_action_chunks[0]
             if not isinstance(first_chunk, dict) or 'joint_count' not in first_chunk:
                 if self.logger:
                     self.logger.error('First chunk missing required "joint_count" key')
                 return None
-                
+
             joint_count = first_chunk['joint_count']
             if not isinstance(joint_count, int) or joint_count <= 0:
                 if self.logger:
@@ -75,13 +75,13 @@ class InferenceResultVisualizer:
 
             # Plot actual executed actions as continuous line
             if action_history:
-                action_numbers = [a['action_number'] for a in action_history]
-
                 for joint_idx in range(joint_count):
                     ax = axes[joint_idx]
 
                     # Plot actual executed actions - ensure data consistency
-                    if len(action_history) > 0 and len(action_history[0]['action_values']) > joint_idx:
+                    if (
+                            len(action_history) > 0 and
+                            len(action_history[0]['action_values']) > joint_idx):
                         actual_values = []
                         valid_action_numbers = []
 
@@ -90,9 +90,12 @@ class InferenceResultVisualizer:
                                 actual_values.append(action_data['action_values'][joint_idx])
                                 valid_action_numbers.append(action_data['action_number'])
 
-                        if len(valid_action_numbers) == len(actual_values) and len(actual_values) > 0:
-                            ax.plot(valid_action_numbers, actual_values, 'k-', linewidth=2, 
-                                   label='Actual Executed Actions', alpha=0.8)
+                        if (
+                                len(valid_action_numbers) == len(actual_values) and
+                                len(actual_values) > 0):
+                            ax.plot(
+                                valid_action_numbers, actual_values, 'k-', linewidth=2,
+                                label='Actual Executed Actions', alpha=0.8)
 
                     colors = [
                         'red', 'blue', 'green', 'orange', 'purple', 'brown', 'pink', 'gray',
@@ -110,10 +113,12 @@ class InferenceResultVisualizer:
                         used_chunk_size = len(raw_actions)
                         if chunk_idx < len(inference_history):
                             applied_offset = inference_history[chunk_idx]['calculated_offset']
-                            used_chunk_size = inference_history[chunk_idx].get('used_chunk_size', len(raw_actions))
+                            used_chunk_size = inference_history[chunk_idx].get(
+                                'used_chunk_size', len(raw_actions))
 
                         if applied_offset < len(raw_actions):
-                            used_actions = raw_actions[applied_offset:applied_offset + used_chunk_size]
+                            used_actions = raw_actions[
+                                applied_offset:applied_offset + used_chunk_size]
                             joint_values = [action[joint_idx] for action in used_actions]
 
                             # Create step numbers for the actually used actions
@@ -122,23 +127,29 @@ class InferenceResultVisualizer:
                                 range(actual_start_step, actual_start_step + len(joint_values))
                             )
 
+                            plot_label = (
+                                f'Inference {chunk_idx+1} '
+                                f'(used: {len(joint_values)}/{len(raw_actions)} actions)')
+
                             color = colors[chunk_idx % len(colors)]
-                            ax.plot(chunk_steps, joint_values, color=color, linestyle='--', 
-                                   linewidth=1.5, alpha=0.7, 
-                                   label=f'Inference {chunk_idx+1} (used: {len(joint_values)}/{len(raw_actions)} actions)')
+                            ax.plot(
+                                chunk_steps, joint_values, color=color, linestyle='--',
+                                linewidth=1.5, alpha=0.7,
+                                label=plot_label
+                            )
 
                             # Mark the start point (when inference was requested)
                             ax.scatter(
-                                [inference_start_step], [raw_actions[0][joint_idx]], 
+                                [inference_start_step], [raw_actions[0][joint_idx]],
                                 color=color, s=50, marker='o', alpha=0.8,
                                 label=f'Inf{chunk_idx+1} Request' if chunk_idx < 3 else None)
 
                             # Mark the actual usage start point (after offset)
                             if applied_offset > 0:
                                 ax.scatter(
-                                    [actual_start_step], [joint_values[0]], 
+                                    [actual_start_step], [joint_values[0]],
                                     color=color, s=50, marker='>', alpha=0.8,
-                                    label=f'Inf{chunk_idx+1} Used Start' if chunk_idx < 3 else None)
+                                    label=f'Inf{chunk_idx+1} Start' if chunk_idx < 3 else None)
 
                             # Mark completion point (when this chunk was processed)
                             if chunk_idx < len(inference_history):
@@ -147,7 +158,7 @@ class InferenceResultVisualizer:
                                 ax.scatter(
                                     [completion_action],
                                     [raw_actions[
-                                        min(applied_offset, len(raw_actions)-1)][joint_idx]], 
+                                        min(applied_offset, len(raw_actions)-1)][joint_idx]],
                                     color=color, s=50, marker='x', alpha=0.8,
                                     label=f'Inf{chunk_idx+1} Complete' if chunk_idx < 3 else None)
 
@@ -227,7 +238,8 @@ class InferenceResultVisualizer:
 
         # Get first action for joint count calculation
         first_action = action_chunk_list[0] if action_chunk_list else None
-        joint_count = len(first_action) if first_action and isinstance(first_action, (list, tuple)) else 0
+        joint_count = len(first_action) if (
+            first_action and isinstance(first_action, (list, tuple))) else 0
 
         raw_chunk_data = {
             'chunk_id': len(raw_action_chunks),
@@ -293,15 +305,17 @@ class InferenceResultVisualizer:
 
         # Ensure all required keys exist in chunk_visualization_data
         required_keys = [
-            'chunk_start_actions', 'chunk_inference_starts', 
+            'chunk_start_actions', 'chunk_inference_starts',
             'chunk_offsets', 'chunk_sizes', 'chunk_used_sizes'
         ]
-        
+
         for key in required_keys:
             if key not in chunk_visualization_data:
                 chunk_visualization_data[key] = []
                 if self.logger:
-                    self.logger.warning(f'Missing key "{key}" in chunk_visualization_data, initialized as empty list')
+                    self.logger.warning(
+                        f'Missing key "{key}" in chunk_visualization_data,'
+                        f' initialized as empty list')
 
         chunk_visualization_data['chunk_start_actions'].append(used_action_count + 1)
         chunk_visualization_data['chunk_inference_starts'].append(worker_start_count)
@@ -399,10 +413,10 @@ class InferenceResultVisualizer:
             if self.logger:
                 if results['success']:
                     self.logger.info(
-                        f'Background plot generation completed successfully in {elapsed_time:.2f}s')
+                        f'Background plot gen completed successfully in {elapsed_time:.2f}s')
                     if results['curves_plot']:
                         self.logger.info(
-                            f'Plot saved to: {results['curves_plot']}')
+                            f'Plot saved to: {results["curves_plot"]}')
                 else:
                     self.logger.error(
                         f'Background plot generation failed after {elapsed_time:.2f}s')

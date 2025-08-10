@@ -21,6 +21,7 @@ import multiprocessing
 import os
 import queue
 import time
+
 import numpy as np
 from physical_ai_server.inference import InferenceFactory
 
@@ -102,8 +103,9 @@ class InferenceWorker:
     @staticmethod
     def _worker_process_loop(input_queue, output_queue, policy_path, device):
         # Set up logging for the worker process
-        logging.basicConfig(level=logging.INFO, 
-                           format='[INFERENCE_WORKER] %(levelname)s: %(message)s')
+        logging.basicConfig(
+            level=logging.INFO,
+            format='[INFERENCE_WORKER] %(levelname)s: %(message)s')
         logger = logging.getLogger('inference_worker')
 
         try:
@@ -118,7 +120,8 @@ class InferenceWorker:
             logger.info('Inference manager created successfully')
 
             # Validate and load policy
-            valid_result, result_message = inference_manager.validate_policy(policy_path=policy_path)
+            valid_result, result_message = inference_manager.validate_policy(
+                policy_path=policy_path)
             if not valid_result:
                 error_msg = f'Policy validation failed: {result_message}'
                 logger.error(error_msg)
@@ -164,7 +167,12 @@ class InferenceWorker:
 
                         request_count += 1
                         logger.info(f'*** Received inference request #{request_count} ***')
-                        camera_data, follower_data, task_instruction, inference_start_action_count = data
+                        (
+                            camera_data,
+                            follower_data,
+                            task_instruction,
+                            inference_start_action_count
+                        ) = data
 
                         # Run inference
                         logger.info('Starting inference...')
@@ -182,7 +190,7 @@ class InferenceWorker:
 
                         # Validate the converted result
                         if not action_chunk or len(action_chunk) == 0:
-                            error_msg = f'Invalid action chunk after conversion: empty or None'
+                            error_msg = 'Invalid action chunk after conversion: empty or None'
                             logger.error(error_msg)
                             output_queue.put(('error', error_msg))
                             continue

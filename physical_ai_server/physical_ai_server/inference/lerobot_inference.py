@@ -17,7 +17,6 @@
 # Author: Dongyun Kim
 
 import os
-import json
 from typing import Dict, List, Optional, Tuple
 
 from lerobot.policies.pretrained import PreTrainedPolicy
@@ -85,18 +84,17 @@ class LeRobotInference(InferenceBase):
     def get_policy_config(self):
         # Get configuration of loaded LeRobot policy
         if self.policy is None:
-            raise RuntimeError("No policy loaded. Call load_policy() first.")
+            raise RuntimeError('No policy loaded. Call load_policy() first.')
         return self.policy.config
 
     def predict(
             self,
             images: Dict[str, np.ndarray],
             state: List[float],
-            task_instruction: Optional[str] = None
-        ) -> np.ndarray:
+            task_instruction: Optional[str] = None) -> np.ndarray:
         # Perform single-step inference using LeRobot policy
         if self.policy is None:
-            raise RuntimeError("No policy loaded. Call load_policy() first.")
+            raise RuntimeError('No policy loaded. Call load_policy() first.')
 
         observation = self._preprocess(images, state, task_instruction)
         with torch.inference_mode():
@@ -104,15 +102,14 @@ class LeRobotInference(InferenceBase):
             action = action.squeeze(0).to('cpu').numpy()
 
         return action
-    
+
     def predict_chunk(
             self,
             images: Dict[str, np.ndarray],
             state: List[float],
-            task_instruction: Optional[str] = None
-        ) -> np.ndarray:
+            task_instruction: Optional[str] = None) -> np.ndarray:
         if self.policy is None:
-            raise RuntimeError("No policy loaded. Call load_policy() first.")
+            raise RuntimeError('No policy loaded. Call load_policy() first.')
 
         observation = self._preprocess(images, state, task_instruction)
         with torch.inference_mode():
@@ -185,7 +182,7 @@ class LeRobotInference(InferenceBase):
         elif name == 'pi0fast':
             from lerobot.policies.pi0fast.modeling_pi0fast import PI0FASTPolicy
             return PI0FASTPolicy
-        elif name == "smolvla":
+        elif name == 'smolvla':
             from lerobot.policies.smolvla.modeling_smolvla import SmolVLAPolicy
             return SmolVLAPolicy
         else:
