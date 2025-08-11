@@ -583,21 +583,21 @@ class PhysicalAIServer(Node):
 
                         # Apply offset and smoothing
                         if self.asynchronous_inference:
-                            new_action_chunk = self.action_chunk_processor.apply_offset_and_smoothing(
+                            new_chunk = self.action_chunk_processor.apply_offset_and_smoothing(
                                 action_chunk, actions_executed_during_inference,
                                 self.action_history, self.last_executed_action)
                         else:
-                            new_action_chunk = action_chunk
+                            new_chunk = action_chunk
 
                         self.remaining_actions.clear()
-                        self.remaining_actions.extend(new_action_chunk)
+                        self.remaining_actions.extend(new_chunk)
                         self.inference_pending = False
 
                     # Process all visualization data if enabled
                     if self.enable_inference_visualization:
                         self.visualizer.process_complete_inference_visualization(
                             action_chunk, inference_time, worker_start_count,
-                            new_action_chunk, self._used_action_count,
+                            new_chunk, self._used_action_count,
                             actions_executed_during_inference,
                             self.inference_history, self.raw_action_chunks, self.action_history,
                             self.chunk_visualization_data, self.get_logger())
