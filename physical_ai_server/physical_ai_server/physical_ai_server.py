@@ -90,6 +90,7 @@ class PhysicalAIServer(Node):
         self._setup_timer_callbacks()
 
         # Multi-process inference state
+        self.asynchronous_inference = False
         self._used_action_count = 0
         self.remaining_actions = []
         self.inference_worker: Optional[InferenceWorker] = None
@@ -106,7 +107,10 @@ class PhysicalAIServer(Node):
         # Track inference timing for proper action offset
         self.inference_start_action_count = 0
         self.last_executed_action = None
-        self.inference_threshold = 20
+        if self.asynchronous_inference:
+            self.inference_threshold = 20
+        else:
+            self.inference_threshold = 0
         self.inference_smoothing = False
 
         # Observation tracking for debugging stale data issues
