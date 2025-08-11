@@ -148,7 +148,6 @@ class LeRobotDatasetWrapper(LeRobotDataset):
             self.episode_buffer = self.create_episode_buffer()
 
         # Automatically add frame_index and timestamp to episode buffer
-        self.episode_buffer['task'].append(task)
         frame_index = self.episode_buffer['size']
         timestamp = frame.pop('timestamp') if 'timestamp' in frame else frame_index / self.fps
         self.episode_buffer['frame_index'].append(frame_index)
@@ -161,6 +160,7 @@ class LeRobotDatasetWrapper(LeRobotDataset):
             else:
                 self.episode_buffer[key].append(frame[key])
 
+        self.episode_buffer['task'].append(task)
         self.episode_buffer['size'] += 1
 
     def save_episode_without_video_encoding(self):
