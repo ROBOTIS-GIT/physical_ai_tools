@@ -111,14 +111,13 @@ class PhysicalAIServer(Node):
             self.inference_threshold = 20
         else:
             self.inference_threshold = 0
-        self.inference_smoothing = False
 
         # Observation tracking for debugging stale data issues
         self.last_observation_data = None
         self.observation_change_history = []
 
         # Initialize inference result visualizer
-        self.enable_inference_visualization = True
+        self.enable_inference_visualization = False
 
         if self.enable_inference_visualization:
             self.visualizer = InferenceResultVisualizer(logger=self.get_logger())
