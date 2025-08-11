@@ -468,6 +468,9 @@ class PhysicalAIServer(Node):
             self._process_inference_results()
 
             remaining_count = len(self.remaining_actions)
+            self.get_logger().info(
+                f'Remaining actions count: {remaining_count}, '
+                f'Inference pending: {self.inference_pending}')
 
             should_start_inference = (
                 not self.inference_pending and
@@ -476,6 +479,13 @@ class PhysicalAIServer(Node):
                 self.inference_worker_ready and
                 remaining_count <= self.inference_threshold
             )
+
+            self.get_logger().info(
+                f'Inference worker ready: {self.inference_worker_ready}, '
+                f'Pending: {self.inference_pending}, '
+                f'Remaining count: {remaining_count}, '
+                f'self.inference_threshold: {self.inference_threshold}, '
+                f'Should start inference: {should_start_inference}')
 
             if should_start_inference:
                 with self.inference_lock:
