@@ -406,6 +406,18 @@ const InferencePanel = () => {
         />
       </div>
 
+      <div className={clsx('flex', 'items-center', 'mb-2.5')}>
+        <span className={classLabel}>FPS</span>
+        <input
+          className={classTextInput}
+          type="number"
+          step="5"
+          value={info.fps || ''}
+          onChange={(e) => handleChange('fps', Number(e.target.value))}
+          disabled={!isEditable}
+        />
+      </div>
+
       <div className="w-full h-1 my-2 border-t border-gray-300"></div>
 
       <div className="text-xs text-gray-400 mt-1 ml-2">
@@ -599,18 +611,6 @@ const InferencePanel = () => {
             </>
           )}
         </div>
-      </div>
-
-      <div className={clsx('flex', 'items-center', 'mb-2.5')}>
-        <span className={classLabel}>FPS</span>
-        <input
-          className={classTextInput}
-          type="number"
-          step="5"
-          value={info.fps || ''}
-          onChange={(e) => handleChange('fps', Number(e.target.value))}
-          disabled={!isEditable || !info.recordInferenceMode}
-        />
       </div>
 
       <div className={clsx('flex', 'items-start', 'mb-2.5')}>

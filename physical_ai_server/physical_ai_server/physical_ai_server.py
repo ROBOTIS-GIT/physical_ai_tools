@@ -280,16 +280,13 @@ class PhysicalAIServer(Node):
         self.timer_manager = TimerManager(node=self)
 
         if self.operation_mode == 'inference':
-            # Set up two timers for inference mode
-            # 1. Action timer - publishes actions at high frequency (33ms)
             self.timer_manager.set_timer(
                 timer_name='action',
                 timer_frequency=10,
                 callback_function=self.timer_callback_dict['action']
             )
 
-            # 2. Inference timer - runs at high frequency to process results quickly
-            inference_frequency = 50.0  # 50Hz = 20ms interval for responsive result processing
+            inference_frequency = 100.0
             self.timer_manager.set_timer(
                 timer_name='inference',
                 timer_frequency=inference_frequency,
