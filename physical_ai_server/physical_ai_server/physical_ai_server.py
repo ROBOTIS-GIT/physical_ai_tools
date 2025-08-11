@@ -106,6 +106,7 @@ class PhysicalAIServer(Node):
 
         # Track inference timing for proper action offset
         self.inference_start_action_count = 0
+        self.action_history = deque(maxlen=1000)
         self.last_executed_action = None
         if self.asynchronous_inference:
             self.inference_threshold = 20
@@ -121,7 +122,6 @@ class PhysicalAIServer(Node):
 
         if self.enable_inference_visualization:
             self.visualizer = InferenceResultVisualizer(logger=self.get_logger())
-            self.action_history = deque(maxlen=1000)
             self.inference_history = []
             self.chunk_visualization_data = {
                 'chunk_start_actions': [],
@@ -582,9 +582,12 @@ class PhysicalAIServer(Node):
                             0, self._used_action_count - worker_start_count)
 
                         # Apply offset and smoothing
-                        new_action_chunk = self.action_chunk_processor.apply_offset_and_smoothing(
-                            action_chunk, actions_executed_during_inference,
-                            self.action_history, self.last_executed_action)
+                        if self.asynchronous_inference:
+                            new_action_chunk = self.action_chunk_processor.apply_offset_and_smoothing(
+                                action_chunk, actions_executed_during_inference,
+                                self.action_history, self.last_executed_action)
+                        else:
+                            new_action_chunk = action_chunk
 
                         self.remaining_actions.clear()
                         self.remaining_actions.extend(new_action_chunk)
