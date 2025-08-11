@@ -2,7 +2,7 @@
 Changelog for package physical_ai_tools
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-0.6.4 (2025-08-11)
+0.6.6 (2025-08-12)
 ------------------
 * Refactored the inference architecture to support various policies using Inference Factory and Inference Base.
 * Added asynchronous inference execution, enabling seamless operation through multi-process support.
