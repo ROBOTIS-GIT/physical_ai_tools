@@ -25,6 +25,7 @@ import rosConnectionManager from '../utils/rosConnectionManager';
 export function useRosServiceCaller() {
   const taskInfo = useSelector((state) => state.tasks.taskInfo);
   const trainingInfo = useSelector((state) => state.training.trainingInfo);
+  const editDatasetInfo = useSelector((state) => state.editDataset);
   const page = useSelector((state) => state.ui.currentPage);
   const rosbridgeUrl = useSelector((state) => state.ros.rosbridgeUrl);
 
