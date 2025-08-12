@@ -16,7 +16,7 @@
 
 import React, { useEffect, useRef } from 'react';
 import clsx from 'clsx';
-import { MdHome, MdVideocam, MdMemory } from 'react-icons/md';
+import { MdHome, MdVideocam, MdMemory, MdDataset } from 'react-icons/md';
 import { GoGraph } from 'react-icons/go';
 import { Toaster } from 'react-hot-toast';
 import toast from 'react-hot-toast';
@@ -25,6 +25,7 @@ import HomePage from './pages/HomePage';
 import RecordPage from './pages/RecordPage';
 import InferencePage from './pages/InferencePage';
 import TrainingPage from './pages/TrainingPage';
+import EditDatasetPage from './pages/EditDatasetPage';
 import { useRosTopicSubscription } from './hooks/useRosTopicSubscription';
 import rosConnectionManager from './utils/rosConnectionManager';
 import { useDispatch, useSelector } from 'react-redux';
@@ -167,6 +168,15 @@ function App() {
     dispatch(moveToPage(PageType.TRAINING));
   };
 
+  const handleEditDatasetPageNavigation = () => {
+    if (process.env.REACT_APP_DEBUG === 'true') {
+      console.log('handleEditDatasetPageNavigation');
+      isFirstLoad.current = false;
+      dispatch(moveToPage(PageType.EDIT_DATASET));
+      return;
+    }
+  };
+
   // Force cleanup of all image streams when page changes
   useEffect(() => {
     return () => {
@@ -296,6 +306,32 @@ function App() {
             <GoGraph size={28} className="mb-1.5" />
             <span className="mt-1 text-sm">Training</span>
           </button>
+          <button
+            className={clsx(
+              'flex',
+              'flex-col',
+              'items-center',
+              'rounded-2xl',
+              'border-none',
+              'py-5',
+              'px-4',
+              'text-base',
+              'text-gray-800',
+              'cursor-pointer',
+              'transition-colors',
+              'duration-150',
+              'outline-none',
+              'w-24',
+              {
+                'hover:bg-gray-200 active:bg-gray-400': page !== PageType.EDIT_DATASET,
+                'bg-gray-300': page === PageType.EDIT_DATASET,
+              }
+            )}
+            onClick={handleEditDatasetPageNavigation}
+          >
+            <MdDataset size={28} className="mb-1.5" />
+            <span className="mt-1 text-sm">Edit Dataset</span>
+          </button>
         </div>
       </aside>
       <main className="flex-1 flex flex-col h-screen">
@@ -307,6 +343,8 @@ function App() {
           <InferencePage isActive={page === PageType.INFERENCE} />
         ) : page === PageType.TRAINING ? (
           <TrainingPage isActive={page === PageType.TRAINING} />
+        ) : page === PageType.EDIT_DATASET ? (
+          <EditDatasetPage isActive={page === PageType.EDIT_DATASET} />
         ) : (
           <HomePage />
         )}
