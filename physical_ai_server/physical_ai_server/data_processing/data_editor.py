@@ -303,44 +303,101 @@ class DataEditor:
                 merged_info[k] = v
         FileIO.write_json(dst, merged_info)
 
-    # ───────────────────────── Missing helper methods (restored) ───────────────────────── #
-    @staticmethod
-    def _shift_positive_ints_recursive(obj: Any, offset: int) -> Any:
-        if isinstance(obj, int):
-            return obj + offset
-        if isinstance(obj, list):
-            return [DataEditor._shift_positive_ints_recursive(x, offset) for x in obj]
-        if isinstance(obj, dict):
-            return {k: DataEditor._shift_positive_ints_recursive(v, offset) for k, v in obj.items()}
-        return obj
+    # ───────────────────────── Added missing helpers for videos & path shifting ───────────────────────── #
+    def _copy_all_videos_for_merge(
+        self,
+        dataset_paths: List[Path],
+        video_dst_chunk_root: Path,
+        chunk_name: str,
+        actual_episode_counts_per_dataset: List[int],
+    ) -> None:
+        """Copies and renames episode mp4 files from each dataset into the merged destination.
 
-    @staticmethod
-    def _parse_episode_index_from_stem(name: str) -> Optional[int]:
-        match = DataEditor.DELETE_STEM_RE.match(name)
-        return int(match.group(1)) if match else None
+        Supports layouts:
+          videos/chunk-000/<camera>/*.mp4   (multi-camera)
+          videos/chunk-000/*.mp4            (single-camera)
+        """
+        cumulative_offset = 0
+        for ds_idx, ds_path in enumerate(dataset_paths):
+            src_chunk_dir = ds_path / "videos" / chunk_name
+            if not src_chunk_dir.exists():
+                self._log(f"Video chunk dir missing: {src_chunk_dir}", logging.DEBUG)
+                cumulative_offset += actual_episode_counts_per_dataset[ds_idx]
+                continue
 
-    @staticmethod
-    def _add_offset_value(val: Any, off: int):
-        if isinstance(val, int):
-            return val + off
-        if isinstance(val, list):
-            return [DataEditor._add_offset_value(x, off) for x in val]
-        return val
+            # Detect camera subdirectories
+            cam_dirs = [d for d in src_chunk_dir.iterdir() if d.is_dir()]
+            if cam_dirs:
+                # Multi-camera: replicate structure
+                for cam_dir in cam_dirs:
+                    rel_cam_name = cam_dir.name
+                    dst_cam_dir = video_dst_chunk_root / rel_cam_name
+                    FileIO.safe_mkdir(dst_cam_dir)
+                    video_files = self._natural_sort_paths(cam_dir.glob("episode_*.mp4"))
+                    for vf in video_files:
+                        try:
+                            ep_idx = self._extract_idx_from_name(vf.name)
+                            new_idx = ep_idx + cumulative_offset
+                            dst_file = dst_cam_dir / f"episode_{new_idx:0{self.EPISODE_INDEX_WIDTH}d}.mp4"
+                            if not dst_file.exists():
+                                shutil.copy2(vf, dst_file)
+                            else:
+                                self._log(f"Skipped existing video {dst_file}", logging.DEBUG)
+                        except Exception as e:
+                            self._log(f"Failed copying video {vf}: {e}", logging.WARNING)
+            else:
+                # Single-camera flat layout
+                FileIO.safe_mkdir(video_dst_chunk_root)
+                video_files = self._natural_sort_paths(src_chunk_dir.glob("episode_*.mp4"))
+                for vf in video_files:
+                    try:
+                        ep_idx = self._extract_idx_from_name(vf.name)
+                        new_idx = ep_idx + cumulative_offset
+                        dst_file = video_dst_chunk_root / f"episode_{new_idx:0{self.EPISODE_INDEX_WIDTH}d}.mp4"
+                        if not dst_file.exists():
+                            shutil.copy2(vf, dst_file)
+                        else:
+                            self._log(f"Skipped existing video {dst_file}", logging.DEBUG)
+                    except Exception as e:
+                        self._log(f"Failed copying video {vf}: {e}", logging.WARNING)
 
-    @staticmethod
-    def _shift_delete_patch_indices_recursive(obj: Any, off: int):
-        if isinstance(obj, dict):
-            return {
-                k: (
-                    DataEditor._add_offset_value(v, off)
-                    if k in DataEditor.DELETE_PATCH_KEYS
-                    else DataEditor._shift_delete_patch_indices_recursive(v, off)
-                )
-                for k, v in obj.items()
-            }
-        if isinstance(obj, list):
-            return [DataEditor._shift_delete_patch_indices_recursive(x, off) for x in obj]
-        return obj
+            cumulative_offset += actual_episode_counts_per_dataset[ds_idx]
+
+    def _shift_episode_paths(
+        self,
+        paths: List[Path],
+        removed_idx: int,
+        pad: int,
+        after_move: Optional[Callable[[Path, Path, int], None]] = None,
+    ) -> None:
+        """Renames episode files/dirs whose episode index is greater than removed_idx by shifting -1.
+
+        after_move: callback(old_path, new_path, new_index) executed after a successful rename.
+        """
+        # Sort to ensure deterministic behavior (ascending so target holes are freed first)
+        sorted_paths = self._natural_sort_paths(paths)
+        for p in sorted_paths:
+            name = p.name
+            try:
+                ep_idx = self._extract_idx_from_name(name)
+            except Exception:
+                continue
+            if ep_idx <= removed_idx:
+                continue
+            new_idx = ep_idx - 1
+            # Preserve extension (if any)
+            if p.is_dir():
+                new_name = f"episode_{new_idx:0{pad}d}"
+            else:
+                suffix = ''.join(p.suffixes)  # handles .mp4/.parquet
+                new_name = f"episode_{new_idx:0{pad}d}{suffix}"
+            new_path = p.with_name(new_name)
+            try:
+                p.rename(new_path)
+                if after_move:
+                    after_move(p, new_path, new_idx)
+            except Exception as e:
+                self._log(f"Failed renaming {p} -> {new_path}: {e}", logging.WARNING)
 
     # ──────────────────────────────── DELETE Operation (Public) ───────────────────────── #
     def delete_episode(
