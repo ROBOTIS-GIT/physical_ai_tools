@@ -1,0 +1,14 @@
+########################################
+# Constants
+########################################
+# command
+uint8 MERGE = 0
+uint8 DELETE = 1
+
+uint8 mode
+string[] dataset_list
+string output_path
+uint8 delete_episode_num
+---
+bool success
+string message
