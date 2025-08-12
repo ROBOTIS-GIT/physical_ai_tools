@@ -20,6 +20,7 @@ import ROSLIB from 'roslib';
 import PageType from '../constants/pageType';
 import TaskCommand from '../constants/taskCommand';
 import TrainingCommand from '../constants/trainingCommand';
+import EditDatasetCommand from '../constants/commands';
 import rosConnectionManager from '../utils/rosConnectionManager';
 
 export function useRosServiceCaller() {
@@ -377,6 +378,49 @@ export function useRosServiceCaller() {
     [callService, trainingInfo]
   );
 
+  const sendEditDatasetCommand = useCallback(
+    async (command) => {
+      try {
+        console.log('Calling service /training/send_edit_dataset_command with request:', {
+          command: command,
+          edit_dataset_info: editDatasetInfo,
+        });
+
+        let command_enum;
+        switch (command) {
+          case 'merge':
+            command_enum = EditDatasetCommand.MERGE;
+            break;
+          case 'delete':
+            command_enum = EditDatasetCommand.DELETE;
+            break;
+          default:
+            throw new Error(`Unknown command: ${command}`);
+        }
+
+        const result = await callService(
+          '/dataset/edit',
+          'physical_ai_interfaces/srv/SetDatasetEditInfo',
+          {
+            mode: command_enum,
+            dataset_list: editDatasetInfo.datasetList,
+            delete_dataset_path: editDatasetInfo.deleteDatasetPath,
+            output_path: editDatasetInfo.outputPath,
+            delete_episode_num: editDatasetInfo.deleteEpisodeNum,
+            upload_huggingface: editDatasetInfo.uploadHuggingface,
+          }
+        );
+
+        console.log('sendEditDatasetCommand service response:', result);
+        return result;
+      } catch (error) {
+        console.error('Failed to send edit dataset command:', error);
+        throw new Error(`${error.message || error}`);
+      }
+    },
+    [callService, editDatasetInfo]
+  );
+
   return {
     callService,
     sendRecordCommand,
@@ -390,5 +434,6 @@ export function useRosServiceCaller() {
     getPolicyList,
     getModelWeightList,
     sendTrainingCommand,
+    sendEditDatasetCommand,
   };
 }
