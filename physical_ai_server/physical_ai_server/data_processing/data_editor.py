@@ -254,7 +254,8 @@ class DataEditor:
                         [x + offset for x in idx_val] if isinstance(idx_val, list) else idx_val + offset
                     )
                 if "stats" in r_new:
-                    r_new["stats"] = self._shift_positive_ints_recursive(r_new["stats"], offset)
+                    # Use class reference to avoid instance attribute lookup issues
+                    r_new["stats"] = DataEditor._shift_positive_ints_recursive(r_new["stats"], offset)
             except Exception as e:
                 self._log(f"Failed patching episode_stats record: {e}", logging.DEBUG)
         FileIO.write_jsonl(base_data + new_data, dst)
@@ -303,6 +304,45 @@ class DataEditor:
                 merged_info[k] = v
         FileIO.write_json(dst, merged_info)
 
+    # ───────────────────────── Helper methods (restored) ───────────────────────── #
+    @staticmethod
+    def _shift_positive_ints_recursive(obj: Any, offset: int) -> Any:
+        if isinstance(obj, int):
+            return obj + offset
+        if isinstance(obj, list):
+            return [DataEditor._shift_positive_ints_recursive(x, offset) for x in obj]
+        if isinstance(obj, dict):
+            return {k: DataEditor._shift_positive_ints_recursive(v, offset) for k, v in obj.items()}
+        return obj
+
+    @staticmethod
+    def _parse_episode_index_from_stem(name: str) -> Optional[int]:
+        match = DataEditor.DELETE_STEM_RE.match(name)
+        return int(match.group(1)) if match else None
+
+    @staticmethod
+    def _add_offset_value(val: Any, off: int):
+        if isinstance(val, int):
+            return val + off
+        if isinstance(val, list):
+            return [DataEditor._add_offset_value(x, off) for x in val]
+        return val
+
+    @staticmethod
+    def _shift_delete_patch_indices_recursive(obj: Any, off: int):
+        if isinstance(obj, dict):
+            return {
+                k: (
+                    DataEditor._add_offset_value(v, off)
+                    if k in DataEditor.DELETE_PATCH_KEYS
+                    else DataEditor._shift_delete_patch_indices_recursive(v, off)
+                )
+                for k, v in obj.items()
+            }
+        if isinstance(obj, list):
+            return [DataEditor._shift_delete_patch_indices_recursive(x, off) for x in obj]
+        return obj
+
     # ───────────────────────── Added missing helpers for videos & path shifting ───────────────────────── #
     def _copy_all_videos_for_merge(
         self,
@@ -312,6 +352,8 @@ class DataEditor:
         actual_episode_counts_per_dataset: List[int],
     ) -> None:
         """Copies and renames episode mp4 files from each dataset into the merged destination.
+
+        Only copies videos whose episode index is < corresponding parquet episode count to keep consistency.
 
         Supports layouts:
           videos/chunk-000/<camera>/*.mp4   (multi-camera)
@@ -324,42 +366,35 @@ class DataEditor:
                 self._log(f"Video chunk dir missing: {src_chunk_dir}", logging.DEBUG)
                 cumulative_offset += actual_episode_counts_per_dataset[ds_idx]
                 continue
+            max_valid_ep = actual_episode_counts_per_dataset[ds_idx]
 
-            # Detect camera subdirectories
             cam_dirs = [d for d in src_chunk_dir.iterdir() if d.is_dir()]
-            if cam_dirs:
-                # Multi-camera: replicate structure
-                for cam_dir in cam_dirs:
-                    rel_cam_name = cam_dir.name
-                    dst_cam_dir = video_dst_chunk_root / rel_cam_name
-                    FileIO.safe_mkdir(dst_cam_dir)
-                    video_files = self._natural_sort_paths(cam_dir.glob("episode_*.mp4"))
-                    for vf in video_files:
-                        try:
-                            ep_idx = self._extract_idx_from_name(vf.name)
-                            new_idx = ep_idx + cumulative_offset
-                            dst_file = dst_cam_dir / f"episode_{new_idx:0{self.EPISODE_INDEX_WIDTH}d}.mp4"
-                            if not dst_file.exists():
-                                shutil.copy2(vf, dst_file)
-                            else:
-                                self._log(f"Skipped existing video {dst_file}", logging.DEBUG)
-                        except Exception as e:
-                            self._log(f"Failed copying video {vf}: {e}", logging.WARNING)
-            else:
-                # Single-camera flat layout
-                FileIO.safe_mkdir(video_dst_chunk_root)
-                video_files = self._natural_sort_paths(src_chunk_dir.glob("episode_*.mp4"))
+            def _copy_set(video_files: List[Path], dst_dir: Path):
+                FileIO.safe_mkdir(dst_dir)
                 for vf in video_files:
                     try:
                         ep_idx = self._extract_idx_from_name(vf.name)
+                        if ep_idx >= max_valid_ep:
+                            continue  # skip videos beyond parquet count
                         new_idx = ep_idx + cumulative_offset
-                        dst_file = video_dst_chunk_root / f"episode_{new_idx:0{self.EPISODE_INDEX_WIDTH}d}.mp4"
+                        dst_file = dst_dir / f"episode_{new_idx:0{self.EPISODE_INDEX_WIDTH}d}.mp4"
                         if not dst_file.exists():
                             shutil.copy2(vf, dst_file)
                         else:
-                            self._log(f"Skipped existing video {dst_file}", logging.DEBUG)
+                            # Silently skip duplicates (debug only)
+                            if self.verbose:
+                                self._log(f"Skipped existing video {dst_file}", logging.DEBUG)
                     except Exception as e:
                         self._log(f"Failed copying video {vf}: {e}", logging.WARNING)
+
+            if cam_dirs:
+                for cam_dir in cam_dirs:
+                    dst_cam_dir = video_dst_chunk_root / cam_dir.name
+                    video_files = self._natural_sort_paths(cam_dir.glob("episode_*.mp4"))
+                    _copy_set(video_files, dst_cam_dir)
+            else:
+                video_files = self._natural_sort_paths(src_chunk_dir.glob("episode_*.mp4"))
+                _copy_set(video_files, video_dst_chunk_root)
 
             cumulative_offset += actual_episode_counts_per_dataset[ds_idx]
 
@@ -625,7 +660,7 @@ def main():
     # Updated main to use new API & logging
     editor = DataEditor(verbose=True)
     base_path = '/home/elicer/.cache/huggingface/lerobot/Dongkkka'
-    output_dir = Path(base_path) / 'merged_dataset_PickTunaCan'
+    output_dir = Path(base_path) / 'merged_dataset_PickTunaCanTest'
     dataset_paths = [
         Path(base_path) / 'ffw_sg2_rev1_PickTunaCan',
         Path(base_path) / 'ffw_sg2_rev1_PickTunaCan3',
