@@ -2,6 +2,16 @@
 Changelog for package physical_ai_server
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
+0.6.5 (2025-08-11)
+------------------
+* Added file browsing service with target file checking for policy path selection
+* Contributors: Kiwoong Park
+
+0.6.4 (2025-08-07)
+------------------
+* Added publishing of current loss during training
+* Contributors: Seongwoo Kim
+
 0.6.3 (2025-07-25)
 ------------------
 * Fixed a bug to allow setting the output folder path to a specified location.

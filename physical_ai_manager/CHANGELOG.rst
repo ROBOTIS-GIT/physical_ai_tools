@@ -2,6 +2,16 @@
 Changelog for package physical_ai_manager
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
+0.6.5 (2025-08-11)
+------------------
+* Added file browser component for policy selection in the inference page
+* Contributors: Kiwoong Park
+
+0.6.4 (2025-08-07)
+------------------
+* Added training loss display
+* Contributors: Kiwoong Park
+
 0.6.3 (2025-07-25)
 ------------------
 * None

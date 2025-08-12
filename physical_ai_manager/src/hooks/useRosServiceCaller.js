@@ -376,6 +376,38 @@ export function useRosServiceCaller() {
     [callService, trainingInfo]
   );
 
+  const browseFile = useCallback(
+    async (action, currentPath = '', targetName = '', targetFiles = null) => {
+      try {
+        const requestData = {
+          action: action,
+          current_path: currentPath,
+          target_name: targetName,
+        };
+
+        // Only add target_files if we actually have files to search for
+        if (targetFiles && targetFiles.length > 0) {
+          requestData.target_files = targetFiles;
+        } else {
+          requestData.target_files = [];
+        }
+
+        const result = await callService(
+          '/browse_file',
+          'physical_ai_interfaces/srv/BrowseFile',
+          requestData
+        );
+
+        console.log('browseFile service response:', result);
+        return result;
+      } catch (error) {
+        console.error('Failed to browse file:', error);
+        throw new Error(`${error.message || error}`);
+      }
+    },
+    [callService]
+  );
+
   return {
     callService,
     sendRecordCommand,
@@ -389,5 +421,6 @@ export function useRosServiceCaller() {
     getPolicyList,
     getModelWeightList,
     sendTrainingCommand,
+    browseFile,
   };
 }

@@ -60,6 +60,7 @@ class LerobotTrainer(Trainer):
         super().__init__()
         self.logger = get_logger('LerobotTrainer')
         self.current_step = 0
+        self.current_loss = float('nan')
 
     # TODO: Uncomment when training metrics is implemented
     # def send_training_metrics(self):
@@ -298,7 +299,11 @@ class LerobotTrainer(Trainer):
         train_metrics.grad_norm = grad_norm.item()
         train_metrics.lr = optimizer.param_groups[0]['lr']
         train_metrics.update_s = time.perf_counter() - start_time
+        self.current_loss = loss.item()
         return train_metrics, output_dict
 
     def get_current_step(self):
         return self.current_step
+
+    def get_current_loss(self):
+        return self.current_loss

@@ -36,6 +36,9 @@ const initialState = {
   currentStep: 0,
   updateCounter: 0,
 
+  // Training loss (to be implemented)
+  currentLoss: undefined,
+
   trainingInfo: {
     datasetRepoId: undefined,
     policyType: undefined,
@@ -150,6 +153,14 @@ const trainingSlice = createSlice({
     setUpdateCounter: (state, action) => {
       state.updateCounter = action.payload;
     },
+    setCurrentLoss: (state, action) => {
+      state.currentLoss = action.payload;
+    },
+    resetTrainingProgress: (state) => {
+      state.currentStep = 0;
+      state.currentLoss = null;
+      state.updateCounter = 0;
+    },
   },
 });
 
@@ -181,6 +192,8 @@ export const {
   setCurrentStep,
   setLastUpdate,
   setUpdateCounter,
+  setCurrentLoss,
+  resetTrainingProgress,
 } = trainingSlice.actions;
 
 export default trainingSlice.reducer;
