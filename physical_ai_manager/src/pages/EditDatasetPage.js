@@ -17,6 +17,10 @@
 import React, { useEffect } from 'react';
 import toast, { useToasterStore } from 'react-hot-toast';
 
+const DatasetListInput = () => {
+  return <div>DatasetListInput</div>;
+};
+
 export default function EditDatasetPage() {
   // Toast limit implementation using useToasterStore
   const { toasts } = useToasterStore();
@@ -35,6 +39,7 @@ export default function EditDatasetPage() {
         <div className="w-full h-full flex flex-col items-start justify-start p-10 gap-8">
           <div className="w-full h-full flex flex-col items-start justify-start">
             <h1 className="text-2xl font-bold">Edit Dataset</h1>
+            <DatasetListInput />
           </div>
         </div>
       </div>
