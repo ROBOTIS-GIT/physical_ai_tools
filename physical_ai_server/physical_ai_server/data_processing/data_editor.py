@@ -661,13 +661,27 @@ def main():
     editor = DataEditor(verbose=True)
     base_path = '/home/elicer/.cache/huggingface/lerobot/Dongkkka'
     output_dir = Path(base_path) / 'merged_dataset_PickTunaCanTest'
-    dataset_paths = [
+    delete_episode_path = output_dir = Path(base_path) / 'merged_dataset_PickTunaCanTest'
+    delete_episode = 32
+    merge_dataset_paths = [
         Path(base_path) / 'ffw_sg2_rev1_PickTunaCan',
         Path(base_path) / 'ffw_sg2_rev1_PickTunaCan3',
     ]
-    result = editor.merge_datasets(dataset_paths, output_dir, chunk_name=DataEditor.DEFAULT_CHUNK_NAME)
-    if result:
-        editor._log(f"Result: processed={result.total_parquet_processed}, episodes={result.total_episodes}")
+    # result = editor.merge_datasets(merge_dataset_paths, output_dir, chunk_name=DataEditor.DEFAULT_CHUNK_NAME)
+    # if result:
+    #     editor._log(f"Result: processed={result.total_parquet_processed}, episodes={result.total_episodes}")
+
+    delete_episode_result = editor.delete_episode(
+        delete_episode_path, delete_episode, chunk_name=DataEditor.DEFAULT_CHUNK_NAME
+    )
+
+    if delete_episode_result.success:
+        editor._log(
+            f"Deleted episode {delete_episode_result.deleted_episode} from {delete_episode_result.dataset_dir}. "
+            f"Frames removed: {delete_episode_result.frames_removed}, Videos removed: {delete_episode_result.videos_removed}"
+        )
+    else:
+        editor._log(f"Failed to delete episode {delete_episode} from {delete_episode_path}", logging.ERROR)
 
 
 if __name__ == "__main__":
