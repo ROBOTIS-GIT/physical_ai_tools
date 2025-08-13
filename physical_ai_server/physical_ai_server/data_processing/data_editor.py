@@ -303,6 +303,7 @@ class DataEditor:
                 existing_task_names[r_new['task']] = next_idx
                 next_idx += 1
         FileIO.write_jsonl(sorted(base_tasks, key=lambda x: x['task_index']), dst)
+        self.total_task_num = len(base_tasks)
 
     def _merge_info(self, src: Path, dst: Path):
         if not src.exists():
@@ -315,6 +316,7 @@ class DataEditor:
         for k, v in d_new.items():
             if (k not in self.MERGE_NUM_KEYS and k != 'splits') or (k == 'splits' and not d_base):
                 merged_info[k] = v
+        merged_info['total_tasks'] = self.total_task_num
         FileIO.write_json(dst, merged_info)
 
     @staticmethod
