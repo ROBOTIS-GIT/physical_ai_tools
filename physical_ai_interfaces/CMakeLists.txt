@@ -9,6 +9,7 @@ rosidl_generate_interfaces(${PROJECT_NAME}
   "msg/TaskStatus.msg"
   "msg/TrainingInfo.msg"
   "msg/TrainingStatus.msg"
+  "srv/EditDataset.srv"
   "srv/GetDatasetList.srv"
   "srv/GetHFUser.srv"
   "srv/GetImageTopicList.srv"
@@ -19,7 +20,6 @@ rosidl_generate_interfaces(${PROJECT_NAME}
   "srv/GetUserList.srv"
   "srv/SendCommand.srv"
   "srv/SendTrainingCommand.srv"
-  "srv/SetDatasetEditInfo.srv"
   "srv/SetHFUser.srv"
   "srv/SetRobotType.srv"
 )
