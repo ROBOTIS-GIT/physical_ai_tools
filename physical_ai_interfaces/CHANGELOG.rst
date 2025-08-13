@@ -2,6 +2,10 @@
 Changelog for package physical_ai_interfaces
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
+0.6.6 (2025-08-13)
+------------------
+* None
+
 0.6.5 (2025-08-11)
 ------------------
 * Added file browse-related message type

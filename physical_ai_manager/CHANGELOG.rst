@@ -2,6 +2,10 @@
 Changelog for package physical_ai_manager
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
+0.6.6 (2025-08-13)
+------------------
+* None
+
 0.6.5 (2025-08-11)
 ------------------
 * Added file browser component for policy selection in the inference page
