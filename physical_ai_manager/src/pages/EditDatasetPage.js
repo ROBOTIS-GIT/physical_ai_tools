@@ -18,7 +18,11 @@ import React, { useEffect, useState } from 'react';
 import clsx from 'clsx';
 import toast, { useToasterStore } from 'react-hot-toast';
 import { useSelector, useDispatch } from 'react-redux';
-import { setMergeDatasetList, setDatasetToDelete } from '../features/editDataset/editDatasetSlice';
+import {
+  setMergeDatasetList,
+  setDatasetToDelete,
+  setDeleteEpisodeNums,
+} from '../features/editDataset/editDatasetSlice';
 import { useRosServiceCaller } from '../hooks/useRosServiceCaller';
 
 const DatasetListInput = ({ datasets = [''], onChange, disabled, className }) => {
@@ -167,14 +171,44 @@ export default function EditDatasetPage() {
   const { toasts } = useToasterStore();
   const TOAST_LIMIT = 3;
 
+  // Helper function to parse episode numbers from string
+  const parseEpisodeNumbers = (input) => {
+    if (!input || typeof input !== 'string') return [];
+
+    const numbers = new Set();
+    const parts = input.split(',').map((part) => part.trim());
+
+    for (const part of parts) {
+      if (part.includes('-')) {
+        // Handle range (e.g., "10-15")
+        const [start, end] = part.split('-').map((num) => parseInt(num.trim()));
+        if (!isNaN(start) && !isNaN(end) && start <= end) {
+          for (let i = start; i <= end; i++) {
+            numbers.add(i);
+          }
+        }
+      } else {
+        // Handle single number
+        const num = parseInt(part.trim());
+        if (!isNaN(num) && num >= 0) {
+          numbers.add(num);
+        }
+      }
+    }
+
+    return Array.from(numbers).sort((a, b) => a - b);
+  };
+
   const dispatch = useDispatch();
 
   const mergeDatasetList = useSelector((state) => state.editDataset.mergeDatasetList);
   const datasetToDelete = useSelector((state) => state.editDataset.datasetToDelete);
+  const deleteEpisodeNums = useSelector((state) => state.editDataset.deleteEpisodeNums);
 
   const { sendEditDatasetCommand } = useRosServiceCaller();
 
   const [isEditable] = useState(true);
+  const [deleteEpisodeNumsLocal, setDeleteEpisodeNumsLocal] = useState([]);
 
   useEffect(() => {
     toasts
@@ -187,8 +221,14 @@ export default function EditDatasetPage() {
     dispatch(setMergeDatasetList(newDatasets));
   };
 
-  const handleDatasetToDeleteChange = (newDatasets) => {
-    dispatch(setDatasetToDelete(newDatasets));
+  const handleDatasetToDeleteChange = (newDatasetToDelete) => {
+    dispatch(setDatasetToDelete(newDatasetToDelete));
+  };
+
+  const handleDeleteEpisodeNumsChange = (newDeleteEpisodeNums) => {
+    setDeleteEpisodeNumsLocal(newDeleteEpisodeNums);
+    const parsedEpisodeNums = parseEpisodeNumbers(newDeleteEpisodeNums);
+    dispatch(setDeleteEpisodeNums(parsedEpisodeNums));
   };
 
   const handleDeleteDataset = async () => {
@@ -197,7 +237,9 @@ export default function EditDatasetPage() {
       console.log('sendEditDatasetCommand result:', result);
 
       if (result && result.success) {
-        toast.success('Dataset deleted successfully!');
+        const episodeText =
+          deleteEpisodeNums.length > 0 ? ` (Episodes: ${deleteEpisodeNums.join(', ')})` : '';
+        toast.success(`Dataset deleted successfully!${episodeText}`);
       } else {
         toast.error('Failed to delete dataset');
       }
@@ -262,6 +304,24 @@ export default function EditDatasetPage() {
     }
   );
 
+  const classTextInput = clsx(
+    'text-sm',
+    'w-full',
+    'h-8',
+    'p-2',
+    'border',
+    'border-gray-300',
+    'rounded-md',
+    'focus:outline-none',
+    'focus:ring-2',
+    'focus:ring-blue-500',
+    'focus:border-transparent',
+    {
+      'bg-gray-100 cursor-not-allowed': !isEditable,
+      'bg-white': isEditable,
+    }
+  );
+
   return (
     <div className="w-full h-full flex flex-col items-start justify-start pt-10">
       <div className="w-full h-full flex flex-col items-start justify-start pt-10">
@@ -279,7 +339,7 @@ export default function EditDatasetPage() {
               </button>
             </div>
           </div>
-          <div className="w-full flex flex-col items-center justify-start bg-gray-100 p-10">
+          <div className="w-full flex flex-col items-center justify-start bg-gray-100 p-10 gap-8">
             <h1 className="text-2xl font-bold">Delete Dataset</h1>
             <textarea
               className={classDatasetToDeleteTextarea}
@@ -288,6 +348,25 @@ export default function EditDatasetPage() {
               disabled={false}
               placeholder="Enter Dataset to Delete"
             />
+            <div className="flex flex-col gap-2 w-full">
+              <input
+                className={classTextInput}
+                type="text"
+                placeholder="Enter episode numbers to delete (e.g., 1,2,3,10-15,20)"
+                value={deleteEpisodeNumsLocal || ''}
+                onChange={(e) => handleDeleteEpisodeNumsChange(e.target.value)}
+                disabled={!isEditable}
+              />
+              {deleteEpisodeNums && (
+                <div className="text-sm text-gray-600">
+                  Preview:{' '}
+                  {parseEpisodeNumbers(deleteEpisodeNumsLocal).length > 0
+                    ? parseEpisodeNumbers(deleteEpisodeNumsLocal).join(', ')
+                    : 'No valid episodes'}{' '}
+                  ({parseEpisodeNumbers(deleteEpisodeNumsLocal).length} episodes)
+                </div>
+              )}
+            </div>
             <button className={classDeleteButton} onClick={handleDeleteDataset}>
               Delete
             </button>

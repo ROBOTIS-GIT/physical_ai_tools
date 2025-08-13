@@ -430,6 +430,8 @@ export function useRosServiceCaller() {
             throw new Error(`Unknown command: ${command}`);
         }
 
+        console.log('editDatasetInfo:', editDatasetInfo);
+
         const result = await callService(
           '/dataset/edit',
           'physical_ai_interfaces/srv/EditDataset',
@@ -438,7 +440,7 @@ export function useRosServiceCaller() {
             merge_dataset_list: editDatasetInfo.mergeDatasetList,
             delete_dataset_path: editDatasetInfo.datasetToDelete,
             output_path: editDatasetInfo.outputPath,
-            delete_episode_num: editDatasetInfo.deleteEpisodeNum,
+            delete_episode_nums: editDatasetInfo.deleteEpisodeNums,
             upload_huggingface: editDatasetInfo.uploadHuggingface,
           }
         );
