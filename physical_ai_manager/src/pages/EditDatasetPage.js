@@ -14,7 +14,7 @@
 //
 // Author: Kiwoong Park
 
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useMemo } from 'react';
 import clsx from 'clsx';
 import toast, { useToasterStore } from 'react-hot-toast';
 import { useSelector, useDispatch } from 'react-redux';
@@ -167,6 +167,31 @@ const DatasetListInput = ({ datasets = [''], onChange, disabled, className }) =>
   );
 };
 
+const EpisodeNumberInput = ({ value, onChange, disabled = false, className, parseFunction }) => {
+  const parsedNumbers = useMemo(() => {
+    return parseFunction(value);
+  }, [value, parseFunction]);
+
+  return (
+    <div className="flex flex-col gap-2 w-full">
+      <input
+        className={className}
+        type="text"
+        placeholder="Enter episode numbers to delete (e.g., 1,2,3,10-15,20)"
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        disabled={disabled}
+      />
+      {value && (
+        <div className="text-sm text-gray-600">
+          Preview: {parsedNumbers.length > 0 ? parsedNumbers.join(', ') : 'No valid episodes'} (
+          {parsedNumbers.length} episodes)
+        </div>
+      )}
+    </div>
+  );
+};
+
 export default function EditDatasetPage() {
   // Toast limit implementation using useToasterStore
   const { toasts } = useToasterStore();
@@ -210,7 +235,7 @@ export default function EditDatasetPage() {
   const { sendEditDatasetCommand } = useRosServiceCaller();
 
   const [isEditable] = useState(true);
-  const [deleteEpisodeNumsLocal, setDeleteEpisodeNumsLocal] = useState([]);
+  const [deleteEpisodeNumsInput, setDeleteEpisodeNumsInput] = useState('');
 
   useEffect(() => {
     toasts
@@ -227,10 +252,10 @@ export default function EditDatasetPage() {
     dispatch(setDatasetToDelete(newDatasetToDelete));
   };
 
-  const handleDeleteEpisodeNumsChange = (newDeleteEpisodeNums) => {
-    setDeleteEpisodeNumsLocal(newDeleteEpisodeNums);
-    const parsedEpisodeNums = parseEpisodeNumbers(newDeleteEpisodeNums);
-    dispatch(setDeleteEpisodeNums(parsedEpisodeNums));
+  const handleDeleteEpisodeNumsChange = (inputValue) => {
+    setDeleteEpisodeNumsInput(inputValue);
+    // parsedEpisodeNums will automatically update via useMemo
+    dispatch(setDeleteEpisodeNums(parseEpisodeNumbers(inputValue)));
   };
 
   const handleDeleteDataset = async () => {
@@ -354,25 +379,13 @@ export default function EditDatasetPage() {
             disabled={false}
             placeholder="Enter Dataset to Delete"
           />
-          <div className="flex flex-col gap-2 w-full">
-            <input
-              className={classTextInput}
-              type="text"
-              placeholder="Enter episode numbers to delete (e.g., 1,2,3,10-15,20)"
-              value={deleteEpisodeNumsLocal || ''}
-              onChange={(e) => handleDeleteEpisodeNumsChange(e.target.value)}
-              disabled={!isEditable}
-            />
-            {deleteEpisodeNums && (
-              <div className="text-sm text-gray-600">
-                Preview:{' '}
-                {parseEpisodeNumbers(deleteEpisodeNumsLocal).length > 0
-                  ? parseEpisodeNumbers(deleteEpisodeNumsLocal).join(', ')
-                  : 'No episodes'}{' '}
-                ({parseEpisodeNumbers(deleteEpisodeNumsLocal).length} episodes)
-              </div>
-            )}
-          </div>
+          <EpisodeNumberInput
+            value={deleteEpisodeNumsInput}
+            onChange={handleDeleteEpisodeNumsChange}
+            disabled={!isEditable}
+            className={classTextInput}
+            parseFunction={parseEpisodeNumbers}
+          />
           <button className={classDeleteButton} onClick={handleDeleteDataset}>
             Delete
           </button>
