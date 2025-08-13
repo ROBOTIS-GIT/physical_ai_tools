@@ -325,62 +325,57 @@ export default function EditDatasetPage() {
   );
 
   return (
-    <div className="w-full h-full flex flex-col items-start justify-start pt-10">
-      <div className="w-full h-full flex flex-col items-start justify-start pt-10">
-        <div className="w-full h-full flex flex-col items-start justify-start p-10 gap-8">
-          <div className="w-full flex flex-col items-start justify-start">
-            <h1 className="text-2xl font-bold">Edit Dataset</h1>
-            <div className="w-full flex flex-col items-center justify-start bg-gray-100 p-10 gap-8">
-              <span className="text-2xl font-bold">Merge Dataset</span>
-              <DatasetListInput
-                datasets={mergeDatasetList}
-                onChange={handleMergeDatasetListChange}
-              />
-              <input
-                className={classTextInput}
-                type="text"
-                placeholder="Enter output path"
-                value={mergeOutputPath || ''}
-                onChange={(e) => dispatch(setMergeOutputPath(e.target.value))}
-                disabled={!isEditable}
-              />
-              <button className={classMergeButton} onClick={handleMergeDataset}>
-                Merge
-              </button>
-            </div>
-          </div>
+    <div className="w-full h-full flex flex-col items-start justify-start">
+      <div className="w-full h-full flex flex-col items-start justify-start p-10 gap-8">
+        <div className="w-full flex flex-col items-center justify-start">
+          <h1 className="text-3xl font-bold m-5">Edit Dataset</h1>
           <div className="w-full flex flex-col items-center justify-start bg-gray-100 p-10 gap-8">
-            <h1 className="text-2xl font-bold">Delete Dataset</h1>
-            <textarea
-              className={classDatasetToDeleteTextarea}
-              value={datasetToDelete}
-              onChange={(e) => handleDatasetToDeleteChange(e.target.value)}
-              disabled={false}
-              placeholder="Enter Dataset to Delete"
+            <span className="text-2xl font-bold">Merge Dataset</span>
+            <DatasetListInput datasets={mergeDatasetList} onChange={handleMergeDatasetListChange} />
+            <input
+              className={classTextInput}
+              type="text"
+              placeholder="Enter output path"
+              value={mergeOutputPath || ''}
+              onChange={(e) => dispatch(setMergeOutputPath(e.target.value))}
+              disabled={!isEditable}
             />
-            <div className="flex flex-col gap-2 w-full">
-              <input
-                className={classTextInput}
-                type="text"
-                placeholder="Enter episode numbers to delete (e.g., 1,2,3,10-15,20)"
-                value={deleteEpisodeNumsLocal || ''}
-                onChange={(e) => handleDeleteEpisodeNumsChange(e.target.value)}
-                disabled={!isEditable}
-              />
-              {deleteEpisodeNums && (
-                <div className="text-sm text-gray-600">
-                  Preview:{' '}
-                  {parseEpisodeNumbers(deleteEpisodeNumsLocal).length > 0
-                    ? parseEpisodeNumbers(deleteEpisodeNumsLocal).join(', ')
-                    : 'No episodes'}{' '}
-                  ({parseEpisodeNumbers(deleteEpisodeNumsLocal).length} episodes)
-                </div>
-              )}
-            </div>
-            <button className={classDeleteButton} onClick={handleDeleteDataset}>
-              Delete
+            <button className={classMergeButton} onClick={handleMergeDataset}>
+              Merge
             </button>
           </div>
+        </div>
+        <div className="w-full flex flex-col items-center justify-start bg-gray-100 p-10 gap-8">
+          <h1 className="text-2xl font-bold">Delete Dataset</h1>
+          <textarea
+            className={classDatasetToDeleteTextarea}
+            value={datasetToDelete}
+            onChange={(e) => handleDatasetToDeleteChange(e.target.value)}
+            disabled={false}
+            placeholder="Enter Dataset to Delete"
+          />
+          <div className="flex flex-col gap-2 w-full">
+            <input
+              className={classTextInput}
+              type="text"
+              placeholder="Enter episode numbers to delete (e.g., 1,2,3,10-15,20)"
+              value={deleteEpisodeNumsLocal || ''}
+              onChange={(e) => handleDeleteEpisodeNumsChange(e.target.value)}
+              disabled={!isEditable}
+            />
+            {deleteEpisodeNums && (
+              <div className="text-sm text-gray-600">
+                Preview:{' '}
+                {parseEpisodeNumbers(deleteEpisodeNumsLocal).length > 0
+                  ? parseEpisodeNumbers(deleteEpisodeNumsLocal).join(', ')
+                  : 'No episodes'}{' '}
+                ({parseEpisodeNumbers(deleteEpisodeNumsLocal).length} episodes)
+              </div>
+            )}
+          </div>
+          <button className={classDeleteButton} onClick={handleDeleteDataset}>
+            Delete
+          </button>
         </div>
       </div>
     </div>
