@@ -433,12 +433,12 @@ class DataEditor:
                 self._log(f'Failed renaming {p} -> {new_path}: {e}', logging.WARNING)
 
     def delete_episode(
-        self, dataset_dir: Path, episode_index_to_delete: int, chunk_name: str = DEFAULT_CHUNK_NAME, verbose: bool | None = None
+        self, dataset_dir: str, episode_index_to_delete: int, chunk_name: str = DEFAULT_CHUNK_NAME, verbose: bool | None = None
     ) -> DeleteResult:
 
         if verbose is not None:
             self.verbose = verbose
-        dataset_dir = dataset_dir.resolve()
+        dataset_dir = Path(dataset_dir).resolve()
         if not dataset_dir.is_dir():
             self._log(f'Dataset directory not found: {dataset_dir}', logging.ERROR)
             return DeleteResult(dataset_dir, episode_index_to_delete, 0, 0, False)
