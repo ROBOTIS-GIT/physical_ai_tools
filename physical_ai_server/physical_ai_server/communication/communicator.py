@@ -379,9 +379,9 @@ class Communicator:
                 response.message = f'Unknown edit mode: {request.mode}'
                 return response
 
-        response.success = True
-        response.message = f'Successfully processed edit mode: {request.mode}'
-        return response
+            response.success = True
+            response.message = f'Successfully processed edit mode: {request.mode}'
+            return response
 
         except Exception as e:
             self.node.get_logger().error(f'Error in dataset_edit_callback: {str(e)}')
