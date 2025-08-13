@@ -39,7 +39,7 @@ def _default_logger(verbose: bool) -> logging.Logger:
         formatter = logging.Formatter('[%(levelname)s] %(message)s')
         handler.setFormatter(formatter)
         logger.addHandler(handler)
-    logger.setLevel(logging.DEBUG if verbose else logging.INFO)
+    logger.setLevel(logging.INFO if verbose else logging.INFO)
     return logger
 
 
@@ -55,7 +55,7 @@ class DataEditor:
         self.logger = logger or _default_logger(verbose)
 
     def _log(self, msg: str, level: int = logging.INFO):
-        if level == logging.DEBUG and not self.verbose:
+        if level == logging.INFO and not self.verbose:
             return
         self.logger.log(level, msg)
 
@@ -108,12 +108,12 @@ class DataEditor:
 
         self._log(
             '--- Processing Parquet Files and Determining Episode Counts ---',
-            logging.DEBUG
+            logging.INFO
         )
 
         for i, dataset_path in enumerate(dataset_paths):
             dataset_path = Path(dataset_path)
-            self._log(f'Processing dataset {i + 1}/{len(dataset_paths)}: {dataset_path}', logging.DEBUG)
+            self._log(f'Processing dataset {i + 1}/{len(dataset_paths)}: {dataset_path}', logging.INFO)
             current_dataset_frames = 0
             info_path = dataset_path / 'meta' / 'info.json'
             info_data = FileIO.read_json(info_path, default={}) or {}
@@ -128,9 +128,9 @@ class DataEditor:
                 cumulative_frame_offset_parquets,
             )
             self._log(
-                f'  Processed {processed_eps} Parquet '
+                f'Processed {processed_eps} Parquet '
                 f'episode files from {dataset_path}.',
-                logging.DEBUG
+                logging.INFO
             )
 
             total_parquets_processed_overall += processed_eps
@@ -138,12 +138,12 @@ class DataEditor:
             cumulative_episode_offset_parquets += processed_eps
             cumulative_frame_offset_parquets += current_dataset_frames
 
-        self._log('--- Processing Metadata Files ---', logging.DEBUG)
+        self._log('--- Processing Metadata Files ---', logging.INFO)
         self._merge_all_meta_files(
             dataset_paths, meta_dst_dir, actual_episode_counts_per_dataset
         )
 
-        self._log('--- Processing Video Files ---', logging.DEBUG)
+        self._log('--- Processing Video Files ---', logging.INFO)
         self._copy_all_videos_for_merge(
             dataset_paths, video_dst_chunk_root, chunk_name, actual_episode_counts_per_dataset
         )
@@ -179,13 +179,13 @@ class DataEditor:
         if not src_chunk_dir.exists():
             if verbose:
                 self._log(
-                    f'Source chunk directory not found: {src_chunk_dir}', logging.DEBUG)
+                    f'Source chunk directory not found: {src_chunk_dir}', logging.INFO)
             return 0
         src_files = self._natural_sort_paths(src_chunk_dir.glob('episode_*.parquet'))
         if not src_files:
             if verbose:
                 self._log(
-                    f'No Parquet files found in {src_chunk_dir}', logging.DEBUG)
+                    f'No Parquet files found in {src_chunk_dir}', logging.INFO)
             return 0
 
         count_processed = 0
@@ -228,7 +228,7 @@ class DataEditor:
             src_meta_dir = dataset_path / 'meta'
             eps_in_this_ds_for_meta = actual_episode_counts[i]
             if not src_meta_dir.exists():
-                self._log(f'Meta dir not found: {src_meta_dir}', logging.DEBUG)
+                self._log(f'Meta dir not found: {src_meta_dir}', logging.INFO)
                 current_meta_episode_offset += eps_in_this_ds_for_meta
                 continue
 
@@ -275,7 +275,7 @@ class DataEditor:
                     # Use class reference to avoid instance attribute lookup issues
                     r_new['stats'] = DataEditor._shift_positive_ints_recursive(r_new['stats'], offset)
             except Exception as e:
-                self._log(f'Failed patching episode_stats record: {e}', logging.DEBUG)
+                self._log(f'Failed patching episode_stats record: {e}', logging.INFO)
         FileIO.write_jsonl(base_data + new_data, dst)
 
     def _merge_episodes(self, src: Path, dst: Path, offset: int):
@@ -292,7 +292,7 @@ class DataEditor:
                         [x + offset for x in idx_val] if isinstance(idx_val, list) else idx_val + offset
                     )
             except Exception as e:
-                self._log(f'Failed patching episode record: {e}', logging.DEBUG)
+                self._log(f'Failed patching episode record: {e}', logging.INFO)
         FileIO.write_jsonl(base_data + new_data, dst)
 
     def _merge_tasks(self, src: Path, dst: Path):
@@ -371,7 +371,7 @@ class DataEditor:
         for ds_idx, ds_path in enumerate(dataset_paths):
             src_chunk_dir = ds_path / 'videos' / chunk_name
             if not src_chunk_dir.exists():
-                self._log(f'Video chunk dir missing: {src_chunk_dir}', logging.DEBUG)
+                self._log(f'Video chunk dir missing: {src_chunk_dir}', logging.INFO)
                 cumulative_offset += actual_episode_counts_per_dataset[ds_idx]
                 continue
             max_valid_ep = actual_episode_counts_per_dataset[ds_idx]
@@ -389,9 +389,9 @@ class DataEditor:
                         if not dst_file.exists():
                             shutil.copy2(vf, dst_file)
                         else:
-                            # Silently skip duplicates (debug only)
+                            # Silently skip duplicates (INFO only)
                             if self.verbose:
-                                self._log(f'Skipped existing video {dst_file}', logging.DEBUG)
+                                self._log(f'Skipped existing video {dst_file}', logging.INFO)
                     except Exception as e:
                         self._log(f'Failed copying video {vf}: {e}', logging.WARNING)
 
