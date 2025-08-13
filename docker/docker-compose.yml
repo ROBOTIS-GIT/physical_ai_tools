@@ -20,8 +20,8 @@ services:
       memlock: 8428281856
     network_mode: host
     environment:
-     - DISPLAY=${DISPLAY}
-     - QT_X11_NO_MITSHM=1
+      - DISPLAY=${DISPLAY}
+      - QT_X11_NO_MITSHM=1
     volumes:
       - /dev:/dev
       - ./workspace:/workspace
@@ -29,6 +29,8 @@ services:
       - /tmp/.docker.xauth:/tmp/.docker.xauth:rw
       - ../:/root/ros2_ws/src/physical_ai_tools/
       - ./huggingface:/root/.cache/huggingface
+      - /etc/timezone:/etc/timezone:ro
+      - /etc/localtime:/etc/localtime:ro
     privileged: true
     command: bash
     runtime: nvidia

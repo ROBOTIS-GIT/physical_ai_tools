@@ -2,6 +2,15 @@
 Changelog for package physical_ai_interfaces
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
+0.6.6 (2025-08-13)
+------------------
+* None
+
+0.6.5 (2025-08-11)
+------------------
+* Added file browse-related message type
+* Contributors: Kiwoong Park
+
 0.6.4 (2025-08-07)
 ------------------
 * Added training-related message type

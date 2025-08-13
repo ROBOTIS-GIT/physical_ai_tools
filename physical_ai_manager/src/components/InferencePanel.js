@@ -18,10 +18,12 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { useSelector, useDispatch } from 'react-redux';
 import clsx from 'clsx';
 import toast from 'react-hot-toast';
-import { MdVisibility, MdVisibilityOff } from 'react-icons/md';
+import { MdVisibility, MdVisibilityOff, MdFolderOpen } from 'react-icons/md';
 import { useRosServiceCaller } from '../hooks/useRosServiceCaller';
 import TagInput from './TagInput';
+import FileBrowserModal from './FileBrowserModal';
 import TaskPhase from '../constants/taskPhases';
+import { DEFAULT_PATHS, TARGET_FILES } from '../constants/paths';
 import { setTaskInfo } from '../features/tasks/taskSlice';
 
 const InferencePanel = () => {
@@ -49,6 +51,9 @@ const InferencePanel = () => {
   // User ID selection states
   const [showUserIdDropdown, setShowUserIdDropdown] = useState(false);
 
+  // File browser modal states
+  const [showPolicyPathModal, setShowPolicyPathModal] = useState(false);
+
   const { registerHFUser, getRegisteredHFUser } = useRosServiceCaller();
 
   const handleChange = useCallback(
@@ -57,6 +62,15 @@ const InferencePanel = () => {
       dispatch(setTaskInfo({ ...info, [field]: value }));
     },
     [isEditable, info, dispatch]
+  );
+
+  const handlePolicyPathSelect = useCallback(
+    (item) => {
+      if (!isEditable) return;
+      handleChange('policyPath', item.full_path);
+      setShowPolicyPathModal(false);
+    },
+    [isEditable, handleChange]
   );
 
   const handleTokenSubmit = async () => {
@@ -126,16 +140,6 @@ const InferencePanel = () => {
       setShowUserIdDropdown(false);
     }
   }, [info.pushToHub]);
-
-  useEffect(() => {
-    handleLoadUserId();
-  }, [handleLoadUserId]);
-
-  useEffect(() => {
-    if (userIdList.length > 0 && !info.userId) {
-      handleUserIdSelect(userIdList[0]);
-    }
-  }, [userIdList, info.userId, handleUserIdSelect]);
 
   // track task status update
   useEffect(() => {
@@ -397,13 +401,41 @@ const InferencePanel = () => {
         >
           Policy Path
         </span>
-        <textarea
-          className={classPolicyPathTextarea}
-          value={info.policyPath || ''}
-          onChange={(e) => handleChange('policyPath', e.target.value)}
-          disabled={!isEditable}
-          placeholder="Enter Policy Path"
-        />
+        <div className={clsx('flex', 'flex-col', 'flex-1', 'gap-2')}>
+          <button
+            onClick={() => setShowPolicyPathModal(true)}
+            disabled={!isEditable}
+            className={clsx(
+              'flex',
+              'items-center',
+              'gap-2',
+              'px-3',
+              'py-2',
+              'text-sm',
+              'bg-blue-50',
+              'text-blue-700',
+              'border',
+              'border-blue-200',
+              'rounded-lg',
+              'hover:bg-blue-100',
+              'transition-colors',
+              'disabled:bg-gray-100',
+              'disabled:text-gray-400',
+              'disabled:cursor-not-allowed',
+              'w-fit'
+            )}
+          >
+            <MdFolderOpen size={16} />
+            Browse Policy Path
+          </button>
+          <textarea
+            className={classPolicyPathTextarea}
+            value={info.policyPath || ''}
+            onChange={(e) => handleChange('policyPath', e.target.value)}
+            disabled={!isEditable}
+            placeholder="Enter Policy Path"
+          />
+        </div>
       </div>
 
       <div className="w-full h-1 my-2 border-t border-gray-300"></div>
@@ -776,6 +808,20 @@ const InferencePanel = () => {
           </div>
         </div>
       )}
+
+      <FileBrowserModal
+        isOpen={showPolicyPathModal}
+        onClose={() => setShowPolicyPathModal(false)}
+        onFileSelect={handlePolicyPathSelect}
+        title="Select Policy Path"
+        selectButtonText="Select"
+        allowDirectorySelect={true}
+        targetFileName={TARGET_FILES.POLICY_MODEL}
+        targetFileLabel="Policy file found! 🎯"
+        initialPath={DEFAULT_PATHS.POLICY_MODEL_PATH}
+        defaultPath={DEFAULT_PATHS.POLICY_MODEL_PATH}
+        homePath=""
+      />
     </div>
   );
 };

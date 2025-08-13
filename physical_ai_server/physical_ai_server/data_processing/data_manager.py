@@ -99,7 +99,9 @@ class DataManager:
                         frame,
                         self.current_instruction)
                 else:
-                    self._lerobot_dataset.add_frame(frame)
+                    self._lerobot_dataset.add_frame(
+                        frame,
+                        self.current_instruction)
 
         elif self._status == 'save':
             if self._on_saving:
