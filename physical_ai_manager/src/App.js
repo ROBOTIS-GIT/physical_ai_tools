@@ -175,6 +175,31 @@ function App() {
       dispatch(moveToPage(PageType.EDIT_DATASET));
       return;
     }
+
+    // Allow navigation if task is in progress
+    if (taskStatus && taskStatus.robotType !== '') {
+      console.log(
+        'robot type:',
+        taskStatus.robotType,
+        '=> allowing navigation to Edit Dataset page'
+      );
+      isFirstLoad.current = false;
+      dispatch(moveToPage(PageType.EDIT_DATASET));
+      return;
+    }
+
+    // Block navigation if robot type is not set
+    if (!robotType || robotType.trim() === '') {
+      toast.error('Please select a robot type first in the Home page', {
+        duration: 4000,
+      });
+      console.log('Robot type not set, blocking navigation to Edit Dataset page');
+      return;
+    }
+
+    // Allow navigation if conditions are met
+    console.log('Robot type set, allowing navigation to Edit Dataset page');
+    dispatch(moveToPage(PageType.EDIT_DATASET));
   };
 
   // Force cleanup of all image streams when page changes
