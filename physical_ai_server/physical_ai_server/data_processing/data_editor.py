@@ -79,6 +79,7 @@ class DataEditor:
         verbose: bool | None = None
     ) -> MergeResult | None:
 
+        output_dir = Path(output_dir).resolve()
         if verbose is not None:
             self.verbose = verbose
         if not dataset_paths:
