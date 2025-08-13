@@ -79,7 +79,7 @@ class DataEditor:
         verbose: bool | None = None
     ) -> MergeResult | None:
 
-        output_dir = Path(output_dir).resolve()
+        output_dir = Path(output_dir)
         if verbose is not None:
             self.verbose = verbose
         if not dataset_paths:
@@ -89,13 +89,17 @@ class DataEditor:
 
         self._log(
             f'Starting merge. Output directory: {output_dir}')
-
+        print("CHECK")
         data_dst_dir = output_dir / 'data' / chunk_name
+        print("CHECK2")
         meta_dst_dir = output_dir / 'meta'
+        print("CHECK3")
         video_dst_chunk_root = output_dir / 'videos' / chunk_name
+        print("CHECK4")
 
         for p in (data_dst_dir, meta_dst_dir, video_dst_chunk_root.parent, video_dst_chunk_root):
             FileIO.safe_mkdir(p)
+        print("CHECK5")
 
         cumulative_episode_offset_parquets = 0
         cumulative_frame_offset_parquets = 0
@@ -108,7 +112,7 @@ class DataEditor:
         )
 
         for i, dataset_path in enumerate(dataset_paths):
-            dataset_path = Path(dataset_path).resolve()
+            dataset_path = Path(dataset_path)
             self._log(f'Processing dataset {i + 1}/{len(dataset_paths)}: {dataset_path}', logging.DEBUG)
             current_dataset_frames = 0
             info_path = dataset_path / 'meta' / 'info.json'
