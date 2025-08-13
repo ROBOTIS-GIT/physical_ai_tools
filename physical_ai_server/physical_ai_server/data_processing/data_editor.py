@@ -73,7 +73,7 @@ class DataEditor:
 
     def merge_datasets(
         self,
-        dataset_paths: List[Path],
+        dataset_paths: List,
         output_dir: Path,
         chunk_name: str = DEFAULT_CHUNK_NAME,
         verbose: bool | None = None
@@ -107,6 +107,7 @@ class DataEditor:
         )
 
         for i, dataset_path in enumerate(dataset_paths):
+            dataset_path = Path(dataset_path).resolve()
             self._log(f'Processing dataset {i + 1}/{len(dataset_paths)}: {dataset_path}', logging.DEBUG)
             current_dataset_frames = 0
             info_path = dataset_path / 'meta' / 'info.json'
