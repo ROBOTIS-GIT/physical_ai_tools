@@ -360,7 +360,7 @@ class Communicator:
 
     def dataset_edit_callback(self, request, response):
         try:
-            if request.mode == EditDataset.MERGE:
+            if request.mode == EditDataset.Request.MERGE:
                 merge_dataset_list = request.merge_dataset_list
                 output_path = request.output_path
                 upload_huggingface = request.upload_huggingface
@@ -371,7 +371,7 @@ class Communicator:
                 response.message = f'Unknown edit mode: {request.mode}'
                 return response
 
-            elif request.mode == EditDataset.DELETE:
+            elif request.mode == EditDataset.Request.DELETE:
                 delete_dataset_path = request.delete_dataset_path
                 delete_episode_num = request.delete_episode_num
                 upload_huggingface = request.upload_huggingface
