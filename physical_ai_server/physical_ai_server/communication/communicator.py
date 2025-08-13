@@ -359,34 +359,34 @@ class Communicator:
         return response
 
     def dataset_edit_callback(self, request, response):
-        try:
-            if request.mode == EditDataset.Request.MERGE:
-                merge_dataset_list = request.merge_dataset_list
-                output_path = request.output_path
-                upload_huggingface = request.upload_huggingface
-                self.data_editor.merge_datasets(
-                    merge_dataset_list, output_path)
+        # try:
+        if request.mode == EditDataset.Request.MERGE:
+            merge_dataset_list = request.merge_dataset_list
+            output_path = request.output_path
+            upload_huggingface = request.upload_huggingface
+            self.data_editor.merge_datasets(
+                merge_dataset_list, output_path)
 
-                response.success = True
-                response.message = f'Unknown edit mode: {request.mode}'
-                return response
+            response.success = True
+            response.message = f'Unknown edit mode: {request.mode}'
+            return response
 
-            elif request.mode == EditDataset.Request.DELETE:
-                delete_dataset_path = request.delete_dataset_path
-                delete_episode_num = request.delete_episode_num
-                upload_huggingface = request.upload_huggingface
-                for episode_num in delete_episode_num:
-                    self.data_editor.delete_episodes(
-                        delete_dataset_path, episode_num)
-            else:
-                response.success = False
-                response.message = f'Unknown edit mode: {request.mode}'
-                return response
-
-        except Exception as e:
-            self.node.get_logger().error(f'Error in dataset_edit_callback: {str(e)}')
+        elif request.mode == EditDataset.Request.DELETE:
+            delete_dataset_path = request.delete_dataset_path
+            delete_episode_num = request.delete_episode_num
+            upload_huggingface = request.upload_huggingface
+            for episode_num in delete_episode_num:
+                self.data_editor.delete_episodes(
+                    delete_dataset_path, episode_num)
+        else:
             response.success = False
-            response.message = f'Error: {str(e)}'
+            response.message = f'Unknown edit mode: {request.mode}'
+            return response
+
+        # except Exception as e:
+        #     self.node.get_logger().error(f'Error in dataset_edit_callback: {str(e)}')
+        #     response.success = False
+        #     response.message = f'Error: {str(e)}'
 
         return response
 
