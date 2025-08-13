@@ -400,10 +400,10 @@ export function useRosServiceCaller() {
 
         const result = await callService(
           '/dataset/edit',
-          'physical_ai_interfaces/srv/SetDatasetEditInfo',
+          'physical_ai_interfaces/srv/EditDataset',
           {
             mode: command_enum,
-            dataset_list: editDatasetInfo.mergeDatasetList,
+            merge_dataset_list: editDatasetInfo.mergeDatasetList,
             delete_dataset_path: editDatasetInfo.datasetToDelete,
             output_path: editDatasetInfo.outputPath,
             delete_episode_num: editDatasetInfo.deleteEpisodeNum,
