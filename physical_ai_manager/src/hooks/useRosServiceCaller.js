@@ -440,7 +440,7 @@ export function useRosServiceCaller() {
             merge_dataset_list: editDatasetInfo.mergeDatasetList,
             delete_dataset_path: editDatasetInfo.datasetToDelete,
             output_path: editDatasetInfo.mergeOutputPath,
-            delete_episode_nums: editDatasetInfo.deleteEpisodeNums,
+            delete_episode_num: editDatasetInfo.deleteEpisodeNums,
             upload_huggingface: editDatasetInfo.uploadHuggingface,
           }
         );
