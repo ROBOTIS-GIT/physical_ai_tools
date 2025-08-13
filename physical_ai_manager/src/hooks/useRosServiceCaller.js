@@ -403,8 +403,8 @@ export function useRosServiceCaller() {
           'physical_ai_interfaces/srv/SetDatasetEditInfo',
           {
             mode: command_enum,
-            dataset_list: editDatasetInfo.datasetList,
-            delete_dataset_path: editDatasetInfo.deleteDatasetPath,
+            dataset_list: editDatasetInfo.mergeDatasetList,
+            delete_dataset_path: editDatasetInfo.datasetToDelete,
             output_path: editDatasetInfo.outputPath,
             delete_episode_num: editDatasetInfo.deleteEpisodeNum,
             upload_huggingface: editDatasetInfo.uploadHuggingface,
