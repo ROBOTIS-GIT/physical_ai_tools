@@ -376,7 +376,7 @@ class Communicator:
             delete_episode_num = request.delete_episode_num
             upload_huggingface = request.upload_huggingface
             for episode_num in delete_episode_num:
-                self.data_editor.delete_episodes(
+                self.data_editor.delete_episode(
                     delete_dataset_path, episode_num)
         else:
             response.success = False
