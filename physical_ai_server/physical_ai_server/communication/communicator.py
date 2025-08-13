@@ -364,7 +364,7 @@ class Communicator:
                 merge_dataset_list = request.merge_dataset_list
                 output_path = request.output_path
                 upload_huggingface = request.upload_huggingface
-                data_editor.merge_datasets(
+                self.data_editor.merge_datasets(
                     merge_dataset_list, output_path)
 
                 response.success = True
@@ -376,7 +376,7 @@ class Communicator:
                 delete_episode_num = request.delete_episode_num
                 upload_huggingface = request.upload_huggingface
                 for episode_num in delete_episode_num:
-                    data_editor.delete_episodes(
+                    self.data_editor.delete_episodes(
                         delete_dataset_path, episode_num)
             else:
                 response.success = False
