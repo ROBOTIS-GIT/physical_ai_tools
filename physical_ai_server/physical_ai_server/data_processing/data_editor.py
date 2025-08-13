@@ -110,6 +110,7 @@ class DataEditor:
             '--- Processing Parquet Files and Determining Episode Counts ---',
             logging.INFO
         )
+        print("CHECK6")
 
         for i, dataset_path in enumerate(dataset_paths):
             dataset_path = Path(dataset_path)
