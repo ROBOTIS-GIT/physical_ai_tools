@@ -478,7 +478,8 @@ class DataEditor:
                     with suppress(Exception):
                         tgt_video_file.unlink()
                     deleted_video = True
-                    removed_video_count = len(camera_subdirs) if camera_subdirs else 1            
+                    removed_video_count = len(camera_subdirs) if camera_subdirs else 1
+        print(camera_subdirs, removed_video_count, deleted_video)         
 
         # 3. Delete images folder(s)
         images_root_dir = dataset_dir / 'images'
