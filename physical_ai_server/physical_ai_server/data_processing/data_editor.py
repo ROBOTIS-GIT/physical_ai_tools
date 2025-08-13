@@ -15,8 +15,6 @@ from functools import cached_property
 import pandas as pd  # type: ignore
 from physical_ai_server.utils.file_utils import FileIO
 
-# --- Constants ---
-
 
 @dataclass
 class MergeResult:
@@ -32,27 +30,6 @@ class DeleteResult:
     frames_removed: int
     videos_removed: int
     success: bool
-
-@dataclass
-class DeleteBatchResult:
-    dataset_dir: Path
-    deleted_episodes: List[int]
-    results: List[DeleteResult]
-    total_frames_removed: int
-    total_videos_removed: int
-    success_all: bool
-
-@dataclass
-class EpisodeInspection:
-    dataset_dir: Path
-    episode_index: int
-    parquet_exists: bool
-    frame_count: int
-    columns: List[str]
-    sample_data: Dict[str, Any]  # First row sample
-    data_types: Dict[str, str]
-    episode_index_range: tuple[int, int] | None  # (min, max) in episode_index column
-    index_range: tuple[int, int] | None  # (min, max) in index column if exists
 
 
 def _default_logger(verbose: bool) -> logging.Logger:
@@ -94,18 +71,23 @@ class DataEditor:
     def _natural_sort_paths(paths: Iterable[Path]) -> List[Path]:
         return sorted(paths, key=lambda p: DataEditor._extract_idx_from_name(p.name))
 
-    # ──────────────────────────────── MERGE Operation (Public) ──────────────────────────────── #
     def merge_datasets(
-        self, dataset_paths: List[Path], output_dir: Path, chunk_name: str = DEFAULT_CHUNK_NAME, verbose: bool | None = None
+        self,
+        dataset_paths: List[Path],
+        output_dir: Path,
+        chunk_name: str = DEFAULT_CHUNK_NAME,
+        verbose: bool | None = None
     ) -> MergeResult | None:
 
         if verbose is not None:
             self.verbose = verbose
         if not dataset_paths:
-            self._log('No dataset paths provided for merging.', logging.WARNING)
+            self._log(
+                'No dataset paths provided for merging.', logging.WARNING)
             return None
 
-        self._log(f'Starting merge. Output directory: {output_dir}')
+        self._log(
+            f'Starting merge. Output directory: {output_dir}')
 
         data_dst_dir = output_dir / 'data' / chunk_name
         meta_dst_dir = output_dir / 'meta'
@@ -119,13 +101,18 @@ class DataEditor:
         total_parquets_processed_overall = 0
         actual_episode_counts_per_dataset: List[int] = []
 
-        self._log('--- Processing Parquet Files and Determining Episode Counts ---', logging.DEBUG)
+        self._log(
+            '--- Processing Parquet Files and Determining Episode Counts ---',
+            logging.DEBUG
+        )
+
         for i, dataset_path in enumerate(dataset_paths):
             self._log(f'Processing dataset {i + 1}/{len(dataset_paths)}: {dataset_path}', logging.DEBUG)
             current_dataset_frames = 0
             info_path = dataset_path / 'meta' / 'info.json'
             info_data = FileIO.read_json(info_path, default={}) or {}
-            current_dataset_frames = info_data.get('total_frames', 0) if isinstance(info_data.get('total_frames'), int) else 0
+            current_dataset_frames = info_data.get(
+                'total_frames', 0) if isinstance(info_data.get('total_frames'), int) else 0
 
             processed_eps = self._copy_parquet_and_update_indices_for_merge(
                 dataset_path,
@@ -134,26 +121,37 @@ class DataEditor:
                 cumulative_episode_offset_parquets,
                 cumulative_frame_offset_parquets,
             )
-            self._log(f'  Processed {processed_eps} Parquet episode files from {dataset_path}.', logging.DEBUG)
+            self._log(
+                f'  Processed {processed_eps} Parquet '
+                f'episode files from {dataset_path}.',
+                logging.DEBUG
+            )
+
             total_parquets_processed_overall += processed_eps
             actual_episode_counts_per_dataset.append(processed_eps)
             cumulative_episode_offset_parquets += processed_eps
             cumulative_frame_offset_parquets += current_dataset_frames
 
         self._log('--- Processing Metadata Files ---', logging.DEBUG)
-        self._merge_all_meta_files(dataset_paths, meta_dst_dir, actual_episode_counts_per_dataset)
+        self._merge_all_meta_files(
+            dataset_paths, meta_dst_dir, actual_episode_counts_per_dataset
+        )
 
         self._log('--- Processing Video Files ---', logging.DEBUG)
-        self._copy_all_videos_for_merge(dataset_paths, video_dst_chunk_root, chunk_name, actual_episode_counts_per_dataset)
+        self._copy_all_videos_for_merge(
+            dataset_paths, video_dst_chunk_root, chunk_name, actual_episode_counts_per_dataset
+        )
 
         final_info_path = meta_dst_dir / 'info.json'
         final_total_episodes: int | str = 'N/A'
         if final_info_path.exists():
-            final_total_episodes = FileIO.read_json(final_info_path, default={}).get('total_episodes', 'N/A')
+            final_total_episodes = FileIO.read_json(
+                final_info_path, default={}).get('total_episodes', 'N/A')
 
         self._log(
             'Merge finished: '
-            f'parquets={total_parquets_processed_overall}, episodes={final_total_episodes}, output={output_dir}'
+            f'parquets={total_parquets_processed_overall}, '
+            f'episodes={final_total_episodes}, output={output_dir}'
         )
         return MergeResult(
             output_dir=output_dir,
@@ -174,12 +172,14 @@ class DataEditor:
         src_chunk_dir = src_root / 'data' / chunk_name
         if not src_chunk_dir.exists():
             if verbose:
-                self._log(f'Source chunk directory not found: {src_chunk_dir}', logging.DEBUG)
+                self._log(
+                    f'Source chunk directory not found: {src_chunk_dir}', logging.DEBUG)
             return 0
         src_files = self._natural_sort_paths(src_chunk_dir.glob('episode_*.parquet'))
         if not src_files:
             if verbose:
-                self._log(f'No Parquet files found in {src_chunk_dir}', logging.DEBUG)
+                self._log(
+                    f'No Parquet files found in {src_chunk_dir}', logging.DEBUG)
             return 0
 
         count_processed = 0
@@ -204,7 +204,10 @@ class DataEditor:
         return count_processed
 
     def _merge_all_meta_files(
-        self, dataset_paths: List[Path], meta_dst_dir: Path, actual_episode_counts: List[int]
+        self,
+        dataset_paths: List[Path],
+        meta_dst_dir: Path,
+        actual_episode_counts: List[int]
     ):
         current_meta_episode_offset = 0
         ep_stats_out = meta_dst_dir / 'episodes_stats.jsonl'
@@ -224,13 +227,21 @@ class DataEditor:
                 continue
 
             # episodes_stats.jsonl
-            self._merge_episode_stats(src_meta_dir / 'episodes_stats.jsonl', ep_stats_out, current_meta_episode_offset)
+            self._merge_episode_stats(
+                src_meta_dir / 'episodes_stats.jsonl',
+                ep_stats_out, current_meta_episode_offset)
             # episodes.jsonl
-            self._merge_episodes(src_meta_dir / 'episodes.jsonl', ep_out, current_meta_episode_offset)
+            self._merge_episodes(
+                src_meta_dir / 'episodes.jsonl',
+                ep_out, current_meta_episode_offset)
             # tasks.jsonl
-            self._merge_tasks(src_meta_dir / 'tasks.jsonl', tasks_out)
+            self._merge_tasks(
+                src_meta_dir / 'tasks.jsonl',
+                tasks_out)
             # info.json
-            self._merge_info(src_meta_dir / 'info.json', info_out)
+            self._merge_info(
+                src_meta_dir / 'info.json',
+                info_out)
 
             current_meta_episode_offset += eps_in_this_ds_for_meta
 
@@ -523,7 +534,10 @@ class DataEditor:
                     meta_info['total_frames'] = max(0, meta_info['total_frames'] - removed_frame_count)
                 if removed_video_count > 0 and isinstance(meta_info.get('total_videos'), int):
                     meta_info['total_videos'] = max(0, meta_info['total_videos'] - removed_video_count)
-                if isinstance(meta_info.get('splits'), dict) and isinstance(meta_info['splits'].get('train'), str):
+                if (
+                        isinstance(meta_info.get('splits'), dict) and
+                        isinstance(meta_info['splits'].get('train'), str)
+                    ):
                     start_str, _, end_str = meta_info['splits']['train'].partition(':')
                     with suppress(ValueError):
                         start_idx = int(start_str)
@@ -538,109 +552,22 @@ class DataEditor:
             except Exception as e:
                 self._log(f'Error updating info.json: {e}', logging.WARNING)
 
-        self._log(f'Episode {episode_index_to_delete} deleted successfully in {dataset_dir}')
-        return DeleteResult(dataset_dir, episode_index_to_delete, removed_frame_count, removed_video_count, True)
+        self._log(
+            f'Episode {episode_index_to_delete} deleted successfully in {dataset_dir}')
+        return DeleteResult(
+            dataset_dir,
+            episode_index_to_delete,
+            removed_frame_count,
+            removed_video_count,
+            True
+        )
 
-    def inspect_episode(
-        self, 
-        dataset_dir: Path, 
-        episode_index: int, 
-        chunk_name: str = DEFAULT_CHUNK_NAME,
-        verbose: bool | None = None
-    ) -> EpisodeInspection:
-        """특정 episode의 parquet 파일을 조사하여 데이터 구조와 내용을 반환한다."""
-        
-        if verbose is not None:
-            self.verbose = verbose
-            
-        dataset_dir = dataset_dir.resolve()
-        target_episode_stem = f'episode_{episode_index:0{self.EPISODE_INDEX_WIDTH}d}'
-        data_chunk_dir = dataset_dir / 'data' / chunk_name
-        tgt_parquet = data_chunk_dir / f'{target_episode_stem}.parquet'
-        
-        if not tgt_parquet.exists():
-            self._log(f'Parquet file not found: {tgt_parquet}', logging.WARNING)
-            return EpisodeInspection(
-                dataset_dir=dataset_dir,
-                episode_index=episode_index,
-                parquet_exists=False,
-                frame_count=0,
-                columns=[],
-                sample_data={},
-                data_types={},
-                episode_index_range=None,
-                index_range=None
-            )
-        
-        try:
-            df = pd.read_parquet(tgt_parquet)
-            frame_count = len(df)
-            columns = df.columns.tolist()
-            
-            # 첫 번째 행의 샘플 데이터 (모든 컬럼)
-            sample_data = {}
-            if frame_count > 0:
-                first_row = df.iloc[0]
-                for col in columns:
-                    val = first_row[col]
-                    # numpy 타입들을 Python 기본 타입으로 변환
-                    if hasattr(val, 'item'):
-                        sample_data[col] = val.item()
-                    elif hasattr(val, 'tolist'):
-                        sample_data[col] = val.tolist()
-                    else:
-                        sample_data[col] = val
-            
-            # 데이터 타입 정보
-            data_types = {col: str(dtype) for col, dtype in df.dtypes.items()}
-            
-            # episode_index 범위
-            episode_index_range = None
-            if 'episode_index' in df.columns:
-                ep_min, ep_max = df['episode_index'].min(), df['episode_index'].max()
-                episode_index_range = (int(ep_min), int(ep_max))
-            
-            # index 범위 (frame index)
-            index_range = None
-            if 'index' in df.columns:
-                idx_min, idx_max = df['index'].min(), df['index'].max()
-                index_range = (int(idx_min), int(idx_max))
-            
-            self._log(f'Episode {episode_index} inspection: {frame_count} frames, columns={len(columns)}')
-            if self.verbose:
-                self._log(f'  Columns: {columns}')
-                self._log(f'  Episode index range: {episode_index_range}')
-                self._log(f'  Frame index range: {index_range}')
-                for col, val in list(sample_data.items())[:5]:  # 처음 5개 컬럼만 표시
-                    self._log(f'  {col}: {val} ({data_types[col]})')
-            
-            return EpisodeInspection(
-                dataset_dir=dataset_dir,
-                episode_index=episode_index,
-                parquet_exists=True,
-                frame_count=frame_count,
-                columns=columns,
-                sample_data=sample_data,
-                data_types=data_types,
-                episode_index_range=episode_index_range,
-                index_range=index_range
-            )
-            
-        except Exception as e:
-            self._log(f'Error reading parquet {tgt_parquet}: {e}', logging.ERROR)
-            return EpisodeInspection(
-                dataset_dir=dataset_dir,
-                episode_index=episode_index,
-                parquet_exists=True,  # 파일은 존재하지만 읽기 실패
-                frame_count=0,
-                columns=[],
-                sample_data={},
-                data_types={},
-                episode_index_range=None,
-                index_range=None
-            )
-
-    def _adjust_parquet_episode_index(self, path: Path, off: int, verbose: bool) -> int:
+    def _adjust_parquet_episode_index(
+        self,
+        path: Path,
+        off: int,
+        verbose: bool
+    ) -> int:
         '''Patches 'episode_index' in a Parquet file by an offset.'''
         try:
             df = pd.read_parquet(path)
@@ -651,26 +578,25 @@ class DataEditor:
             return nrows
         except Exception as e:
             if verbose:
-                self._log(f'    Could not patch Parquet {path}: {e}')
+                self._log(f'Could not patch Parquet {path}: {e}')
             return 0
 
     def _rewrite_meta_for_delete(
-        self, path: Path, episode_index_to_remove: int, offset_for_shifting: int, verbose: bool
+        self,
+        path: Path,
+        episode_index_to_remove: int,
+        offset_for_shifting: int,
+        verbose: bool
     ):
-        '''
-        Rewrites a JSON or JSONL file:
-        - Removes entries matching ep_id_to_remove.
-        - Shifts 'episode_index' (and other keys in DELETE_PATCH_KEYS) for entries with episode_index > ep_id_to_remove.
-        '''
         try:
             content = path.read_text().strip()
             if not content:  # File is empty
                 if verbose:
-                    self._log(f'    {path.name} is empty, skipping.')
+                    self._log(f'{path.name} is empty, skipping.')
                 return
         except Exception as e:
             if verbose:
-                self._log(f'    Could not read {path.name}: {e}')
+                self._log(f'Could not read {path.name}: {e}')
             return
 
         is_json_list_format = content.startswith('[') and content.endswith(']')
@@ -683,12 +609,14 @@ class DataEditor:
                 if not isinstance(original_data_list_parsed, list):  # Should be a list
                     if verbose:
                         self._log(
-                            f'    Content of {path.name} looks like JSON list but is not a list. Processing as JSONL.'
+                            f'Content of {path.name} looks like JSON '
+                            f'list but is not a list. Processing as JSONL.'
                         )
                     is_json_list_format = False  # Fallback
             except json.JSONDecodeError as e:
                 if verbose:
-                    self._log(f'    Invalid JSON in {path.name}: {e}. Attempting line-by-line (JSONL).')
+                    self._log(
+                        f'Invalid JSON in {path.name}: {e}. Attempting line-by-line (JSONL).')
                 is_json_list_format = False  # Fallback to JSONL
 
         items_to_process = original_data_list_parsed if is_json_list_format else content.splitlines()
@@ -712,7 +640,7 @@ class DataEditor:
                 current_ep_idx = obj_to_process.get('episode_index')
                 if current_ep_idx == episode_index_to_remove:
                     if verbose:
-                        self._log(f'      Removing episode {episode_index_to_remove} entry from {path.name}')
+                        self._log(f'Removing episode {episode_index_to_remove} entry from {path.name}')
                     continue  # Skip this episode
                 if isinstance(current_ep_idx, int) and current_ep_idx > episode_index_to_remove:
                     obj_to_process = self._shift_delete_patch_indices_recursive(
@@ -735,61 +663,4 @@ class DataEditor:
             path.write_text('\n'.join(new_data_list_for_output) + ('\n' if new_data_list_for_output else ''))
 
         if verbose:
-            self._log(f'    {path.name} updated.')
-
-def main():
-    # Updated main to use new API & logging
-    editor = DataEditor(verbose=True)
-    base_path = '/home/elicer/.cache/huggingface/lerobot/Dongkkka'
-    output_dir = Path(base_path) / 'merged_dataset_PickTunaCanTest'
-    delete_episode_path = output_dir = Path(base_path) / 'merged_dataset_PickTunaCanTest'
-    delete_episode = 32
-    merge_dataset_paths = [
-        Path(base_path) / 'ffw_sg2_rev1_PickTunaCan',
-        Path(base_path) / 'ffw_sg2_rev1_PickTunaCan3',
-    ]
-    # result = editor.merge_datasets(merge_dataset_paths, output_dir, chunk_name=DataEditor.DEFAULT_CHUNK_NAME)
-    # if result:
-    #     editor._log(f'Result: processed={result.total_parquet_processed}, episodes={result.total_episodes}')
-
-    # 삭제하기 전에 해당 episode의 데이터 내용 조회
-    editor._log(f"=== Inspecting episode {delete_episode} before deletion ===")
-    inspection = editor.inspect_episode(delete_episode_path, delete_episode, verbose=True)
-    
-    if inspection.parquet_exists:
-        print(f"\n📊 Episode {delete_episode} Analysis:")
-        print(f"  📁 Dataset: {inspection.dataset_dir}")
-        print(f"  📦 Frame count: {inspection.frame_count}")
-        print(f"  📋 Columns ({len(inspection.columns)}): {inspection.columns}")
-        print(f"  🔢 Episode index range: {inspection.episode_index_range}")
-        print(f"  📍 Frame index range: {inspection.index_range}")
-        print(f"\n📋 Data Types:")
-        for col, dtype in inspection.data_types.items():
-            print(f"    {col}: {dtype}")
-        print(f"\n📄 Sample Data (first row):")
-        for col, val in inspection.sample_data.items():
-            # 긴 데이터는 잘라서 표시
-            val_str = str(val)
-            if len(val_str) > 100:
-                val_str = val_str[:100] + "..."
-            print(f"    {col}: {val_str}")
-    else:
-        print(f"❌ Episode {delete_episode} parquet file not found!")
-        
-    # 삭제 실행
-    print(f"\n=== Proceeding with deletion ===")
-    delete_episode_result = editor.delete_episode(
-        delete_episode_path, delete_episode, chunk_name=DataEditor.DEFAULT_CHUNK_NAME
-    )
-
-    if delete_episode_result.success:
-        editor._log(
-            f'Deleted episode {delete_episode_result.deleted_episode} from {delete_episode_result.dataset_dir}. '
-            f'Frames removed: {delete_episode_result.frames_removed}, Videos removed: {delete_episode_result.videos_removed}'
-        )
-    else:
-        editor._log(f'Failed to delete episode {delete_episode} from {delete_episode_path}', logging.ERROR)
-
-
-if __name__ == '__main__':
-    main()
+            self._log(f'{path.name} updated.')

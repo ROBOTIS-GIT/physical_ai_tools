@@ -21,14 +21,17 @@ from typing import Any, Dict, Optional, Set, Tuple
 
 from geometry_msgs.msg import Twist
 from nav_msgs.msg import Odometry
+from pathlib import Path
 from physical_ai_interfaces.msg import BrowserItem, TaskStatus, TrainingStatus
 from physical_ai_interfaces.srv import (
     BrowseFile,
-    GetImageTopicList
+    GetImageTopicList,
+    EditDataset
 )
 from physical_ai_server.communication.multi_subscriber import MultiSubscriber
 from physical_ai_server.utils.file_browse_utils import FileBrowseUtils
 from physical_ai_server.utils.parameter_utils import parse_topic_list_with_names
+from physical_ai_server.data_processing.data_editor import DataEditor
 from rclpy.node import Node
 from rclpy.qos import (
     DurabilityPolicy,
@@ -76,6 +79,9 @@ class Communicator:
 
         # Initialize MultiSubscriber with enabled sources
         self.multi_subscriber = MultiSubscriber(self.node, self.enabled_sources)
+
+        # Initialize DataEditor for dataset editing
+        self.data_editor = DataEditor()
 
         # Initialize joint publishers
         self.joint_publishers = {}
@@ -208,6 +214,12 @@ class Communicator:
             BrowseFile,
             '/browse_file',
             self.browse_file_callback
+        )
+
+        self.data_editor_service = self.node.create_service(
+            EditDataset,
+            '/dataset/edit',
+            self.dataset_edit_callback
         )
 
     def _camera_callback(self, name: str, msg: CompressedImage) -> None:
@@ -343,6 +355,38 @@ class Communicator:
             response.parent_path = ''
             response.selected_path = ''
             response.items = []
+
+        return response
+
+    def dataset_edit_callback(self, request, response):
+        try:
+            if request.mode == EditDataset.MERGE:
+                merge_dataset_list = request.merge_dataset_list
+                output_path = request.output_path
+                upload_huggingface = request.upload_huggingface
+                data_editor.merge_datasets(
+                    merge_dataset_list, output_path)
+
+                response.success = True
+                response.message = f'Unknown edit mode: {request.mode}'
+                return response
+
+            elif request.mode == EditDataset.DELETE:
+                delete_dataset_path = request.delete_dataset_path
+                delete_episode_num = request.delete_episode_num
+                upload_huggingface = request.upload_huggingface
+                for episode_num in delete_episode_num:
+                    data_editor.delete_episodes(
+                        delete_dataset_path, episode_num)
+            else:
+                response.success = False
+                response.message = f'Unknown edit mode: {request.mode}'
+                return response
+
+        except Exception as e:
+            self.node.get_logger().error(f'Error in dataset_edit_callback: {str(e)}')
+            response.success = False
+            response.message = f'Error: {str(e)}'
 
         return response
 
