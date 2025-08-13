@@ -471,14 +471,14 @@ class DataEditor:
                         with suppress(Exception):
                             tgt_video_file.unlink()
                         deleted_video = True
+                        removed_video_count = len(camera_subdirs) if camera_subdirs else 1
             else:
                 tgt_video_file = video_chunk_dir / f'{target_episode_stem}.mp4'
                 if tgt_video_file.exists():
                     with suppress(Exception):
                         tgt_video_file.unlink()
                     deleted_video = True
-        if deleted_video:
-            removed_video_count = 1
+                    removed_video_count = len(camera_subdirs) if camera_subdirs else 1            
 
         # 3. Delete images folder(s)
         images_root_dir = dataset_dir / 'images'
