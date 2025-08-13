@@ -22,6 +22,7 @@ import {
   setMergeDatasetList,
   setDatasetToDelete,
   setDeleteEpisodeNums,
+  setMergeOutputPath,
 } from '../features/editDataset/editDatasetSlice';
 import { useRosServiceCaller } from '../hooks/useRosServiceCaller';
 
@@ -204,6 +205,7 @@ export default function EditDatasetPage() {
   const mergeDatasetList = useSelector((state) => state.editDataset.mergeDatasetList);
   const datasetToDelete = useSelector((state) => state.editDataset.datasetToDelete);
   const deleteEpisodeNums = useSelector((state) => state.editDataset.deleteEpisodeNums);
+  const mergeOutputPath = useSelector((state) => state.editDataset.mergeOutputPath);
 
   const { sendEditDatasetCommand } = useRosServiceCaller();
 
@@ -328,11 +330,19 @@ export default function EditDatasetPage() {
         <div className="w-full h-full flex flex-col items-start justify-start p-10 gap-8">
           <div className="w-full flex flex-col items-start justify-start">
             <h1 className="text-2xl font-bold">Edit Dataset</h1>
-            <div className="w-full flex flex-col items-center justify-start bg-gray-100 p-10">
+            <div className="w-full flex flex-col items-center justify-start bg-gray-100 p-10 gap-8">
               <span className="text-2xl font-bold">Merge Dataset</span>
               <DatasetListInput
                 datasets={mergeDatasetList}
                 onChange={handleMergeDatasetListChange}
+              />
+              <input
+                className={classTextInput}
+                type="text"
+                placeholder="Enter output path"
+                value={mergeOutputPath || ''}
+                onChange={(e) => dispatch(setMergeOutputPath(e.target.value))}
+                disabled={!isEditable}
               />
               <button className={classMergeButton} onClick={handleMergeDataset}>
                 Merge
@@ -362,7 +372,7 @@ export default function EditDatasetPage() {
                   Preview:{' '}
                   {parseEpisodeNumbers(deleteEpisodeNumsLocal).length > 0
                     ? parseEpisodeNumbers(deleteEpisodeNumsLocal).join(', ')
-                    : 'No valid episodes'}{' '}
+                    : 'No episodes'}{' '}
                   ({parseEpisodeNumbers(deleteEpisodeNumsLocal).length} episodes)
                 </div>
               )}
