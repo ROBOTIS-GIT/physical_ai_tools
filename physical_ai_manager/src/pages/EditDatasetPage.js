@@ -172,7 +172,7 @@ export default function EditDatasetPage() {
   const mergeDatasetList = useSelector((state) => state.editDataset.mergeDatasetList);
   const datasetToDelete = useSelector((state) => state.editDataset.datasetToDelete);
 
-  const sendEditDatasetCommand = useRosServiceCaller();
+  const { sendEditDatasetCommand } = useRosServiceCaller();
 
   const [isEditable] = useState(true);
 
@@ -191,12 +191,36 @@ export default function EditDatasetPage() {
     dispatch(setDatasetToDelete(newDatasets));
   };
 
-  const handleDeleteDataset = () => {
-    sendEditDatasetCommand('delete');
+  const handleDeleteDataset = async () => {
+    try {
+      const result = await sendEditDatasetCommand('delete');
+      console.log('sendEditDatasetCommand result:', result);
+
+      if (result && result.success) {
+        toast.success('Dataset deleted successfully!');
+      } else {
+        toast.error('Failed to delete dataset');
+      }
+    } catch (error) {
+      console.error('Error deleting dataset:', error);
+      toast.error(`Failed to delete dataset: ${error.message}`);
+    }
   };
 
-  const handleMergeDataset = () => {
-    sendEditDatasetCommand('merge');
+  const handleMergeDataset = async () => {
+    try {
+      const result = await sendEditDatasetCommand('merge');
+      console.log('sendEditDatasetCommand result:', result);
+
+      if (result && result.success) {
+        toast.success('Dataset merged successfully!');
+      } else {
+        toast.error('Failed to merge dataset');
+      }
+    } catch (error) {
+      console.error('Error merging dataset:', error);
+      toast.error(`Failed to merge dataset: ${error.message}`);
+    }
   };
 
   const classMergeButton = clsx(
