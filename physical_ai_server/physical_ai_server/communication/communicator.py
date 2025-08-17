@@ -21,17 +21,16 @@ from typing import Any, Dict, Optional, Set, Tuple
 
 from geometry_msgs.msg import Twist
 from nav_msgs.msg import Odometry
-from pathlib import Path
 from physical_ai_interfaces.msg import BrowserItem, TaskStatus, TrainingStatus
 from physical_ai_interfaces.srv import (
     BrowseFile,
+    EditDataset,
     GetImageTopicList,
-    EditDataset
 )
 from physical_ai_server.communication.multi_subscriber import MultiSubscriber
+from physical_ai_server.data_processing.data_editor import DataEditor
 from physical_ai_server.utils.file_browse_utils import FileBrowseUtils
 from physical_ai_server.utils.parameter_utils import parse_topic_list_with_names
-from physical_ai_server.data_processing.data_editor import DataEditor
 from rclpy.node import Node
 from rclpy.qos import (
     DurabilityPolicy,
@@ -363,14 +362,14 @@ class Communicator:
             if request.mode == EditDataset.Request.MERGE:
                 merge_dataset_list = request.merge_dataset_list
                 output_path = request.output_path
-                upload_huggingface = request.upload_huggingface
+                # upload_huggingface = request.upload_huggingface
                 self.data_editor.merge_datasets(
                     merge_dataset_list, output_path)
 
             elif request.mode == EditDataset.Request.DELETE:
                 delete_dataset_path = request.delete_dataset_path
                 delete_episode_num = request.delete_episode_num
-                upload_huggingface = request.upload_huggingface
+                # upload_huggingface = request.upload_huggingface
                 for episode_num in delete_episode_num:
                     self.data_editor.delete_episode(
                         delete_dataset_path, episode_num)

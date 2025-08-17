@@ -1,18 +1,31 @@
-# lerobot_dataset_manager.py
-# Copyright 2024-2025 The HuggingFace Inc. team and contributors.
-# Licensed under the Apache-2.0 license.
+#!/usr/bin/env python3
+#
+# Copyright 2025 ROBOTIS CO., LTD.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+#
+# Author: Dongyun Kim
 
+from contextlib import suppress
+from dataclasses import dataclass
 import json
+import logging
+from pathlib import Path
 import re
 import shutil
-from pathlib import Path
-from typing import Any, Dict, Iterable, List, Optional, Callable
-from dataclasses import dataclass
-import logging
-from contextlib import suppress
-from functools import cached_property
+from typing import Any, Callable, Iterable, List, Optional
 
-import pandas as pd  # type: ignore
+import pandas as pd
 from physical_ai_server.utils.file_utils import FileIO
 
 
@@ -22,6 +35,7 @@ class MergeResult:
     total_parquet_processed: int
     total_episodes: int | str
     dataset_episode_counts: List[int]
+
 
 @dataclass
 class DeleteResult:
@@ -44,13 +58,18 @@ def _default_logger(verbose: bool) -> logging.Logger:
 
 
 class DataEditor:
-    EPISODE_INDEX_WIDTH: int = 6
     DEFAULT_CHUNK_NAME: str = 'chunk-000'
-    MERGE_NUM_KEYS: List[str] = ['total_episodes', 'total_frames', 'total_videos']
-    DELETE_STEM_RE = re.compile(fr'^episode_(\d{{{EPISODE_INDEX_WIDTH}}})$')
+    EPISODE_INDEX_WIDTH: int = 6
+    DELETE_STEM_RE = re.compile(
+        fr'^episode_(\d{{{EPISODE_INDEX_WIDTH}}})$')
     DELETE_PATCH_KEYS = {'episode_index', 'index'}
+    MERGE_NUM_KEYS: List[str] = [
+        'total_episodes', 'total_frames', 'total_videos'
+    ]
 
-    def __init__(self, *, verbose: bool = False, logger: Optional[logging.Logger] = None):
+    def __init__(
+        self, *, verbose: bool = False, logger: Optional[logging.Logger] = None
+    ):
         self.verbose = verbose
         self.logger = logger or _default_logger(verbose)
 
@@ -60,11 +79,14 @@ class DataEditor:
         self.logger.log(level, msg)
 
     @staticmethod
-    def _extract_idx_from_name(name_with_index: str, default_pad: int = 6) -> int:
+    def _extract_idx_from_name(
+        name_with_index: str, default_pad: int = 6
+    ) -> int:
         num_re = re.compile(r'(\d+)(?=\.parquet$|\.mp4$|$)')
         match = num_re.search(name_with_index)
         if not match:
-            raise ValueError(f'Impossible de trouver un index numérique dans {name_with_index}')
+            raise ValueError(
+                f'Impossible de trouver un index numérique dans {name_with_index}')
         return int(match.group(1))
 
     @staticmethod
@@ -108,7 +130,9 @@ class DataEditor:
         )
 
         for i, dataset_path in enumerate(dataset_paths):
-            self._log(f'Processing dataset {i + 1}/{len(dataset_paths)}: {dataset_path}', logging.INFO)
+            self._log(
+                f'Processing dataset {i + 1}/{len(dataset_paths)}: {dataset_path}', logging.INFO
+            )
             current_dataset_frames = 0
             info_path = dataset_path / 'meta' / 'info.json'
             info_data = FileIO.read_json(info_path, default={}) or {}
@@ -187,11 +211,12 @@ class DataEditor:
         for src_file_path in src_files:
             try:
                 original_episode_idx = self._extract_idx_from_name(src_file_path.name)
-                new_episode_global_idx = original_episode_idx + episode_idx_offset
-                dst_file_path = dst_data_dir / f'episode_{new_episode_global_idx:0{self.EPISODE_INDEX_WIDTH}d}.parquet'
+                new_episode_idx = original_episode_idx + episode_idx_offset
+                parquet_name = f'episode_{new_episode_idx:0{self.EPISODE_INDEX_WIDTH}d}.parquet'
+                dst_file_path = dst_data_dir / parquet_name
                 df = pd.read_parquet(src_file_path)
                 if 'episode_index' in df.columns:
-                    df['episode_index'] = new_episode_global_idx
+                    df['episode_index'] = new_episode_idx
                 if 'index' in df.columns:
                     df['index'] = df['index'] + frame_idx_offset
                 if 'frame_index' in df.columns:
@@ -250,7 +275,8 @@ class DataEditor:
         info_data = FileIO.read_json(info_out, default={}) or {}
         total_eps = info_data.get('total_episodes', 0)
         if isinstance(total_eps, int):
-            info_data.setdefault('splits', {})['train'] = f'0:{total_eps - 1 if total_eps > 0 else 0}'
+            info_data.setdefault(
+                'splits', {})['train'] = f'0:{total_eps - 1 if total_eps > 0 else 0}'
             FileIO.write_json(info_out, info_data)
 
     def _merge_episode_stats(self, src: Path, dst: Path, offset: int):
@@ -264,11 +290,13 @@ class DataEditor:
                 if 'index' in r_new:
                     idx_val = r_new['index']
                     r_new['index'] = (
-                        [x + offset for x in idx_val] if isinstance(idx_val, list) else idx_val + offset
+                        [x + offset for x in idx_val] if (
+                            isinstance(idx_val, list)) else idx_val + offset
                     )
                 if 'stats' in r_new:
-                    # Use class reference to avoid instance attribute lookup issues
-                    r_new['stats'] = DataEditor._shift_positive_ints_recursive(r_new['stats'], offset)
+                    r_new['stats'] = DataEditor._shift_positive_ints_recursive(
+                        r_new['stats'], offset
+                    )
             except Exception as e:
                 self._log(f'Failed patching episode_stats record: {e}', logging.INFO)
         FileIO.write_jsonl(base_data + new_data, dst)
@@ -284,7 +312,8 @@ class DataEditor:
                 if 'index' in r_new:
                     idx_val = r_new['index']
                     r_new['index'] = (
-                        [x + offset for x in idx_val] if isinstance(idx_val, list) else idx_val + offset
+                        [x + offset for x in idx_val] if (
+                            isinstance(idx_val, list)) else idx_val + offset
                     )
             except Exception as e:
                 self._log(f'Failed patching episode record: {e}', logging.INFO)
@@ -324,9 +353,13 @@ class DataEditor:
         if isinstance(obj, int):
             return obj + offset
         if isinstance(obj, list):
-            return [DataEditor._shift_positive_ints_recursive(x, offset) for x in obj]
+            return [
+                DataEditor._shift_positive_ints_recursive(x, offset) for x in obj
+            ]
         if isinstance(obj, dict):
-            return {k: DataEditor._shift_positive_ints_recursive(v, offset) for k, v in obj.items()}
+            return {
+                k: DataEditor._shift_positive_ints_recursive(v, offset) for k, v in obj.items()
+            }
         return obj
 
     @staticmethod
@@ -368,12 +401,14 @@ class DataEditor:
         for ds_idx, ds_path in enumerate(dataset_paths):
             src_chunk_dir = ds_path / 'videos' / chunk_name
             if not src_chunk_dir.exists():
-                self._log(f'Video chunk dir missing: {src_chunk_dir}', logging.INFO)
+                self._log(
+                    f'Video chunk dir missing: {src_chunk_dir}', logging.INFO)
                 cumulative_offset += actual_episode_counts_per_dataset[ds_idx]
                 continue
             max_valid_ep = actual_episode_counts_per_dataset[ds_idx]
 
             cam_dirs = [d for d in src_chunk_dir.iterdir() if d.is_dir()]
+
             def _copy_set(video_files: List[Path], dst_dir: Path):
                 FileIO.safe_mkdir(dst_dir)
                 for vf in video_files:
@@ -395,10 +430,12 @@ class DataEditor:
             if cam_dirs:
                 for cam_dir in cam_dirs:
                     dst_cam_dir = video_dst_chunk_root / cam_dir.name
-                    video_files = self._natural_sort_paths(cam_dir.glob('episode_*.mp4'))
+                    video_files = self._natural_sort_paths(
+                        cam_dir.glob('episode_*.mp4'))
                     _copy_set(video_files, dst_cam_dir)
             else:
-                video_files = self._natural_sort_paths(src_chunk_dir.glob('episode_*.mp4'))
+                video_files = self._natural_sort_paths(
+                    src_chunk_dir.glob('episode_*.mp4'))
                 _copy_set(video_files, video_dst_chunk_root)
 
             cumulative_offset += actual_episode_counts_per_dataset[ds_idx]
@@ -432,20 +469,29 @@ class DataEditor:
                 if after_move:
                     after_move(p, new_path, new_idx)
             except Exception as e:
-                self._log(f'Failed renaming {p} -> {new_path}: {e}', logging.WARNING)
+                self._log(
+                    f'Failed renaming {p} -> {new_path}: {e}', logging.WARNING)
 
     def delete_episode(
-        self, dataset_dir: str, episode_index_to_delete: int, chunk_name: str = DEFAULT_CHUNK_NAME, verbose: bool | None = None
+        self,
+        dataset_dir: str,
+        episode_index_to_delete: int,
+        chunk_name: str = DEFAULT_CHUNK_NAME,
+        verbose: bool | None = None
     ) -> DeleteResult:
 
         if verbose is not None:
             self.verbose = verbose
         dataset_dir = Path(dataset_dir).resolve()
         if not dataset_dir.is_dir():
-            self._log(f'Dataset directory not found: {dataset_dir}', logging.ERROR)
+            self._log(
+                f'Dataset directory not found: {dataset_dir}', logging.ERROR
+            )
             return DeleteResult(dataset_dir, episode_index_to_delete, 0, 0, False)
 
-        self._log(f'Deleting episode {episode_index_to_delete} in {dataset_dir} (chunk={chunk_name})')
+        self._log(
+            f'Deleting episode {episode_index_to_delete} in {dataset_dir} (chunk={chunk_name})'
+        )
 
         target_episode_stem = f'episode_{episode_index_to_delete:0{self.EPISODE_INDEX_WIDTH}d}'
         removed_frame_count = 0
@@ -463,7 +509,6 @@ class DataEditor:
 
         # 2. Delete associated videos
         video_chunk_dir = dataset_dir / 'videos' / chunk_name
-        deleted_video = False
         if video_chunk_dir.exists():
             camera_subdirs = [d for d in video_chunk_dir.iterdir() if d.is_dir()]
             if camera_subdirs:
@@ -472,16 +517,13 @@ class DataEditor:
                     if tgt_video_file.exists():
                         with suppress(Exception):
                             tgt_video_file.unlink()
-                        deleted_video = True
                         removed_video_count = len(camera_subdirs) if camera_subdirs else 1
             else:
                 tgt_video_file = video_chunk_dir / f'{target_episode_stem}.mp4'
                 if tgt_video_file.exists():
                     with suppress(Exception):
                         tgt_video_file.unlink()
-                    deleted_video = True
                     removed_video_count = len(camera_subdirs) if camera_subdirs else 1
-        print(camera_subdirs, removed_video_count, deleted_video)         
 
         # 3. Delete images folder(s)
         images_root_dir = dataset_dir / 'images'
@@ -500,7 +542,9 @@ class DataEditor:
                 parquet_paths,
                 episode_index_to_delete,
                 self.EPISODE_INDEX_WIDTH,
-                after_move=lambda old, new, new_idx: self._adjust_parquet_episode_index(new, -1, self.verbose),
+                after_move=lambda old,
+                new,
+                new_idx: self._adjust_parquet_episode_index(new, -1, self.verbose),
             )
 
         # 5. Shift remaining video filenames
@@ -510,7 +554,9 @@ class DataEditor:
                 video_paths = [p for cam in camera_subdirs for p in cam.glob('episode_*.mp4')]
             else:
                 video_paths = list(video_chunk_dir.glob('episode_*.mp4'))
-            self._shift_episode_paths(video_paths, episode_index_to_delete, self.EPISODE_INDEX_WIDTH)
+            self._shift_episode_paths(
+                video_paths, episode_index_to_delete, self.EPISODE_INDEX_WIDTH
+            )
 
         # 6. Shift image directories
         if images_root_dir.exists():
@@ -518,14 +564,18 @@ class DataEditor:
             for cam_obs_dir in images_root_dir.iterdir():
                 if cam_obs_dir.is_dir():
                     image_dirs.extend([d for d in cam_obs_dir.glob('episode_*') if d.is_dir()])
-            self._shift_episode_paths(image_dirs, episode_index_to_delete, self.EPISODE_INDEX_WIDTH)
+            self._shift_episode_paths(
+                image_dirs, episode_index_to_delete, self.EPISODE_INDEX_WIDTH
+            )
 
         # 7. Update meta json/jsonl files
         meta_dir = dataset_dir / 'meta'
         for name in ['episodes_stats.jsonl', 'episodes.jsonl', 'episodes.json']:
             path = meta_dir / name
             if path.exists():
-                self._rewrite_meta_for_delete(path, episode_index_to_delete, -1, self.verbose)
+                self._rewrite_meta_for_delete(
+                    path, episode_index_to_delete, -1, self.verbose
+                )
 
         # 8. Update info.json counts
         info_path = meta_dir / 'info.json'
@@ -533,15 +583,21 @@ class DataEditor:
             try:
                 meta_info = FileIO.read_json(info_path, default={}) or {}
                 if isinstance(meta_info.get('total_episodes'), int):
-                    meta_info['total_episodes'] = max(0, meta_info['total_episodes'] - 1)
+                    meta_info['total_episodes'] = max(
+                        0, meta_info['total_episodes'] - 1
+                    )
                 if isinstance(meta_info.get('total_frames'), int):
-                    meta_info['total_frames'] = max(0, meta_info['total_frames'] - removed_frame_count)
+                    meta_info['total_frames'] = max(
+                        0, meta_info['total_frames'] - removed_frame_count
+                    )
                 if removed_video_count > 0 and isinstance(meta_info.get('total_videos'), int):
-                    meta_info['total_videos'] = max(0, meta_info['total_videos'] - removed_video_count)
+                    meta_info['total_videos'] = max(
+                        0, meta_info['total_videos'] - removed_video_count
+                    )
                 if (
-                        isinstance(meta_info.get('splits'), dict) and
-                        isinstance(meta_info['splits'].get('train'), str)
-                    ):
+                    isinstance(meta_info.get('splits'), dict) and
+                    isinstance(meta_info['splits'].get('train'), str)
+                ):
                     start_str, _, end_str = meta_info['splits']['train'].partition(':')
                     with suppress(ValueError):
                         start_idx = int(start_str)
@@ -572,11 +628,11 @@ class DataEditor:
         off: int,
         verbose: bool
     ) -> int:
-        '''Patches 'episode_index' in a Parquet file by an offset.'''
         try:
             df = pd.read_parquet(path)
             nrows = len(df)
-            if 'episode_index' in df.columns and pd.api.types.is_integer_dtype(df['episode_index']):
+            if 'episode_index' in df.columns and pd.api.types.is_integer_dtype(
+                    df['episode_index']):
                 df['episode_index'] += off  # e.g., off = -1
                 df.to_parquet(path, index=False)
             return nrows
@@ -604,7 +660,7 @@ class DataEditor:
             return
 
         is_json_list_format = content.startswith('[') and content.endswith(']')
-        new_data_list_for_output = []  # Stores processed objects for JSON list or strings for JSONL
+        new_data_list_for_output = []
 
         original_data_list_parsed = []
         if is_json_list_format:
@@ -623,28 +679,30 @@ class DataEditor:
                         f'Invalid JSON in {path.name}: {e}. Attempting line-by-line (JSONL).')
                 is_json_list_format = False  # Fallback to JSONL
 
-        items_to_process = original_data_list_parsed if is_json_list_format else content.splitlines()
+        items_to_process = original_data_list_parsed if (
+            is_json_list_format) else content.splitlines()
 
         for item in items_to_process:
             obj_to_process = None
             is_decodable_json = False
-            raw_line_if_not_json = item  # For JSONL, item is a line string
+            raw_line_if_not_json = item
 
-            if is_json_list_format:  # item is already a Python object (dict, list, etc.)
+            if is_json_list_format:
                 obj_to_process = item
                 is_decodable_json = True
-            elif isinstance(item, str) and item.strip():  # For JSONL, item is a line string
+            elif isinstance(item, str) and item.strip():
                 try:
                     obj_to_process = json.loads(item)
                     is_decodable_json = True
                 except json.JSONDecodeError:
-                    is_decodable_json = False  # Keep raw_line_if_not_json
+                    is_decodable_json = False
 
             if is_decodable_json and isinstance(obj_to_process, dict):
                 current_ep_idx = obj_to_process.get('episode_index')
                 if current_ep_idx == episode_index_to_remove:
                     if verbose:
-                        self._log(f'Removing episode {episode_index_to_remove} entry from {path.name}')
+                        self._log(
+                            f'Removing episode {episode_index_to_remove} entry from {path.name}')
                     continue  # Skip this episode
                 if isinstance(current_ep_idx, int) and current_ep_idx > episode_index_to_remove:
                     obj_to_process = self._shift_delete_patch_indices_recursive(
@@ -654,17 +712,22 @@ class DataEditor:
             # Add to output list
             if is_json_list_format:
                 new_data_list_for_output.append(obj_to_process)
-            else:  # JSONL
-                if is_decodable_json:  # If it was JSON, serialize it back
-                    new_data_list_for_output.append(json.dumps(obj_to_process, separators=(',', ':')))
-                else:  # If it was not JSON (e.g. malformed line), keep original line
+            else:
+                if is_decodable_json:
+                    new_data_list_for_output.append(
+                        json.dumps(obj_to_process, separators=(',', ':')))
+                else:
                     new_data_list_for_output.append(raw_line_if_not_json)
 
         # Write back to file
         if is_json_list_format:
-            path.write_text(json.dumps(new_data_list_for_output, indent=2) + '\n')
+            path.write_text(
+                json.dumps(new_data_list_for_output, indent=2) + '\n'
+            )
         else:  # JSONL
-            path.write_text('\n'.join(new_data_list_for_output) + ('\n' if new_data_list_for_output else ''))
+            path.write_text(
+                '\n'.join(new_data_list_for_output) + ('\n' if new_data_list_for_output else '')
+            )
 
         if verbose:
             self._log(f'{path.name} updated.')

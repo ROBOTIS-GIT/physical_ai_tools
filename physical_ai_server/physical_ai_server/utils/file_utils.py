@@ -16,12 +16,11 @@
 #
 # Author: Dongyun Kim
 
-
 import json
-import os
-from pathlib import Path
-from typing import Any, Dict, Iterable, List, Optional, Union, Callable
 import logging
+from pathlib import Path
+from typing import Dict, Iterable, List, Optional, Union
+
 
 # Public export list
 __all__ = [
@@ -79,7 +78,8 @@ def read_json(
 
 
 def write_json(
-    file_path: Union[str, Path], data: Dict, *, indent: int = 2) -> bool:
+    file_path: Union[str, Path], data: Dict, *, indent: int = 2
+) -> bool:
     p = Path(file_path)
     try:
         safe_mkdir(p.parent)
