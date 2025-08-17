@@ -64,7 +64,9 @@ class DataEditor:
         fr'^episode_(\d{{{EPISODE_INDEX_WIDTH}}})$')
     DELETE_PATCH_KEYS = {'episode_index', 'index'}
     MERGE_NUM_KEYS: List[str] = [
-        'total_episodes', 'total_frames', 'total_videos'
+        'total_episodes',
+        'total_frames',
+        'total_videos'
     ]
 
     def __init__(
@@ -91,7 +93,9 @@ class DataEditor:
 
     @staticmethod
     def _natural_sort_paths(paths: Iterable[Path]) -> List[Path]:
-        return sorted(paths, key=lambda p: DataEditor._extract_idx_from_name(p.name))
+        return sorted(
+            paths, key=lambda p: DataEditor._extract_idx_from_name(p.name)
+        )
 
     def merge_datasets(
         self,
