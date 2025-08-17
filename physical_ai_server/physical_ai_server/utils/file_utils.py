@@ -25,7 +25,13 @@ import logging
 
 # Public export list
 __all__ = [
-    'read_json', 'write_json', 'read_json_file', 'read_jsonl', 'write_jsonl', 'safe_mkdir', 'FileIO'
+    'read_json',
+    'write_json',
+    'read_json_file',
+    'read_jsonl',
+    'write_jsonl',
+    'safe_mkdir',
+    'FileIO'
 ]
 
 _logger = logging.getLogger('file_utils')
@@ -37,14 +43,15 @@ if not _logger.handlers:
 
 
 def safe_mkdir(path: Union[str, Path]) -> Path:
-    """Create directory (and parents) if missing. Returns Path."""
     p = Path(path)
     p.mkdir(parents=True, exist_ok=True)
     return p
 
 
-def read_json(file_path: Union[str, Path], *, default: Optional[Dict] = None, silent: bool = False) -> Optional[Dict]:
-    """Read JSON file returning dict or default/None. Silent suppresses log noise."""
+def read_json(
+        file_path: Union[str, Path],
+        *, default: Optional[Dict] = None,
+        silent: bool = False) -> Optional[Dict]:
     p = Path(file_path)
     if p.exists() and not p.is_file():
         if not silent:
@@ -71,8 +78,8 @@ def read_json(file_path: Union[str, Path], *, default: Optional[Dict] = None, si
         return default
 
 
-def write_json(file_path: Union[str, Path], data: Dict, *, indent: int = 2) -> bool:
-    """Write dict as JSON. Returns True on success."""
+def write_json(
+    file_path: Union[str, Path], data: Dict, *, indent: int = 2) -> bool:
     p = Path(file_path)
     try:
         safe_mkdir(p.parent)
@@ -84,7 +91,6 @@ def write_json(file_path: Union[str, Path], data: Dict, *, indent: int = 2) -> b
 
 
 def read_jsonl(path: Union[str, Path]) -> List[Dict]:
-    """Read JSON Lines file into list of dicts. Malformed lines are skipped with warning."""
     p = Path(path)
     if not p.exists():
         return []
@@ -104,7 +110,6 @@ def read_jsonl(path: Union[str, Path]) -> List[Dict]:
 
 
 def write_jsonl(objs: Iterable[Dict], path: Union[str, Path]) -> bool:
-    """Write iterable of dicts to JSON Lines file. Returns True on success."""
     p = Path(path)
     try:
         safe_mkdir(p.parent)
@@ -119,12 +124,10 @@ def write_jsonl(objs: Iterable[Dict], path: Union[str, Path]) -> bool:
 
 # Backward compatibility wrapper
 def read_json_file(file_path: str) -> Optional[Dict]:  # Legacy API
-    """Deprecated: use read_json instead."""
     return read_json(file_path)
 
 
 class FileIO:
-    """Facade class grouping filesystem + JSON helpers for convenient namespacing."""
     read_json = staticmethod(read_json)
     write_json = staticmethod(write_json)
     read_jsonl = staticmethod(read_jsonl)
