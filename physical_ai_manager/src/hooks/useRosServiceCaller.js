@@ -395,15 +395,12 @@ export function useRosServiceCaller() {
           requestData.target_files = [];
         }
 
-        console.log('targetFolders:', targetFolders);
-
         // Only add target_folders if we actually have folders to search for
         if (targetFolders && targetFolders.length > 0) {
           requestData.target_folders = targetFolders;
         } else {
           requestData.target_folders = [];
         }
-        console.log('browseFile requestData:', requestData);
 
         const result = await callService(
           '/browse_file',
@@ -443,6 +440,13 @@ export function useRosServiceCaller() {
 
         console.log('editDatasetInfo:', editDatasetInfo);
 
+        // Remove trailing slash from mergeOutputPath if present
+        let mergeOutputPath = editDatasetInfo.mergeOutputPath;
+        if (mergeOutputPath.endsWith('/')) {
+          mergeOutputPath = mergeOutputPath.slice(0, -1);
+        }
+        const output_path = `${mergeOutputPath}/${editDatasetInfo.mergeOutputFolderName}`;
+
         const result = await callService(
           '/dataset/edit',
           'physical_ai_interfaces/srv/EditDataset',
@@ -450,7 +454,7 @@ export function useRosServiceCaller() {
             mode: command_enum,
             merge_dataset_list: editDatasetInfo.mergeDatasetList,
             delete_dataset_path: editDatasetInfo.datasetToDelete,
-            output_path: editDatasetInfo.mergeOutputPath,
+            output_path: output_path,
             delete_episode_num: editDatasetInfo.deleteEpisodeNums,
             upload_huggingface: editDatasetInfo.uploadHuggingface,
           }

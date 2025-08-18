@@ -28,6 +28,7 @@ import {
   setDatasetToDelete,
   setDeleteEpisodeNums,
   setMergeOutputPath,
+  setMergeOutputFolderName,
 } from '../features/editDataset/editDatasetSlice';
 import { useRosServiceCaller } from '../hooks/useRosServiceCaller';
 
@@ -346,9 +347,13 @@ export default function EditDatasetPage() {
   const { sendEditDatasetCommand } = useRosServiceCaller();
 
   // Redux state selectors
-  const { mergeDatasetList, datasetToDelete, deleteEpisodeNums, mergeOutputPath } = useSelector(
-    (state) => state.editDataset
-  );
+  const {
+    mergeDatasetList,
+    datasetToDelete,
+    deleteEpisodeNums,
+    mergeOutputPath,
+    mergeOutputFolderName,
+  } = useSelector((state) => state.editDataset);
 
   // Local state
   const [isEditable] = useState(true);
@@ -467,7 +472,7 @@ export default function EditDatasetPage() {
                     'bg-white': isEditable,
                   })}
                   type="text"
-                  placeholder="Enter output path"
+                  placeholder="Enter output directory"
                   value={mergeOutputPath || ''}
                   onChange={(e) => dispatch(setMergeOutputPath(e.target.value))}
                   disabled={!isEditable}
@@ -480,6 +485,26 @@ export default function EditDatasetPage() {
                 >
                   <MdFolderOpen className="w-8 h-8" />
                 </button>
+              </div>
+              <input
+                className={clsx(STYLES.textInput, {
+                  'bg-gray-100 cursor-not-allowed': !isEditable,
+                  'bg-white': isEditable,
+                })}
+                type="text"
+                placeholder="Enter output folder name"
+                value={mergeOutputFolderName || ''}
+                onChange={(e) => dispatch(setMergeOutputFolderName(e.target.value))}
+                disabled={!isEditable}
+              />
+              <div className="flex flex-row items-center justify-start gap-2 w-full">
+                <span className="text-sm text-white font-bold bg-blue-400 py-1 px-2 rounded-full shadow-sm">
+                  Output path
+                </span>
+                <span className="text-sm text-blue-600">
+                  {/* Remove trailing slash from mergeOutputPath before displaying */}
+                  {(mergeOutputPath || '').replace(/\/$/, '')}/{mergeOutputFolderName}
+                </span>
               </div>
             </div>
           </div>
@@ -549,16 +574,10 @@ export default function EditDatasetPage() {
         isOpen={showMergeOutputPathBrowserModal}
         onClose={() => setShowMergeOutputPathBrowserModal(false)}
         onFileSelect={handlers.mergeOutputPathSelect}
-        title="Select Merge Output Path"
+        title="Select Merge Output Directory"
         selectButtonText="Select"
         allowDirectorySelect={true}
         allowFileSelect={false}
-        targetFolderName={[
-          TARGET_FOLDERS.DATASET_METADATA,
-          TARGET_FOLDERS.DATASET_VIDEO,
-          TARGET_FOLDERS.DATASET_DATA,
-        ]}
-        targetFileLabel="Dataset folder found! 🎯"
         initialPath={DEFAULT_PATHS.DATASET_PATH}
         defaultPath={DEFAULT_PATHS.DATASET_PATH}
         homePath=""

@@ -22,6 +22,7 @@ const initialState = {
   mergeDatasetList: [],
   datasetToDelete: '',
   mergeOutputPath: '',
+  mergeOutputFolderName: '',
   deleteEpisodeNums: [],
   uploadHuggingface: false,
 };
@@ -41,6 +42,9 @@ const editDatasetSlice = createSlice({
     },
     setMergeOutputPath: (state, action) => {
       state.mergeOutputPath = action.payload;
+    },
+    setMergeOutputFolderName: (state, action) => {
+      state.mergeOutputFolderName = action.payload;
     },
     setDeleteEpisodeNums: (state, action) => {
       state.deleteEpisodeNums = action.payload;
@@ -62,6 +66,7 @@ export const {
   setMergeDatasetList,
   setDatasetToDelete,
   setMergeOutputPath,
+  setMergeOutputFolderName,
   setDeleteEpisodeNums,
   setUploadHuggingface,
   setDefaultEditDatasetInfo,
