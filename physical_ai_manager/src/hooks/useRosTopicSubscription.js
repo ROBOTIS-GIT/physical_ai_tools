@@ -150,6 +150,8 @@ export function useRosTopicSubscription() {
               taskInstruction: msg.task_info.task_instruction || [],
               policyPath: msg.task_info.policy_path || '',
               recordInferenceMode: msg.task_info.record_inference_mode || false,
+              useAsyncInferenceMode: msg.task_info.use_async_inference_mode || false,
+              updateAsyncInferenceStep: msg.task_info.update_async_inference_step || 30,
               userId: msg.task_info.user_id || '',
               fps: msg.task_info.fps || 0,
               tags: msg.task_info.tags || [],

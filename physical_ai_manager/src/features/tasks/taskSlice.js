@@ -26,6 +26,8 @@ const initialState = {
     taskInstruction: [],
     policyPath: '',
     recordInferenceMode: false,
+    useAsyncInferenceMode: false,
+    updateAsyncInferenceStep: 30,
     userId: undefined,
     fps: 30,
     tags: [],

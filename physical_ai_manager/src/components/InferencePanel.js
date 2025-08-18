@@ -450,6 +450,37 @@ const InferencePanel = () => {
         />
       </div>
 
+      <div className={clsx('flex', 'items-center', 'mb-2')}>
+        <span className={classLabel}>Async Inference</span>
+        <div className={clsx('flex', 'items-center')}>
+          <input
+            className={classCheckbox}
+            type="checkbox"
+            checked={info.useAsyncInferenceMode}
+            onChange={(e) => handleChange('useAsyncInferenceMode', e.target.checked)}
+            disabled={!isEditable}
+          />
+          <span className={clsx('ml-2', 'text-sm', 'text-gray-500')}>
+            {info.useAsyncInferenceMode ? 'Enabled' : 'Disabled'}
+          </span>
+        </div>
+      </div>
+
+      {info.useAsyncInferenceMode && (
+        <div className={clsx('flex', 'items-center', 'mb-2.5')}>
+          <span className={classLabel}>Update Step</span>
+          <input
+            className={classTextInput}
+            type="number"
+            min="0"
+            step="1"
+            value={info.updateAsyncInferenceStep || 30}
+            onChange={(e) => handleChange('updateAsyncInferenceStep', Number(e.target.value))}
+            disabled={!isEditable}
+          />
+        </div>
+      )}
+
       <div className="w-full h-1 my-2 border-t border-gray-300"></div>
 
       <div className="text-xs text-gray-400 mt-1 ml-2">

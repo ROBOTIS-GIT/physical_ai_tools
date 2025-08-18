@@ -66,6 +66,7 @@ class PhysicalAIServer(Node):
     DEFAULT_TOPIC_TIMEOUT = 5.0  # seconds
     PUB_QOS_SIZE = 10
     TRAINING_STATUS_TIMER_FREQUENCY = 0.5  # seconds
+    ASYNC_INFERENCE_THRESHOLD = 20
 
     def __init__(self):
         super().__init__('physical_ai_server')
@@ -90,7 +91,6 @@ class PhysicalAIServer(Node):
         self._setup_timer_callbacks()
 
         # Multi-process inference state
-        self.asynchronous_inference = False
         self._used_action_count = 0
         self.remaining_actions = []
         self.inference_worker: Optional[InferenceWorker] = None
@@ -108,10 +108,6 @@ class PhysicalAIServer(Node):
         self.inference_start_action_count = 0
         self.action_history = deque(maxlen=1000)
         self.last_executed_action = None
-        if self.asynchronous_inference:
-            self.inference_threshold = 20
-        else:
-            self.inference_threshold = 0
 
         # Observation tracking for debugging stale data issues
         self.last_observation_data = None
@@ -582,7 +578,7 @@ class PhysicalAIServer(Node):
                             0, self._used_action_count - worker_start_count)
 
                         # Apply offset and smoothing
-                        if self.asynchronous_inference:
+                        if self.inference_threshold > 0:
                             new_chunk = self.action_chunk_processor.apply_offset_and_smoothing(
                                 action_chunk, actions_executed_during_inference,
                                 self.action_history, self.last_executed_action)
@@ -786,6 +782,13 @@ class PhysicalAIServer(Node):
                 task_info = request.task_info
                 self.task_info = task_info  # Store for process restart
                 self.task_instruction = task_info.task_instruction
+                self.async_inference_mode = task_info.use_async_inference_mode
+                self.inference_threshold = task_info.update_async_inference_step
+
+                self.get_logger().info(
+                    f'Starting inference with policy: {task_info.policy_path}, '
+                    f'Async mode: {self.async_inference_mode}, '
+                    f'Threshold: {self.inference_threshold}')
 
                 # Start inference process (non-blocking)
                 if not self._start_inference_process(task_info.policy_path):

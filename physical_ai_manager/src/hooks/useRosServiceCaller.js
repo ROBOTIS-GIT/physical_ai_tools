@@ -126,6 +126,8 @@ export function useRosServiceCaller() {
             task_instruction: task_instruction,
             policy_path: String(taskInfo.policyPath || ''),
             record_inference_mode: Boolean(taskInfo.recordInferenceMode),
+            use_async_inference_mode: Boolean(taskInfo.useAsyncInferenceMode),
+            update_async_inference_step: taskInfo.useAsyncInferenceMode ? (Number(taskInfo.updateAsyncInferenceStep) || 30) : 0,
             fps: Number(taskInfo.fps) || 0,
             tags: taskInfo.tags || [],
             warmup_time_s: Number(taskInfo.warmupTime) || 0,
