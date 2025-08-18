@@ -354,6 +354,7 @@ export default function EditDatasetPage() {
   const [isEditable] = useState(true);
   const [deleteEpisodeNumsInput, setDeleteEpisodeNumsInput] = useState('');
   const [showDatasetFileBrowserModal, setShowDatasetFileBrowserModal] = useState(false);
+  const [showMergeOutputPathBrowserModal, setShowMergeOutputPathBrowserModal] = useState(false);
   const [selectingDatasetIndex, setSelectingDatasetIndex] = useState(null);
 
   // Effects
@@ -390,6 +391,14 @@ export default function EditDatasetPage() {
         setShowDatasetFileBrowserModal(false);
       },
       [isEditable, mergeDatasetList, selectingDatasetIndex, dispatch]
+    ),
+
+    mergeOutputPathSelect: useCallback(
+      (item) => {
+        dispatch(setMergeOutputPath(item.full_path));
+        setShowMergeOutputPathBrowserModal(false);
+      },
+      [dispatch]
     ),
   };
 
@@ -451,17 +460,27 @@ export default function EditDatasetPage() {
           <div className="w-full min-w-72 bg-white p-5 rounded-md shadow-md">
             <div className="flex flex-col items-start justify-center gap-2">
               <span className="text-xl font-bold">Enter Output Path</span>
-              <input
-                className={clsx(STYLES.textInput, {
-                  'bg-gray-100 cursor-not-allowed': !isEditable,
-                  'bg-white': isEditable,
-                })}
-                type="text"
-                placeholder="Enter output path"
-                value={mergeOutputPath || ''}
-                onChange={(e) => dispatch(setMergeOutputPath(e.target.value))}
-                disabled={!isEditable}
-              />
+              <div className="flex flex-row items-center justify-start gap-2 w-full">
+                <input
+                  className={clsx(STYLES.textInput, {
+                    'bg-gray-100 cursor-not-allowed': !isEditable,
+                    'bg-white': isEditable,
+                  })}
+                  type="text"
+                  placeholder="Enter output path"
+                  value={mergeOutputPath || ''}
+                  onChange={(e) => dispatch(setMergeOutputPath(e.target.value))}
+                  disabled={!isEditable}
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowMergeOutputPathBrowserModal(true)}
+                  className="flex items-center justify-center w-10 h-10 text-blue-500 bg-gray-200 rounded-md hover:text-blue-700"
+                  aria-label="Browse files for merge output path"
+                >
+                  <MdFolderOpen className="w-8 h-8" />
+                </button>
+              </div>
             </div>
           </div>
         </div>
@@ -514,7 +533,26 @@ export default function EditDatasetPage() {
         onFileSelect={handlers.datasetFileSelect}
         title="Select Dataset Path"
         selectButtonText="Select"
+        allowDirectorySelect={false}
+        targetFolderName={[
+          TARGET_FOLDERS.DATASET_METADATA,
+          TARGET_FOLDERS.DATASET_VIDEO,
+          TARGET_FOLDERS.DATASET_DATA,
+        ]}
+        targetFileLabel="Dataset folder found! 🎯"
+        initialPath={DEFAULT_PATHS.DATASET_PATH}
+        defaultPath={DEFAULT_PATHS.DATASET_PATH}
+        homePath=""
+      />
+
+      <FileBrowserModal
+        isOpen={showMergeOutputPathBrowserModal}
+        onClose={() => setShowMergeOutputPathBrowserModal(false)}
+        onFileSelect={handlers.mergeOutputPathSelect}
+        title="Select Merge Output Path"
+        selectButtonText="Select"
         allowDirectorySelect={true}
+        allowFileSelect={false}
         targetFolderName={[
           TARGET_FOLDERS.DATASET_METADATA,
           TARGET_FOLDERS.DATASET_VIDEO,
