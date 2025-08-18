@@ -26,7 +26,7 @@ import FileBrowserModal from '../components/FileBrowserModal';
 
 import {
   setMergeDatasetList,
-  setDatasetToDelete,
+  setDatasetToDeleteEpisode,
   setDeleteEpisodeNums,
   setMergeOutputPath,
   setMergeOutputFolderName,
@@ -45,7 +45,6 @@ const STYLES = {
     'flex-col',
     'items-start',
     'justify-start',
-    'pt-10',
     'overflow-scroll'
   ),
   textInput: clsx(
@@ -352,7 +351,7 @@ export default function EditDatasetPage() {
   // Redux state selectors
   const {
     mergeDatasetList,
-    datasetToDelete,
+    datasetToDeleteEpisode,
     deleteEpisodeNums,
     mergeOutputPath,
     mergeOutputFolderName,
@@ -364,6 +363,7 @@ export default function EditDatasetPage() {
   const [showDatasetFileBrowserModal, setShowDatasetFileBrowserModal] = useState(false);
   const [showMergeOutputPathBrowserModal, setShowMergeOutputPathBrowserModal] = useState(false);
   const [selectingDatasetIndex, setSelectingDatasetIndex] = useState(null);
+  const [showSelectDatasetPathBrowserModal, setShowSelectDatasetPathBrowserModal] = useState(false);
 
   // Effects
   useEffect(() => {
@@ -376,8 +376,8 @@ export default function EditDatasetPage() {
       dispatch(setMergeDatasetList(newDatasets));
     },
 
-    datasetToDeleteChange: (newDatasetToDelete) => {
-      dispatch(setDatasetToDelete(newDatasetToDelete));
+    datasetToDeleteEpisodeChange: (newDatasetToDelete) => {
+      dispatch(setDatasetToDeleteEpisode(newDatasetToDelete));
     },
 
     deleteEpisodeNumsChange: (inputValue) => {
@@ -405,6 +405,15 @@ export default function EditDatasetPage() {
       (item) => {
         dispatch(setMergeOutputPath(item.full_path));
         setShowMergeOutputPathBrowserModal(false);
+      },
+      [dispatch]
+    ),
+
+    selectDatasetPathSelect: useCallback(
+      (item) => {
+        dispatch(setDatasetToDeleteEpisode(item.full_path));
+        setShowSelectDatasetPathBrowserModal(false);
+        handlers.datasetToDeleteEpisodeChange(item.full_path);
       },
       [dispatch]
     ),
@@ -447,111 +456,136 @@ export default function EditDatasetPage() {
 
   // Render sections
   const renderMergeSection = () => (
-    <div className="w-full flex flex-col items-center justify-start">
-      <h1 className="text-3xl font-bold m-5">Edit Dataset</h1>
-      <div className="w-full flex flex-col items-center justify-start bg-gray-100 p-10 gap-8">
-        <span className="text-2xl font-bold">Merge Dataset</span>
-        <div className="w-full h-full flex flex-row items-center justify-start gap-8">
-          <div className="w-full min-w-72 bg-white p-5 rounded-md flex flex-col items-start justify-center gap-2 shadow-md">
-            <span className="text-xl font-bold">Enter Datasets to Merge</span>
-            <DatasetListInput
-              datasets={mergeDatasetList}
-              onChange={handlers.mergeDatasetsChange}
-              setShowDatasetFileBrowserModal={setShowDatasetFileBrowserModal}
-              selectingDatasetIndex={selectingDatasetIndex}
-              setSelectingDatasetIndex={setSelectingDatasetIndex}
-            />
-          </div>
-          <div className="w-10 h-full flex flex-col items-center justify-center">
-            <TbArrowMerge className="w-12 h-12 rotate-90" />
-          </div>
-          <div className="w-full min-w-72 bg-white p-5 rounded-md shadow-md">
-            <div className="flex flex-col items-start justify-center gap-2">
-              <span className="text-xl font-bold">Enter Output Path</span>
-              <div className="flex flex-row items-center justify-start gap-2 w-full">
-                <input
-                  className={clsx(STYLES.textInput, {
-                    'bg-gray-100 cursor-not-allowed': !isEditable,
-                    'bg-white': isEditable,
-                  })}
-                  type="text"
-                  placeholder="Enter output directory"
-                  value={mergeOutputPath || ''}
-                  onChange={(e) => dispatch(setMergeOutputPath(e.target.value))}
-                  disabled={!isEditable}
-                />
-                <button
-                  type="button"
-                  onClick={() => setShowMergeOutputPathBrowserModal(true)}
-                  className="flex items-center justify-center w-10 h-10 text-blue-500 bg-gray-200 rounded-md hover:text-blue-700"
-                  aria-label="Browse files for merge output path"
-                >
-                  <MdFolderOpen className="w-8 h-8" />
-                </button>
-              </div>
+    <div className="w-full flex flex-col items-center justify-start bg-gray-100 p-10 gap-8 rounded-xl">
+      <div className="w-full flex items-center justify-start">
+        <span className="text-2xl font-bold mb-4">Merge Datasets</span>
+      </div>
+      <div className="w-full h-full flex flex-row items-center justify-start gap-8">
+        <div className="w-full min-w-72 bg-white p-5 rounded-md flex flex-col items-start justify-center gap-2 shadow-md">
+          <span className="text-xl font-bold">Enter Datasets to Merge</span>
+          <DatasetListInput
+            datasets={mergeDatasetList}
+            onChange={handlers.mergeDatasetsChange}
+            setShowDatasetFileBrowserModal={setShowDatasetFileBrowserModal}
+            selectingDatasetIndex={selectingDatasetIndex}
+            setSelectingDatasetIndex={setSelectingDatasetIndex}
+          />
+        </div>
+        <div className="w-10 h-full flex flex-col items-center justify-center">
+          <TbArrowMerge className="w-12 h-12 rotate-90" />
+        </div>
+        <div className="w-full min-w-72 bg-white p-5 rounded-md shadow-md">
+          <div className="flex flex-col items-start justify-center gap-2">
+            <span className="text-xl font-bold">Enter Output Path</span>
+            <div className="flex flex-row items-center justify-start gap-2 w-full">
               <input
                 className={clsx(STYLES.textInput, {
                   'bg-gray-100 cursor-not-allowed': !isEditable,
                   'bg-white': isEditable,
                 })}
                 type="text"
-                placeholder="Enter output folder name"
-                value={mergeOutputFolderName || ''}
-                onChange={(e) => dispatch(setMergeOutputFolderName(e.target.value))}
+                placeholder="Enter output directory"
+                value={mergeOutputPath || ''}
+                onChange={(e) => dispatch(setMergeOutputPath(e.target.value))}
                 disabled={!isEditable}
               />
-              <div className="flex flex-row items-center justify-start gap-2 w-full">
-                <span className="min-w-24 text-sm text-white font-bold bg-blue-400 py-1 px-2 rounded-full shadow-sm">
-                  Output path
-                </span>
-                <span className="text-sm text-blue-600">
-                  {/* Remove trailing slash from mergeOutputPath before displaying */}
-                  {(mergeOutputPath || '').replace(/\/$/, '')}/{mergeOutputFolderName}
-                </span>
-              </div>
+              <button
+                type="button"
+                onClick={() => setShowMergeOutputPathBrowserModal(true)}
+                className="flex items-center justify-center w-10 h-10 text-blue-500 bg-gray-200 rounded-md hover:text-blue-700"
+                aria-label="Browse files for merge output path"
+              >
+                <MdFolderOpen className="w-8 h-8" />
+              </button>
+            </div>
+            <input
+              className={clsx(STYLES.textInput, {
+                'bg-gray-100 cursor-not-allowed': !isEditable,
+                'bg-white': isEditable,
+              })}
+              type="text"
+              placeholder="Enter output folder name"
+              value={mergeOutputFolderName || ''}
+              onChange={(e) => dispatch(setMergeOutputFolderName(e.target.value))}
+              disabled={!isEditable}
+            />
+            <div className="flex flex-row items-center justify-start gap-2 w-full">
+              <span className="min-w-24 text-sm text-white font-bold bg-blue-400 py-1 px-2 rounded-full shadow-sm">
+                Output path
+              </span>
+              <span className="text-sm text-blue-600">
+                {/* Remove trailing slash from mergeOutputPath before displaying */}
+                {(mergeOutputPath || '').replace(/\/$/, '')}/{mergeOutputFolderName}
+              </span>
             </div>
           </div>
         </div>
-        <button
-          className={STYLES.button}
-          onClick={operations.mergeDataset}
-          disabled={
-            mergeDatasetList.length < 2 ||
-            mergeOutputPath === '' ||
-            mergeOutputFolderName === '' ||
-            !isEditable
-          }
-        >
-          Merge
-        </button>
       </div>
+      <button
+        className={STYLES.button}
+        onClick={operations.mergeDataset}
+        disabled={
+          mergeDatasetList.length < 2 ||
+          mergeOutputPath === '' ||
+          mergeOutputFolderName === '' ||
+          !isEditable
+        }
+      >
+        Merge
+      </button>
     </div>
   );
 
   const renderDeleteSection = () => (
-    <div className="w-full flex flex-col items-center justify-start bg-gray-100 p-10 gap-8">
-      <h1 className="text-2xl font-bold">Delete Dataset</h1>
-      <textarea
-        className={clsx(STYLES.textarea, {
-          'bg-gray-100 cursor-not-allowed': !isEditable,
-          'bg-white': isEditable,
-        })}
-        value={datasetToDelete}
-        onChange={(e) => handlers.datasetToDeleteChange(e.target.value)}
-        disabled={!isEditable}
-        placeholder="Enter Dataset to Delete"
-      />
-      <EpisodeNumberInput
-        value={deleteEpisodeNumsInput}
-        onChange={handlers.deleteEpisodeNumsChange}
-        disabled={!isEditable}
-        className={clsx(STYLES.textInput, {
-          'bg-gray-100 cursor-not-allowed': !isEditable,
-          'bg-white': isEditable,
-        })}
-        parseFunction={parseEpisodeNumbers}
-      />
-      <button className={STYLES.button} onClick={operations.deleteDataset} disabled={!isEditable}>
+    <div className="w-full flex flex-col items-center justify-start bg-gray-100 p-10 gap-8 rounded-xl">
+      <div className="w-full flex items-center justify-start">
+        <h1 className="text-2xl font-bold mb-4">Delete Episodes from Dataset</h1>
+      </div>
+
+      <div className="flex flex-row items-center justify-start gap-20 w-full">
+        <div className="flex items-center justify-center gap-2 w-full">
+          <textarea
+            className={clsx(STYLES.textarea, {
+              'bg-gray-100 cursor-not-allowed': !isEditable,
+              'bg-white': isEditable,
+              'shadow-sm': isEditable,
+            })}
+            value={datasetToDeleteEpisode}
+            onChange={(e) => handlers.datasetToDeleteEpisodeChange(e.target.value)}
+            disabled={!isEditable}
+            placeholder="Enter dataset to delete episodes"
+          />
+
+          <button
+            type="button"
+            onClick={() => setShowSelectDatasetPathBrowserModal(true)}
+            className="flex items-center justify-center w-12 h-12 text-blue-500 bg-gray-200 rounded-md hover:text-blue-700"
+            aria-label="Browse files for dataset to delete"
+          >
+            <MdFolderOpen className="w-10 h-10" />
+          </button>
+        </div>
+
+        <div className="flex flex-col items-start justify-start gap-2 w-full">
+          <span className="text-lg font-bold">Episode Numbers to Delete</span>
+          <EpisodeNumberInput
+            value={deleteEpisodeNumsInput}
+            onChange={handlers.deleteEpisodeNumsChange}
+            disabled={!isEditable}
+            className={clsx(STYLES.textInput, {
+              'bg-gray-100 cursor-not-allowed': !isEditable,
+              'bg-white': isEditable,
+              'shadow-sm': isEditable,
+            })}
+            parseFunction={parseEpisodeNumbers}
+          />
+        </div>
+      </div>
+      <button
+        className={STYLES.button}
+        onClick={operations.deleteDataset}
+        disabled={datasetToDeleteEpisode === '' || deleteEpisodeNums.length === 0 || !isEditable}
+      >
         Delete
       </button>
     </div>
@@ -559,7 +593,11 @@ export default function EditDatasetPage() {
 
   return (
     <div className={STYLES.container}>
-      <div className="w-full h-full flex flex-col items-start justify-start p-10 gap-8">
+      <div className="w-full flex flex-col items-start justify-start p-10 gap-6">
+        <h1 className="text-4xl font-bold flex flex-row items-center justify-start gap-2">
+          <MdDataset className="w-10 h-10" />
+          Edit Dataset
+        </h1>
         {renderMergeSection()}
         {renderDeleteSection()}
       </div>
@@ -590,6 +628,24 @@ export default function EditDatasetPage() {
         selectButtonText="Select"
         allowDirectorySelect={true}
         allowFileSelect={false}
+        initialPath={DEFAULT_PATHS.DATASET_PATH}
+        defaultPath={DEFAULT_PATHS.DATASET_PATH}
+        homePath=""
+      />
+
+      <FileBrowserModal
+        isOpen={showSelectDatasetPathBrowserModal}
+        onClose={() => setShowSelectDatasetPathBrowserModal(false)}
+        onFileSelect={handlers.selectDatasetPathSelect}
+        title="Select Dataset Path"
+        selectButtonText="Select"
+        allowDirectorySelect={false}
+        targetFolderName={[
+          TARGET_FOLDERS.DATASET_METADATA,
+          TARGET_FOLDERS.DATASET_VIDEO,
+          TARGET_FOLDERS.DATASET_DATA,
+        ]}
+        targetFileLabel="Dataset folder found! 🎯"
         initialPath={DEFAULT_PATHS.DATASET_PATH}
         defaultPath={DEFAULT_PATHS.DATASET_PATH}
         homePath=""
