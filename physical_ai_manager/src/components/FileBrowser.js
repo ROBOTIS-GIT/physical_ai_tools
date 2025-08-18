@@ -543,7 +543,7 @@ export default function FileBrowser({
         setLoading(false);
       }
     },
-    [browseFile, onPathChange, targetFileName, checkDirectoriesForTargetFile]
+    [browseFile, onPathChange, targetFileName, targetFolderName, checkDirectoriesForTargetFile]
   );
 
   const goHome = useCallback(async () => {

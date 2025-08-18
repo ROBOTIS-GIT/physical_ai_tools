@@ -413,7 +413,6 @@ export default function EditDatasetPage() {
       (item) => {
         dispatch(setDatasetToDeleteEpisode(item.full_path));
         setShowSelectDatasetPathBrowserModal(false);
-        handlers.datasetToDeleteEpisodeChange(item.full_path);
       },
       [dispatch]
     ),
