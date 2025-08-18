@@ -14,11 +14,15 @@
 //
 // Author: Kiwoong Park
 
-import React, { useEffect, useState, useMemo } from 'react';
+import React, { useEffect, useState, useMemo, useCallback } from 'react';
 import clsx from 'clsx';
 import toast, { useToasterStore } from 'react-hot-toast';
 import { useSelector, useDispatch } from 'react-redux';
 import { TbArrowMerge } from 'react-icons/tb';
+import { MdFolderOpen } from 'react-icons/md';
+import { DEFAULT_PATHS, TARGET_FILES } from '../constants/paths';
+import FileBrowserModal from '../components/FileBrowserModal';
+
 import {
   setMergeDatasetList,
   setDatasetToDelete,
@@ -27,7 +31,15 @@ import {
 } from '../features/editDataset/editDatasetSlice';
 import { useRosServiceCaller } from '../hooks/useRosServiceCaller';
 
-const DatasetListInput = ({ datasets = [''], onChange, disabled, className }) => {
+const DatasetListInput = ({
+  datasets = [''],
+  onChange,
+  disabled,
+  className,
+  setShowDatasetFileBrowserModal,
+  selectingDatasetIndex,
+  setSelectingDatasetIndex,
+}) => {
   const [localDatasets, setLocalDatasets] = useState(() => {
     // Ensure instructions is always an array
     if (Array.isArray(datasets) && datasets.length > 0) {
@@ -66,6 +78,11 @@ const DatasetListInput = ({ datasets = [''], onChange, disabled, className }) =>
     onChange(newDatasets);
   };
 
+  const selectDatasetUsingFileBrowser = (index) => {
+    setSelectingDatasetIndex(index);
+    setShowDatasetFileBrowserModal(true);
+  };
+
   const classDatasetTextarea = clsx(
     'w-full',
     'p-2',
@@ -75,7 +92,7 @@ const DatasetListInput = ({ datasets = [''], onChange, disabled, className }) =>
     'text-sm',
     'resize-none',
     'min-h-8',
-    'h-14',
+    'h-12',
     'focus:ring-2',
     'focus:ring-blue-500',
     'focus:border-transparent'
@@ -123,28 +140,37 @@ const DatasetListInput = ({ datasets = [''], onChange, disabled, className }) =>
       <div className="max-h-48 overflow-y-auto border border-gray-300 rounded-md bg-white">
         <div className="p-2 space-y-2">
           {localDatasets.map((dataset, index) => (
-            <div key={index} className="relative">
-              <textarea
-                value={dataset}
-                onChange={(e) => updateDataset(index, e.target.value)}
-                disabled={disabled}
-                placeholder={`Dataset ${index + 1}`}
-                className={clsx(classDatasetTextarea, {
-                  'bg-gray-100 cursor-not-allowed': disabled,
-                  'bg-white': !disabled,
-                  'pr-10': !disabled && localDatasets.length > 1,
-                })}
-                rows={2}
-              />
-              {!disabled && localDatasets.length > 1 && (
-                <button
-                  type="button"
-                  onClick={() => removeDataset(index)}
-                  className={classRemoveDatasetButton}
-                >
-                  ×
-                </button>
-              )}
+            <div className="flex flex-row items-center justify-start gap-2 w-full">
+              <div key={index} className="relative w-full">
+                <textarea
+                  value={dataset}
+                  onChange={(e) => updateDataset(index, e.target.value)}
+                  disabled={disabled}
+                  placeholder={`Dataset ${index + 1}`}
+                  className={clsx(classDatasetTextarea, {
+                    'bg-gray-100 cursor-not-allowed': disabled,
+                    'bg-white': !disabled,
+                    'pr-10': !disabled && localDatasets.length > 1,
+                  })}
+                  rows={2}
+                />
+                {!disabled && localDatasets.length > 1 && (
+                  <button
+                    type="button"
+                    onClick={() => removeDataset(index)}
+                    className={classRemoveDatasetButton}
+                  >
+                    ×
+                  </button>
+                )}
+              </div>
+              <button
+                type="button"
+                onClick={() => selectDatasetUsingFileBrowser(index)}
+                className="flex items-center justify-center w-10 h-10 text-blue-500 bg-gray-200 rounded-md hover:text-blue-700"
+              >
+                <MdFolderOpen className="w-8 h-8" />
+              </button>
             </div>
           ))}
         </div>
@@ -156,7 +182,7 @@ const DatasetListInput = ({ datasets = [''], onChange, disabled, className }) =>
             <span className="text-base font-bold">+</span>
             Add Dataset
           </button>
-          <span className="block text-xs text-gray-600 mb-0.5 px-0 select-none">
+          <span className="block text-md text-gray-600 mb-0.5 px-0 select-none">
             <span role="img" aria-label="task">
               📝
             </span>{' '}
@@ -237,6 +263,8 @@ export default function EditDatasetPage() {
 
   const [isEditable] = useState(true);
   const [deleteEpisodeNumsInput, setDeleteEpisodeNumsInput] = useState('');
+  const [showDatasetFileBrowserModal, setShowDatasetFileBrowserModal] = useState(false);
+  const [selectingDatasetIndex, setSelectingDatasetIndex] = useState(null);
 
   useEffect(() => {
     toasts
@@ -292,6 +320,21 @@ export default function EditDatasetPage() {
       toast.error(`Failed to merge dataset: ${error.message}`);
     }
   };
+
+  const handleDatasetFileSelect = useCallback(
+    (item) => {
+      if (!isEditable) return;
+      console.log('selectingDatasetIndex:', selectingDatasetIndex);
+      console.log('item:', item);
+      handleMergeDatasetListChange([
+        ...mergeDatasetList.slice(0, selectingDatasetIndex),
+        item.full_path,
+        ...mergeDatasetList.slice(selectingDatasetIndex + 1),
+      ]);
+      setShowDatasetFileBrowserModal(false);
+    },
+    [isEditable, mergeDatasetList, selectingDatasetIndex]
+  );
 
   const classContainer = clsx(
     'w-full',
@@ -369,26 +412,31 @@ export default function EditDatasetPage() {
           <div className="w-full flex flex-col items-center justify-start bg-gray-100 p-10 gap-8">
             <span className="text-2xl font-bold">Merge Dataset</span>
             <div className="w-full h-full flex flex-row items-center justify-start gap-8">
-              <div className="w-full bg-white p-5 rounded-md flex flex-col items-center justify-center gap-2 shadow-md">
+              <div className="w-full min-w-72 bg-white p-5 rounded-md flex flex-col items-start justify-center gap-2 shadow-md">
                 <span className="text-xl font-bold">Enter Datasets to Merge</span>
                 <DatasetListInput
                   datasets={mergeDatasetList}
                   onChange={handleMergeDatasetListChange}
+                  setShowDatasetFileBrowserModal={setShowDatasetFileBrowserModal}
+                  selectingDatasetIndex={selectingDatasetIndex}
+                  setSelectingDatasetIndex={setSelectingDatasetIndex}
                 />
               </div>
               <div className="w-10 h-full flex flex-col items-center justify-center">
                 <TbArrowMerge className="w-12 h-12 rotate-90" />
               </div>
-              <div className="w-full bg-white p-5 rounded-md shadow-md">
-                <span className="text-lg font-bold">Enter Output Path</span>
-                <input
-                  className={classTextInput}
-                  type="text"
-                  placeholder="Enter output path"
-                  value={mergeOutputPath || ''}
-                  onChange={(e) => dispatch(setMergeOutputPath(e.target.value))}
-                  disabled={!isEditable}
-                />
+              <div className="w-full min-w-72 bg-white p-5 rounded-md shadow-md">
+                <div className="flex flex-col items-start justify-center gap-2">
+                  <span className="text-xl font-bold">Enter Output Path</span>
+                  <input
+                    className={classTextInput}
+                    type="text"
+                    placeholder="Enter output path"
+                    value={mergeOutputPath || ''}
+                    onChange={(e) => dispatch(setMergeOutputPath(e.target.value))}
+                    disabled={!isEditable}
+                  />
+                </div>
               </div>
             </div>
             <button className={classMergeButton} onClick={handleMergeDataset}>
@@ -417,6 +465,20 @@ export default function EditDatasetPage() {
           </button>
         </div>
       </div>
+
+      <FileBrowserModal
+        isOpen={showDatasetFileBrowserModal}
+        onClose={() => setShowDatasetFileBrowserModal(false)}
+        onFileSelect={handleDatasetFileSelect}
+        title="Select Policy Path"
+        selectButtonText="Select"
+        allowDirectorySelect={true}
+        targetFileName={TARGET_FILES.POLICY_MODEL}
+        targetFileLabel="Policy file found! 🎯"
+        initialPath={DEFAULT_PATHS.POLICY_MODEL_PATH}
+        defaultPath={DEFAULT_PATHS.POLICY_MODEL_PATH}
+        homePath=""
+      />
     </div>
   );
 }
