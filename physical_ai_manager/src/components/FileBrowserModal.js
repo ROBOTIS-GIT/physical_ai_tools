@@ -28,6 +28,7 @@ export default function FileBrowserModal({
   title = 'Select File',
   selectButtonText = 'Select',
   allowDirectorySelect = false,
+  allowFileSelect = true,
   targetFileName = null,
   targetFolderName = null,
   targetFileLabel = null,
@@ -198,6 +199,8 @@ export default function FileBrowserModal({
               targetFileLabel={targetFileLabel}
               homePath={homePath}
               defaultPath={defaultPath}
+              allowDirectorySelect={allowDirectorySelect}
+              allowFileSelect={allowFileSelect}
             />
           </div>
 
@@ -219,9 +222,13 @@ export default function FileBrowserModal({
                 <span>
                   {targetFileName || targetFolderName
                     ? `Select a directory containing ${targetFileName || targetFolderName}`
+                    : allowDirectorySelect && allowFileSelect
+                    ? 'Select a file or folder, or use current directory'
                     : allowDirectorySelect
-                    ? 'Select a file or use current directory'
-                    : 'Select a file to continue'}
+                    ? 'Select a folder or use current directory'
+                    : allowFileSelect
+                    ? 'Select a file to continue'
+                    : 'Navigation only'}
                 </span>
               )}
             </div>
@@ -235,7 +242,9 @@ export default function FileBrowserModal({
                 disabled={
                   targetFileName || targetFolderName
                     ? !(selectedItem && selectedItem.is_directory)
-                    : !selectedItem && !(allowDirectorySelect && currentPath)
+                    : (!selectedItem && !(allowDirectorySelect && currentPath)) ||
+                      (selectedItem && selectedItem.is_directory && !allowDirectorySelect) ||
+                      (selectedItem && !selectedItem.is_directory && !allowFileSelect)
                 }
                 className={classConfirmButton}
               >

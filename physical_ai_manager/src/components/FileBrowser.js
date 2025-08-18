@@ -189,7 +189,17 @@ const PathInfo = ({ currentPath, homePath, defaultPath, targetFileName }) => {
   );
 };
 
-const FileItem = ({ item, isSelected, hasTarget, targetFileName, targetFileLabel, onClick }) => {
+const FileItem = ({
+  item,
+  isSelected,
+  hasTarget,
+  targetFileName,
+  targetFileLabel,
+  onClick,
+  onSelect,
+  allowDirectorySelect = false,
+  allowFileSelect = true,
+}) => {
   const classItemContainer = clsx(
     'flex',
     'items-center',
@@ -241,8 +251,41 @@ const FileItem = ({ item, isSelected, hasTarget, targetFileName, targetFileLabel
 
   const classArrowIcon = clsx('w-4', 'h-4', 'text-gray-400', 'ml-2');
 
+  const canSelectDirectory = item.is_directory && allowDirectorySelect;
+  const canSelectFile = !item.is_directory && allowFileSelect;
+  const showSelectButton = canSelectDirectory || canSelectFile;
+
+  const classSelectButton = clsx(
+    'flex-shrink-0',
+    'ml-2',
+    'px-3',
+    'py-1',
+    'text-xs',
+    'font-medium',
+    'rounded-md',
+    'border',
+    'transition-colors',
+    isSelected
+      ? 'bg-blue-600 text-white border-blue-600'
+      : 'bg-white text-blue-600 border-blue-300 hover:bg-blue-50'
+  );
+
+  const handleItemClick = (e) => {
+    // Only trigger navigation when the select button is not clicked
+    if (!e.target.closest('.select-button')) {
+      onClick(item);
+    }
+  };
+
+  const handleSelectClick = (e) => {
+    e.stopPropagation();
+    if (onSelect) {
+      onSelect(item);
+    }
+  };
+
   return (
-    <div onClick={() => onClick(item)} className={classItemContainer}>
+    <div onClick={handleItemClick} className={classItemContainer}>
       <div className={classIconContainer}>
         {item.is_directory ? (
           <>
@@ -264,16 +307,48 @@ const FileItem = ({ item, isSelected, hasTarget, targetFileName, targetFileLabel
               </span>
             )}
           </div>
-          {isSelected && <MdCheck className={classCheckIcon} />}
+
+          <div className="flex items-center">
+            {showSelectButton && (
+              <button
+                onClick={handleSelectClick}
+                className={`${classSelectButton} select-button`}
+                title={`Select this ${item.is_directory ? 'folder' : 'file'}`}
+              >
+                {isSelected ? 'Selected' : 'Select'}
+              </button>
+            )}
+            {isSelected && <MdCheck className={classCheckIcon} />}
+          </div>
         </div>
         <div className={classMetaRow}>
           <span>{formatFileSize(item.size)}</span>
           <span className="mx-2">•</span>
           <span>{item.modified_time}</span>
+          {canSelectDirectory && (
+            <>
+              <span className="mx-2">•</span>
+              <span className="text-blue-600 font-medium">Selectable folder</span>
+            </>
+          )}
+          {item.is_directory && !allowDirectorySelect && (
+            <>
+              <span className="mx-2">•</span>
+              <span className="text-gray-400 font-medium">Navigation only</span>
+            </>
+          )}
+          {!item.is_directory && !allowFileSelect && (
+            <>
+              <span className="mx-2">•</span>
+              <span className="text-gray-400 font-medium">File selection disabled</span>
+            </>
+          )}
         </div>
       </div>
 
-      {item.is_directory && <MdKeyboardArrowRight className={classArrowIcon} />}
+      {item.is_directory && !showSelectButton && (
+        <MdKeyboardArrowRight className={classArrowIcon} />
+      )}
     </div>
   );
 };
@@ -401,6 +476,8 @@ export default function FileBrowser({
   targetFileLabel = null,
   homePath = null,
   defaultPath = null,
+  allowDirectorySelect = false,
+  allowFileSelect = true,
 }) {
   const { browseFile } = useRosServiceCaller();
 
@@ -497,8 +574,8 @@ export default function FileBrowser({
   const handleItemClick = useCallback(
     async (item) => {
       if (item.is_directory) {
+        // Special handling when a target is present
         if (targetFileName || targetFolderName) {
-          // Check if this directory has target files (server already checked)
           if (item.has_target_file) {
             setSelectedItem(item);
             if (onDirectorySelect) {
@@ -510,17 +587,32 @@ export default function FileBrowser({
           }
         }
 
+        // Normal folder navigation (not selected)
         await browsePath(item.full_path, 'browse');
         setSelectedItem(null);
+      }
+      // File click is handled in handleItemSelect
+    },
+    [browsePath, onFileSelect, onDirectorySelect, targetFileName, targetFolderName]
+  );
+
+  const handleItemSelect = useCallback(
+    (item) => {
+      setSelectedItem(item);
+
+      if (item.is_directory) {
+        if (onDirectorySelect) {
+          onDirectorySelect(item);
+        } else if (onFileSelect) {
+          onFileSelect(item);
+        }
       } else {
-        setSelectedItem(item);
         if (onFileSelect) {
           onFileSelect(item);
         }
       }
     },
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [browsePath, currentPath, onFileSelect, onDirectorySelect, targetFileName, targetFolderName]
+    [onFileSelect, onDirectorySelect]
   );
 
   const filteredItems = filterItems(items, targetFileName, fileFilter);
@@ -603,6 +695,9 @@ export default function FileBrowser({
                     targetFileName={targetFileName}
                     targetFileLabel={targetFileLabel}
                     onClick={handleItemClick}
+                    onSelect={handleItemSelect}
+                    allowDirectorySelect={allowDirectorySelect}
+                    allowFileSelect={allowFileSelect}
                   />
                 );
               })}
