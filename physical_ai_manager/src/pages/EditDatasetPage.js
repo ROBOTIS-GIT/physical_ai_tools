@@ -20,6 +20,7 @@ import toast, { useToasterStore } from 'react-hot-toast';
 import { useSelector, useDispatch } from 'react-redux';
 import { TbArrowMerge } from 'react-icons/tb';
 import { MdFolderOpen } from 'react-icons/md';
+import { MdDataset } from 'react-icons/md';
 import { DEFAULT_PATHS, TARGET_FOLDERS } from '../constants/paths';
 import FileBrowserModal from '../components/FileBrowserModal';
 
@@ -76,11 +77,12 @@ const STYLES = {
     'focus:border-transparent'
   ),
   button: clsx(
-    'p-3',
+    'px-5',
+    'py-3',
     'm-5',
     'bg-blue-500',
     'text-white',
-    'rounded',
+    'rounded-xl',
     'hover:bg-blue-600',
     'focus:outline-none',
     'focus:ring-2',
@@ -88,8 +90,11 @@ const STYLES = {
     'flex',
     'items-center',
     'gap-5',
-    'text-sm',
-    'font-medium'
+    'text-xl',
+    'font-medium',
+    'shadow-md',
+    'disabled:opacity-50',
+    'disabled:cursor-not-allowed'
   ),
   datasetTextarea: clsx(
     'w-full',
@@ -129,7 +134,7 @@ const STYLES = {
     'py-1',
     'bg-blue-500',
     'text-white',
-    'rounded',
+    'rounded-md',
     'hover:bg-blue-600',
     'focus:outline-none',
     'focus:ring-2',
@@ -298,12 +303,10 @@ const DatasetListInput = ({
             <span className="text-base font-bold">+</span>
             Add Dataset
           </button>
-          <span className="block text-md text-gray-600 mb-0.5 px-0 select-none">
-            <span role="img" aria-label="dataset count">
-              📝
-            </span>{' '}
+          <div className="flex flex-row items-center justify-start gap-2 text-md text-green-600 mb-0.5 px-0 select-none">
+            <MdDataset className="w-5 h-5 text-green-600" />
             {localDatasets.length}
-          </span>
+          </div>
         </div>
       )}
     </div>
@@ -498,7 +501,7 @@ export default function EditDatasetPage() {
                 disabled={!isEditable}
               />
               <div className="flex flex-row items-center justify-start gap-2 w-full">
-                <span className="text-sm text-white font-bold bg-blue-400 py-1 px-2 rounded-full shadow-sm">
+                <span className="min-w-24 text-sm text-white font-bold bg-blue-400 py-1 px-2 rounded-full shadow-sm">
                   Output path
                 </span>
                 <span className="text-sm text-blue-600">
@@ -509,7 +512,16 @@ export default function EditDatasetPage() {
             </div>
           </div>
         </div>
-        <button className={STYLES.button} onClick={operations.mergeDataset} disabled={!isEditable}>
+        <button
+          className={STYLES.button}
+          onClick={operations.mergeDataset}
+          disabled={
+            mergeDatasetList.length < 2 ||
+            mergeOutputPath === '' ||
+            mergeOutputFolderName === '' ||
+            !isEditable
+          }
+        >
           Merge
         </button>
       </div>
