@@ -42,5 +42,10 @@ export const DEFAULT_PATHS = {
  */
 export const TARGET_FILES = {
   POLICY_MODEL: 'model.safetensors',
+};
+
+export const TARGET_FOLDERS = {
   DATASET_METADATA: 'meta',
+  DATASET_VIDEO: 'videos',
+  DATASET_DATA: 'data',
 };

@@ -52,8 +52,11 @@ const filterItems = (items, targetFileName, fileFilter) => {
   }
   return items;
 };
-const hasTargetFile = (item, targetFileName, directoriesWithTarget) => {
-  return targetFileName && item.is_directory && directoriesWithTarget.has(item.full_path);
+const hasTargetFile = (item, targetFileName, targetFolderName, directoriesWithTarget) => {
+  return (
+    (targetFileName && item.is_directory && directoriesWithTarget.has(item.full_path)) ||
+    (targetFolderName && item.is_directory && directoriesWithTarget.has(item.full_path))
+  );
 };
 
 const FileBrowserHeader = ({
@@ -393,6 +396,7 @@ export default function FileBrowser({
   className = '',
   title = 'File Browser',
   targetFileName = null,
+  targetFolderName = null,
   onDirectorySelect = null,
   targetFileLabel = null,
   homePath = null,
@@ -429,8 +433,9 @@ export default function FileBrowser({
 
       try {
         // Only pass target files if we actually have a targetFileName
-        const targetFiles = targetFileName ? [targetFileName] : null;
-        const result = await browseFile(action, path, targetName, targetFiles);
+        const targetFiles = targetFileName ? targetFileName : null;
+        const targetFolders = targetFolderName ? targetFolderName : null;
+        const result = await browseFile(action, path, targetName, targetFiles, targetFolders);
 
         if (result.success) {
           setCurrentPath(result.current_path);
@@ -444,7 +449,9 @@ export default function FileBrowser({
           // Server already checked for target files, just process the results
           if (targetFileName && result.items) {
             checkDirectoriesForTargetFile(result.items);
-          } else if (!targetFileName) {
+          } else if (targetFolderName && result.items) {
+            checkDirectoriesForTargetFile(result.items);
+          } else if (!targetFileName && !targetFolderName) {
             setDirectoriesWithTarget(new Set());
           }
         } else {
@@ -490,7 +497,7 @@ export default function FileBrowser({
   const handleItemClick = useCallback(
     async (item) => {
       if (item.is_directory) {
-        if (targetFileName) {
+        if (targetFileName || targetFolderName) {
           // Check if this directory has target files (server already checked)
           if (item.has_target_file) {
             setSelectedItem(item);
@@ -513,7 +520,7 @@ export default function FileBrowser({
       }
     },
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [browsePath, currentPath, onFileSelect, onDirectorySelect, targetFileName]
+    [browsePath, currentPath, onFileSelect, onDirectorySelect, targetFileName, targetFolderName]
   );
 
   const filteredItems = filterItems(items, targetFileName, fileFilter);
@@ -579,7 +586,12 @@ export default function FileBrowser({
           ) : (
             <div className={classItemList}>
               {filteredItems.map((item, index) => {
-                const itemHasTarget = hasTargetFile(item, targetFileName, directoriesWithTarget);
+                const itemHasTarget = hasTargetFile(
+                  item,
+                  targetFileName,
+                  targetFolderName,
+                  directoriesWithTarget
+                );
                 const isSelected = selectedItem?.full_path === item.full_path;
 
                 return (

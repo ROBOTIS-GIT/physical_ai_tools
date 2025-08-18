@@ -379,12 +379,13 @@ export function useRosServiceCaller() {
   );
 
   const browseFile = useCallback(
-    async (action, currentPath = '', targetName = '', targetFiles = null) => {
+    async (action, currentPath = '', targetName = '', targetFiles = null, targetFolders = null) => {
       try {
         const requestData = {
           action: action,
           current_path: currentPath,
           target_name: targetName,
+          target_folders: targetFolders,
         };
 
         // Only add target_files if we actually have files to search for
@@ -393,6 +394,16 @@ export function useRosServiceCaller() {
         } else {
           requestData.target_files = [];
         }
+
+        console.log('targetFolders:', targetFolders);
+
+        // Only add target_folders if we actually have folders to search for
+        if (targetFolders && targetFolders.length > 0) {
+          requestData.target_folders = targetFolders;
+        } else {
+          requestData.target_folders = [];
+        }
+        console.log('browseFile requestData:', requestData);
 
         const result = await callService(
           '/browse_file',

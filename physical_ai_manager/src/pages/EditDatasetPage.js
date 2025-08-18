@@ -20,7 +20,7 @@ import toast, { useToasterStore } from 'react-hot-toast';
 import { useSelector, useDispatch } from 'react-redux';
 import { TbArrowMerge } from 'react-icons/tb';
 import { MdFolderOpen } from 'react-icons/md';
-import { DEFAULT_PATHS, TARGET_FILES } from '../constants/paths';
+import { DEFAULT_PATHS, TARGET_FOLDERS } from '../constants/paths';
 import FileBrowserModal from '../components/FileBrowserModal';
 
 import {
@@ -515,8 +515,12 @@ export default function EditDatasetPage() {
         title="Select Dataset Path"
         selectButtonText="Select"
         allowDirectorySelect={true}
-        targetFileName={TARGET_FILES.DATASET_METADATA}
-        targetFileLabel="Dataset file found! 🎯"
+        targetFolderName={[
+          TARGET_FOLDERS.DATASET_METADATA,
+          TARGET_FOLDERS.DATASET_VIDEO,
+          TARGET_FOLDERS.DATASET_DATA,
+        ]}
+        targetFileLabel="Dataset folder found! 🎯"
         initialPath={DEFAULT_PATHS.DATASET_PATH}
         defaultPath={DEFAULT_PATHS.DATASET_PATH}
         homePath=""
