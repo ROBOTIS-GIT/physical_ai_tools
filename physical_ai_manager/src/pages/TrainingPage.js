@@ -26,6 +26,7 @@ import ModelWeightSelector from '../components/ModelWeightSelector';
 import TrainingControlPanel from '../components/TrainingControlPanel';
 import TrainingOptionInput from '../components/TrainingOptionInput';
 import TrainingProgressBar from '../components/TrainingProgressBar';
+import TrainingLossDisplay from '../components/TrainingLossDisplay';
 
 export default function TrainingPage() {
   const trainingMode = useSelector((state) => state.training.trainingMode);
@@ -99,6 +100,14 @@ export default function TrainingPage() {
       {/* Components based on selected mode */}
       <div className="overflow-scroll h-full w-full">
         <div>{renderTrainingComponents()}</div>
+        <div className="flex justify-center items-center mt-5 mb-8">
+          <div className="rounded-full bg-gray-200 w-32 h-3"></div>
+        </div>
+        <div className="flex justify-center items-center mb-10">
+          <div className="w-full max-w-md">
+            <TrainingLossDisplay />
+          </div>
+        </div>
       </div>
 
       {/* Training Control Buttons */}
@@ -106,9 +115,11 @@ export default function TrainingPage() {
         <div className="flex-shrink-0">
           <TrainingControlPanel />
         </div>
-        {/* Training Progress Bar */}
-        <div className="flex-1 min-w-0 max-w-xl flex justify-center items-center">
-          <TrainingProgressBar />
+        {/* Training Progress and Loss Display */}
+        <div className="flex-1 min-w-0 max-w-4xl flex gap-10 justify-center items-center">
+          <div className="flex-1 max-w-md">
+            <TrainingProgressBar />
+          </div>
         </div>
       </div>
     </div>

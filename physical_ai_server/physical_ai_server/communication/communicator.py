@@ -14,18 +14,20 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
-# Author: Dongyun Kim, Seongwoo Kim
+# Author: Dongyun Kim, Seongwoo Kim, Kiwoong Park
 
 from functools import partial
 from typing import Any, Dict, Optional, Set, Tuple
 
 from geometry_msgs.msg import Twist
 from nav_msgs.msg import Odometry
-from physical_ai_interfaces.msg import TaskStatus, TrainingStatus
+from physical_ai_interfaces.msg import BrowserItem, TaskStatus, TrainingStatus
 from physical_ai_interfaces.srv import (
+    BrowseFile,
     GetImageTopicList
 )
 from physical_ai_server.communication.multi_subscriber import MultiSubscriber
+from physical_ai_server.utils.file_browse_utils import FileBrowseUtils
 from physical_ai_server.utils.parameter_utils import parse_topic_list_with_names
 from rclpy.node import Node
 from rclpy.qos import (
@@ -61,6 +63,9 @@ class Communicator:
         self.node = node
         self.operation_mode = operation_mode
         self.params = params
+        self.file_browse_utils = FileBrowseUtils(
+            max_workers=8,
+            logger=self.node.get_logger())
 
         # Parse topic lists for more convenient access
         self.camera_topics = parse_topic_list_with_names(self.params['camera_topic_list'])
@@ -199,6 +204,12 @@ class Communicator:
             self.get_image_topic_list_callback
         )
 
+        self.file_browser_service = self.node.create_service(
+            BrowseFile,
+            '/browse_file',
+            self.browse_file_callback
+        )
+
     def _camera_callback(self, name: str, msg: CompressedImage) -> None:
         self.camera_topic_msgs[name] = msg
 
@@ -259,6 +270,80 @@ class Communicator:
         response.image_topic_list = camera_topic_list
         response.success = True
         response.message = 'Image topic list retrieved successfully'
+        return response
+
+    def browse_file_callback(self, request, response):
+        try:
+            if request.action == 'get_path':
+                result = self.file_browse_utils.handle_get_path_action(
+                    request.current_path)
+            elif request.action == 'go_parent':
+                # Check if target_files are provided for parallel file checking
+                target_files = None
+                if hasattr(request, 'target_files') and request.target_files:
+                    target_files = set(request.target_files)
+
+                if target_files:
+                    # Use parallel file checking for go_parent
+                    result = self.file_browse_utils.handle_go_parent_with_file_check(
+                        request.current_path, target_files)
+                else:
+                    # Use standard go_parent (no target files or empty list)
+                    result = self.file_browse_utils.handle_go_parent_action(
+                        request.current_path)
+            elif request.action == 'browse':
+                # Check if target_files are provided for parallel file checking
+                target_files = None
+                if hasattr(request, 'target_files') and request.target_files:
+                    target_files = set(request.target_files)
+
+                if target_files:
+                    # Use parallel file checking
+                    result = self.file_browse_utils.handle_browse_with_file_check(
+                        request.current_path, request.target_name, target_files)
+                else:
+                    # Use standard browsing (no target files or empty list)
+                    result = self.file_browse_utils.handle_browse_action(
+                        request.current_path, request.target_name)
+            else:
+                result = {
+                    'success': False,
+                    'message': f'Unknown action: {request.action}',
+                    'current_path': '',
+                    'parent_path': '',
+                    'selected_path': '',
+                    'items': []
+                }
+
+            # Convert result dict to response object
+            response.success = result['success']
+            response.message = result['message']
+            response.current_path = result['current_path']
+            response.parent_path = result['parent_path']
+            response.selected_path = result['selected_path']
+
+            # Convert item dicts to BrowserItem objects
+            response.items = []
+            for item_dict in result['items']:
+                item = BrowserItem()
+                item.name = item_dict['name']
+                item.full_path = item_dict['full_path']
+                item.is_directory = item_dict['is_directory']
+                item.size = item_dict['size']
+                item.modified_time = item_dict['modified_time']
+                # Set has_target_file field (default False for files)
+                item.has_target_file = item_dict.get('has_target_file', False)
+                response.items.append(item)
+
+        except Exception as e:
+            self.node.get_logger().error(f'Error in browse file handler: {str(e)}')
+            response.success = False
+            response.message = f'Error: {str(e)}'
+            response.current_path = ''
+            response.parent_path = ''
+            response.selected_path = ''
+            response.items = []
+
         return response
 
     def get_publisher_msg_types(self):
