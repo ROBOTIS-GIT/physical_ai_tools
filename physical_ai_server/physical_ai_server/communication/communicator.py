@@ -289,31 +289,44 @@ class Communicator:
                 result = self.file_browse_utils.handle_get_path_action(
                     request.current_path)
             elif request.action == 'go_parent':
-                # Check if target_files are provided for parallel file checking
+                # Check if target_files or target_folders are provided
                 target_files = None
+                target_folders = None
+
                 if hasattr(request, 'target_files') and request.target_files:
                     target_files = set(request.target_files)
+                if hasattr(request, 'target_folders') and request.target_folders:
+                    target_folders = set(request.target_folders)
 
-                if target_files:
-                    # Use parallel file checking for go_parent
-                    result = self.file_browse_utils.handle_go_parent_with_file_check(
-                        request.current_path, target_files)
+                if target_files or target_folders:
+                    # Use parallel target checking for go_parent
+                    result = self.file_browse_utils.handle_go_parent_with_target_check(
+                        request.current_path,
+                        target_files,
+                        target_folders)
                 else:
-                    # Use standard go_parent (no target files or empty list)
+                    # Use standard go_parent (no targets specified)
                     result = self.file_browse_utils.handle_go_parent_action(
                         request.current_path)
             elif request.action == 'browse':
-                # Check if target_files are provided for parallel file checking
+                # Check if target_files or target_folders are provided
                 target_files = None
+                target_folders = None
+
                 if hasattr(request, 'target_files') and request.target_files:
                     target_files = set(request.target_files)
+                if hasattr(request, 'target_folders') and request.target_folders:
+                    target_folders = set(request.target_folders)
 
-                if target_files:
-                    # Use parallel file checking
-                    result = self.file_browse_utils.handle_browse_with_file_check(
-                        request.current_path, request.target_name, target_files)
+                if target_files or target_folders:
+                    # Use parallel target checking
+                    result = self.file_browse_utils.handle_browse_with_target_check(
+                        request.current_path,
+                        request.target_name,
+                        target_files,
+                        target_folders)
                 else:
-                    # Use standard browsing (no target files or empty list)
+                    # Use standard browsing (no targets specified)
                     result = self.file_browse_utils.handle_browse_action(
                         request.current_path, request.target_name)
             else:
