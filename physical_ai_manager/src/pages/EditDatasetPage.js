@@ -512,13 +512,13 @@ export default function EditDatasetPage() {
         isOpen={showDatasetFileBrowserModal}
         onClose={() => setShowDatasetFileBrowserModal(false)}
         onFileSelect={handlers.datasetFileSelect}
-        title="Select Policy Path"
+        title="Select Dataset Path"
         selectButtonText="Select"
         allowDirectorySelect={true}
-        targetFileName={TARGET_FILES.POLICY_MODEL}
-        targetFileLabel="Policy file found! 🎯"
-        initialPath={DEFAULT_PATHS.POLICY_MODEL_PATH}
-        defaultPath={DEFAULT_PATHS.POLICY_MODEL_PATH}
+        targetFileName={TARGET_FILES.DATASET_METADATA}
+        targetFileLabel="Dataset file found! 🎯"
+        initialPath={DEFAULT_PATHS.DATASET_PATH}
+        defaultPath={DEFAULT_PATHS.DATASET_PATH}
         homePath=""
       />
     </div>
