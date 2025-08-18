@@ -18,6 +18,7 @@ import React, { useEffect, useState, useMemo } from 'react';
 import clsx from 'clsx';
 import toast, { useToasterStore } from 'react-hot-toast';
 import { useSelector, useDispatch } from 'react-redux';
+import { TbArrowMerge } from 'react-icons/tb';
 import {
   setMergeDatasetList,
   setDatasetToDelete,
@@ -292,6 +293,17 @@ export default function EditDatasetPage() {
     }
   };
 
+  const classContainer = clsx(
+    'w-full',
+    'h-full',
+    'flex',
+    'flex-col',
+    'items-start',
+    'justify-start',
+    'pt-10',
+    'overflow-scroll'
+  );
+
   const classMergeButton = clsx(
     'p-3',
     'm-5',
@@ -350,21 +362,35 @@ export default function EditDatasetPage() {
   );
 
   return (
-    <div className="w-full h-full flex flex-col items-start justify-start">
+    <div className={classContainer}>
       <div className="w-full h-full flex flex-col items-start justify-start p-10 gap-8">
         <div className="w-full flex flex-col items-center justify-start">
           <h1 className="text-3xl font-bold m-5">Edit Dataset</h1>
           <div className="w-full flex flex-col items-center justify-start bg-gray-100 p-10 gap-8">
             <span className="text-2xl font-bold">Merge Dataset</span>
-            <DatasetListInput datasets={mergeDatasetList} onChange={handleMergeDatasetListChange} />
-            <input
-              className={classTextInput}
-              type="text"
-              placeholder="Enter output path"
-              value={mergeOutputPath || ''}
-              onChange={(e) => dispatch(setMergeOutputPath(e.target.value))}
-              disabled={!isEditable}
-            />
+            <div className="w-full h-full flex flex-row items-center justify-start gap-8">
+              <div className="w-full bg-white p-5 rounded-md flex flex-col items-center justify-center gap-2 shadow-md">
+                <span className="text-xl font-bold">Enter Datasets to Merge</span>
+                <DatasetListInput
+                  datasets={mergeDatasetList}
+                  onChange={handleMergeDatasetListChange}
+                />
+              </div>
+              <div className="w-10 h-full flex flex-col items-center justify-center">
+                <TbArrowMerge className="w-12 h-12 rotate-90" />
+              </div>
+              <div className="w-full bg-white p-5 rounded-md shadow-md">
+                <span className="text-lg font-bold">Enter Output Path</span>
+                <input
+                  className={classTextInput}
+                  type="text"
+                  placeholder="Enter output path"
+                  value={mergeOutputPath || ''}
+                  onChange={(e) => dispatch(setMergeOutputPath(e.target.value))}
+                  disabled={!isEditable}
+                />
+              </div>
+            </div>
             <button className={classMergeButton} onClick={handleMergeDataset}>
               Merge
             </button>
