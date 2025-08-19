@@ -21,10 +21,16 @@ from typing import Any, Dict, Optional, Set, Tuple
 
 from geometry_msgs.msg import Twist
 from nav_msgs.msg import Odometry
-from physical_ai_interfaces.msg import BrowserItem, TaskStatus, TrainingStatus
+from physical_ai_interfaces.msg import (
+    BrowserItem,
+    DatasetInfo,
+    TaskStatus,
+    TrainingStatus
+)
 from physical_ai_interfaces.srv import (
     BrowseFile,
     EditDataset,
+    GetDatasetInfo,
     GetImageTopicList,
 )
 from physical_ai_server.communication.multi_subscriber import MultiSubscriber
@@ -221,6 +227,12 @@ class Communicator:
             self.dataset_edit_callback
         )
 
+        self.get_dataset_info_service = self.node.create_service(
+            GetDatasetInfo,
+            '/dataset/get_info',
+            self.get_dataset_info_callback
+        )
+
     def _camera_callback(self, name: str, msg: CompressedImage) -> None:
         self.camera_topic_msgs[name] = msg
 
@@ -401,6 +413,35 @@ class Communicator:
             response.message = f'Error: {str(e)}'
 
         return response
+
+    def get_dataset_info_callback(self, request, response):
+        try:
+            dataset_path = request.dataset_path
+            dataset_info = self.data_editor.get_dataset_info(dataset_path)
+
+            info = DatasetInfo()
+            info.codebase_version = dataset_info.get('codebase_version', 'unknown') if isinstance(
+                dataset_info.get('codebase_version'), str) else 'unknown'
+            info.robot_type = dataset_info.get('robot_type', 'unknown') if isinstance(
+                dataset_info.get('robot_type'), str) else 'unknown'
+            info.total_episodes = dataset_info.get('total_episodes', 0) if isinstance(
+                dataset_info.get('total_episodes'), int) else 0
+            info.total_tasks = dataset_info.get('total_tasks', 0) if isinstance(
+                dataset_info.get('total_tasks'), int) else 0
+            info.fps = dataset_info.get('fps', 0) if isinstance(
+                dataset_info.get('fps'), int) else 0
+
+            response.dataset_info = info
+            response.success = True
+            response.message = 'Dataset info retrieved successfully'
+            return response
+
+        except Exception as e:
+            self.node.get_logger().error(f'Error in get_dataset_info_callback: {str(e)}')
+            response.success = False
+            response.message = f'Error: {str(e)}'
+            response.dataset_info = DatasetInfo()
+            return response
 
     def get_publisher_msg_types(self):
         msg_types = {}

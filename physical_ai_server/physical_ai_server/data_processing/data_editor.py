@@ -483,6 +483,13 @@ class DataEditor:
         chunk_name: str = DEFAULT_CHUNK_NAME,
         verbose: bool | None = None
     ) -> DeleteResult:
+        self._log(
+            'aaaaaaaaaaaaaaaaaa', logging.ERROR
+        )
+        num = self.get_num_of_episodes(dataset_dir)
+        self._log(
+            f'num of episode {num}', logging.ERROR
+        )
 
         if verbose is not None:
             self.verbose = verbose
@@ -735,3 +742,9 @@ class DataEditor:
 
         if verbose:
             self._log(f'{path.name} updated.')
+
+    def get_dataset_info(self, dataset_dir: str) -> dict:
+        dataset_path = Path(dataset_dir)
+        info_path = dataset_path / 'meta' / 'info.json'
+        info_data = FileIO.read_json(info_path, default={}) or {}
+        return info_data
