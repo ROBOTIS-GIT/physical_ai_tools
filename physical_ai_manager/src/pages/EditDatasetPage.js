@@ -198,6 +198,49 @@ const showOperationError = (operation, errorMessage = '') => {
   toast.error(message);
 };
 
+// Check for duplicate datasets in the list
+const checkForDuplicateDatasets = (datasets) => {
+  const normalizedPaths = datasets
+    .filter((path) => path && path.trim() !== '') // Filter out empty paths
+    .map((path) => path.trim().replace(/\/$/, '')); // Normalize paths by removing trailing slashes
+
+  const uniquePaths = new Set(normalizedPaths);
+  const duplicates = [];
+
+  // Find duplicates
+  normalizedPaths.forEach((path, index) => {
+    const firstIndex = normalizedPaths.indexOf(path);
+    if (firstIndex !== index && !duplicates.some((dup) => dup.path === path)) {
+      duplicates.push({
+        path: path,
+        indices: normalizedPaths.map((p, i) => (p === path ? i : -1)).filter((i) => i !== -1),
+      });
+    }
+  });
+
+  return {
+    hasDuplicates: duplicates.length > 0,
+    duplicates: duplicates,
+  };
+};
+
+const showDuplicateWarning = (duplicates) => {
+  const duplicateList = duplicates
+    .map((dup) => `"${dup.path}" (positions: ${dup.indices.map((i) => i + 1).join(', ')})`)
+    .join('\n');
+
+  toast.error(
+    `Duplicate datasets detected:\n${duplicateList}\n\nPlease remove duplicates before merging.`,
+    {
+      duration: 6000,
+      style: {
+        maxWidth: '500px',
+        whiteSpace: 'pre-line',
+      },
+    }
+  );
+};
+
 const DatasetListInput = ({
   datasets = [''],
   onChange,
@@ -438,6 +481,14 @@ export default function EditDatasetPage() {
 
     mergeDataset: async () => {
       try {
+        // Check for duplicate datasets before merging
+        const duplicateCheck = checkForDuplicateDatasets(mergeDatasetList);
+
+        if (duplicateCheck.hasDuplicates) {
+          showDuplicateWarning(duplicateCheck.duplicates);
+          return; // Stop execution if duplicates are found
+        }
+
         const result = await sendEditDatasetCommand('merge');
         console.log('Merge dataset result:', result);
 
@@ -452,6 +503,18 @@ export default function EditDatasetPage() {
       }
     },
   };
+
+  // Calculate merge button state
+  const duplicateCheck = useMemo(
+    () => checkForDuplicateDatasets(mergeDatasetList),
+    [mergeDatasetList]
+  );
+  const isMergeDisabled =
+    mergeDatasetList.length < 2 ||
+    mergeOutputPath === '' ||
+    mergeOutputFolderName === '' ||
+    !isEditable ||
+    duplicateCheck.hasDuplicates;
 
   // Render sections
   const renderMergeSection = () => (
@@ -520,15 +583,30 @@ export default function EditDatasetPage() {
           </div>
         </div>
       </div>
+      {/* Duplicate Warning */}
+      {duplicateCheck.hasDuplicates && (
+        <div className="w-full p-4 bg-red-50 border border-red-200 rounded-lg">
+          <div className="flex items-center gap-2 text-red-800 font-medium mb-2">
+            <span className="text-lg">⚠️</span>
+            Duplicate Datasets Detected
+          </div>
+          <div className="text-red-700 text-sm">
+            {duplicateCheck.duplicates.map((dup, index) => (
+              <div key={index} className="mb-1">
+                <span className="font-mono bg-red-100 px-1 rounded">{dup.path}</span>
+                <span className="text-red-600 ml-2">
+                  (positions: {dup.indices.map((i) => i + 1).join(', ')})
+                </span>
+              </div>
+            ))}
+          </div>
+          <div className="text-red-600 text-sm mt-2">Please remove duplicates before merging.</div>
+        </div>
+      )}
       <button
         className={STYLES.button}
         onClick={operations.mergeDataset}
-        disabled={
-          mergeDatasetList.length < 2 ||
-          mergeOutputPath === '' ||
-          mergeOutputFolderName === '' ||
-          !isEditable
-        }
+        disabled={isMergeDisabled}
       >
         Merge
       </button>
