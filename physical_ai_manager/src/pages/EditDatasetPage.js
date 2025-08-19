@@ -193,7 +193,7 @@ const showOperationSuccess = (operation, episodeNums = []) => {
 const showOperationError = (operation, errorMessage = '') => {
   const operationText = operation === 'delete' ? 'delete' : 'merge';
   const message = errorMessage
-    ? `Failed to ${operationText} dataset: ${errorMessage}`
+    ? `Failed to ${operationText} dataset:\n${errorMessage}`
     : `Failed to ${operationText} dataset`;
   toast.error(message);
 };
@@ -526,7 +526,8 @@ export default function EditDatasetPage() {
         if (result?.success) {
           showOperationSuccess('delete', deleteEpisodeNums);
         } else {
-          showOperationError('delete');
+          if (result?.message !== '') showOperationError('delete', result.message);
+          else showOperationError('delete');
         }
       } catch (error) {
         console.error('Error deleting dataset:', error);
@@ -557,6 +558,8 @@ export default function EditDatasetPage() {
 
         if (result?.success) {
           showOperationSuccess('merge');
+          dispatch(setMergeOutputPath(''));
+          dispatch(setMergeOutputFolderName(''));
         } else {
           showOperationError('merge');
         }

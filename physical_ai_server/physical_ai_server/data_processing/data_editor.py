@@ -491,7 +491,7 @@ class DataEditor:
             self._log(
                 f'Dataset directory not found: {dataset_dir}', logging.ERROR
             )
-            return DeleteResult(dataset_dir, episode_index_to_delete, 0, 0, False)
+            raise FileNotFoundError(f'Dataset directory not found: {dataset_dir}')
 
         self._log(
             f'Deleting episode {episode_index_to_delete} in {dataset_dir} (chunk={chunk_name})'
