@@ -113,11 +113,11 @@ class ActionChunkProcessor:
     ) -> List[List[float]]:
         try:
             # Determine number of interpolation steps based on gap size
-            if gap_size > 0.8:  # Very large gap (>45 degrees)
+            if gap_size > 0.45:  # Very large gap (>25.5 degrees)
                 num_steps = 9  # Large gap - more steps
-            elif gap_size > 0.5:  # Large gap (>30 degrees)
+            elif gap_size > 0.3:  # Large gap (>17 degrees)
                 num_steps = 6  # Medium gap
-            elif gap_size > 0.3:  # Medium gap (>17 degrees)
+            elif gap_size > 0.15:  # Medium gap (>8.5 degrees)
                 num_steps = 3  # Small gap
             else:
                 return []  # No interpolation needed
@@ -164,18 +164,17 @@ class ActionChunkProcessor:
                     f'({len(action_history)} < {actions_executed_during_inference})')
             return False  # Not enough history to analyze
 
-        # Get actions executed during inference time
         inference_period_actions = list(action_history)[-actions_executed_during_inference:]
 
         if len(inference_period_actions) < 2:
             if self.logger:
                 self.logger.info(
                     'Robot was static during inference: Too few actions to analyze')
-            return True  # Too few actions to determine motion
+            return True
 
         # Calculate position variations during inference period
-        max_variation = 0.0
-        joint_variations = []
+        all_joints_static = True
+        
         if last_executed_action is not None:
             for joint_idx in range(len(last_executed_action)):
                 joint_positions = [
@@ -183,18 +182,21 @@ class ActionChunkProcessor:
                 joint_max = max(joint_positions)
                 joint_min = min(joint_positions)
                 variation = joint_max - joint_min
-                joint_variations.append(variation)
-                max_variation = max(max_variation, variation)
+                
+                # Check if this joint is static
+                joint_is_static = variation < self.position_threshold
+                if not joint_is_static:
+                    all_joints_static = False
 
-        is_static = max_variation < self.position_threshold
+        is_static = all_joints_static
 
         # Detailed logging for debugging
         if self.logger:
             self.logger.info(
                 f'Static analysis during inference '
                 f'({actions_executed_during_inference} actions): '
-                f'is_static={is_static}, max_variation={max_variation:.6f}'
-                f', threshold={self.position_threshold:.6f}')
+                f'is_static={is_static}, all_joints_static={all_joints_static}, '
+                f'threshold={self.position_threshold:.6f}')
 
         return is_static
 
