@@ -144,6 +144,22 @@ const STYLES = {
     'text-sm',
     'font-medium'
   ),
+  deleteAllButton: clsx(
+    'px-3',
+    'py-1',
+    'bg-red-500',
+    'text-white',
+    'rounded-md',
+    'hover:bg-red-600',
+    'focus:outline-none',
+    'focus:ring-2',
+    'focus:ring-red-500',
+    'flex',
+    'items-center',
+    'gap-2',
+    'text-sm',
+    'font-medium'
+  ),
 };
 
 // Utility Functions
@@ -222,6 +238,10 @@ const checkForDuplicateDatasets = (datasets) => {
     hasDuplicates: duplicates.length > 0,
     duplicates: duplicates,
   };
+};
+
+const checkForEmptyDataset = (datasets) => {
+  return datasets.some((dataset) => !dataset || dataset.trim() === '') || datasets.length === 0;
 };
 
 const showDuplicateWarning = (duplicates) => {
@@ -309,6 +329,13 @@ const DatasetListInput = ({
       setSelectingDatasetIndex(index);
       setShowDatasetFileBrowserModal(true);
     },
+
+    deleteAll: () => {
+      if (localDatasets.length > 0) {
+        setLocalDatasets([]);
+        onChange([]);
+      }
+    },
   };
 
   // Render individual dataset input row
@@ -357,15 +384,26 @@ const DatasetListInput = ({
 
       {!disabled && (
         <div className="mt-3 flex justify-between items-center">
-          <button
-            type="button"
-            onClick={datasetActions.add}
-            className={STYLES.addButton}
-            aria-label="Add new dataset"
-          >
-            <span className="text-base font-bold">+</span>
-            Add Dataset
-          </button>
+          <div className="flex flex-row items-center justify-start gap-2">
+            <button
+              type="button"
+              onClick={datasetActions.add}
+              className={STYLES.addButton}
+              aria-label="Add new dataset"
+            >
+              <span className="text-base font-bold">+</span>
+              Add Dataset
+            </button>
+            <button
+              type="button"
+              onClick={datasetActions.deleteAll}
+              className={STYLES.deleteAllButton}
+              aria-label="Delete all datasets"
+            >
+              <span className="text-base font-bold">×</span>
+              Delete All
+            </button>
+          </div>
           <div className="flex flex-row items-center justify-start gap-2 text-md text-green-600 mb-0.5 px-0 select-none">
             <MdDataset className="w-5 h-5 text-green-600" />
             {localDatasets.length}
@@ -574,6 +612,7 @@ export default function EditDatasetPage() {
       try {
         // Check for duplicate datasets before merging
         const duplicateCheck = checkForDuplicateDatasets(mergeDatasetList);
+        const emptyDatasetCheck = checkForEmptyDataset(mergeDatasetList);
 
         if (duplicateCheck.hasDuplicates) {
           showDuplicateWarning(duplicateCheck.duplicates);
@@ -610,6 +649,10 @@ export default function EditDatasetPage() {
     () => checkForDuplicateDatasets(mergeDatasetList),
     [mergeDatasetList]
   );
+  const hasEmptyDatasets = useMemo(
+    () => checkForEmptyDataset(mergeDatasetList),
+    [mergeDatasetList]
+  );
   const hasFolderConflict = useMemo(
     () => checkFolderNameConflict(mergeOutputFolderName, existingFolders),
     [mergeOutputFolderName, existingFolders]
@@ -620,6 +663,7 @@ export default function EditDatasetPage() {
     mergeOutputFolderName === '' ||
     !isEditable ||
     duplicateCheck.hasDuplicates ||
+    hasEmptyDatasets ||
     hasFolderConflict;
 
   // Render sections
@@ -689,6 +733,30 @@ export default function EditDatasetPage() {
           </div>
         </div>
       </div>
+      {/* Empty Dataset Warning */}
+      {hasEmptyDatasets && (
+        <div className="w-full p-4 bg-yellow-50 border border-yellow-200 rounded-lg">
+          <div className="flex items-center gap-2 text-yellow-800 font-medium mb-2">
+            <span className="text-lg">⚠️</span>
+            Empty Dataset Paths Detected
+          </div>
+          <div className="text-yellow-700 text-sm">
+            {mergeDatasetList.map(
+              (dataset, index) =>
+                (!dataset || dataset.trim() === '') && (
+                  <div key={index} className="mb-1">
+                    <span className="font-medium">Position {index + 1}:</span>
+                    <span className="ml-2 text-yellow-600">Empty dataset path</span>
+                  </div>
+                )
+            )}
+          </div>
+          <div className="text-yellow-600 text-sm mt-2">
+            Please fill in all dataset paths before merging.
+          </div>
+        </div>
+      )}
+
       {/* Duplicate Warning */}
       {duplicateCheck.hasDuplicates && (
         <div className="w-full p-4 bg-red-50 border border-red-200 rounded-lg">
