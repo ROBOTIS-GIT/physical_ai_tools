@@ -174,7 +174,7 @@ class ActionChunkProcessor:
 
         # Calculate position variations during inference period
         all_joints_static = True
-        
+
         if last_executed_action is not None:
             for joint_idx in range(len(last_executed_action)):
                 joint_positions = [
@@ -182,7 +182,7 @@ class ActionChunkProcessor:
                 joint_max = max(joint_positions)
                 joint_min = min(joint_positions)
                 variation = joint_max - joint_min
-                
+
                 # Check if this joint is static
                 joint_is_static = variation < self.position_threshold
                 if not joint_is_static:
