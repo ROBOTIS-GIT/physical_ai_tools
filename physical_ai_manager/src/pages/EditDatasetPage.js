@@ -377,7 +377,7 @@ const DatasetListInput = ({
 
   return (
     <div className={clsx('w-full', className)}>
-      <div className="max-h-48 overflow-y-auto border border-gray-300 rounded-md bg-white">
+      <div className="max-h-48 overflow-y-auto border border-gray-300 rounded-md bg-white scrollbar-thin">
         <div className="p-2 space-y-2">{localDatasets.map(renderDatasetRow)}</div>
       </div>
 
