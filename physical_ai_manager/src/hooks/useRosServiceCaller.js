@@ -453,7 +453,7 @@ export function useRosServiceCaller() {
           {
             mode: command_enum,
             merge_dataset_list: editDatasetInfo.mergeDatasetList,
-            delete_dataset_path: editDatasetInfo.datasetToDelete,
+            delete_dataset_path: editDatasetInfo.datasetToDeleteEpisode,
             output_path: output_path,
             delete_episode_num: editDatasetInfo.deleteEpisodeNums,
             upload_huggingface: editDatasetInfo.uploadHuggingface,
