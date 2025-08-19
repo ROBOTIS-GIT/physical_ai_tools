@@ -21,6 +21,13 @@ import { createSlice } from '@reduxjs/toolkit';
 const initialState = {
   mergeDatasetList: [],
   datasetToDeleteEpisode: '',
+  datasetInfo: {
+    totalEpisodes: 0,
+    totalTasks: 0,
+    fps: 0,
+    codebaseVersion: '',
+    robotType: '',
+  },
   mergeOutputPath: '',
   mergeOutputFolderName: '',
   deleteEpisodeNums: [],
@@ -39,6 +46,9 @@ const editDatasetSlice = createSlice({
     },
     setDatasetToDeleteEpisode: (state, action) => {
       state.datasetToDeleteEpisode = action.payload;
+    },
+    setDatasetInfo: (state, action) => {
+      state.datasetInfo = action.payload;
     },
     setMergeOutputPath: (state, action) => {
       state.mergeOutputPath = action.payload;
@@ -65,6 +75,7 @@ export const {
   setEditDatasetInfo,
   setMergeDatasetList,
   setDatasetToDeleteEpisode,
+  setDatasetInfo,
   setMergeOutputPath,
   setMergeOutputFolderName,
   setDeleteEpisodeNums,

@@ -470,6 +470,24 @@ export function useRosServiceCaller() {
     [callService, editDatasetInfo]
   );
 
+  const getDatasetInfo = useCallback(
+    async (datasetPath) => {
+      try {
+        const result = await callService(
+          '/dataset/get_info',
+          'physical_ai_interfaces/srv/GetDatasetInfo',
+          { dataset_path: datasetPath }
+        );
+        console.log('getDatasetInfo service response:', result);
+        return result;
+      } catch (error) {
+        console.error('Failed to get dataset info:', error);
+        throw new Error(`${error.message || error}`);
+      }
+    },
+    [callService]
+  );
+
   return {
     callService,
     sendRecordCommand,
@@ -485,5 +503,6 @@ export function useRosServiceCaller() {
     sendTrainingCommand,
     browseFile,
     sendEditDatasetCommand,
+    getDatasetInfo,
   };
 }

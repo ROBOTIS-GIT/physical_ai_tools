@@ -19,8 +19,7 @@ import clsx from 'clsx';
 import toast, { useToasterStore } from 'react-hot-toast';
 import { useSelector, useDispatch } from 'react-redux';
 import { TbArrowMerge } from 'react-icons/tb';
-import { MdFolderOpen } from 'react-icons/md';
-import { MdDataset } from 'react-icons/md';
+import { MdFolderOpen, MdRefresh, MdDataset } from 'react-icons/md';
 import { DEFAULT_PATHS, TARGET_FOLDERS } from '../constants/paths';
 import FileBrowserModal from '../components/FileBrowserModal';
 
@@ -30,6 +29,7 @@ import {
   setDeleteEpisodeNums,
   setMergeOutputPath,
   setMergeOutputFolderName,
+  setDatasetInfo,
 } from '../features/editDataset/editDatasetSlice';
 import { useRosServiceCaller } from '../hooks/useRosServiceCaller';
 
@@ -69,7 +69,7 @@ const STYLES = {
     'p-2',
     'border',
     'border-gray-300',
-    'rounded-md',
+    'rounded-lg',
     'focus:outline-none',
     'focus:ring-2',
     'focus:ring-blue-500',
@@ -410,7 +410,7 @@ export default function EditDatasetPage() {
   // Hooks and state management
   const { toasts } = useToasterStore();
   const dispatch = useDispatch();
-  const { sendEditDatasetCommand, browseFile } = useRosServiceCaller();
+  const { sendEditDatasetCommand, browseFile, getDatasetInfo } = useRosServiceCaller();
 
   // Redux state selectors
   const {
@@ -419,6 +419,7 @@ export default function EditDatasetPage() {
     deleteEpisodeNums,
     mergeOutputPath,
     mergeOutputFolderName,
+    datasetInfo,
   } = useSelector((state) => state.editDataset);
 
   // Local state
@@ -452,6 +453,38 @@ export default function EditDatasetPage() {
       }
     },
     [browseFile]
+  );
+
+  const fetchDatasetInfo = useCallback(
+    async (datasetPath) => {
+      if (!datasetPath || datasetPath === '') {
+        toast.error('Dataset path is empty');
+        return;
+      }
+
+      try {
+        const result = await getDatasetInfo(datasetPath);
+        console.log('Dataset info result:', result);
+        if (result?.success) {
+          dispatch(
+            setDatasetInfo({
+              ...result.dataset_info,
+              totalEpisodes: result.dataset_info.total_episodes,
+              totalTasks: result.dataset_info.total_tasks,
+              fps: result.dataset_info.fps,
+              codebaseVersion: result.dataset_info.codebase_version,
+              robotType: result.dataset_info.robot_type,
+            })
+          );
+        } else {
+          toast.error('Failed to get dataset info: ' + result.message);
+        }
+      } catch (error) {
+        console.error('Error fetching dataset info:', error);
+        toast.error('Failed to get dataset info: ' + error.message);
+      }
+    },
+    [getDatasetInfo, dispatch]
   );
 
   // Effects
@@ -511,8 +544,9 @@ export default function EditDatasetPage() {
       (item) => {
         dispatch(setDatasetToDeleteEpisode(item.full_path));
         setShowSelectDatasetPathBrowserModal(false);
+        fetchDatasetInfo(item.full_path);
       },
-      [dispatch]
+      [dispatch, fetchDatasetInfo]
     ),
   };
 
@@ -525,6 +559,7 @@ export default function EditDatasetPage() {
 
         if (result?.success) {
           showOperationSuccess('delete', deleteEpisodeNums);
+          fetchDatasetInfo(datasetToDeleteEpisode);
         } else {
           if (result?.message !== '') showOperationError('delete', result.message);
           else showOperationError('delete');
@@ -725,27 +760,43 @@ export default function EditDatasetPage() {
       </div>
 
       <div className="flex flex-row items-center justify-start gap-20 w-full">
-        <div className="flex items-center justify-center gap-2 w-full">
-          <textarea
-            className={clsx(STYLES.textarea, {
-              'bg-gray-100 cursor-not-allowed': !isEditable,
-              'bg-white': isEditable,
-              'shadow-sm': isEditable,
-            })}
-            value={datasetToDeleteEpisode}
-            onChange={(e) => handlers.datasetToDeleteEpisodeChange(e.target.value)}
-            disabled={!isEditable}
-            placeholder="Enter dataset to delete episodes"
-          />
+        <div className="flex flex-col items-start justify-start gap-2 w-full">
+          <div className="flex items-center justify-start gap-2 w-full">
+            <div className="flex flex-row items-center justify-start gap-2 bg-white pr-2 pl-4 py-2 rounded-full shadow-md">
+              <span className="text-md font-bold">Total Episodes</span>
+              <span className="text-lg font-bold bg-gray-200 px-3 py-0 rounded-full">
+                {datasetInfo.totalEpisodes}
+              </span>
+            </div>
+            <button
+              onClick={() => fetchDatasetInfo(datasetToDeleteEpisode)}
+              className="flex items-center justify-center text-blue-500 rounded-md p-1 hover:text-blue-700 hover:bg-gray-200"
+            >
+              <MdRefresh className="w-8 h-8" />
+            </button>
+          </div>
+          <div className="flex items-center justify-center gap-2 w-full">
+            <textarea
+              className={clsx(STYLES.textarea, {
+                'bg-gray-100 cursor-not-allowed': !isEditable,
+                'bg-white': isEditable,
+                'shadow-sm': isEditable,
+              })}
+              value={datasetToDeleteEpisode}
+              onChange={(e) => handlers.datasetToDeleteEpisodeChange(e.target.value)}
+              disabled={!isEditable}
+              placeholder="Enter dataset to delete episodes"
+            />
 
-          <button
-            type="button"
-            onClick={() => setShowSelectDatasetPathBrowserModal(true)}
-            className="flex items-center justify-center w-12 h-12 text-blue-500 bg-gray-200 rounded-md hover:text-blue-700"
-            aria-label="Browse files for dataset to delete"
-          >
-            <MdFolderOpen className="w-10 h-10" />
-          </button>
+            <button
+              type="button"
+              onClick={() => setShowSelectDatasetPathBrowserModal(true)}
+              className="flex items-center justify-center w-12 h-12 text-blue-500 bg-gray-200 rounded-md hover:text-blue-700"
+              aria-label="Browse files for dataset to delete"
+            >
+              <MdFolderOpen className="w-10 h-10" />
+            </button>
+          </div>
         </div>
 
         <div className="flex flex-col items-start justify-start gap-2 w-full">
