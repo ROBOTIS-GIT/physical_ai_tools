@@ -25,11 +25,64 @@ import matplotlib.pyplot as plt
 
 class InferenceResultVisualizer:
 
-    def __init__(self, logger=None):
+    def __init__(self, logger=None, enabled=False):
         self.logger = logger
         self.plot_thread = None
         self.plot_lock = threading.Lock()
         self.is_plotting = False
+        self.enabled = enabled
+        self._initialize_data_structures()
+
+    def _initialize_data_structures(self):
+        self.inference_history = []
+        self.raw_action_chunks = []
+        self.chunk_visualization_data = {
+            'chunk_start_actions': [],
+            'chunk_inference_starts': [],
+            'chunk_offsets': [],
+            'chunk_used_sizes': [],
+            'chunk_sizes': [],
+        }
+        self.action_history = []
+
+    def set_enabled(self, enabled):
+        if enabled and not self.enabled:
+            self.clear_data()
+            if self.logger:
+                self.logger.info('Visualization enabled')
+        elif not enabled and self.enabled:
+            if self.logger:
+                self.logger.info('Visualization disabled')
+
+        self.enabled = enabled
+
+    def is_enabled(self):
+        return self.enabled
+
+    def add_action_data(self, action_number, timestamp, action_values, remaining_in_buffer):
+        if not self.enabled:
+            return
+
+        action_data = {
+            'action_number': action_number,
+            'timestamp': timestamp,
+            'action_values': action_values,
+            'remaining_in_buffer': remaining_in_buffer
+        }
+        self.action_history.append(action_data)
+
+    def get_action_history(self):
+        return self.action_history
+
+    def clear_data(self):
+        self.inference_history.clear()
+        self.raw_action_chunks.clear()
+        self.action_history.clear()
+        for key in self.chunk_visualization_data:
+            self.chunk_visualization_data[key].clear()
+
+        if self.logger:
+            self.logger.debug('Visualization data cleared')
 
     def plot_action_chunk_curves(self, raw_action_chunks, action_history, inference_history):
         try:
@@ -52,7 +105,7 @@ class InferenceResultVisualizer:
             first_chunk = raw_action_chunks[0]
             if not isinstance(first_chunk, dict) or 'joint_count' not in first_chunk:
                 if self.logger:
-                    self.logger.error('First chunk missing required "joint_count" key')
+                    self.logger.error('First chunk missing required joint_count key')
                 return None
 
             joint_count = first_chunk['joint_count']
@@ -200,8 +253,10 @@ class InferenceResultVisualizer:
 
         except Exception as e:
             if self.logger:
-                self.logger.error(f'Error creating action chunk curves plot: {str(e)}')
-                self.logger.error(f'Traceback: {traceback.format_exc()}')
+                self.logger.error(
+                    f'Error creating action chunk curves plot: {str(e)}')
+                self.logger.error(
+                    f'Traceback: {traceback.format_exc()}')
             return None
 
     def process_visualization_data(
@@ -211,7 +266,8 @@ class InferenceResultVisualizer:
         # Validate input data
         if action_chunk is None:
             if self.logger:
-                self.logger.warning('action_chunk is None, cannot process visualization data')
+                self.logger.warning(
+                    'action_chunk is None, cannot process visualization data')
             return
 
         current_chunk_data = {
@@ -251,6 +307,36 @@ class InferenceResultVisualizer:
         raw_action_chunks.append(raw_chunk_data)
 
     def process_complete_inference_visualization(
+            self,
+            action_chunk,
+            inference_time, worker_start_count,
+            offset_action_chunk, used_action_count, actions_executed_during_inference,
+            logger=None):
+
+        if not self.enabled:
+            return
+
+        self.process_visualization_data(
+            action_chunk, inference_time, worker_start_count,
+            self.inference_history, self.raw_action_chunks
+        )
+
+        self.update_visualization_data_with_final_values(
+            self.inference_history, used_action_count, actions_executed_during_inference
+        )
+
+        self.update_final_visualization_data(
+            offset_action_chunk, used_action_count, worker_start_count,
+            actions_executed_during_inference, len(action_chunk),
+            self.inference_history, self.chunk_visualization_data
+        )
+
+        self.generate_visualization_output(
+            self.inference_history, self.raw_action_chunks,
+            self.action_history, self.chunk_visualization_data, logger
+        )
+
+    def process_complete_inference_visualization_legacy(
             self,
             action_chunk,
             inference_time, worker_start_count,
@@ -314,7 +400,7 @@ class InferenceResultVisualizer:
                 chunk_visualization_data[key] = []
                 if self.logger:
                     self.logger.warning(
-                        f'Missing key "{key}" in chunk_visualization_data,'
+                        f'Missing key {key} in chunk_visualization_data,'
                         f' initialized as empty list')
 
         chunk_visualization_data['chunk_start_actions'].append(used_action_count + 1)

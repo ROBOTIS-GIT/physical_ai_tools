@@ -16,7 +16,6 @@
 #
 # Author: Dongyun Kim, Seongwoo Kim
 
-from collections import deque
 import glob
 import multiprocessing
 import os
@@ -99,7 +98,6 @@ class PhysicalAIServer(Node):
 
         # Track inference timing for proper action offset
         self.inference_start_action_count = 0
-        self.action_history = deque(maxlen=1000)
         self.last_executed_action = None
 
         # Observation tracking for debugging stale data issues
@@ -107,19 +105,10 @@ class PhysicalAIServer(Node):
         self.observation_change_history = []
 
         # Initialize inference result visualizer
-        self.enable_inference_visualization = False
-
-        if self.enable_inference_visualization:
-            self.visualizer = InferenceResultVisualizer(logger=self.get_logger())
-            self.inference_history = []
-            self.chunk_visualization_data = {
-                'chunk_start_actions': [],
-                'chunk_inference_starts': [],
-                'chunk_offsets': [],
-                'chunk_used_sizes': [],
-                'chunk_sizes': [],
-            }
-            self.raw_action_chunks = []
+        self.visualizer = InferenceResultVisualizer(
+            logger=self.get_logger(),
+            enabled=True
+        )
 
         # Initialize action chunk processor
         self.action_chunk_processor = ActionChunkProcessor(logger=self.get_logger())
@@ -311,6 +300,10 @@ class PhysicalAIServer(Node):
         if self.inference_worker:
             self.inference_worker.stop()
             self.inference_worker = None
+
+        # Clear visualization data
+        if self.visualizer:
+            self.visualizer.clear_data()
 
         self.params = None
         self.total_joint_order = None
@@ -573,8 +566,10 @@ class PhysicalAIServer(Node):
                         # Apply offset and smoothing
                         if self.inference_threshold > 0:
                             new_chunk = self.action_chunk_processor.apply_offset_and_smoothing(
-                                action_chunk, actions_executed_during_inference,
-                                self.action_history, self.last_executed_action)
+                                action_chunk,
+                                actions_executed_during_inference,
+                                self.visualizer.get_action_history(),
+                                self.last_executed_action)
                         else:
                             new_chunk = action_chunk
 
@@ -583,13 +578,13 @@ class PhysicalAIServer(Node):
                         self.inference_pending = False
 
                     # Process all visualization data if enabled
-                    if self.enable_inference_visualization:
+                    if self.visualizer.is_enabled():
                         self.visualizer.process_complete_inference_visualization(
                             action_chunk, inference_time, worker_start_count,
                             new_chunk, self._used_action_count,
                             actions_executed_during_inference,
-                            self.inference_history, self.raw_action_chunks, self.action_history,
-                            self.chunk_visualization_data, self.get_logger())
+                            self.get_logger()
+                        )
 
                     # Update status
                     current_status = self.data_manager.get_current_record_status()
@@ -634,14 +629,13 @@ class PhysicalAIServer(Node):
             if action_available:
                 self.last_executed_action = action.copy()
 
-                if self.enable_inference_visualization:
-                    action_data = {
-                        'action_number': self._used_action_count + 1,
-                        'timestamp': time.time(),
-                        'action_values': action,
-                        'remaining_in_buffer': remaining_count
-                    }
-                    self.action_history.append(action_data)
+                if self.visualizer.is_enabled():
+                    self.visualizer.add_action_data(
+                        action_number=self._used_action_count + 1,
+                        timestamp=time.time(),
+                        action_values=action,
+                        remaining_in_buffer=remaining_count
+                    )
 
                 action_pub_msgs = self.data_manager.data_converter.tensor_array2joint_msgs(
                     action,
