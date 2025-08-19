@@ -28,13 +28,21 @@ from physical_ai_server.inference import InferenceFactory
 
 class InferenceWorker:
 
-    def __init__(self, policy_path, device='cuda'):
+    def __init__(self, policy_path, device='cuda', initialization_timeout=120.0):
         self.policy_path = policy_path
         self.device = device
         self.input_queue = multiprocessing.Queue()
         self.output_queue = multiprocessing.Queue()
         self.process = None
         self.logger = logging.getLogger('InferenceWorker')
+
+        # Initialization state management
+        self.initializing = False
+        self.ready = False
+        self.start_time = None
+        self.last_log_time = None
+        self.initialization_timeout = initialization_timeout
+
         # Basic config for the main process logger
         logging.basicConfig(
             level=logging.INFO,
@@ -45,20 +53,36 @@ class InferenceWorker:
             self.logger.warning('Inference process is already running.')
             return False
 
-        self.process = multiprocessing.Process(
-            target=self._worker_process_loop,
-            args=(
-                self.input_queue,
-                self.output_queue,
-                self.policy_path,
-                self.device
-            )
-        )
+        try:
+            self.logger.info(
+                f'Starting inference worker initialization for policy: {self.policy_path}')
 
-        self.process.start()
-        self.logger.info(
-            f'Inference worker process started with PID: {self.process.pid}')
-        return True
+            self.process = multiprocessing.Process(
+                target=self._worker_process_loop,
+                args=(
+                    self.input_queue,
+                    self.output_queue,
+                    self.policy_path,
+                    self.device
+                )
+            )
+
+            self.process.start()
+
+            # Set initialization state
+            self.initializing = True
+            self.ready = False
+            self.start_time = time.time()
+            self.last_log_time = self.start_time
+
+            self.logger.info(
+                f'Inference worker process started with PID: {self.process.pid}')
+            return True
+
+        except Exception as e:
+            self.logger.error(f'Failed to start inference worker: {str(e)}')
+            self.initializing = False
+            return False
 
     def stop(self, timeout=5.0):
         if not self.is_alive():
@@ -81,6 +105,11 @@ class InferenceWorker:
             self.logger.error(f'Error stopping inference process: {e}')
         finally:
             self.process = None
+            # Reset initialization state
+            self.initializing = False
+            self.ready = False
+            self.start_time = None
+            self.last_log_time = None
 
     def is_alive(self):
         return self.process and self.process.is_alive()
@@ -99,6 +128,60 @@ class InferenceWorker:
             return self.output_queue.get(block=block, timeout=timeout)
         except queue.Empty:
             return None
+
+    def check_initialization_status(self):
+        if not self.is_alive():
+            self.logger.error(
+                'Inference worker process died during initialization')
+            return 'error', False
+
+        try:
+            # Check for initialization result
+            result = self.get_result(block=False, timeout=0.1)
+            if result:
+                status, message = result
+                if status == 'ready':
+                    elapsed = time.time() - self.start_time
+                    self.logger.info(
+                        f'✅ Inference worker initialized successfully in {elapsed:.1f}s')
+                    self.initializing = False
+                    self.ready = True
+                    return 'ready', True
+                elif status == 'loading':
+                    # Log progress periodically
+                    current_time = time.time()
+                    if current_time - self.last_log_time >= 10.0:
+                        elapsed = current_time - self.start_time
+                        self.logger.info(
+                            f'⏳ Model loading in progress: {message} ({elapsed:.1f}s)')
+                        self.last_log_time = current_time
+                    return 'loading', False
+                elif status == 'error':
+                    self.logger.error(
+                        f'❌ Inference worker failed to initialize: {message}')
+                    return 'error', False
+
+            # Check timeout
+            if time.time() - self.start_time > self.initialization_timeout:
+                elapsed = time.time() - self.start_time
+                self.logger.error(
+                    f'Inference worker initialization timeout after {elapsed:.1f}s')
+                return 'timeout', False
+
+            return 'loading', False  # Still waiting
+
+        except Exception as e:
+            self.logger.error(
+                f'Error checking inference worker initialization: {str(e)}')
+            return 'error', False
+
+    def is_ready(self):
+        """Check if the worker is ready for inference requests."""
+        return self.ready and self.is_alive()
+
+    def is_initializing(self):
+        """Check if the worker is currently initializing."""
+        return self.initializing
 
     @staticmethod
     def _worker_process_loop(input_queue, output_queue, policy_path, device):
