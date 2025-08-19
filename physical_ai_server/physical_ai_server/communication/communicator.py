@@ -393,7 +393,7 @@ class Communicator:
 
             elif request.mode == EditDataset.Request.DELETE:
                 delete_dataset_path = request.delete_dataset_path
-                delete_episode_num = request.delete_episode_num
+                delete_episode_num = sorted(request.delete_episode_num, reverse=True)
                 # upload_huggingface = request.upload_huggingface
                 for episode_num in delete_episode_num:
                     self.data_editor.delete_episode(
