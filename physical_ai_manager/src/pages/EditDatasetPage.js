@@ -241,6 +241,27 @@ const showDuplicateWarning = (duplicates) => {
   );
 };
 
+// Check if folder name already exists in the output path
+const checkFolderNameConflict = (folderName, existingFolders) => {
+  if (!folderName || !folderName.trim()) return false;
+
+  const normalizedFolderName = folderName.trim().toLowerCase();
+  return existingFolders.some((folder) => folder.toLowerCase() === normalizedFolderName);
+};
+
+const showFolderConflictWarning = (folderName) => {
+  toast.error(
+    `Folder "${folderName}" already exists in the output directory.\nPlease choose a different folder name.`,
+    {
+      duration: 5000,
+      style: {
+        maxWidth: '400px',
+        whiteSpace: 'pre-line',
+      },
+    }
+  );
+};
+
 const DatasetListInput = ({
   datasets = [''],
   onChange,
@@ -389,7 +410,7 @@ export default function EditDatasetPage() {
   // Hooks and state management
   const { toasts } = useToasterStore();
   const dispatch = useDispatch();
-  const { sendEditDatasetCommand } = useRosServiceCaller();
+  const { sendEditDatasetCommand, browseFile } = useRosServiceCaller();
 
   // Redux state selectors
   const {
@@ -407,11 +428,45 @@ export default function EditDatasetPage() {
   const [showMergeOutputPathBrowserModal, setShowMergeOutputPathBrowserModal] = useState(false);
   const [selectingDatasetIndex, setSelectingDatasetIndex] = useState(null);
   const [showSelectDatasetPathBrowserModal, setShowSelectDatasetPathBrowserModal] = useState(false);
+  const [existingFolders, setExistingFolders] = useState([]);
+
+  // Function to fetch existing folders in the output path
+  const fetchExistingFolders = useCallback(
+    async (path) => {
+      if (!path || !path.trim()) {
+        setExistingFolders([]);
+        return;
+      }
+
+      try {
+        const result = await browseFile('browse', path.trim());
+        if (result.success && result.items) {
+          const folders = result.items.filter((item) => item.is_directory).map((item) => item.name);
+          setExistingFolders(folders);
+        } else {
+          setExistingFolders([]);
+        }
+      } catch (error) {
+        console.error('Failed to fetch existing folders:', error);
+        setExistingFolders([]);
+      }
+    },
+    [browseFile]
+  );
 
   // Effects
   useEffect(() => {
     manageTostLimit(toasts);
   }, [toasts]);
+
+  // Fetch existing folders when output path changes
+  useEffect(() => {
+    if (mergeOutputPath) {
+      fetchExistingFolders(mergeOutputPath);
+    } else {
+      setExistingFolders([]);
+    }
+  }, [mergeOutputPath, fetchExistingFolders]);
 
   // Event handlers
   const handlers = {
@@ -489,6 +544,14 @@ export default function EditDatasetPage() {
           return; // Stop execution if duplicates are found
         }
 
+        // Check for folder name conflict
+        const hasFolderConflict = checkFolderNameConflict(mergeOutputFolderName, existingFolders);
+
+        if (hasFolderConflict) {
+          showFolderConflictWarning(mergeOutputFolderName);
+          return; // Stop execution if folder name conflicts
+        }
+
         const result = await sendEditDatasetCommand('merge');
         console.log('Merge dataset result:', result);
 
@@ -509,12 +572,17 @@ export default function EditDatasetPage() {
     () => checkForDuplicateDatasets(mergeDatasetList),
     [mergeDatasetList]
   );
+  const hasFolderConflict = useMemo(
+    () => checkFolderNameConflict(mergeOutputFolderName, existingFolders),
+    [mergeOutputFolderName, existingFolders]
+  );
   const isMergeDisabled =
     mergeDatasetList.length < 2 ||
     mergeOutputPath === '' ||
     mergeOutputFolderName === '' ||
     !isEditable ||
-    duplicateCheck.hasDuplicates;
+    duplicateCheck.hasDuplicates ||
+    hasFolderConflict;
 
   // Render sections
   const renderMergeSection = () => (
@@ -601,6 +669,40 @@ export default function EditDatasetPage() {
             ))}
           </div>
           <div className="text-red-600 text-sm mt-2">Please remove duplicates before merging.</div>
+        </div>
+      )}
+
+      {/* Folder Name Conflict Warning */}
+      {hasFolderConflict && (
+        <div className="w-full p-4 bg-orange-50 border border-orange-200 rounded-lg">
+          <div className="flex items-center gap-2 text-orange-800 font-medium mb-2">
+            <span className="text-lg">📁</span>
+            Folder Name Conflict
+          </div>
+          <div className="text-orange-700 text-sm">
+            <span className="font-mono bg-orange-100 px-1 rounded">{mergeOutputFolderName}</span>
+            <span className="ml-2">already exists in the output directory</span>
+          </div>
+          <div className="text-orange-600 text-sm mt-2">
+            Please choose a different folder name to avoid overwriting existing data.
+          </div>
+          {existingFolders.length > 0 && (
+            <div className="text-orange-600 text-sm mt-2">
+              <span className="font-medium">Existing folders:</span>
+              <div className="mt-1 flex flex-wrap gap-1">
+                {existingFolders.slice(0, 10).map((folder, index) => (
+                  <span key={index} className="font-mono bg-orange-100 px-1 rounded text-xs">
+                    {folder}
+                  </span>
+                ))}
+                {existingFolders.length > 10 && (
+                  <span className="text-xs text-orange-500">
+                    +{existingFolders.length - 10} more...
+                  </span>
+                )}
+              </div>
+            </div>
+          )}
         </div>
       )}
       <button
