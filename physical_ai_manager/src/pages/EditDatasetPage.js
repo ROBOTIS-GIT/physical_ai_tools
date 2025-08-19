@@ -220,7 +220,6 @@ const checkForDuplicateDatasets = (datasets) => {
     .filter((path) => path && path.trim() !== '') // Filter out empty paths
     .map((path) => path.trim().replace(/\/$/, '')); // Normalize paths by removing trailing slashes
 
-  const uniquePaths = new Set(normalizedPaths);
   const duplicates = [];
 
   // Find duplicates
@@ -612,7 +611,6 @@ export default function EditDatasetPage() {
       try {
         // Check for duplicate datasets before merging
         const duplicateCheck = checkForDuplicateDatasets(mergeDatasetList);
-        const emptyDatasetCheck = checkForEmptyDataset(mergeDatasetList);
 
         if (duplicateCheck.hasDuplicates) {
           showDuplicateWarning(duplicateCheck.duplicates);
