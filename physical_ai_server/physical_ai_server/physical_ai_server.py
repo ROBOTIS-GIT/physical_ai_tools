@@ -355,6 +355,11 @@ class PhysicalAIServer(Node):
             self.timer_manager.stop(timer_name=self.operation_mode)
             return
 
+        if self.communicator.joystick_state['updated']:
+            self.handle_joystick_trigger(
+                joystick_mode=self.communicator.joystick_state['mode'])
+            self.communicator.joystick_state['updated'] = False
+
         record_completed = self.data_manager.record(
             images=camera_data,
             state=follower_data,
@@ -768,6 +773,42 @@ class PhysicalAIServer(Node):
             response.success = False
             response.message = f'Failed to set robot type: {str(e)}'
             return response
+
+    def handle_joystick_trigger(self, joystick_mode: str):
+        self.get_logger().info(
+            f'Joystick mode updated: {joystick_mode}')
+        if self.data_manager is None:
+            self.get_logger().warning(
+                'Data manager is not initialized')
+            return
+
+        if not self.on_recording:
+            self.get_logger().warning(
+                'Not currently recording')
+            return
+
+        if joystick_mode == 'right':
+            self.get_logger().info(
+                'Right tact triggered - Moving to next episode')
+            if len(self.data_manager.get_task_info().task_instruction) > 1:
+                self.data_manager.record_next_episode()
+            else:
+                self.data_manager.record_early_save()
+        elif joystick_mode == 'left':
+            self.get_logger().info(
+                'Left tact triggered - Re-record current episode')
+            self.data_manager.re_record()
+        elif joystick_mode == 'right_long_time':
+            self.get_logger().info(
+                'Right long tact triggered - Custom')
+            # If you want, you can add custom functionality.
+        elif joystick_mode == 'left_long_time':
+            self.get_logger().info(
+                'Left long tact triggered - Custom')
+            # If you want, you can add custom functionality.
+        else:
+            self.get_logger().info(
+                f'Received joystick trigger: {joystick_mode}')
 
 
 def main(args=None):

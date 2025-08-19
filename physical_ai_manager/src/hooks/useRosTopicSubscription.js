@@ -43,10 +43,60 @@ export function useRosTopicSubscription() {
   const taskStatusTopicRef = useRef(null);
   const heartbeatTopicRef = useRef(null);
   const trainingStatusTopicRef = useRef(null);
+  const previousPhaseRef = useRef(null);
+  const audioContextRef = useRef(null);
 
   const dispatch = useDispatch();
   const rosbridgeUrl = useSelector((state) => state.ros.rosbridgeUrl);
   const [connected, setConnected] = useState(false);
+
+  const initializeAudioContext = useCallback(() => {
+    if (!audioContextRef.current) {
+      audioContextRef.current = new (window.AudioContext || window.webkitAudioContext)();
+    }
+    return audioContextRef.current;
+  }, []);
+
+  const playBeep = useCallback(async (frequency = 1000, duration = 400) => {
+    const INITIAL_GAIN = 1.0;
+    const FINAL_GAIN = 0.01;
+    const FALLBACK_VIBRATION_PATTERN = [200, 100, 200];
+
+    try {
+      const audioContext = initializeAudioContext();
+
+      if (audioContext.state === 'suspended') {
+        await audioContext.resume();
+      }
+      
+      const oscillator = audioContext.createOscillator();
+      const gainNode = audioContext.createGain();
+      
+      oscillator.connect(gainNode);
+      gainNode.connect(audioContext.destination);
+      
+      oscillator.frequency.value = frequency;
+      oscillator.type = 'sine';
+
+      gainNode.gain.setValueAtTime(INITIAL_GAIN, audioContext.currentTime);
+      gainNode.gain.exponentialRampToValueAtTime(FINAL_GAIN, audioContext.currentTime + duration / 1000);
+
+      oscillator.start(audioContext.currentTime);
+      oscillator.stop(audioContext.currentTime + duration / 1000);
+      
+      console.log('🔊 Beep played successfully');
+    } catch (error) {
+      console.warn('Audio playback failed:', error);
+      try {
+        if (window.navigator && window.navigator.vibrate) {
+          window.navigator.vibrate(FALLBACK_VIBRATION_PATTERN);
+          console.log('📳 Fallback to vibration');
+        }
+      } catch (vibrationError) {
+        console.warn('Vibration fallback also failed:', vibrationError);
+      }
+    }
+  }, [initializeAudioContext]);
 
   const cleanup = useCallback(() => {
     console.log('Starting ROS task status cleanup...');
@@ -66,13 +116,50 @@ export function useRosTopicSubscription() {
       trainingStatusTopicRef.current = null;
       console.log('Training status topic unsubscribed');
     }
+    
+    // Reset previous phase tracking
+    previousPhaseRef.current = null;
+    
+    if (audioContextRef.current && audioContextRef.current.state !== 'closed') {
+      audioContextRef.current.close();
+      audioContextRef.current = null;
+    }
+    
     setConnected(false);
     dispatch(setHeartbeatStatus('disconnected'));
     console.log('ROS task status cleanup completed');
   }, [dispatch]);
 
+  useEffect(() => {
+    const enableAudioOnUserGesture = () => {
+      const audioContext = initializeAudioContext();
+      if (audioContext.state === 'suspended') {
+        audioContext.resume().then(() => {
+          console.log('🎵 Audio enabled by user gesture');
+        }).catch(error => {
+          console.warn('Failed to resume AudioContext on user gesture:', error);
+        });
+      }
+    };
+
+    const events = ['touchstart', 'touchend', 'mousedown', 'keydown', 'click'];
+    events.forEach(event => {
+      document.addEventListener(event, enableAudioOnUserGesture, { once: true, passive: true });
+    });
+
+    return () => {
+      events.forEach(event => {
+        document.removeEventListener(event, enableAudioOnUserGesture);
+      });
+    };
+  }, [initializeAudioContext]);
+
   const subscribeToTaskStatus = useCallback(async () => {
     try {
+      const RECORDING_BEEP_FREQUENCY = 1000;
+      const RECORDING_BEEP_DURATION = 400;
+      const BEEP_DELAY = 100;
+
       const ros = await rosConnectionManager.getConnection(rosbridgeUrl);
       if (!ros) return;
 
@@ -99,6 +186,21 @@ export function useRosTopicSubscription() {
           toast.error(msg.error);
           return;
         }
+
+        const currentPhase = msg.phase;
+        const previousPhase = previousPhaseRef.current;
+        
+        if (currentPhase === TaskPhase.RECORDING && previousPhase !== TaskPhase.RECORDING) {
+          console.log('🔊 Recording started - playing beep sound');
+          
+          setTimeout(() => {
+            playBeep(RECORDING_BEEP_FREQUENCY, RECORDING_BEEP_DURATION);
+          }, BEEP_DELAY);
+          
+          toast.success('Recording started! 🎬');
+        }
+        
+        previousPhaseRef.current = currentPhase;
 
         // Calculate progress percentage
         if (msg.phase === TaskPhase.SAVING) {
