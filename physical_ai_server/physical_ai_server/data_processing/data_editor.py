@@ -523,7 +523,7 @@ class DataEditor:
                     if tgt_video_file.exists():
                         with suppress(Exception):
                             tgt_video_file.unlink()
-                        removed_video_count = len(camera_subdirs) if camera_subdirs else 1
+                        removed_video_count += 1
                     else:
                         raise FileNotFoundError(
                             f'Target video file does not exist : {tgt_video_file}')
@@ -532,7 +532,7 @@ class DataEditor:
                 if tgt_video_file.exists():
                     with suppress(Exception):
                         tgt_video_file.unlink()
-                    removed_video_count = len(camera_subdirs) if camera_subdirs else 1
+                    removed_video_count += 1
                 else:
                     raise FileNotFoundError(
                         f'Target video file does not exist : {tgt_video_file}')
