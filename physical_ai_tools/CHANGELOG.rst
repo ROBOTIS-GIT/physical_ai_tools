@@ -2,6 +2,14 @@
 Changelog for package physical_ai_tools
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
+0.6.7 (2025-08-21)
+------------------
+* Added DatasetInfo.msg, EditDataset.srv, and GetDatasetInfo.srv interfaces for Data Edit communication.
+* Added UI features for editing datasets, including merge and delete functionality.
+* Added functionality to edit data in the Physical AI Server, including merge and delete operations.
+* Added ROS topics and services to receive parameters related to data editing.
+* Contributors: Dongyun Kim, Kiwoong Park
+
 0.6.6 (2025-08-13)
 ------------------
 * Fixed an error in the data saving method based on Lerobot.
