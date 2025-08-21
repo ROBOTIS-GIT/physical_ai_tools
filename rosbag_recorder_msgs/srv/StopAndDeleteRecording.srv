@@ -1,0 +1,4 @@
+# Request to stop the active recording and delete the created bag file
+---
+bool success
+string message
