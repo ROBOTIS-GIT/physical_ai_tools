@@ -427,7 +427,7 @@ const EpisodeNumberInput = ({ value, onChange, disabled = false, className, pars
           'bg-white': !disabled,
         })}
         type="text"
-        placeholder="Enter episode numbers to delete (e.g., 1,2,3,10-15,20)"
+        placeholder="Enter episode numbers to delete (e.g., 0,1,2,3,10-15,20)"
         value={value}
         onChange={(e) => onChange(e.target.value)}
         disabled={disabled}
