@@ -54,8 +54,9 @@ const filterItems = (items, targetFileName, fileFilter) => {
 };
 const hasTargetFile = (item, targetFileName, targetFolderName, directoriesWithTarget) => {
   return (
-    (targetFileName && item.is_directory && directoriesWithTarget.has(item.full_path)) ||
-    (targetFolderName && item.is_directory && directoriesWithTarget.has(item.full_path))
+    (targetFileName || targetFolderName) &&
+    item.is_directory &&
+    directoriesWithTarget.has(item.full_path)
   );
 };
 

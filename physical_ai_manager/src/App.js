@@ -193,12 +193,10 @@ function App() {
       toast.error('Please select a robot type first in the Home page', {
         duration: 4000,
       });
-      console.log('Robot type not set, blocking navigation to Edit Dataset page');
       return;
     }
 
     // Allow navigation if conditions are met
-    console.log('Robot type set, allowing navigation to Edit Dataset page');
     dispatch(moveToPage(PageType.EDIT_DATASET));
   };
 
@@ -206,7 +204,6 @@ function App() {
   useEffect(() => {
     return () => {
       // Clean up all possible image streams when page changes
-      console.log('Page changing, forcing complete cleanup of all image streams');
 
       // Find all streaming images by src pattern
       const allStreamImgs = document.querySelectorAll('img[src*="/stream"]');
@@ -215,10 +212,7 @@ function App() {
         if (img.parentNode) {
           img.parentNode.removeChild(img);
         }
-        console.log(`Page cleanup: removed stream image ${index}`);
       });
-
-      console.log(`Page cleanup completed: removed ${allStreamImgs.length} streaming images`);
     };
   }, [page]);
 

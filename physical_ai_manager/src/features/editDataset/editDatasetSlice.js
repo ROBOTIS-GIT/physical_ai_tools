@@ -38,9 +38,6 @@ const editDatasetSlice = createSlice({
   name: 'editDataset',
   initialState,
   reducers: {
-    setEditDatasetInfo: (state, action) => {
-      state.editDatasetInfo = action.payload;
-    },
     setMergeDatasetList: (state, action) => {
       state.mergeDatasetList = action.payload;
     },
@@ -62,17 +59,10 @@ const editDatasetSlice = createSlice({
     setUploadHuggingface: (state, action) => {
       state.uploadHuggingface = action.payload;
     },
-    setDefaultEditDatasetInfo: (state) => {
-      state.editDatasetInfo = {
-        ...state.editDatasetInfo,
-        uploadHuggingface: false,
-      };
-    },
   },
 });
 
 export const {
-  setEditDatasetInfo,
   setMergeDatasetList,
   setDatasetToDeleteEpisode,
   setDatasetInfo,
@@ -80,7 +70,6 @@ export const {
   setMergeOutputFolderName,
   setDeleteEpisodeNums,
   setUploadHuggingface,
-  setDefaultEditDatasetInfo,
 } = editDatasetSlice.actions;
 
 export default editDatasetSlice.reducer;

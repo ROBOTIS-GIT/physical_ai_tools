@@ -421,7 +421,7 @@ export function useRosServiceCaller() {
   const sendEditDatasetCommand = useCallback(
     async (command) => {
       try {
-        console.log('Calling service /training/send_edit_dataset_command with request:', {
+        console.log('Calling service /dataset/edit with request:', {
           command: command,
           edit_dataset_info: editDatasetInfo,
         });
