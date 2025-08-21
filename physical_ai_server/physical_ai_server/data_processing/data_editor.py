@@ -88,7 +88,7 @@ class DataEditor:
         match = num_re.search(name_with_index)
         if not match:
             raise ValueError(
-                f'Impossible de trouver un index numérique dans {name_with_index}')
+                f'Could not find a numeric index in {name_with_index}')
         return int(match.group(1))
 
     @staticmethod
