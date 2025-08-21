@@ -509,6 +509,9 @@ class DataEditor:
                 removed_frame_count = len(df)
             with suppress(Exception):
                 tgt_parquet.unlink()
+        else:
+            raise FileNotFoundError(
+                f'Target parquet file does not exist : {tgt_parquet}')
 
         # 2. Delete associated videos
         video_chunk_dir = dataset_dir / 'videos' / chunk_name
@@ -521,12 +524,18 @@ class DataEditor:
                         with suppress(Exception):
                             tgt_video_file.unlink()
                         removed_video_count = len(camera_subdirs) if camera_subdirs else 1
+                    else:
+                        raise FileNotFoundError(
+                            f'Target video file does not exist : {tgt_video_file}')
             else:
                 tgt_video_file = video_chunk_dir / f'{target_episode_stem}.mp4'
                 if tgt_video_file.exists():
                     with suppress(Exception):
                         tgt_video_file.unlink()
                     removed_video_count = len(camera_subdirs) if camera_subdirs else 1
+                else:
+                    raise FileNotFoundError(
+                        f'Target video file does not exist : {tgt_video_file}')
 
         # 3. Delete images folder(s)
         images_root_dir = dataset_dir / 'images'
@@ -537,6 +546,9 @@ class DataEditor:
                     if tgt_image_dir.exists() and tgt_image_dir.is_dir():
                         with suppress(Exception):
                             shutil.rmtree(tgt_image_dir)
+                    else:
+                        raise FileNotFoundError(
+                            f'Target image directory does not exist : {tgt_image_dir}')
 
         # 4. Shift remaining parquet files & patch content
         if data_chunk_dir.exists():
@@ -549,6 +561,10 @@ class DataEditor:
                 new,
                 new_idx: self._adjust_parquet_episode_index(new, -1, self.verbose),
             )
+        else:
+            raise FileNotFoundError(
+                f'Target parquet file does not exist : {tgt_parquet}'
+            )
 
         # 5. Shift remaining video filenames
         if video_chunk_dir.exists():
@@ -559,6 +575,10 @@ class DataEditor:
                 video_paths = list(video_chunk_dir.glob('episode_*.mp4'))
             self._shift_episode_paths(
                 video_paths, episode_index_to_delete, self.EPISODE_INDEX_WIDTH
+            )
+        else:
+            raise FileNotFoundError(
+                f'Target video directory does not exist : {video_chunk_dir}'
             )
 
         # 6. Shift image directories
@@ -572,12 +592,19 @@ class DataEditor:
             )
 
         # 7. Update meta json/jsonl files
+        check_episode_file = False
         meta_dir = dataset_dir / 'meta'
         for name in ['episodes_stats.jsonl', 'episodes.jsonl', 'episodes.json']:
             path = meta_dir / name
             if path.exists():
                 self._rewrite_meta_for_delete(
                     path, episode_index_to_delete, -1, self.verbose
+                )
+                check_episode_file = True
+
+        if not check_episode_file:
+            raise FileNotFoundError(
+                    f'Meta file does not exist : {path}'
                 )
 
         # 8. Update info.json counts
@@ -614,6 +641,11 @@ class DataEditor:
                 FileIO.write_json(info_path, meta_info)
             except Exception as e:
                 self._log(f'Error updating info.json: {e}', logging.WARNING)
+
+        else:
+            raise FileNotFoundError(
+                f'Info file does not exist : {info_path}'
+            )
 
         self._log(
             f'Episode {episode_index_to_delete} deleted successfully in {dataset_dir}')
