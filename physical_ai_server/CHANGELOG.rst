@@ -2,11 +2,17 @@
 Changelog for package physical_ai_server
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-0.6.7 (2025-08-21)
+0.6.8 (2025-08-21)
 ------------------
 * Added functionality to edit data in the Physical AI Server, including merge and delete operations.
 * Added ROS topics and services to receive parameters related to data editing.
 * Contributors: Dongyun Kim, Kiwoong Park
+
+0.6.7 (2025-08-18)
+------------------
+* Improved the convenience of data acquisition by using the AI Worker's buttons.
+* The right button moves to the next episode, and the left button is for cancellation.
+* Contributors: Dongyun Kim
 
 0.6.6 (2025-08-13)
 ------------------
