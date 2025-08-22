@@ -6,7 +6,7 @@ physical_ai_server:
         - state
 
       camera_topic_list:
-        - cam_global:/camera/camera/color/image_raw/compressed
+        - cam_global:/camera1/image_raw/compressed
 
       joint_topic_list:
         - follower:/joint_states
@@ -21,4 +21,5 @@ physical_ai_server:
           - joint2
           - joint3
           - joint4
-          - gripper_left_joint
+          - joint5
+          - joint6

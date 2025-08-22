@@ -53,6 +53,7 @@ class DataManager:
         self._robot_type = robot_type
         self._save_repo_name = f'{task_info.user_id}/{robot_type}_{task_info.task_name}'
         self._save_path = save_root_path / self._save_repo_name
+        self._save_rosbag_path = '/workspace/physical_ai_server/' + self._save_repo_name
         self._on_saving = False
         self._single_task = len(task_info.task_instruction) == 1
         self._task_info = task_info
@@ -69,6 +70,15 @@ class DataManager:
         self._current_task = 0
         self._init_task_limits()
         self._current_scenario_number = 0
+
+    def get_status(self):
+        return self._status
+
+    def get_save_rosbag_path(self):
+        episode_index = self._lerobot_dataset.get_episode_index()
+        if episode_index is None:
+            return None
+        return self._save_rosbag_path + f'/{episode_index}'
 
     def record(
             self,
