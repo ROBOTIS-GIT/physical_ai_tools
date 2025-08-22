@@ -37,7 +37,7 @@ from rclpy.qos import (
     ReliabilityPolicy
 )
 from sensor_msgs.msg import CompressedImage, JointState
-from std_msgs.msg import Empty
+from std_msgs.msg import Empty, String
 from trajectory_msgs.msg import JointTrajectory
 
 
@@ -98,6 +98,11 @@ class Communicator:
         self.init_subscribers()
         self.init_publishers()
         self.init_services()
+
+        self.joystick_state = {
+            'updated': False,
+            'mode': None
+        }
 
     def _get_enabled_sources_for_mode(self, mode: str) -> Set[str]:
         enabled_sources = set()
@@ -161,6 +166,13 @@ class Communicator:
             )
             self.node.get_logger().info(
                 f'Joint subscriber: {name} -> {topic} ({msg_type.__name__})')
+
+        self.joystick_trigger_subscriber = self.node.create_subscription(
+            String,
+            '/leader/joystick_controller/tact_trigger',
+            self.joystick_trigger_callback,
+            10
+        )
 
     def init_publishers(self):
         self.node.get_logger().info('Initializing joint publishers...')
@@ -384,3 +396,8 @@ class Communicator:
 
     def publish_training_status(self, status: TrainingStatus):
         self.training_status_publisher.publish(status)
+
+    def joystick_trigger_callback(self, msg: String):
+        self.node.get_logger().info(f'Received joystick trigger: {msg.data}')
+        self.joystick_state['updated'] = True
+        self.joystick_state['mode'] = msg.data

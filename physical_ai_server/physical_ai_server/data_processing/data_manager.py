@@ -486,6 +486,9 @@ class DataManager:
             self.total_joint_order)
         return joint_trajectory_msgs
 
+    def get_task_info(self):
+        return self._task_info
+
     @staticmethod
     def get_huggingface_user_id():
         api = HfApi()
