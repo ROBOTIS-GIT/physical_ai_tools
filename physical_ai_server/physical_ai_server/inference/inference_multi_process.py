@@ -289,6 +289,7 @@ class InferenceWorker:
                         continue
 
                 except Exception as e:
+                    inference_manager.clear_policy()
                     error_msg = f'Inference error: {str(e)}'
                     logger.error(error_msg)
                     import traceback
@@ -296,6 +297,7 @@ class InferenceWorker:
                     output_queue.put(('error', error_msg))
 
         except Exception as e:
+            inference_manager.clear_policy()
             error_msg = f'Worker initialization error: {str(e)}'
             logger.error(error_msg)
             import traceback

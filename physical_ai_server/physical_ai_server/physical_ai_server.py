@@ -281,7 +281,7 @@ class PhysicalAIServer(Node):
                 )
 
                 self.timer_manager.set_timer(
-                    timer_name='inference',
+                    timer_name='async_inference',
                     timer_frequency=self.INFERENCE_WORKER_FREQUENCY,
                     callback_function=self.timer_callback_dict['async_inference']
                 )
@@ -538,10 +538,12 @@ class PhysicalAIServer(Node):
 
 
     def _async_inference_timer_callback(self):
-        if not self.on_inference:
-            return
-
         try:
+            if not self.on_inference:
+                self.get_logger().info('Inference mode is not active')
+                self._stop_inference_process()
+                self.timer_manager.stop(timer_name='async_inference')
+                return
             # Check inference worker initialization status
             if self.inference_worker and self.inference_worker.is_initializing():
                 if not self._check_inference_worker_initialization():
@@ -644,6 +646,13 @@ class PhysicalAIServer(Node):
         current_status = TaskStatus()
 
         try:
+            if not self.on_inference:
+                current_status = self.data_manager.get_current_record_status()
+                current_status.phase = TaskStatus.READY
+                self.communicator.publish_status(status=current_status)
+                self.timer_manager.stop(timer_name='action')
+                return
+
             # Publish next action if available (thread-safe)
             with self.inference_lock:
                 if len(self.remaining_actions) > 0:
@@ -926,10 +935,6 @@ class PhysicalAIServer(Node):
                         self.get_logger().info('Terminating all operations')
                         self.data_manager.record_finish()
                         self.on_inference = False
-
-                        # Stop inference worker if running
-                        if self.inference_worker:
-                            self._stop_inference_process()
 
                         response.success = True
                         response.message = 'All operations terminated'
