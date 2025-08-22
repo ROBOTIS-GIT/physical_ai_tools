@@ -41,7 +41,7 @@ class LeRobotDatasetWrapper(LeRobotDataset):
         self.total_frame_buffer = None
         self.episode_ranges = []
         self._append_in_progress = False
-        self._robot_type = 'default' # default
+        self._robot_type = 'default'  # default
 
     def set_robot_type(self, robot_type: str) -> None:
         self._robot_type = robot_type
