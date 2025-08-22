@@ -151,7 +151,8 @@ class PhysicalAIServer(Node):
         self.timer_callback_dict = {
             'collection': self._data_collection_timer_callback,
             'action': self._action_timer_callback,
-            'inference': self._inference_timer_callback,
+            'async_inference': self._async_inference_timer_callback,
+            'sync_inference': self._sync_inference_timer_callback,
         }
 
     def init_ros_params(self, robot_type):
@@ -258,24 +259,45 @@ class PhysicalAIServer(Node):
             task_info=task_info
         )
         self.communicator.clear_latest_data()
-
         self.timer_manager = TimerManager(node=self)
 
         if self.operation_mode == 'inference':
-            self.timer_manager.set_timer(
-                timer_name='action',
-                timer_frequency=task_info.fps,
-                callback_function=self.timer_callback_dict['action']
-            )
+            if task_info.use_async_inference_mode:
+                # Start Async inference process (non-blocking)
+                if not self._start_inference_process(task_info.policy_path):
+                    self.get_logger().error('Failed to start inference process')
+                    return False
 
-            self.timer_manager.set_timer(
-                timer_name='inference',
-                timer_frequency=self.INFERENCE_WORKER_FREQUENCY,
-                callback_function=self.timer_callback_dict['inference']
-            )
+                # Initialize inference state
+                self._used_action_count = 0
+                with self.inference_lock:
+                    self.remaining_actions = []
+                self.inference_pending = False
 
-            self.timer_manager.start(timer_name='action')
-            self.timer_manager.start(timer_name='inference')
+                self.timer_manager.set_timer(
+                    timer_name='action',
+                    timer_frequency=task_info.fps,
+                    callback_function=self.timer_callback_dict['action']
+                )
+
+                self.timer_manager.set_timer(
+                    timer_name='inference',
+                    timer_frequency=self.INFERENCE_WORKER_FREQUENCY,
+                    callback_function=self.timer_callback_dict['async_inference']
+                )
+
+                self.timer_manager.start(timer_name='action')
+                self.timer_manager.start(timer_name='async_inference')
+            else:
+                self.inference_manager.validate_policy(
+                    policy_path=task_info.policy_path)
+                # Start synchronous inference timer
+                self.timer_manager.set_timer(
+                    timer_name='sync_inference',
+                    timer_frequency=task_info.fps,
+                    callback_function=self.timer_callback_dict['sync_inference']
+                )
+                self.timer_manager.start(timer_name='sync_inference')
         else:
             # For collection mode, use single timer
             self.timer_manager.set_timer(
@@ -433,7 +455,84 @@ class PhysicalAIServer(Node):
             self.timer_manager.stop(timer_name=self.operation_mode)
             return
 
-    def _inference_timer_callback(self):
+    def _sync_inference_timer_callback(self):
+        error_msg = ''
+        current_status = TaskStatus()
+        camera_msgs, follower_msgs, _ = self.communicator.get_latest_data()
+        if (camera_msgs is None or
+                len(camera_msgs) != len(self.params['camera_topic_list'])):
+            self.get_logger().info('Waiting for camera data...')
+            return
+        elif follower_msgs is None:
+            self.get_logger().info('Waiting for follower data...')
+            return
+
+        try:
+            camera_data, follower_data, _ = self.data_manager.convert_msgs_to_raw_datas(
+                camera_msgs,
+                follower_msgs,
+                self.total_joint_order)
+        except Exception as e:
+            error_msg = f'Failed to convert messages: {str(e)}, please check the robot type again!'
+            self.on_inference = False
+            current_status.phase = TaskStatus.READY
+            current_status.error = error_msg
+            self.communicator.publish_status(status=current_status)
+            self.inference_manager.clear_policy()
+            self.timer_manager.stop(timer_name=self.operation_mode)
+            return
+
+        if self.inference_manager.policy is None:
+            if not self.inference_manager.load_policy():
+                self.get_logger().error('Failed to load policy')
+                return
+
+        try:
+            if not self.on_inference:
+                self.get_logger().info('Inference mode is not active')
+                current_status = self.data_manager.get_current_record_status()
+                current_status.phase = TaskStatus.READY
+                self.communicator.publish_status(status=current_status)
+                self.inference_manager.clear_policy()
+                self.timer_manager.stop(timer_name=self.operation_mode)
+                return
+
+            action = self.inference_manager.predict(
+                images=camera_data,
+                state=follower_data,
+                task_instruction=self.task_instruction[0]
+            )
+
+            self.get_logger().info(
+                f'Action data: {action}')
+            action_pub_msgs = self.data_manager.data_converter.tensor_array2joint_msgs(
+                action,
+                self.joint_topic_types,
+                self.joint_order
+            )
+
+            self.communicator.publish_action(
+                joint_msg_datas=action_pub_msgs
+            )
+            current_status = self.data_manager.get_current_record_status()
+            current_status.phase = TaskStatus.INFERENCING
+            self.communicator.publish_status(status=current_status)
+
+        except Exception as e:
+            self.get_logger().error(f'Inference failed, please check : {str(e)}')
+            error_msg = f'Inference failed, please check : {str(e)}'
+            self.on_recording = False
+            self.on_inference = False
+            current_status = self.data_manager.get_current_record_status()
+            current_status.phase = TaskStatus.READY
+            current_status.error = error_msg
+            self.communicator.publish_status(status=current_status)
+            self.inference_manager.clear_policy()
+            self.timer_manager.stop(timer_name=self.operation_mode)
+            return
+
+
+    def _async_inference_timer_callback(self):
         if not self.on_inference:
             return
 
@@ -535,6 +634,51 @@ class PhysicalAIServer(Node):
             self.get_logger().error(f'Inference timer callback error: {str(e)}')
             self._stop_inference_with_error(f'Inference timer error: {str(e)}')
 
+    def _action_timer_callback(self):
+        error_msg = ''
+        current_status = TaskStatus()
+
+        try:
+            # Publish next action if available (thread-safe)
+            with self.inference_lock:
+                if len(self.remaining_actions) > 0:
+                    action = self.remaining_actions.pop(0)
+                    action_available = True
+                    remaining_count = len(self.remaining_actions)
+                else:
+                    action_available = False
+                    remaining_count = 0
+
+            if action_available:
+                self.last_executed_action = action.copy()
+
+                if self.visualizer.is_enabled():
+                    self.visualizer.add_action_data(
+                        action_number=self._used_action_count + 1,
+                        timestamp=time.time(),
+                        action_values=action,
+                        remaining_in_buffer=remaining_count
+                    )
+
+                action_pub_msgs = self.data_manager.data_converter.tensor_array2joint_msgs(
+                    action,
+                    self.joint_topic_types,
+                    self.joint_order
+                )
+                self.communicator.publish_action(
+                    joint_msg_datas=action_pub_msgs
+                )
+                self._used_action_count += 1
+
+            else:
+                if self._used_action_count % 10 == 0:
+                    self.get_logger().warning(
+                        'No actions available! Robot will wait for fresh inference...'
+                    )
+
+        except Exception as e:
+            self.get_logger().error(f'Action publishing failed: {str(e)}')
+
     def _process_inference_results(self):
         try:
             try:
@@ -610,51 +754,6 @@ class PhysicalAIServer(Node):
         except Exception as e:
             self.get_logger().error(
                 f'Error processing inference results: {str(e)}')
-
-    def _action_timer_callback(self):
-        if not self.on_inference:
-            return
-
-        try:
-            # Publish next action if available (thread-safe)
-            with self.inference_lock:
-                if len(self.remaining_actions) > 0:
-                    action = self.remaining_actions.pop(0)
-                    action_available = True
-                    remaining_count = len(self.remaining_actions)
-                else:
-                    action_available = False
-                    remaining_count = 0
-
-            if action_available:
-                self.last_executed_action = action.copy()
-
-                if self.visualizer.is_enabled():
-                    self.visualizer.add_action_data(
-                        action_number=self._used_action_count + 1,
-                        timestamp=time.time(),
-                        action_values=action,
-                        remaining_in_buffer=remaining_count
-                    )
-
-                action_pub_msgs = self.data_manager.data_converter.tensor_array2joint_msgs(
-                    action,
-                    self.joint_topic_types,
-                    self.joint_order
-                )
-                self.communicator.publish_action(
-                    joint_msg_datas=action_pub_msgs
-                )
-                self._used_action_count += 1
-
-            else:
-                if self._used_action_count % 10 == 0:
-                    self.get_logger().warning(
-                        'No actions available! Robot will wait for fresh inference...'
-                    )
-
-        except Exception as e:
-            self.get_logger().error(f'Action publishing failed: {str(e)}')
 
     def user_training_interaction_callback(self, request, response):
         try:
@@ -777,22 +876,13 @@ class PhysicalAIServer(Node):
                     f'Async mode: {self.async_inference_mode}, '
                     f'Threshold: {self.inference_threshold}')
 
-                # Start inference process (non-blocking)
-                if not self._start_inference_process(task_info.policy_path):
+                if not self.init_robot_control_parameters_from_user_task(
+                    task_info
+                ):
                     response.success = False
-                    response.message = 'Failed to start inference process'
-                    self.get_logger().error(response.message)
+                    response.message = 'Failed to initialize robot control parameters'
                     return response
 
-                # Initialize inference state
-                self._used_action_count = 0
-                with self.inference_lock:
-                    self.remaining_actions = []
-                self.inference_pending = False
-
-                self.init_robot_control_parameters_from_user_task(
-                    task_info
-                )
                 if task_info.record_inference_mode:
                     self.on_recording = True
                 self.on_inference = True
