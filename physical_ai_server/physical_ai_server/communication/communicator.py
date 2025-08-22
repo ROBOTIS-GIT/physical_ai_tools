@@ -17,7 +17,7 @@
 # Author: Dongyun Kim, Seongwoo Kim, Kiwoong Park
 
 from functools import partial
-from typing import Any, Dict, Optional, Set, Tuple
+from typing import Any, Dict, List, Optional, Set, Tuple
 
 from geometry_msgs.msg import Twist
 from nav_msgs.msg import Odometry
@@ -47,6 +47,8 @@ from rclpy.qos import (
 from sensor_msgs.msg import CompressedImage, JointState
 from std_msgs.msg import Empty, String
 from trajectory_msgs.msg import JointTrajectory
+
+from rosbag_recorder_msgs.srv import StartRecording, StopRecording, StopAndDeleteRecording
 
 
 class Communicator:
@@ -106,6 +108,8 @@ class Communicator:
             history=HistoryPolicy.KEEP_LAST
         )
 
+        self.rosbag_service_available = False
+
         self.init_subscribers()
         self.init_publishers()
         self.init_services()
@@ -114,6 +118,15 @@ class Communicator:
             'updated': False,
             'mode': None
         }
+
+
+    def get_all_topics(self):
+        result = []
+        for name, topic in self.camera_topics.items():
+            result.append(topic)
+        for name, topic in self.joint_topics.items():
+            result.append(topic)
+        return result
 
     def _get_enabled_sources_for_mode(self, mode: str) -> Set[str]:
         enabled_sources = set()
@@ -244,6 +257,89 @@ class Communicator:
             '/dataset/get_info',
             self.get_dataset_info_callback
         )
+
+        self._rosbag_start_client = self.node.create_client(StartRecording, 'start_recording')
+        self._rosbag_stop_client = self.node.create_client(StopRecording, 'stop_recording')
+        self._rosbag_stop_and_delete_client = self.node.create_client(StopAndDeleteRecording, 'stop_and_delete_recording')
+
+        if self._rosbag_start_client.wait_for_service(timeout_sec=5.0) and \
+            self._rosbag_stop_client.wait_for_service(timeout_sec=5.0) and \
+            self._rosbag_stop_and_delete_client.wait_for_service(timeout_sec=5.0):
+            self.rosbag_service_available = True
+            self.node.get_logger().info('Rosbag service is available')
+        else:
+            self.node.get_logger().error('Failed to connect to rosbag service')
+            self.rosbag_service_available = False
+
+    def start_rosbag_recording(self, uri: str, topics: List[str]):
+        self.node.get_logger().info(f'Starting rosbag recording: {uri} with topics: {topics}')
+        self.node.get_logger().info(f'Rosbag service available: {self.rosbag_service_available}')
+        if not self.rosbag_service_available:
+            self.node.get_logger().error('Rosbag service is not available')
+            raise RuntimeError('Rosbag service is not available')
+
+        req = StartRecording.Request()
+        req.uri = uri
+        req.topics = topics
+        future = self._rosbag_start_client.call_async(req)
+        future.add_done_callback(self.start_rosbag_recording_callback)
+
+    def stop_rosbag_recording(self):
+        if not self.rosbag_service_available:
+            self.node.get_logger().error('Rosbag service is not available')
+            raise RuntimeError('Rosbag service is not available')
+
+        req = StopRecording.Request()
+
+        future = self._rosbag_stop_client.call_async(req)
+        future.add_done_callback(self.stop_rosbag_recording_callback)
+
+    def stop_and_delete_rosbag_recording(self):
+        if not self.rosbag_service_available:
+            self.node.get_logger().error('Rosbag service is not available')
+            raise RuntimeError('Rosbag service is not available')
+
+        req = StopAndDeleteRecording.Request()
+
+        future = self._rosbag_stop_and_delete_client.call_async(req)
+        future.add_done_callback(self.stop_and_delete_rosbag_recording_callback)
+
+    def start_rosbag_recording_callback(self, future):
+        if not future.done():
+            self.node.get_logger().error('Failed to start rosbag recording')
+            return
+        resp = future.result()
+        if not resp.success:
+            self.node.get_logger().error(f'Failed to start rosbag recording: {resp.message}')
+            return
+        self.node.get_logger().info(f'Started rosbag recording: {resp.message}')
+        return resp.success
+
+    def stop_rosbag_recording_callback(self, future):
+
+        if not future.done():
+            self.node.get_logger().error('Failed to stop rosbag recording')
+            return
+
+        resp = future.result()
+        if not resp.success:
+            self.node.get_logger().error(f'Failed to stop rosbag recording: {resp.message}')
+            return
+        self.node.get_logger().info(f'Stopped rosbag recording: {resp.message}')
+        return resp.success
+
+    def stop_and_delete_rosbag_recording_callback(self, future):
+
+        if not future.done():
+            self.node.get_logger().error('Failed to stop and delete rosbag recording')
+            return
+
+        resp = future.result()
+        if not resp.success:
+            self.node.get_logger().error(f'Failed to stop and delete rosbag recording: {resp.message}')
+            return
+        self.node.get_logger().info(f'Stopped and deleted rosbag recording: {resp.message}')
+        return resp.success
 
     def _camera_callback(self, name: str, msg: CompressedImage) -> None:
         self.camera_topic_msgs[name] = msg

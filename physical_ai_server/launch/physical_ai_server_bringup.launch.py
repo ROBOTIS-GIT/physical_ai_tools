@@ -46,6 +46,14 @@ def generate_launch_description():
         )
     )
 
+    # Include rosbag_recorder service_bag_recorder node
+    rosbag_recorder_node = Node(
+        package='rosbag_recorder',
+        executable='service_bag_recorder',
+        name='service_bag_recorder',
+        output='screen'
+    )
+
     # web_video_server node
     web_video_server_node = Node(
         package='web_video_server',
@@ -57,5 +65,6 @@ def generate_launch_description():
     return LaunchDescription([
         physical_ai_server_launch,
         rosbridge_server_launch,
+        rosbag_recorder_node,
         web_video_server_node
     ])
