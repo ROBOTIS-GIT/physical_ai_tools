@@ -399,6 +399,7 @@ class Communicator:
             if request.mode == EditDataset.Request.MERGE:
                 merge_dataset_list = request.merge_dataset_list
                 output_path = request.output_path
+                # TODO: Implement HuggingFace upload functionality if needed
                 # upload_huggingface = request.upload_huggingface
                 self.data_editor.merge_datasets(
                     merge_dataset_list, output_path)
@@ -406,6 +407,7 @@ class Communicator:
             elif request.mode == EditDataset.Request.DELETE:
                 delete_dataset_path = request.delete_dataset_path
                 delete_episode_num = sorted(request.delete_episode_num, reverse=True)
+                # TODO: Implement HuggingFace upload functionality if needed
                 # upload_huggingface = request.upload_huggingface
                 for episode_num in delete_episode_num:
                     self.data_editor.delete_episode(
