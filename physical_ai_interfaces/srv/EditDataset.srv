@@ -1,0 +1,16 @@
+########################################
+# Constants
+########################################
+# command
+uint8 MERGE = 0
+uint8 DELETE = 1
+
+uint8 mode
+string[] merge_dataset_list
+string delete_dataset_path
+string output_path
+uint16[] delete_episode_num
+bool upload_huggingface
+---
+bool success
+string message

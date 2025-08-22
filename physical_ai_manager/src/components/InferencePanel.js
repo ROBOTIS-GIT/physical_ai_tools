@@ -816,7 +816,7 @@ const InferencePanel = () => {
         title="Select Policy Path"
         selectButtonText="Select"
         allowDirectorySelect={true}
-        targetFileName={TARGET_FILES.POLICY_MODEL}
+        targetFileName={[TARGET_FILES.POLICY_MODEL]}
         targetFileLabel="Policy file found! 🎯"
         initialPath={DEFAULT_PATHS.POLICY_MODEL_PATH}
         defaultPath={DEFAULT_PATHS.POLICY_MODEL_PATH}

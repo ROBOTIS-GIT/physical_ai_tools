@@ -2,6 +2,11 @@
 Changelog for package physical_ai_interfaces
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
+0.6.8 (2025-08-21)
+------------------
+* Added DatasetInfo.msg, EditDataset.srv, and GetDatasetInfo.srv interfaces for Data Edit communication.
+* Contributors: Dongyun Kim, Kiwoong Park
+
 0.6.7 (2025-08-18)
 ------------------
 * None
