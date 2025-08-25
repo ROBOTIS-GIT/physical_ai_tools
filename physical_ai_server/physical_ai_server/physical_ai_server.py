@@ -93,7 +93,6 @@ class PhysicalAIServer(Node):
         self._used_action_count = 0
         self.remaining_actions = []
         self.inference_worker: Optional[InferenceWorker] = None
-        self.inference_lock = multiprocessing.Lock()
         self.inference_pending = False
 
         # Track inference timing for proper action offset
@@ -150,7 +149,6 @@ class PhysicalAIServer(Node):
     def _setup_timer_callbacks(self):
         self.timer_callback_dict = {
             'collection': self._data_collection_timer_callback,
-            'action': self._action_timer_callback,
             'async_inference': self._async_inference_timer_callback,
             'sync_inference': self._sync_inference_timer_callback,
         }
@@ -270,23 +268,14 @@ class PhysicalAIServer(Node):
 
                 # Initialize inference state
                 self._used_action_count = 0
-                with self.inference_lock:
-                    self.remaining_actions = []
+                self.remaining_actions = []
                 self.inference_pending = False
 
                 self.timer_manager.set_timer(
-                    timer_name='action',
-                    timer_frequency=task_info.fps,
-                    callback_function=self.timer_callback_dict['action']
-                )
-
-                self.timer_manager.set_timer(
                     timer_name='async_inference',
-                    timer_frequency=self.INFERENCE_WORKER_FREQUENCY,
+                    timer_frequency=task_info.fps,
                     callback_function=self.timer_callback_dict['async_inference']
                 )
-
-                self.timer_manager.start(timer_name='action')
                 self.timer_manager.start(timer_name='async_inference')
             else:
                 self.inference_manager.validate_policy(
@@ -538,12 +527,18 @@ class PhysicalAIServer(Node):
 
 
     def _async_inference_timer_callback(self):
+        error_msg = ''
+        current_status = TaskStatus()
+
         try:
             if not self.on_inference:
-                self.get_logger().info('Inference mode is not active')
+                current_status = self.data_manager.get_current_record_status()
+                current_status.phase = TaskStatus.READY
+                self.communicator.publish_status(status=current_status)
                 self._stop_inference_process()
                 self.timer_manager.stop(timer_name='async_inference')
                 return
+
             # Check inference worker initialization status
             if self.inference_worker and self.inference_worker.is_initializing():
                 if not self._check_inference_worker_initialization():
@@ -553,36 +548,36 @@ class PhysicalAIServer(Node):
             if not self.inference_worker or not self.inference_worker.is_ready():
                 return
 
-            self._process_inference_results()
-
             remaining_count = len(self.remaining_actions)
-            self.get_logger().info(
-                f'Remaining actions count: {remaining_count}, '
-                f'Inference pending: {self.inference_pending}')
+            if remaining_count > 0:
+                action = self.remaining_actions.pop(0)
+                action_pub_msgs = self.data_manager.data_converter.tensor_array2joint_msgs(
+                    action,
+                    self.joint_topic_types,
+                    self.joint_order
+                )
+                self.communicator.publish_action(
+                    joint_msg_datas=action_pub_msgs
+                )
+                self._used_action_count += 1
+                self.last_executed_action = action.copy()
+                if self.visualizer.is_enabled():
+                    self.visualizer.add_action_data(
+                        action_number=self._used_action_count + 1,
+                        timestamp=time.time(),
+                        action_values=action,
+                        remaining_in_buffer=remaining_count
+                    )
 
-            should_start_inference = (
-                not self.inference_pending and
-                self.inference_worker and
-                self.inference_worker.is_ready() and
-                remaining_count <= self.inference_threshold
-            )
+            if self._process_inference_results():
+                self.remaining_actions.clear()
+                self.remaining_actions.extend(new_chunk)
 
-            self.get_logger().info(
-                f'Inference worker ready: {
-                    self.inference_worker.is_ready() if self.inference_worker else False}, '
-                f'Pending: {self.inference_pending}, '
-                f'Remaining count: {remaining_count}, '
-                f'self.inference_threshold: {self.inference_threshold}, '
-                f'Should start inference: {should_start_inference}')
-
-            if should_start_inference:
-                with self.inference_lock:
-                    self.inference_start_action_count = self._used_action_count
-
-                # Record inference start time for data freshness validation
-                self.get_logger().info(
-                    f'Starting new inference at action count: {self.inference_start_action_count}')
-
+            if (
+                remaining_count <= self.inference_threshold and
+                not self.inference_pending
+            ):
+                self.inference_start_action_count = self._used_action_count
                 camera_msgs, follower_msgs, _ = self.communicator.get_latest_data()
 
                 # Validate data availability
@@ -623,75 +618,10 @@ class PhysicalAIServer(Node):
                     self.get_logger().error(error_msg)
                     self._stop_inference_with_error(error_msg)
                     return
-            else:
-                if self.inference_pending:
-                    self.get_logger().debug(
-                        'Inference already pending, waiting...')
-                elif not self.inference_worker or not self.inference_worker.is_alive():
-                    self.get_logger().warning(
-                        'Inference worker is not alive')
-                elif remaining_count > self.inference_threshold:
-                    self.get_logger().debug(
-                        'Sufficient actions available, waiting...')
-                else:
-                    self.get_logger().debug(
-                        'Unknown reason for not starting inference')
 
         except Exception as e:
             self.get_logger().error(f'Inference timer callback error: {str(e)}')
             self._stop_inference_with_error(f'Inference timer error: {str(e)}')
-
-    def _action_timer_callback(self):
-        error_msg = ''
-        current_status = TaskStatus()
-
-        try:
-            if not self.on_inference:
-                current_status = self.data_manager.get_current_record_status()
-                current_status.phase = TaskStatus.READY
-                self.communicator.publish_status(status=current_status)
-                self.timer_manager.stop(timer_name='action')
-                return
-
-            # Publish next action if available (thread-safe)
-            with self.inference_lock:
-                if len(self.remaining_actions) > 0:
-                    action = self.remaining_actions.pop(0)
-                    action_available = True
-                    remaining_count = len(self.remaining_actions)
-                else:
-                    action_available = False
-                    remaining_count = 0
-
-            if action_available:
-                self.last_executed_action = action.copy()
-
-                if self.visualizer.is_enabled():
-                    self.visualizer.add_action_data(
-                        action_number=self._used_action_count + 1,
-                        timestamp=time.time(),
-                        action_values=action,
-                        remaining_in_buffer=remaining_count
-                    )
-
-                action_pub_msgs = self.data_manager.data_converter.tensor_array2joint_msgs(
-                    action,
-                    self.joint_topic_types,
-                    self.joint_order
-                )
-                self.communicator.publish_action(
-                    joint_msg_datas=action_pub_msgs
-                )
-                self._used_action_count += 1
-
-            else:
-                if self._used_action_count % 10 == 0:
-                    self.get_logger().warning(
-                        'No actions available! Robot will wait for fresh inference...'
-                    )
-
-        except Exception as e:
-            self.get_logger().error(f'Action publishing failed: {str(e)}')
 
     def _process_inference_results(self):
         try:
@@ -699,7 +629,7 @@ class PhysicalAIServer(Node):
                 result = self.inference_worker.get_result(
                     block=False)
                 if not result:
-                    return
+                    return []
 
                 status, result_data = result
 
@@ -717,23 +647,20 @@ class PhysicalAIServer(Node):
                         return
 
                     # Calculate offset and apply smoothing
-                    with self.inference_lock:
-                        actions_executed_during_inference = max(
-                            0, self._used_action_count - worker_start_count)
+                    actions_executed_during_inference = max(
+                        0, self._used_action_count - worker_start_count)
 
-                        # Apply offset and smoothing
-                        if self.inference_threshold > 0:
-                            new_chunk = self.action_chunk_processor.apply_offset_and_smoothing(
-                                action_chunk,
-                                actions_executed_during_inference,
-                                self.visualizer.get_action_history(),
-                                self.last_executed_action)
-                        else:
-                            new_chunk = action_chunk
+                    # Apply offset and smoothing
+                    if self.inference_threshold > 0:
+                        new_chunk = self.action_chunk_processor.apply_offset_and_smoothing(
+                            action_chunk,
+                            actions_executed_during_inference,
+                            self.visualizer.get_action_history(),
+                            self.last_executed_action)
+                    else:
+                        new_chunk = action_chunk
 
-                        self.remaining_actions.clear()
-                        self.remaining_actions.extend(new_chunk)
-                        self.inference_pending = False
+                    self.inference_pending = False
 
                     # Process all visualization data if enabled
                     if self.visualizer.is_enabled():
@@ -743,11 +670,7 @@ class PhysicalAIServer(Node):
                             actions_executed_during_inference,
                             self.get_logger()
                         )
-
-                    # Update status
-                    current_status = self.data_manager.get_current_record_status()
-                    current_status.phase = TaskStatus.INFERENCING
-                    self.communicator.publish_status(status=current_status)
+                    return new_chunk
 
                 elif status == 'error':
                     self.inference_pending = False
@@ -755,19 +678,21 @@ class PhysicalAIServer(Node):
                         f'Received error from inference worker: {result_data}')
                     self._stop_inference_with_error(
                         f'Inference process error: {result_data}')
-                    return
+                    return []
 
                 elif status == 'pong':
                     self.get_logger().debug('Received health check pong')
-                    return
+                    return []
 
             except Exception as inner_e:
                 self.get_logger().error(
                     f'Error processing single result: {str(inner_e)}')
+                return []
 
         except Exception as e:
             self.get_logger().error(
                 f'Error processing inference results: {str(e)}')
+            return []
 
     def user_training_interaction_callback(self, request, response):
         try:
