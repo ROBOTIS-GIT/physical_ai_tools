@@ -20,11 +20,13 @@ import ROSLIB from 'roslib';
 import PageType from '../constants/pageType';
 import TaskCommand from '../constants/taskCommand';
 import TrainingCommand from '../constants/trainingCommand';
+import EditDatasetCommand from '../constants/commands';
 import rosConnectionManager from '../utils/rosConnectionManager';
 
 export function useRosServiceCaller() {
   const taskInfo = useSelector((state) => state.tasks.taskInfo);
   const trainingInfo = useSelector((state) => state.training.trainingInfo);
+  const editDatasetInfo = useSelector((state) => state.editDataset);
   const page = useSelector((state) => state.ui.currentPage);
   const rosbridgeUrl = useSelector((state) => state.ros.rosbridgeUrl);
 
@@ -377,12 +379,13 @@ export function useRosServiceCaller() {
   );
 
   const browseFile = useCallback(
-    async (action, currentPath = '', targetName = '', targetFiles = null) => {
+    async (action, currentPath = '', targetName = '', targetFiles = null, targetFolders = null) => {
       try {
         const requestData = {
           action: action,
           current_path: currentPath,
           target_name: targetName,
+          target_folders: targetFolders,
         };
 
         // Only add target_files if we actually have files to search for
@@ -390,6 +393,13 @@ export function useRosServiceCaller() {
           requestData.target_files = targetFiles;
         } else {
           requestData.target_files = [];
+        }
+
+        // Only add target_folders if we actually have folders to search for
+        if (targetFolders && targetFolders.length > 0) {
+          requestData.target_folders = targetFolders;
+        } else {
+          requestData.target_folders = [];
         }
 
         const result = await callService(
@@ -402,6 +412,76 @@ export function useRosServiceCaller() {
         return result;
       } catch (error) {
         console.error('Failed to browse file:', error);
+        throw new Error(`${error.message || error}`);
+      }
+    },
+    [callService]
+  );
+
+  const sendEditDatasetCommand = useCallback(
+    async (command) => {
+      try {
+        console.log('Calling service /dataset/edit with request:', {
+          command: command,
+          edit_dataset_info: editDatasetInfo,
+        });
+
+        let command_enum;
+        switch (command) {
+          case 'merge':
+            command_enum = EditDatasetCommand.MERGE;
+            break;
+          case 'delete':
+            command_enum = EditDatasetCommand.DELETE;
+            break;
+          default:
+            throw new Error(`Unknown command: ${command}`);
+        }
+
+        console.log('editDatasetInfo:', editDatasetInfo);
+
+        // Remove trailing slash from mergeOutputPath if present
+        let mergeOutputPath = editDatasetInfo.mergeOutputPath;
+        if (mergeOutputPath.endsWith('/')) {
+          mergeOutputPath = mergeOutputPath.slice(0, -1);
+        }
+        const output_path = `${mergeOutputPath}/${editDatasetInfo.mergeOutputFolderName}`;
+
+        const result = await callService(
+          '/dataset/edit',
+          'physical_ai_interfaces/srv/EditDataset',
+          {
+            mode: command_enum,
+            merge_dataset_list: editDatasetInfo.mergeDatasetList,
+            delete_dataset_path: editDatasetInfo.datasetToDeleteEpisode,
+            output_path: output_path,
+            delete_episode_num: editDatasetInfo.deleteEpisodeNums,
+            upload_huggingface: editDatasetInfo.uploadHuggingface,
+          }
+        );
+
+        console.log('sendEditDatasetCommand service response:', result);
+        return result;
+      } catch (error) {
+        console.error('Failed to send edit dataset command:', error);
+        throw new Error(`${error.message || error}`);
+      }
+    },
+    [callService, editDatasetInfo]
+  );
+
+  const getDatasetInfo = useCallback(
+    async (datasetPath) => {
+      try {
+        const result = await callService(
+          '/dataset/get_info',
+          'physical_ai_interfaces/srv/GetDatasetInfo',
+          { dataset_path: datasetPath }
+        );
+        console.log('getDatasetInfo service response:', result);
+        return result;
+      } catch (error) {
+        console.error('Failed to get dataset info:', error);
         throw new Error(`${error.message || error}`);
       }
     },
@@ -422,5 +502,7 @@ export function useRosServiceCaller() {
     getModelWeightList,
     sendTrainingCommand,
     browseFile,
+    sendEditDatasetCommand,
+    getDatasetInfo,
   };
 }

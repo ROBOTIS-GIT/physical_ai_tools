@@ -71,10 +71,11 @@ class FileBrowseUtils:
                 'items': []
             }
 
-    def handle_go_parent_with_file_check(self,
-                                         current_path: str,
-                                         target_files: Set[str]) -> Dict:
-        """Handle go_parent action with parallel file checking for target files."""
+    def handle_go_parent_with_target_check(self,
+                                           current_path: str,
+                                           target_files: Set[str] = None,
+                                           target_folders: Set[str] = None) -> Dict:
+        """Handle go_parent action with parallel checking for target files/folders."""
         if current_path is None or current_path == '':
             current_path = os.path.expanduser('~')
 
@@ -82,21 +83,22 @@ class FileBrowseUtils:
 
         if os.path.exists(parent_path) and os.path.isdir(parent_path):
             try:
-                items = self._get_directories_with_file_check(
-                    parent_path, target_files)
+                items = self._get_directories_with_target_check(
+                    parent_path, target_files, target_folders)
 
                 return {
                     'success': True,
-                    'message': 'Navigated to parent directory with file check',
+                    'message': 'Navigated to parent directory with target check',
                     'current_path': parent_path,
                     'parent_path': os.path.dirname(parent_path),
                     'selected_path': '',
                     'items': items
                 }
             except Exception as e:
+                error_msg = f'Error during parent navigation with target check: {str(e)}'
                 return {
                     'success': False,
-                    'message': f'Error during parent navigation with file check: {str(e)}',
+                    'message': error_msg,
                     'current_path': current_path,
                     'parent_path': '',
                     'selected_path': '',
@@ -122,24 +124,25 @@ class FileBrowseUtils:
         else:
             return self._handle_directory_browse(current_path)
 
-    def handle_browse_with_file_check(self,
-                                      current_path: str,
-                                      target_name: str,
-                                      target_files: Set[str]) -> Dict:
-        """Handle browse action with parallel file checking for target files."""
+    def handle_browse_with_target_check(self,
+                                        current_path: str,
+                                        target_name: str,
+                                        target_files: Set[str] = None,
+                                        target_folders: Set[str] = None) -> Dict:
+        """Handle browse action with parallel checking for target files/folders."""
         if current_path is None or current_path == '':
             current_path = os.path.expanduser('~')
 
         if target_name:
             # Handle target selection (navigate to specific item)
-            # with parallel file checking
+            # with parallel target checking
             target_path = os.path.join(current_path, target_name)
 
             if os.path.exists(target_path) and os.path.isdir(target_path):
-                # Navigate into directory and check for target files
+                # Navigate into directory and check for target files/folders
                 try:
-                    items = self._get_directories_with_file_check(
-                        target_path, target_files)
+                    items = self._get_directories_with_target_check(
+                        target_path, target_files, target_folders)
 
                     return {
                         'success': True,
@@ -150,9 +153,10 @@ class FileBrowseUtils:
                         'items': items
                     }
                 except Exception as e:
+                    error_msg = f'Error during navigation with target check: {str(e)}'
                     return {
                         'success': False,
-                        'message': f'Error during navigation with file check: {str(e)}',
+                        'message': error_msg,
                         'current_path': current_path,
                         'parent_path': '',
                         'selected_path': '',
@@ -162,14 +166,14 @@ class FileBrowseUtils:
                 # File selection or non-existent path - use standard logic
                 return self.handle_browse_action(current_path, target_name)
         else:
-            # Handle directory browsing with parallel file checking
+            # Handle directory browsing with parallel target checking
             try:
-                items = self._get_directories_with_file_check(
-                    current_path, target_files)
+                items = self._get_directories_with_target_check(
+                    current_path, target_files, target_folders)
 
                 return {
                     'success': True,
-                    'message': 'Directory browsed successfully with file check',
+                    'message': 'Directory browsed successfully with target check',
                     'current_path': current_path,
                     'parent_path': self._get_parent_path(current_path),
                     'selected_path': '',
@@ -178,7 +182,7 @@ class FileBrowseUtils:
             except Exception as e:
                 return {
                     'success': False,
-                    'message': f'Error during file check: {str(e)}',
+                    'message': f'Error during target check: {str(e)}',
                     'current_path': current_path,
                     'parent_path': '',
                     'selected_path': '',
@@ -242,21 +246,35 @@ class FileBrowseUtils:
                 'items': []
             }
 
-    def _check_directories_for_files(
+    def _check_directories_for_targets(
         self,
         directory_paths: List[str],
-        target_files: Set[str]
+        target_files: Set[str] = None,
+        target_folders: Set[str] = None
     ) -> Dict[str, bool]:
-        """Check multiple directories in parallel for presence of target files."""
+        """Check multiple directories in parallel for presence of ALL target files and folders."""
         def check_single_directory(dir_path: str) -> tuple:
-            """Check if any target files exist in a single directory."""
+            """Check if ALL target files and folders exist in a single directory."""
             try:
+                found_files = set()
+                found_folders = set()
+
+                # Collect all files and folders in the directory
                 with os.scandir(dir_path) as entries:
                     for entry in entries:
-                        if (entry.is_file(follow_symlinks=False)
-                                and entry.name in target_files):
-                            return (dir_path, True)
-                return (dir_path, False)
+                        entry_name = entry.name
+
+                        if entry.is_file(follow_symlinks=False):
+                            found_files.add(entry_name)
+                        elif entry.is_dir(follow_symlinks=False):
+                            found_folders.add(entry_name)
+
+                # Check if ALL required targets are found
+                files_satisfied = not target_files or target_files.issubset(found_files)
+                folders_satisfied = not target_folders or target_folders.issubset(found_folders)
+
+                return (dir_path, files_satisfied and folders_satisfied)
+
             except (OSError, PermissionError):
                 return (dir_path, False)
 
@@ -276,23 +294,25 @@ class FileBrowseUtils:
                     dir_path, has_target = future.result()
                     results[dir_path] = has_target
                 except Exception as e:
-                    # If error occurs, assume no target file
+                    # If error occurs, assume no target file/folder
                     path = future_to_path[future]
                     if self.logger:
-                        self.logger.error(f'Error during directory check: {path} {e}')
+                        error_msg = f'Error during directory check: {path} {e}'
+                        self.logger.error(error_msg)
                     results[path] = False
 
         return results
 
-    def _get_directories_with_file_check(
+    def _get_directories_with_target_check(
         self,
         directory_path: str,
-        target_files: Optional[Set[str]] = None
+        target_files: Optional[Set[str]] = None,
+        target_folders: Optional[Set[str]] = None
     ) -> List[Dict]:
-        """Get directory items with parallel file existence checking."""
+        """Get directory items with parallel target file/folder existence checking."""
         items = self._get_directory_items(directory_path)
 
-        if target_files is None:
+        if target_files is None and target_folders is None:
             return items
 
         # Separate directories from files
@@ -302,9 +322,10 @@ class FileBrowseUtils:
         if not directories:
             return items
 
-        # Check directories in parallel for target files
+        # Check directories in parallel for target files/folders
         dir_paths = [item['full_path'] for item in directories]
-        check_results = self._check_directories_for_files(dir_paths, target_files)
+        check_results = self._check_directories_for_targets(
+            dir_paths, target_files, target_folders)
 
         # Add has_target_file field to directory items
         for item in directories:
