@@ -2,6 +2,11 @@
 Changelog for package physical_ai_manager
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
+0.6.8 (2025-08-21)
+------------------
+* Added UI features for editing datasets, including merge and delete functionality.
+* Contributors: Kiwoong Park
+
 0.6.7 (2025-08-18)
 ------------------
 * Added a beep sound to signal the start of recording.

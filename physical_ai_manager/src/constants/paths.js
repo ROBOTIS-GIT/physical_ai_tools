@@ -25,6 +25,8 @@ const BASE_WORKSPACE_PATH =
 const LEROBOT_OUTPUTS_PATH =
   process.env.REACT_APP_LEROBOT_OUTPUTS_PATH || `${BASE_WORKSPACE_PATH}/lerobot/outputs`;
 
+const DOT_CACHE_PATH = '/root/.cache';
+
 export const DEFAULT_PATHS = {
   // Base paths
   BASE_WORKSPACE: BASE_WORKSPACE_PATH,
@@ -32,6 +34,7 @@ export const DEFAULT_PATHS = {
 
   // File browser defaults
   POLICY_MODEL_PATH: `${LEROBOT_OUTPUTS_PATH}/train/`,
+  DATASET_PATH: `${DOT_CACHE_PATH}/huggingface/lerobot/`,
 };
 
 /**
@@ -39,4 +42,10 @@ export const DEFAULT_PATHS = {
  */
 export const TARGET_FILES = {
   POLICY_MODEL: 'model.safetensors',
+};
+
+export const TARGET_FOLDERS = {
+  DATASET_METADATA: 'meta',
+  DATASET_VIDEO: 'videos',
+  DATASET_DATA: 'data',
 };
