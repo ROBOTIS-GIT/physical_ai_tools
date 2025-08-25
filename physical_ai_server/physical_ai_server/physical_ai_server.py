@@ -260,33 +260,23 @@ class PhysicalAIServer(Node):
         self.timer_manager = TimerManager(node=self)
 
         if self.operation_mode == 'inference':
-            if task_info.use_async_inference_mode:
-                # Start Async inference process (non-blocking)
-                if not self._start_inference_process(task_info.policy_path):
-                    self.get_logger().error('Failed to start inference process')
-                    return False
+            # Start Async inference process (non-blocking)
+            if not self._start_inference_process(task_info.policy_path):
+                self.get_logger().error('Failed to start inference process')
+                return False
 
-                # Initialize inference state
-                self._used_action_count = 0
-                self.remaining_actions = []
-                self.inference_pending = False
+            # Initialize inference state
+            self._used_action_count = 0
+            self.remaining_actions = []
+            self.inference_pending = False
 
-                self.timer_manager.set_timer(
-                    timer_name='async_inference',
-                    timer_frequency=task_info.fps,
-                    callback_function=self.timer_callback_dict['async_inference']
-                )
-                self.timer_manager.start(timer_name='async_inference')
-            else:
-                self.inference_manager.validate_policy(
-                    policy_path=task_info.policy_path)
-                # Start synchronous inference timer
-                self.timer_manager.set_timer(
-                    timer_name='sync_inference',
-                    timer_frequency=task_info.fps,
-                    callback_function=self.timer_callback_dict['sync_inference']
-                )
-                self.timer_manager.start(timer_name='sync_inference')
+            self.timer_manager.set_timer(
+                timer_name='async_inference',
+                timer_frequency=task_info.fps,
+                callback_function=self.timer_callback_dict['async_inference']
+            )
+            self.timer_manager.start(timer_name='async_inference')
+
         else:
             # For collection mode, use single timer
             self.timer_manager.set_timer(
