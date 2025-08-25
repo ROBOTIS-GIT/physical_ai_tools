@@ -463,6 +463,15 @@ class PhysicalAIServer(Node):
     def _sync_inference_timer_callback(self):
         error_msg = ''
         current_status = TaskStatus()
+        if not self.on_inference:
+            self.get_logger().info('Inference mode is not active')
+            current_status = self.data_manager.get_current_record_status()
+            current_status.phase = TaskStatus.READY
+            self.communicator.publish_status(status=current_status)
+            self.inference_manager.clear_policy()
+            self.timer_manager.stop(timer_name='sync_inference')
+            return
+
         camera_msgs, follower_msgs, _ = self.communicator.get_latest_data()
         if (camera_msgs is None or
                 len(camera_msgs) != len(self.params['camera_topic_list'])):
@@ -484,7 +493,7 @@ class PhysicalAIServer(Node):
             current_status.error = error_msg
             self.communicator.publish_status(status=current_status)
             self.inference_manager.clear_policy()
-            self.timer_manager.stop(timer_name=self.operation_mode)
+            self.timer_manager.stop(timer_name='sync_inference')
             return
 
         if self.inference_manager.policy is None:
@@ -493,15 +502,6 @@ class PhysicalAIServer(Node):
                 return
 
         try:
-            if not self.on_inference:
-                self.get_logger().info('Inference mode is not active')
-                current_status = self.data_manager.get_current_record_status()
-                current_status.phase = TaskStatus.READY
-                self.communicator.publish_status(status=current_status)
-                self.inference_manager.clear_policy()
-                self.timer_manager.stop(timer_name=self.operation_mode)
-                return
-
             action = self.inference_manager.predict(
                 images=camera_data,
                 state=follower_data,
@@ -533,7 +533,7 @@ class PhysicalAIServer(Node):
             current_status.error = error_msg
             self.communicator.publish_status(status=current_status)
             self.inference_manager.clear_policy()
-            self.timer_manager.stop(timer_name=self.operation_mode)
+            self.timer_manager.stop(timer_name='sync_inference')
             return
 
 
@@ -879,6 +879,7 @@ class PhysicalAIServer(Node):
             elif request.command == SendCommand.Request.START_INFERENCE:
                 self.joint_topic_types = self.communicator.get_publisher_msg_types()
                 self.operation_mode = 'inference'
+                self.on_inference = True
                 task_info = request.task_info
                 self.task_info = task_info  # Store for process restart
                 self.task_instruction = task_info.task_instruction
@@ -899,7 +900,6 @@ class PhysicalAIServer(Node):
 
                 if task_info.record_inference_mode:
                     self.on_recording = True
-                self.on_inference = True
                 self.start_recording_time = time.perf_counter()
 
                 response.success = True
