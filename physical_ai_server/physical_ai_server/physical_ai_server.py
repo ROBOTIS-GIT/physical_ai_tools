@@ -288,6 +288,7 @@ class PhysicalAIServer(Node):
 
         self.get_logger().info(
             'Robot control parameters initialized successfully')
+        return True
 
     def clear_parameters(self):
         if self.communicator is not None:
@@ -639,7 +640,8 @@ class PhysicalAIServer(Node):
                     # Calculate offset and apply smoothing
                     actions_executed_during_inference = max(
                         0, self._used_action_count - worker_start_count)
-
+                    
+                    new_chunk = []
                     # Apply offset and smoothing
                     if self.inference_threshold > 0:
                         new_chunk = self.action_chunk_processor.apply_offset_and_smoothing(
