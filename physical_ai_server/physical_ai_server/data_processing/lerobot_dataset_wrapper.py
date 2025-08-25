@@ -41,6 +41,10 @@ class LeRobotDatasetWrapper(LeRobotDataset):
         self.total_frame_buffer = None
         self.episode_ranges = []
         self._append_in_progress = False
+        self._robot_type = 'default'  # default
+
+    def set_robot_type(self, robot_type: str) -> None:
+        self._robot_type = robot_type
 
     def video_encoding(self) -> None:
         video_paths = {}
@@ -296,7 +300,7 @@ class LeRobotDatasetWrapper(LeRobotDataset):
         self.meta.info['total_frames'] += episode_length
         self.meta.info['total_videos'] += video_count
         self.meta.info['splits'] = {'train': f"0:{self.meta.info['total_episodes']}"}
-        self.meta.info['robot_type'] = 'aiworker'
+        self.meta.info['robot_type'] = self._robot_type
 
         episode_dict = {
             'episode_index': episode_index,

@@ -21,12 +21,20 @@ from typing import Any, Dict, Optional, Set, Tuple
 
 from geometry_msgs.msg import Twist
 from nav_msgs.msg import Odometry
-from physical_ai_interfaces.msg import BrowserItem, TaskStatus, TrainingStatus
+from physical_ai_interfaces.msg import (
+    BrowserItem,
+    DatasetInfo,
+    TaskStatus,
+    TrainingStatus
+)
 from physical_ai_interfaces.srv import (
     BrowseFile,
-    GetImageTopicList
+    EditDataset,
+    GetDatasetInfo,
+    GetImageTopicList,
 )
 from physical_ai_server.communication.multi_subscriber import MultiSubscriber
+from physical_ai_server.data_processing.data_editor import DataEditor
 from physical_ai_server.utils.file_browse_utils import FileBrowseUtils
 from physical_ai_server.utils.parameter_utils import parse_topic_list_with_names
 from rclpy.node import Node
@@ -76,6 +84,9 @@ class Communicator:
 
         # Initialize MultiSubscriber with enabled sources
         self.multi_subscriber = MultiSubscriber(self.node, self.enabled_sources)
+
+        # Initialize DataEditor for dataset editing
+        self.data_editor = DataEditor()
 
         # Initialize joint publishers
         self.joint_publishers = {}
@@ -222,6 +233,18 @@ class Communicator:
             self.browse_file_callback
         )
 
+        self.data_editor_service = self.node.create_service(
+            EditDataset,
+            '/dataset/edit',
+            self.dataset_edit_callback
+        )
+
+        self.get_dataset_info_service = self.node.create_service(
+            GetDatasetInfo,
+            '/dataset/get_info',
+            self.get_dataset_info_callback
+        )
+
     def _camera_callback(self, name: str, msg: CompressedImage) -> None:
         self.camera_topic_msgs[name] = msg
 
@@ -290,31 +313,44 @@ class Communicator:
                 result = self.file_browse_utils.handle_get_path_action(
                     request.current_path)
             elif request.action == 'go_parent':
-                # Check if target_files are provided for parallel file checking
+                # Check if target_files or target_folders are provided
                 target_files = None
+                target_folders = None
+
                 if hasattr(request, 'target_files') and request.target_files:
                     target_files = set(request.target_files)
+                if hasattr(request, 'target_folders') and request.target_folders:
+                    target_folders = set(request.target_folders)
 
-                if target_files:
-                    # Use parallel file checking for go_parent
-                    result = self.file_browse_utils.handle_go_parent_with_file_check(
-                        request.current_path, target_files)
+                if target_files or target_folders:
+                    # Use parallel target checking for go_parent
+                    result = self.file_browse_utils.handle_go_parent_with_target_check(
+                        request.current_path,
+                        target_files,
+                        target_folders)
                 else:
-                    # Use standard go_parent (no target files or empty list)
+                    # Use standard go_parent (no targets specified)
                     result = self.file_browse_utils.handle_go_parent_action(
                         request.current_path)
             elif request.action == 'browse':
-                # Check if target_files are provided for parallel file checking
+                # Check if target_files or target_folders are provided
                 target_files = None
+                target_folders = None
+
                 if hasattr(request, 'target_files') and request.target_files:
                     target_files = set(request.target_files)
+                if hasattr(request, 'target_folders') and request.target_folders:
+                    target_folders = set(request.target_folders)
 
-                if target_files:
-                    # Use parallel file checking
-                    result = self.file_browse_utils.handle_browse_with_file_check(
-                        request.current_path, request.target_name, target_files)
+                if target_files or target_folders:
+                    # Use parallel target checking
+                    result = self.file_browse_utils.handle_browse_with_target_check(
+                        request.current_path,
+                        request.target_name,
+                        target_files,
+                        target_folders)
                 else:
-                    # Use standard browsing (no target files or empty list)
+                    # Use standard browsing (no targets specified)
                     result = self.file_browse_utils.handle_browse_action(
                         request.current_path, request.target_name)
             else:
@@ -357,6 +393,69 @@ class Communicator:
             response.items = []
 
         return response
+
+    def dataset_edit_callback(self, request, response):
+        try:
+            if request.mode == EditDataset.Request.MERGE:
+                merge_dataset_list = request.merge_dataset_list
+                output_path = request.output_path
+                # TODO: Implement HuggingFace upload functionality if needed
+                # upload_huggingface = request.upload_huggingface
+                self.data_editor.merge_datasets(
+                    merge_dataset_list, output_path)
+
+            elif request.mode == EditDataset.Request.DELETE:
+                delete_dataset_path = request.delete_dataset_path
+                delete_episode_num = sorted(request.delete_episode_num, reverse=True)
+                # TODO: Implement HuggingFace upload functionality if needed
+                # upload_huggingface = request.upload_huggingface
+                for episode_num in delete_episode_num:
+                    self.data_editor.delete_episode(
+                        delete_dataset_path, episode_num)
+            else:
+                response.success = False
+                response.message = f'Unknown edit mode: {request.mode}'
+                return response
+
+            response.success = True
+            response.message = f'Successfully processed edit mode: {request.mode}'
+            return response
+
+        except Exception as e:
+            self.node.get_logger().error(f'Error in dataset_edit_callback: {str(e)}')
+            response.success = False
+            response.message = f'Error: {str(e)}'
+
+        return response
+
+    def get_dataset_info_callback(self, request, response):
+        try:
+            dataset_path = request.dataset_path
+            dataset_info = self.data_editor.get_dataset_info(dataset_path)
+
+            info = DatasetInfo()
+            info.codebase_version = dataset_info.get('codebase_version', 'unknown') if isinstance(
+                dataset_info.get('codebase_version'), str) else 'unknown'
+            info.robot_type = dataset_info.get('robot_type', 'unknown') if isinstance(
+                dataset_info.get('robot_type'), str) else 'unknown'
+            info.total_episodes = dataset_info.get('total_episodes', 0) if isinstance(
+                dataset_info.get('total_episodes'), int) else 0
+            info.total_tasks = dataset_info.get('total_tasks', 0) if isinstance(
+                dataset_info.get('total_tasks'), int) else 0
+            info.fps = dataset_info.get('fps', 0) if isinstance(
+                dataset_info.get('fps'), int) else 0
+
+            response.dataset_info = info
+            response.success = True
+            response.message = 'Dataset info retrieved successfully'
+            return response
+
+        except Exception as e:
+            self.node.get_logger().error(f'Error in get_dataset_info_callback: {str(e)}')
+            response.success = False
+            response.message = f'Error: {str(e)}'
+            response.dataset_info = DatasetInfo()
+            return response
 
     def get_publisher_msg_types(self):
         msg_types = {}

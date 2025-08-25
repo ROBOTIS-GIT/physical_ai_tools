@@ -21,7 +21,7 @@ from typing import Dict, List, Optional, Tuple
 
 from lerobot.policies.pretrained import PreTrainedPolicy
 import numpy as np
-from physical_ai_server.utils.read_file import read_json_file
+from physical_ai_server.utils.file_utils import read_json_file
 import torch
 
 from .inference_base import InferenceBase

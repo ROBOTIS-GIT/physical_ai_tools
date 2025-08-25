@@ -14,15 +14,12 @@
 //
 // Author: Kiwoong Park
 
-// PageType enum-like object for page types
+// TrainingCommand enum-like object for training commands
 // Use this for better code readability and maintainability
 
-const PageType = {
-  HOME: 'home',
-  RECORD: 'record',
-  INFERENCE: 'inference',
-  TRAINING: 'training',
-  EDIT_DATASET: 'edit_dataset',
+const EditDatasetCommand = {
+  MERGE: 0,
+  DELETE: 1,
 };
 
-export default PageType;
+export default EditDatasetCommand;

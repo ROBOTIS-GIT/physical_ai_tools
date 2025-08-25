@@ -429,6 +429,7 @@ class DataManager:
                             num_processes=1,
                             num_threads=1
                         )
+            self._lerobot_dataset.set_robot_type(self._robot_type)
 
             return True
         except Exception as e:
