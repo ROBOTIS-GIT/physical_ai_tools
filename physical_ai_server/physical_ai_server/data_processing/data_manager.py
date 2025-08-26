@@ -21,10 +21,15 @@ import os
 import shutil
 import subprocess
 import time
+from pathlib import Path
 
 import cv2
 from geometry_msgs.msg import Twist
-from huggingface_hub import HfApi, snapshot_download
+from huggingface_hub import (
+    HfApi,
+    snapshot_download,
+    upload_folder
+)
 from lerobot.datasets.utils import DEFAULT_FEATURES
 from nav_msgs.msg import Odometry
 import numpy as np
@@ -489,6 +494,11 @@ class DataManager:
 
     def get_task_info(self):
         return self._task_info
+    
+    def _init_task_limits(self):
+        if not self._single_task:
+            self._task_info.num_episodes = 1_000_000
+            self._task_info.episode_time_s = 1_000_000
 
     @staticmethod
     def get_huggingface_user_id():
@@ -533,7 +543,67 @@ class DataManager:
             print('huggingface-cli not found. Please install package.')
             return False
 
-    def _init_task_limits(self):
-        if not self._single_task:
-            self._task_info.num_episodes = 1_000_000
-            self._task_info.episode_time_s = 1_000_000
+    @staticmethod
+    def download_huggingface_repo(
+        repo_id,
+        repo_type='dataset'
+    ):
+        save_path = Path.home() / '.cache/huggingface/lerobot'
+        save_dir = save_path / repo_id
+        try:
+            snapshot_download(
+                repo_id=repo_id,
+                repo_type=repo_type,
+                local_dir=save_dir
+            )
+        except Exception as e:
+            print(f'Error downloading HuggingFace repo: {e}')
+
+    @staticmethod
+    def upload_huggingface_repo(
+        repo_id,
+        repo_type,
+        local_dir
+    ):
+        try:
+            url = HfApi().create_repo(
+                repo_id,
+                repo_type=repo_type,
+                private=False
+            )
+            upload_folder(
+                repo_id   = repo_id,
+                folder_path = local_dir,
+                repo_type = repo_type
+            )
+        except Exception as e:
+            print(f'Error Uploading HuggingFace repo: {e}')
+
+    @staticmethod
+    def delete_huggingface_repo(
+        repo_id,
+        repo_type='dataset',
+    ):
+        try:
+            HfApi().delete_repo(repo_id, repo_type=repo_type)
+            print(f'Successfully deleted HuggingFace repo: {repo_id}')
+        except Exception as e:
+            print(f'Error deleting HuggingFace repo: {e}')
+
+    @staticmethod
+    def get_huggingface_repo_list(
+        author,
+        data_type='dataset'
+    ):
+        repo_id_list = []
+        if data_type == 'dataset':
+            dataset_list = HfApi().list_datasets(author=author)
+            for dataset in dataset_list:
+                repo_id_list.append(dataset.id)
+
+        elif data_type == 'model':
+            model_list = HfApi().list_models(author=author)
+            for model in model_list:
+                repo_id_list.append(model.id)
+        reverse = repo_id_list[::-1]
+        return reverse

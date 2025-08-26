@@ -12,6 +12,7 @@ rosidl_generate_interfaces(${PROJECT_NAME}
   "msg/TrainingInfo.msg"
   "msg/TrainingStatus.msg"
   "srv/BrowseFile.srv"
+  "srv/ControlHfServer.srv"
   "srv/EditDataset.srv"
   "srv/GetDatasetInfo.srv"
   "srv/GetDatasetList.srv"

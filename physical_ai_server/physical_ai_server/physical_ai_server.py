@@ -26,6 +26,7 @@ from typing import Optional
 from ament_index_python.packages import get_package_share_directory
 from physical_ai_interfaces.msg import TaskStatus, TrainingStatus
 from physical_ai_interfaces.srv import (
+    ControlHfServer,
     GetDatasetList,
     GetHFUser,
     GetModelWeightList,
@@ -112,6 +113,7 @@ class PhysicalAIServer(Node):
                 GetModelWeightList,
                 self.get_model_weight_list_callback
             ),
+            ('/huggingface/control', ControlHfServer, self.control_hf_server_callback),
         ]
 
         for service_name, service_type, callback in service_definitions:
@@ -773,6 +775,56 @@ class PhysicalAIServer(Node):
             response.success = False
             response.message = f'Failed to set robot type: {str(e)}'
             return response
+
+    def control_hf_server_callback(self, request, response):
+        try:
+            mode = request.mode
+            repo_id = request.repo_id
+            local_dir = request.local_dir
+            repo_type = request.repo_type
+            author = request.author
+
+            if mode == 'upload':
+                DataManager.upload_huggingface_repo(
+                    repo_id=repo_id,
+                    repo_type=repo_type,
+                    local_dir=local_dir
+                )
+                response.message = f'Uploaded Hugging Face repo: {repo_id}'
+            elif mode == 'download':
+                DataManager.download_huggingface_repo(
+                    repo_id=repo_id,
+                    repo_type=repo_type
+                )
+                response.message = f'Downloaded Hugging Face repo: {repo_id}'
+            elif mode == 'delete':
+                DataManager.delete_huggingface_repo(
+                    repo_id=repo_id,
+                    repo_type=repo_type
+                )
+                response.message = f'Deleted Hugging Face repo: {repo_id}'
+            elif mode == 'get_dataset_list':
+                DataManager.get_huggingface_repo_list(
+                    author=author,
+                    data_type='dataset'
+                )
+                response.message = f'Got dataset list for author: {author}'
+            elif mode == 'get_model_list':
+                DataManager.get_huggingface_repo_list(
+                    author=author,
+                    data_type='model'
+                )
+                response.message = f'Got model list for author: {author}'
+            else:
+                self.get_logger().warning(f'Unknown mode: {mode}')
+                response.success = False
+                response.message = f'Unknown mode: {mode}'
+            response.success = True
+            
+        except Exception as e:
+            self.get_logger().error(f'Error occurred: {str(e)}')
+            response.success = False
+            response.message = f'Error occurred: {str(e)}'
 
     def handle_joystick_trigger(self, joystick_mode: str):
         self.get_logger().info(
