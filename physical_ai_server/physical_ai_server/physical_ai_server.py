@@ -792,11 +792,14 @@ class PhysicalAIServer(Node):
                 )
                 response.message = f'Uploaded Hugging Face repo: {repo_id}'
             elif mode == 'download':
-                DataManager.download_huggingface_repo(
+                result = DataManager.download_huggingface_repo(
                     repo_id=repo_id,
                     repo_type=repo_type
                 )
-                response.message = f'Downloaded Hugging Face repo: {repo_id}'
+                if result:
+                    response.message = f'Downloaded Hugging Face repo: {repo_id}'
+                else:
+                    response.message = f'Failed to download Hugging Face repo: {repo_id}, Please check the repo ID and try again.'
             elif mode == 'delete':
                 DataManager.delete_huggingface_repo(
                     repo_id=repo_id,
@@ -820,11 +823,13 @@ class PhysicalAIServer(Node):
                 response.success = False
                 response.message = f'Unknown mode: {mode}'
             response.success = True
+            return response
             
         except Exception as e:
             self.get_logger().error(f'Error occurred: {str(e)}')
             response.success = False
             response.message = f'Error occurred: {str(e)}'
+            return response
 
     def handle_joystick_trigger(self, joystick_mode: str):
         self.get_logger().info(

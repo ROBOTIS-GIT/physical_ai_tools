@@ -54,7 +54,10 @@ const InferencePanel = () => {
   // File browser modal states
   const [showPolicyPathModal, setShowPolicyPathModal] = useState(false);
 
-  const { registerHFUser, getRegisteredHFUser } = useRosServiceCaller();
+  // Download Policy states
+  const [isDownloadingPolicy, setIsDownloadingPolicy] = useState(false);
+
+  const { registerHFUser, getRegisteredHFUser, controlHfServer } = useRosServiceCaller();
 
   const handleChange = useCallback(
     (field, value) => {
@@ -128,6 +131,30 @@ const InferencePanel = () => {
     },
     [handleChange]
   );
+
+  const handleDownloadPolicy = useCallback(async () => {
+    if (!info.policyPath || info.policyPath.trim() === '') {
+      toast.error('Please enter a Policy Path or Repo ID first');
+      return;
+    }
+
+    setIsDownloadingPolicy(true);
+    try {
+      const repoId = info.policyPath.trim();
+      // Update the policy path with the local cache path
+      const localPath = `/root/.cache/huggingface/lerobot/${repoId}`;
+      handleChange('policyPath', localPath);
+      const result = await controlHfServer('download', repoId, 'model');
+      console.log('Download policy result:', result);
+      
+      toast.success(`Policy download started successfully for ${repoId}!`);
+    } catch (error) {
+      console.error('Error downloading policy:', error);
+      toast.error(`Failed to download policy: ${error.message}`);
+    } finally {
+      setIsDownloadingPolicy(false);
+    }
+  }, [controlHfServer, info.policyPath, handleChange]);
 
   // Update isEditable state when the disabled prop changes
   useEffect(() => {
@@ -433,8 +460,33 @@ const InferencePanel = () => {
             value={info.policyPath || ''}
             onChange={(e) => handleChange('policyPath', e.target.value)}
             disabled={!isEditable}
-            placeholder="Enter Policy Path"
+            placeholder="Enter Policy Path or Repo ID"
           />
+          <button
+            disabled={!isEditable || isDownloadingPolicy || !info.policyPath}
+            onClick={handleDownloadPolicy}
+            className={clsx(
+              'flex',
+              'items-center',
+              'gap-2',
+              'px-3',
+              'py-2',
+              'text-sm',
+              'bg-green-50',
+              'text-green-700',
+              'border',
+              'border-green-200',
+              'rounded-lg',
+              'hover:bg-green-100',
+              'transition-colors',
+              'disabled:bg-gray-100',
+              'disabled:text-gray-400',
+              'disabled:cursor-not-allowed',
+              'w-fit'
+            )}
+          >
+            {isDownloadingPolicy ? 'Downloading...' : 'Download Policy'}
+          </button>
         </div>
       </div>
 

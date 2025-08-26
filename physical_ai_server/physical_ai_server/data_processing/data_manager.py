@@ -551,13 +551,15 @@ class DataManager:
         save_path = Path.home() / '.cache/huggingface/lerobot'
         save_dir = save_path / repo_id
         try:
-            snapshot_download(
+            result = snapshot_download(
                 repo_id=repo_id,
                 repo_type=repo_type,
                 local_dir=save_dir
             )
+            return result
         except Exception as e:
             print(f'Error downloading HuggingFace repo: {e}')
+            return False
 
     @staticmethod
     def upload_huggingface_repo(
@@ -571,13 +573,15 @@ class DataManager:
                 repo_type=repo_type,
                 private=False
             )
-            upload_folder(
+            result = upload_folder(
                 repo_id   = repo_id,
                 folder_path = local_dir,
                 repo_type = repo_type
             )
+            return result
         except Exception as e:
             print(f'Error Uploading HuggingFace repo: {e}')
+            return False
 
     @staticmethod
     def delete_huggingface_repo(
@@ -585,10 +589,11 @@ class DataManager:
         repo_type='dataset',
     ):
         try:
-            HfApi().delete_repo(repo_id, repo_type=repo_type)
-            print(f'Successfully deleted HuggingFace repo: {repo_id}')
+            result = HfApi().delete_repo(repo_id, repo_type=repo_type)
+            return result
         except Exception as e:
             print(f'Error deleting HuggingFace repo: {e}')
+            return False
 
     @staticmethod
     def get_huggingface_repo_list(
