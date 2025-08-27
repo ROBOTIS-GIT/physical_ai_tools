@@ -127,8 +127,13 @@ export default function ImageGridCell({
       console.log(`Creating new image stream for idx ${idx}, topic: ${topic}`);
 
       const img = document.createElement('img');
+
+      const type = 'mjpeg';
       const timestamp = Date.now();
-      img.src = `http://${rosHost}:8080/stream?quality=50&type=ros_compressed&default_transport=compressed&topic=${topic}&t=${timestamp}`;
+      const quality = '50';
+      const default_transport = 'compressed';
+
+      img.src = `http://${rosHost}:8080/stream?quality=${quality}&type=${type}&default_transport=${default_transport}&topic=${topic}&t=${timestamp}`;
       img.alt = topic;
       img.className = 'w-full h-full object-cover rounded-3xl bg-gray-100';
       img.onclick = (e) => e.stopPropagation();
