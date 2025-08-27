@@ -2,6 +2,10 @@
 Changelog for package physical_ai_server
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
+0.6.9 (2025-08-27)
+------------------
+* None
+
 0.6.8 (2025-08-21)
 ------------------
 * Added functionality to edit data in the Physical AI Server, including merge and delete operations.
