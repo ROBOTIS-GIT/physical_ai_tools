@@ -46,6 +46,10 @@ class RosbagToLeRobotConverter(Node):
         self.declare_parameter('fps', 30)
         self.declare_parameter('use_videos', True)
         self.declare_parameter('robot_type', 'mobile_robot')
+        # Individual camera rotation parameters
+        self.declare_parameter('cam_head_rotation', 0)  # 0, 90, 180, 270 degrees
+        self.declare_parameter('cam_wrist_left_rotation', 0)  # 0, 90, 180, 270 degrees
+        self.declare_parameter('cam_wrist_right_rotation', 0)  # 0, 90, 180, 270 degrees
 
         # Get parameters
         self.rosbag_dir = Path(self.get_parameter('rosbag_dir').value)
@@ -54,6 +58,18 @@ class RosbagToLeRobotConverter(Node):
         self.fps = self.get_parameter('fps').value
         self.use_videos = self.get_parameter('use_videos').value
         self.robot_type = self.get_parameter('robot_type').value
+
+        # Get individual camera rotation parameters
+        self.camera_rotations = {
+            'cam_head': self.get_parameter('cam_head_rotation').value,
+            'cam_wrist_left': self.get_parameter('cam_wrist_left_rotation').value,
+            'cam_wrist_right': self.get_parameter('cam_wrist_right_rotation').value,
+        }
+
+        # Validate rotation parameters
+        for camera_name, rotation in self.camera_rotations.items():
+            if rotation not in [0, 90, 180, 270]:
+                raise ValueError(f"Invalid rotation for {camera_name}: {rotation}. Must be 0, 90, 180, or 270 degrees")
 
         # Initialize CV bridge
         self.bridge = CvBridge()
@@ -93,6 +109,22 @@ class RosbagToLeRobotConverter(Node):
         self.get_logger().info(f'Rosbag directory: {self.rosbag_dir}')
         self.get_logger().info(f'Output repo ID: {self.output_repo_id}')
         self.get_logger().info(f'Target frequency: {self.fps} Hz')
+        for camera_name, rotation in self.camera_rotations.items():
+            self.get_logger().info(f'{camera_name} rotation: {rotation} degrees')
+
+    def rotate_image(self, image: np.ndarray, camera_name: str) -> np.ndarray:
+        """Rotate image by the specified angle for the given camera."""
+        rotation = self.camera_rotations.get(camera_name, 0)
+        if rotation == 0:
+            return image
+        elif rotation == 90:
+            return cv2.rotate(image, cv2.ROTATE_90_CLOCKWISE)
+        elif rotation == 180:
+            return cv2.rotate(image, cv2.ROTATE_180)
+        elif rotation == 270:
+            return cv2.rotate(image, cv2.ROTATE_90_COUNTERCLOCKWISE)
+        else:
+            return image  # Should not happen due to validation
 
     def create_dataset_features(self, image_shapes: Dict[str, Tuple[int, int, int]] = None) -> Dict:
         """Create the features dictionary for the LeRobot dataset."""
@@ -109,23 +141,24 @@ class RosbagToLeRobotConverter(Node):
             },
         }
 
-        # Add camera features with actual image shapes or defaults
+        # Add camera features with actual image shapes or defaults, accounting for rotation
         for camera_name in self.camera_topics.keys():
             if image_shapes and camera_name in image_shapes:
                 # Use actual image shape
                 height, width, channels = image_shapes[camera_name]
+                # Apply rotation to dimensions for this specific camera
+                rotation = self.camera_rotations.get(camera_name, 0)
+                if rotation in [90, 270]:
+                    # Width and height swap for 90° and 270° rotations
+                    height, width = width, height
+                # 0° and 180° rotations don't change dimensions
                 features[f"observation.images.{camera_name}"] = {
                     "dtype": "video" if self.use_videos else "image",
                     "shape": (channels, height, width),
                     "names": ["channels", "height", "width"],
                 }
             else:
-                # Use default shape
-                features[f"observation.images.{camera_name}"] = {
-                    "dtype": "video" if self.use_videos else "image",
-                    "shape": (3, 480, 640),  # Default shape
-                    "names": ["channels", "height", "width"],
-                }
+                raise ValueError(f"Image shape not found for camera {camera_name}")
 
         return features
 
@@ -140,34 +173,29 @@ class RosbagToLeRobotConverter(Node):
         first_episode_dir = episode_dirs[0]
         self.get_logger().info(f"Reading first episode {first_episode_dir} to determine image shapes")
 
-        try:
-            episode_data, num_frames = self.read_rosbag_episode(first_episode_dir)
+        episode_data, num_frames = self.read_rosbag_episode(first_episode_dir)
 
-            if num_frames == 0:
-                self.get_logger().warning("No frames in first episode")
-                return {}
-
-            image_shapes = {}
-            for camera_name, images in episode_data['images'].items():
-                if images and len(images) > 0:
-                    # Find the first non-None image
-                    for img in images:
-                        if img is not None:
-                            height, width, channels = img.shape
-                            image_shapes[camera_name] = (height, width, channels)
-                            self.get_logger().info(f"Camera {camera_name}: {height}x{width}x{channels}")
-                            break
-                    else:
-                        self.get_logger().warning(f"No valid images found for camera {camera_name}")
-                else:
-                    self.get_logger().warning(f"No images found for camera {camera_name}")
-
-            return image_shapes
-
-        except Exception as e:
-            raise e
-            self.get_logger().error(f"Error determining image shapes: {e}")
+        if num_frames == 0:
+            self.get_logger().warning("No frames in first episode")
             return {}
+
+        image_shapes = {}
+        for camera_name, images in episode_data['images'].items():
+            if images and len(images) > 0:
+                # Find the first non-None image
+                for img in images:
+                    if img is not None:
+                        height, width, channels = img.shape
+                        image_shapes[camera_name] = (height, width, channels)
+                        self.get_logger().info(f"Camera {camera_name}: {height}x{width}x{channels}")
+                        break
+                else:
+                    self.get_logger().warning(f"No valid images found for camera {camera_name}")
+            else:
+                self.get_logger().warning(f"No images found for camera {camera_name}")
+
+        return image_shapes
+
 
     def find_episode_directories(self) -> List[Path]:
         """Find all episode directories in the rosbag directory."""
@@ -206,6 +234,8 @@ class RosbagToLeRobotConverter(Node):
             self.get_logger().info(f"Episode duration: {duration:.2f} seconds")
             actual_fps = num_frames / duration if duration > 0 else 0
             self.get_logger().info(f"Actual sampling rate: {actual_fps:.2f} Hz")
+        else:
+            raise ValueError(f"No frames in episode {episode_dir}")
 
         return episode_data, num_frames
 
@@ -241,8 +271,7 @@ class RosbagToLeRobotConverter(Node):
         episode_data, num_frames = self.read_rosbag_episode(episode_dir)
 
         if num_frames == 0:
-            self.get_logger().warning(f"No data found in episode {episode_index}")
-            return
+            raise ValueError(f"No frames in episode {episode_dir}")
 
         for i in range(num_frames):
             frame = {
@@ -264,6 +293,8 @@ class RosbagToLeRobotConverter(Node):
                                 f"expected {expected_height}x{expected_width}x{expected_channels}, "
                                 f"got {actual_height}x{actual_width}x{actual_channels}"
                             )
+                    # Apply rotation if specified for this camera
+                    img = self.rotate_image(img, camera_name)
                     frame[f"observation.images.{camera_name}"] = img
                 else:
                     error_msg = f"No image found for camera {camera_name} at frame {i}"
@@ -282,15 +313,14 @@ class RosbagToLeRobotConverter(Node):
         episode_dirs = self.find_episode_directories()
 
         if not episode_dirs:
-            self.get_logger().error("No episode directories found")
-            return
+            raise ValueError("No episode directories found")
 
         # Determine image shapes from first episode
         self.image_shapes = self.determine_image_shapes()
         if self.image_shapes:
             self.get_logger().info(f"Determined image shapes: {self.image_shapes}")
         else:
-            self.get_logger().warning("Could not determine image shapes, using defaults")
+            raise ValueError("Could not determine image shapes")
 
         # Create the dataset with proper image shapes
         dataset = self.create_lerobot_dataset(self.image_shapes)
@@ -299,8 +329,6 @@ class RosbagToLeRobotConverter(Node):
         for episode_dir in episode_dirs:
             episode_index = int(episode_dir.name)
             self.convert_episode(dataset, episode_dir, episode_index)
-            if episode_index == 1:
-                break
 
         # Consolidate the dataset
         self.get_logger().info("Dataset conversion completed")
