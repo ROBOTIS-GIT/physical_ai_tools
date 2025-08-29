@@ -71,7 +71,15 @@ export default function ImageGridCell({
   const destroyImage = useCallback(() => {
     if (currentImgRef.current) {
       console.log(`Destroying image stream for idx ${idx}`);
-      // First set src to empty
+
+      // Remove event handlers first
+
+      setTimeout(() => {
+        if (currentImgRef.current && currentImgRef.current.parentNode) {
+          currentImgRef.current.parentNode.removeChild(currentImgRef.current);
+        }
+        currentImgRef.current = null;
+      }, 100);
       currentImgRef.current.src = '';
       // Remove from DOM completely
       if (currentImgRef.current.parentNode) {
