@@ -8,6 +8,7 @@ The rosbag recorder saves episodes in subdirectories with episode indices.
 """
 
 import os
+import gc
 import sys
 import argparse
 from pathlib import Path
@@ -27,12 +28,14 @@ import yaml
 from sensor_msgs.msg import JointState, CompressedImage
 from std_msgs.msg import String
 
-# Add the lerobot path to sys.path
-sys.path.append('/root/ros2_ws/src/lerobot/src')
 from lerobot.datasets.lerobot_dataset import LeRobotDataset
+
+from physical_ai_server.data_processing.lerobot_dataset_wrapper import LeRobotDatasetWrapper
 
 # Import our rosbag reader
 from .rosbag_reader import read_episode_from_bag
+
+import time
 
 
 class RosbagToLeRobotConverter(Node):
@@ -56,6 +59,7 @@ class RosbagToLeRobotConverter(Node):
         self.declare_parameter('joint_names', descriptor=dyn)
         self.declare_parameter('joint_order', descriptor=dyn)
         self.declare_parameter('config_yaml_path', descriptor=dyn)
+        self.declare_parameter('use_optimized_save_mode', descriptor=dyn)
 
         # Helper parsers to support both YAML dict/list and JSON strings
         def parse_dict_param(param_name: str, required: bool = True) -> Dict[str, Any]:
@@ -108,6 +112,7 @@ class RosbagToLeRobotConverter(Node):
         self.fps = self.get_parameter('fps').value
         self.use_videos = self.get_parameter('use_videos').value
         self.robot_type = self.get_parameter('robot_type').value
+        self.use_optimized_save_mode = self.get_parameter('use_optimized_save_mode').value
 
         # Validate basic parameters
         if not self.rosbag_dir.exists():
@@ -122,6 +127,8 @@ class RosbagToLeRobotConverter(Node):
             raise ValueError(f"use_videos must be boolean, got: {self.use_videos}")
         if not self.robot_type:
             raise ValueError("robot_type parameter is required")
+        if not isinstance(self.use_optimized_save_mode, bool):
+            raise ValueError(f"use_optimized_save_mode must be boolean, got: {self.use_optimized_save_mode}")
 
         # Parse and validate camera rotation parameters (dict)
         self.camera_rotations = parse_dict_param('camera_rotations', required=False)
@@ -353,15 +360,14 @@ class RosbagToLeRobotConverter(Node):
             shutil.rmtree(dataset_path)
             self.get_logger().info(f"Removed existing dataset at {dataset_path}")
 
-        dataset = LeRobotDataset.create(
+        dataset = LeRobotDatasetWrapper.create(
             repo_id=self.output_repo_id,
             fps=self.fps,
             robot_type=self.robot_type,
             features=features,
             use_videos=self.use_videos,
-            image_writer_processes=1,
-            image_writer_threads=1,
         )
+        dataset.set_robot_type(self.robot_type)
 
         self.get_logger().info(f"Created LeRobot dataset: {self.output_repo_id}")
         return dataset
@@ -403,12 +409,22 @@ class RosbagToLeRobotConverter(Node):
                     self.get_logger().warning(error_msg)
                     raise ValueError(error_msg)
 
-            # Add frame to dataset
-            dataset.add_frame(frame, task=self.task_name)
+            # Add frame to dataset using optimized or standard mode
+            if self.use_optimized_save_mode:
+                dataset.add_frame_without_write_image(frame, task=self.task_name)
+            else:
+                dataset.add_frame(frame, task=self.task_name)
 
-        # Save the episode
-        dataset.save_episode()
+        # Save the episode using optimized or standard mode
+        if self.use_optimized_save_mode:
+            dataset.save_episode_without_write_image()
+            if not dataset.check_video_encoding_completed():
+                self.get_logger().info("Waiting for video encoding to complete")
+                time.sleep(0.1)
+        else:
+            dataset.save_episode()
         self.get_logger().info(f"Saved episode {episode_index} with {num_frames} frames")
+        self._episode_reset(dataset)
 
     def convert_all_episodes(self):
         """Convert all episodes from rosbag directory to LeRobot dataset."""
@@ -427,6 +443,12 @@ class RosbagToLeRobotConverter(Node):
         # Create the dataset with proper image shapes
         dataset = self.create_lerobot_dataset(self.image_shapes)
 
+        # Log the save mode being used
+        if self.use_optimized_save_mode:
+            self.get_logger().info("Using optimized save mode: images will be kept in RAM and encoded at the end")
+        else:
+            self.get_logger().info("Using standard save mode: images will be written to disk immediately")
+
         # Convert each episode
         for episode_dir in episode_dirs:
             episode_index = int(episode_dir.name)
@@ -443,6 +465,20 @@ class RosbagToLeRobotConverter(Node):
         self.get_logger().info("Starting rosbag to LeRobot dataset conversion")
         self.convert_all_episodes()
         self.get_logger().info("Conversion completed")
+
+    def _episode_reset(self, dataset: LeRobotDataset) -> None:
+        """Clear dataset's in-memory episode buffer after saving, freeing RAM.
+
+        Mirrors physical_ai_server DataManager._episode_reset behavior.
+        """
+        if dataset.episode_buffer is not None:
+            for key, value in dataset.episode_buffer.items():
+                if isinstance(value, list):
+                    value.clear()
+                del value
+            dataset.episode_buffer.clear()
+        dataset.episode_buffer = None
+        gc.collect()
 
 
 def main(args=None):

@@ -7,6 +7,7 @@ rosbag_to_lerobot_converter:
     fps: 10
     use_videos: true
     robot_type: 'ffw_bg2_rev4'
+    use_optimized_save_mode: true
 
     # Camera configuration
     camera_topics:
