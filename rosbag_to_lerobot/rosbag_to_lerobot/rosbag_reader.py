@@ -387,27 +387,37 @@ class RosbagReader:
         for state_name, state in latest_joint_states.items():
             if state is not None:
                 if state_name == 'joints':
-                    # Joint states contain arm, head, gripper joints (19 joints)
-                    # Map to the first part of the combined state (excluding mobile base)
-                    if len(state) <= len(combined_state) - 3:  # -3 for mobile base components
+                    # Joint states contain arm, head, gripper joints (excluding mobile base)
+                    # Use the same logic as action processing: filter out mobile base joints
+                    joint_state_names = [name for name in joint_names if name not in ['linear_x', 'linear_y', 'angular_z']]
+                    if len(state) == len(joint_state_names):
+                        # Map joint states to the first part of the combined state
                         combined_state[:len(state)] = state
-                        # print(f"Merged joint state from {state_name} (positions 0-{len(state)-1})")
                     else:
-                        print(f"Warning: Joint state from {state_name} too large ({len(state)}) for combined state ({len(combined_state)})")
+                        raise ValueError(f"Joint state from {state_name} size ({len(state)}) doesn't match expected joint names ({len(joint_state_names)})")
 
                 elif state_name == 'odometry':
                     # Odometry contains mobile base velocity (linear_x, linear_y, angular_z)
-                    # Map to the last 3 positions of the combined state
-                    if len(state) == 3:
-                        combined_state[-3:] = state
-                        # print(f"Merged odometry from {state_name} (positions {len(combined_state)-3}-{len(combined_state)-1})")
+                    # Use the same logic as action processing: specifically look for mobile base velocity names
+                    velocity_names = ['linear_x', 'linear_y', 'angular_z']
+                    if len(state) == len(velocity_names):
+                        # Check if mobile base joints exist in joint_names
+                        mobile_base_indices = []
+                        for vel_name in velocity_names:
+                            if vel_name in joint_names:
+                                mobile_base_indices.append(joint_names.index(vel_name))
+
+                        if len(mobile_base_indices) == len(velocity_names):
+                            # Map odometry to the correct positions in combined state
+                            for i, vel_idx in enumerate(mobile_base_indices):
+                                combined_state[vel_idx] = state[i]
+                        else:
+                            raise ValueError(f"Not all mobile base joints found in joint_names")
                     else:
-                        print(f"Warning: Odometry from {state_name} has unexpected size ({len(state)})")
+                        raise ValueError(f"Odometry from {state_name} has unexpected size ({len(state)})")
 
                 else:
-                    # For other sources, just use the state as is
-                    combined_state = state
-                    print(f"Using joint state from {state_name} (unknown mapping)")
+                    raise ValueError(f"Unknown joint state source: {state_name}")
 
                 merged_count += 1
 
