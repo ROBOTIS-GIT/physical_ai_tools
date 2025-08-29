@@ -71,7 +71,15 @@ export default function ImageGridCell({
   const destroyImage = useCallback(() => {
     if (currentImgRef.current) {
       console.log(`Destroying image stream for idx ${idx}`);
-      // First set src to empty
+
+      // Remove event handlers first
+
+      setTimeout(() => {
+        if (currentImgRef.current && currentImgRef.current.parentNode) {
+          currentImgRef.current.parentNode.removeChild(currentImgRef.current);
+        }
+        currentImgRef.current = null;
+      }, 100);
       currentImgRef.current.src = '';
       // Remove from DOM completely
       if (currentImgRef.current.parentNode) {
@@ -127,8 +135,13 @@ export default function ImageGridCell({
       console.log(`Creating new image stream for idx ${idx}, topic: ${topic}`);
 
       const img = document.createElement('img');
+
+      const type = 'mjpeg';
       const timestamp = Date.now();
-      img.src = `http://${rosHost}:8080/stream?quality=50&type=ros_compressed&default_transport=compressed&topic=${topic}&t=${timestamp}`;
+      const quality = '50';
+      const default_transport = 'compressed';
+
+      img.src = `http://${rosHost}:8080/stream?quality=${quality}&type=${type}&default_transport=${default_transport}&topic=${topic}&t=${timestamp}`;
       img.alt = topic;
       img.className = 'w-full h-full object-cover rounded-3xl bg-gray-100';
       img.onclick = (e) => e.stopPropagation();
@@ -139,7 +152,7 @@ export default function ImageGridCell({
       };
 
       img.onload = () => {
-        console.log(`Image stream started for idx ${idx}, topic: ${topic}`);
+        // console.log(`Image stream started for idx ${idx}, topic: ${topic}`);
       };
 
       if (containerRef.current && isCreatingRef.current) {
