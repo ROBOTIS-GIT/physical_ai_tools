@@ -22,6 +22,7 @@ import { TbArrowMerge } from 'react-icons/tb';
 import { MdFolderOpen, MdRefresh, MdDataset } from 'react-icons/md';
 import { DEFAULT_PATHS, TARGET_FOLDERS } from '../constants/paths';
 import FileBrowserModal from '../components/FileBrowserModal';
+import TokenInputPopup from '../components/TokenInputPopup';
 
 import {
   setMergeDatasetList,
@@ -30,6 +31,7 @@ import {
   setMergeOutputPath,
   setMergeOutputFolderName,
   setDatasetInfo,
+  setUserId,
 } from '../features/editDataset/editDatasetSlice';
 import { useRosServiceCaller } from '../hooks/useRosServiceCaller';
 
@@ -159,6 +161,29 @@ const STYLES = {
     'gap-2',
     'text-sm',
     'font-medium'
+  ),
+  selectUserID: clsx(
+    'text-md',
+    'w-full',
+    'max-w-80',
+    'h-8',
+    'px-2',
+    'border',
+    'border-gray-300',
+    'rounded-md',
+    'focus:outline-none',
+    'focus:ring-2',
+    'focus:ring-blue-500',
+    'focus:border-transparent'
+  ),
+  loadUserButton: clsx('px-3', 'py-1', 'text-md', 'font-medium', 'rounded-xl', 'transition-colors'),
+  changeUserButton: clsx(
+    'px-3',
+    'py-1',
+    'text-md',
+    'font-medium',
+    'rounded-xl',
+    'transition-colors'
   ),
 };
 
@@ -447,7 +472,14 @@ export default function EditDatasetPage() {
   // Hooks and state management
   const { toasts } = useToasterStore();
   const dispatch = useDispatch();
-  const { sendEditDatasetCommand, browseFile, getDatasetInfo, controlHfServer } = useRosServiceCaller();
+  const {
+    sendEditDatasetCommand,
+    browseFile,
+    getDatasetInfo,
+    controlHfServer,
+    registerHFUser,
+    getRegisteredHFUser,
+  } = useRosServiceCaller();
 
   // Redux state selectors
   const {
@@ -457,6 +489,7 @@ export default function EditDatasetPage() {
     mergeOutputPath,
     mergeOutputFolderName,
     datasetInfo,
+    userId,
   } = useSelector((state) => state.editDataset);
 
   // Local state
@@ -474,6 +507,11 @@ export default function EditDatasetPage() {
   const [isUploading, setIsUploading] = useState(false);
   const [isDownloading, setIsDownloading] = useState(false);
   const [showHfLocalDirBrowserModal, setShowHfLocalDirBrowserModal] = useState(false);
+  const [userIdList, setUserIdList] = useState([]);
+
+  // Token popup states
+  const [showTokenPopup, setShowTokenPopup] = useState(false);
+  const [isLoading, setIsLoading] = useState(false);
 
   // Function to fetch existing folders in the output path
   const fetchExistingFolders = useCallback(
@@ -600,6 +638,83 @@ export default function EditDatasetPage() {
       },
       []
     ),
+  };
+
+  // Token related handlers
+  const handleTokenSubmit = async (token) => {
+    if (!token || !token.trim()) {
+      toast.error('Please enter a token');
+      return;
+    }
+
+    setIsLoading(true);
+    try {
+      const result = await registerHFUser(token);
+      console.log('registerHFUser result:', result);
+
+      if (result && result.user_id_list) {
+        setUserIdList(result.user_id_list);
+        setShowTokenPopup(false);
+        toast.success('User ID list updated successfully!');
+      } else {
+        toast.error('Failed to get user ID list from response');
+      }
+    } catch (error) {
+      console.error('Error registering HF user:', error);
+      toast.error(`Failed to register user: ${error.message}`);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleLoadUserId = useCallback(async () => {
+    setIsLoading(true);
+    try {
+      const result = await getRegisteredHFUser();
+      console.log('getRegisteredHFUser result:', result);
+
+      if (result && result.user_id_list) {
+        if (result.success) {
+          setUserIdList(result.user_id_list);
+          toast.success('User ID list loaded successfully!');
+        } else {
+          toast.error('Failed to get user ID list: ' + result.message);
+        }
+      } else {
+        toast.error('Failed to get user ID list from response');
+      }
+    } catch (error) {
+      console.error('Error loading HF user list:', error);
+      toast.error(`Failed to load user ID list: ${error.message}`);
+    } finally {
+      setIsLoading(false);
+    }
+  }, [getRegisteredHFUser]);
+
+  // Auto-load User ID list on component mount
+  useEffect(() => {
+    handleLoadUserId();
+  }, [handleLoadUserId]);
+
+  // Button variants helper function
+  const getButtonVariant = (variant, isActive = true, isLoading = false) => {
+    const variants = {
+      blue: {
+        active: 'bg-blue-200 text-blue-800 hover:bg-blue-300',
+        disabled: 'bg-gray-200 text-gray-500 cursor-not-allowed',
+      },
+      red: {
+        active: 'bg-red-200 text-red-800 hover:bg-red-300',
+        disabled: 'bg-gray-200 text-gray-500 cursor-not-allowed',
+      },
+      green: {
+        active: 'bg-green-200 text-green-800 hover:bg-green-300',
+        disabled: 'bg-gray-200 text-gray-500 cursor-not-allowed',
+      },
+    };
+
+    const isDisabled = !isActive || isLoading;
+    return variants[variant]?.[isDisabled ? 'disabled' : 'active'] || '';
   };
 
   // Async operations
@@ -735,96 +850,268 @@ export default function EditDatasetPage() {
       <div className="w-full flex items-center justify-start">
         <span className="text-2xl font-bold mb-4">Huggingface Upload & Download</span>
       </div>
-      <div className="w-full bg-white p-5 rounded-md flex flex-col items-start justify-center gap-4 shadow-md">
-        <div className="w-full flex flex-col gap-3">
-          {/* Repo ID Input */}
-          <div className="w-full flex flex-col gap-2">
-            <span className="text-lg font-bold">Repository ID</span>
-            <input
-              className={clsx(STYLES.textInput, {
-                'bg-gray-100 cursor-not-allowed': !isEditable,
-                'bg-white': isEditable,
-              })}
-              type="text"
-              placeholder="Enter Repo ID (e.g., username/dataset-name)"
-              value={hfRepoId || ''}
-              onChange={(e) => setHfRepoId(e.target.value)}
-              disabled={!isEditable}
-            />
-          </div>
 
-          {/* Local Directory Input */}
-          <div className="w-full flex flex-col gap-2">
-            <span className="text-lg font-bold">Local Directory</span>
-            <div className="w-full flex flex-row items-center justify-start gap-2">
-              <input
-                className={clsx(STYLES.textInput, 'flex-1', {
-                  'bg-gray-100 cursor-not-allowed': !isEditable,
-                  'bg-white': isEditable,
-                })}
-                type="text"
-                placeholder="Enter local directory path or browse"
-                value={hfLocalDir || ''}
-                onChange={(e) => setHfLocalDir(e.target.value)}
-                disabled={!isEditable}
-              />
+      {/* User ID Selection */}
+      <div className="w-full bg-white p-5 rounded-md flex flex-col items-start justify-center gap-4 shadow-md">
+        <div className="w-full flex items-center justify-start">
+          <span className="text-lg font-bold">User ID Configuration</span>
+        </div>
+        <div className="w-full flex flex-row gap-3">
+          <select
+            className={STYLES.selectUserID}
+            value={userId || ''}
+            onChange={(e) => dispatch(setUserId(e.target.value))}
+          >
+            <option value="">Select User ID</option>
+            {userIdList.map((userId) => (
+              <option key={userId} value={userId}>
+                {userId}
+              </option>
+            ))}
+          </select>
+          <div className="flex gap-2">
+            <button
+              className={clsx(
+                STYLES.loadUserButton,
+                getButtonVariant('blue', isEditable, isLoading)
+              )}
+              onClick={() => {
+                if (isEditable && !isLoading) {
+                  handleLoadUserId();
+                }
+              }}
+              disabled={!isEditable || isLoading}
+            >
+              {isLoading ? 'Loading...' : 'Load'}
+            </button>
+            <button
+              className={clsx(
+                STYLES.loadUserButton,
+                getButtonVariant('green', isEditable, isLoading)
+              )}
+              onClick={() => {
+                if (isEditable && !isLoading) {
+                  setShowTokenPopup(true);
+                }
+              }}
+              disabled={!isEditable || isLoading}
+            >
+              Change
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <div className="w-full flex gap-5">
+        {/* Upload */}
+        <div className="w-full bg-white p-5 rounded-md flex flex-col items-start justify-center gap-4 shadow-md">
+          <div className="w-full flex items-center justify-start">
+            <span className="text-lg font-bold">Upload Dataset</span>
+          </div>
+          <div className="w-full flex flex-col gap-3">
+            {/* Local Directory Input */}
+            <div className="w-full flex flex-col gap-2">
+              <span className="text-lg font-bold">Local Directory</span>
+              <div className="w-full flex flex-row items-center justify-start gap-2">
+                <input
+                  className={clsx(STYLES.textInput, 'flex-1', {
+                    'bg-gray-100 cursor-not-allowed': !isEditable,
+                    'bg-white': isEditable,
+                  })}
+                  type="text"
+                  placeholder="Enter local directory path or browse"
+                  value={hfLocalDir || ''}
+                  onChange={(e) => setHfLocalDir(e.target.value)}
+                  disabled={!isEditable}
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowHfLocalDirBrowserModal(true)}
+                  className="flex items-center justify-center w-8 h-8 text-blue-500 bg-gray-200 rounded-md hover:text-blue-700"
+                  aria-label="Browse files for local directory"
+                >
+                  <MdFolderOpen className="w-6 h-6" />
+                </button>
+              </div>
+            </div>
+
+            {/* Repo ID Input */}
+            <div className="w-full flex flex-col gap-2">
+              <span className="text-lg font-bold">Repository ID</span>
+              <div className="relative">
+                <div className="flex items-center border border-gray-300 rounded-md overflow-hidden bg-white focus-within:ring-2 focus-within:ring-blue-500 focus-within:border-transparent">
+                  <div className="px-3 py-2 bg-gray-50 border-r border-gray-300 text-gray-700 font-medium flex items-center">
+                    <span className="text-sm">{userId || 'username'}</span>
+                    <span className="mx-1 text-gray-400">/</span>
+                  </div>
+                  <input
+                    className={clsx(
+                      'flex-1 px-3 py-2 text-sm bg-transparent border-none outline-none',
+                      {
+                        'bg-gray-100 cursor-not-allowed text-gray-500': !isEditable,
+                        'text-gray-900': isEditable,
+                      }
+                    )}
+                    type="text"
+                    placeholder="Enter repository id"
+                    value={hfRepoId || ''}
+                    onChange={(e) => setHfRepoId(e.target.value)}
+                    disabled={!isEditable}
+                  />
+                </div>
+                <div className="mt-1 text-xs text-gray-500">
+                  Full repository path:{' '}
+                  <span className="font-mono text-blue-600">
+                    {userId || ''}/{hfRepoId || ''}
+                  </span>
+                </div>
+              </div>
+            </div>
+
+            {/* Action Buttons */}
+            <div className="w-full flex flex-row items-center justify-start gap-3 mt-2">
               <button
-                type="button"
-                onClick={() => setShowHfLocalDirBrowserModal(true)}
-                className="flex items-center justify-center w-8 h-8 text-blue-500 bg-gray-200 rounded-md hover:text-blue-700"
-                aria-label="Browse files for local directory"
+                className={clsx(
+                  'px-6',
+                  'py-2',
+                  'text-sm',
+                  'font-medium',
+                  'rounded-lg',
+                  'transition-colors',
+                  'w-32',
+                  {
+                    'bg-green-500 text-white hover:bg-green-600':
+                      !isUploading &&
+                      !isDownloading &&
+                      isEditable &&
+                      hfRepoId?.trim() &&
+                      hfLocalDir?.trim(),
+                    'bg-gray-300 text-gray-500 cursor-not-allowed':
+                      isUploading ||
+                      isDownloading ||
+                      !isEditable ||
+                      !hfRepoId?.trim() ||
+                      !hfLocalDir?.trim(),
+                  }
+                )}
+                onClick={operations.uploadDataset}
+                disabled={
+                  isUploading ||
+                  isDownloading ||
+                  !isEditable ||
+                  !hfRepoId?.trim() ||
+                  !hfLocalDir?.trim()
+                }
               >
-                <MdFolderOpen className="w-6 h-6" />
+                {isUploading ? 'Uploading...' : 'Upload'}
               </button>
             </div>
           </div>
 
-          {/* Action Buttons */}
-          <div className="w-full flex flex-row items-center justify-start gap-3 mt-2">
-            <button
-              className={clsx(
-                'px-6',
-                'py-2',
-                'text-sm',
-                'font-medium',
-                'rounded-lg',
-                'transition-colors',
-                'w-32',
-                {
-                  'bg-green-500 text-white hover:bg-green-600': !isUploading && !isDownloading && isEditable && hfRepoId?.trim() && hfLocalDir?.trim(),
-                  'bg-gray-300 text-gray-500 cursor-not-allowed': isUploading || isDownloading || !isEditable || !hfRepoId?.trim() || !hfLocalDir?.trim(),
-                }
-              )}
-              onClick={operations.uploadDataset}
-              disabled={isUploading || isDownloading || !isEditable || !hfRepoId?.trim() || !hfLocalDir?.trim()}
-            >
-              {isUploading ? 'Uploading...' : 'Upload'}
-            </button>
-            <button
-              className={clsx(
-                'px-6',
-                'py-2',
-                'text-sm',
-                'font-medium',
-                'rounded-lg',
-                'transition-colors',
-                'w-32',
-                {
-                  'bg-blue-500 text-white hover:bg-blue-600': !isUploading && !isDownloading && isEditable && hfRepoId?.trim(),
-                  'bg-gray-300 text-gray-500 cursor-not-allowed': isUploading || isDownloading || !isEditable || !hfRepoId?.trim(),
-                }
-              )}
-              onClick={operations.downloadDataset}
-              disabled={isUploading || isDownloading || !isEditable || !hfRepoId?.trim()}
-            >
-              {isDownloading ? 'Downloading...' : 'Download'}
-            </button>
+          <div className="text-sm text-gray-600 mt-2">
+            <div className="mb-1">
+              • <strong>Upload:</strong> Uploads dataset from local directory to HuggingFace Hub
+            </div>
           </div>
         </div>
 
-        <div className="text-sm text-gray-600 mt-2">
-          <div className="mb-1">• <strong>Upload:</strong> Uploads dataset from local directory to HuggingFace Hub</div>
-          <div>• <strong>Download:</strong> Downloads dataset from HuggingFace Hub to local cache directory</div>
+        {/* Download */}
+        <div className="w-full bg-white p-5 rounded-md flex flex-col items-start justify-center gap-4 shadow-md">
+          <div className="w-full flex items-center justify-start">
+            <span className="text-lg font-bold">Download Dataset</span>
+          </div>
+          <div className="w-full flex flex-col gap-3">
+            {/* Local Directory Input */}
+            <div className="w-full flex flex-col gap-2">
+              <span className="text-lg font-bold">Local Directory</span>
+              <div className="w-full flex flex-row items-center justify-start gap-2">
+                <input
+                  className={clsx(STYLES.textInput, 'flex-1', {
+                    'bg-gray-100 cursor-not-allowed': !isEditable,
+                    'bg-white': isEditable,
+                  })}
+                  type="text"
+                  placeholder="Enter local directory path or browse"
+                  value={hfLocalDir || ''}
+                  onChange={(e) => setHfLocalDir(e.target.value)}
+                  disabled={!isEditable}
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowHfLocalDirBrowserModal(true)}
+                  className="flex items-center justify-center w-8 h-8 text-blue-500 bg-gray-200 rounded-md hover:text-blue-700"
+                  aria-label="Browse files for local directory"
+                >
+                  <MdFolderOpen className="w-6 h-6" />
+                </button>
+              </div>
+            </div>
+
+            {/* Repo ID Input */}
+            <div className="w-full flex flex-col gap-2">
+              <span className="text-lg font-bold">Repository ID</span>
+              <div className="relative">
+                <div className="flex items-center border border-gray-300 rounded-md overflow-hidden bg-white focus-within:ring-2 focus-within:ring-blue-500 focus-within:border-transparent">
+                  <div className="px-3 py-2 bg-gray-50 border-r border-gray-300 text-gray-700 font-medium flex items-center">
+                    <span className="text-sm">{userId || 'username'}</span>
+                    <span className="mx-1 text-gray-400">/</span>
+                  </div>
+                  <input
+                    className={clsx(
+                      'flex-1 px-3 py-2 text-sm bg-transparent border-none outline-none',
+                      {
+                        'bg-gray-100 cursor-not-allowed text-gray-500': !isEditable,
+                        'text-gray-900': isEditable,
+                      }
+                    )}
+                    type="text"
+                    placeholder="Enter repository id"
+                    value={hfRepoId || ''}
+                    onChange={(e) => setHfRepoId(e.target.value)}
+                    disabled={!isEditable}
+                  />
+                </div>
+                <div className="mt-1 text-xs text-gray-500">
+                  Full repository path:{' '}
+                  <span className="font-mono text-blue-600">
+                    {userId || ''}/{hfRepoId || ''}
+                  </span>
+                </div>
+              </div>
+            </div>
+
+            {/* Action Buttons */}
+            <div className="w-full flex flex-row items-center justify-start gap-3 mt-2">
+              <button
+                className={clsx(
+                  'px-6',
+                  'py-2',
+                  'text-sm',
+                  'font-medium',
+                  'rounded-lg',
+                  'transition-colors',
+                  'w-32',
+                  {
+                    'bg-blue-500 text-white hover:bg-blue-600':
+                      !isUploading && !isDownloading && isEditable && hfRepoId?.trim(),
+                    'bg-gray-300 text-gray-500 cursor-not-allowed':
+                      isUploading || isDownloading || !isEditable || !hfRepoId?.trim(),
+                  }
+                )}
+                onClick={operations.downloadDataset}
+                disabled={isUploading || isDownloading || !isEditable || !hfRepoId?.trim()}
+              >
+                {isDownloading ? 'Downloading...' : 'Download'}
+              </button>
+            </div>
+          </div>
+
+          <div className="text-sm text-gray-600 mt-2">
+            <div className="mb-1">
+              • <strong>Download:</strong> Downloads dataset from HuggingFace Hub to local cache
+              directory
+            </div>
+          </div>
         </div>
       </div>
     </div>
@@ -1132,6 +1419,14 @@ export default function EditDatasetPage() {
         initialPath={DEFAULT_PATHS.DATASET_PATH}
         defaultPath={DEFAULT_PATHS.DATASET_PATH}
         homePath=""
+      />
+
+      {/* Token Input Popup */}
+      <TokenInputPopup
+        isOpen={showTokenPopup}
+        onClose={() => setShowTokenPopup(false)}
+        onSubmit={handleTokenSubmit}
+        isLoading={isLoading}
       />
     </div>
   );

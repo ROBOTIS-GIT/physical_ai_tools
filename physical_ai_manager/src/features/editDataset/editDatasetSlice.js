@@ -32,6 +32,7 @@ const initialState = {
   mergeOutputFolderName: '',
   deleteEpisodeNums: [],
   uploadHuggingface: false,
+  userId: '',
 };
 
 const editDatasetSlice = createSlice({
@@ -59,6 +60,9 @@ const editDatasetSlice = createSlice({
     setUploadHuggingface: (state, action) => {
       state.uploadHuggingface = action.payload;
     },
+    setUserId: (state, action) => {
+      state.userId = action.payload;
+    },
   },
 });
 
@@ -70,6 +74,7 @@ export const {
   setMergeOutputFolderName,
   setDeleteEpisodeNums,
   setUploadHuggingface,
+  setUserId,
 } = editDatasetSlice.actions;
 
 export default editDatasetSlice.reducer;
