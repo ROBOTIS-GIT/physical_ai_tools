@@ -33,6 +33,7 @@ const initialState = {
   deleteEpisodeNums: [],
   uploadHuggingface: false,
   userId: '',
+  hfStatus: 'Idle',
 };
 
 const editDatasetSlice = createSlice({
@@ -63,6 +64,9 @@ const editDatasetSlice = createSlice({
     setUserId: (state, action) => {
       state.userId = action.payload;
     },
+    setHFStatus: (state, action) => {
+      state.hfStatus = action.payload;
+    },
   },
 });
 
@@ -75,6 +79,7 @@ export const {
   setDeleteEpisodeNums,
   setUploadHuggingface,
   setUserId,
+  setHFStatus,
 } = editDatasetSlice.actions;
 
 export default editDatasetSlice.reducer;
