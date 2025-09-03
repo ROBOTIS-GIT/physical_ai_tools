@@ -19,7 +19,13 @@ import clsx from 'clsx';
 import toast, { useToasterStore } from 'react-hot-toast';
 import { useSelector, useDispatch } from 'react-redux';
 import { TbArrowMerge } from 'react-icons/tb';
-import { MdFolderOpen, MdRefresh, MdDataset } from 'react-icons/md';
+import {
+  MdFolderOpen,
+  MdRefresh,
+  MdDataset,
+  MdOutlineFileUpload,
+  MdOutlineFileDownload,
+} from 'react-icons/md';
 import { DEFAULT_PATHS, TARGET_FOLDERS } from '../constants/paths';
 import FileBrowserModal from '../components/FileBrowserModal';
 import TokenInputPopup from '../components/TokenInputPopup';
@@ -502,11 +508,20 @@ export default function EditDatasetPage() {
   const [existingFolders, setExistingFolders] = useState([]);
 
   // Huggingface Upload/Download states
-  const [hfRepoId, setHfRepoId] = useState('');
-  const [hfLocalDir, setHfLocalDir] = useState('');
+  const [hfRepoIdUpload, setHfRepoIdUpload] = useState('');
+  const [hfRepoIdDownload, setHfRepoIdDownload] = useState('');
+  const [hfLocalDirUpload, setHfLocalDirUpload] = useState('');
+  const [hfLocalDirDownload, setHfLocalDirDownload] = useState('');
   const [isUploading, setIsUploading] = useState(false);
   const [isDownloading, setIsDownloading] = useState(false);
   const [showHfLocalDirBrowserModal, setShowHfLocalDirBrowserModal] = useState(false);
+  const [showHfLocalDirDownloadBrowserModal, setShowHfLocalDirDownloadBrowserModal] =
+    useState(false);
+
+  const uploadButtonEnabled =
+    !isUploading && isEditable && hfRepoIdUpload?.trim() && hfLocalDirUpload?.trim();
+  const downloadButtonEnabled =
+    !isDownloading && isEditable && hfRepoIdDownload?.trim() && hfLocalDirDownload?.trim();
   const [userIdList, setUserIdList] = useState([]);
 
   // Token popup states
@@ -631,13 +646,15 @@ export default function EditDatasetPage() {
       [dispatch, fetchDatasetInfo]
     ),
 
-    hfLocalDirSelect: useCallback(
-      (item) => {
-        setHfLocalDir(item.full_path);
-        setShowHfLocalDirBrowserModal(false);
-      },
-      []
-    ),
+    hfLocalDirSelect: useCallback((item) => {
+      setHfLocalDirUpload(item.full_path);
+      setShowHfLocalDirBrowserModal(false);
+    }, []),
+
+    hfLocalDirDownloadSelect: useCallback((item) => {
+      setHfLocalDirDownload(item.full_path);
+      setShowHfLocalDirDownloadBrowserModal(false);
+    }, []),
   };
 
   // Token related handlers
@@ -772,20 +789,20 @@ export default function EditDatasetPage() {
     },
 
     uploadDataset: async () => {
-      if (!hfRepoId || hfRepoId.trim() === '') {
+      if (!hfRepoIdUpload || hfRepoIdUpload.trim() === '') {
         toast.error('Please enter a Repo ID first');
         return;
       }
 
-      if (!hfLocalDir || hfLocalDir.trim() === '') {
+      if (!hfLocalDirUpload || hfLocalDirUpload.trim() === '') {
         toast.error('Please select a Local Directory first');
         return;
       }
 
       setIsUploading(true);
       try {
-        const repoId = hfRepoId.trim();
-        const localDir = hfLocalDir.trim();
+        const repoId = hfRepoIdUpload.trim();
+        const localDir = hfLocalDirUpload.trim();
         const result = await controlHfServer('upload', repoId, 'dataset', localDir);
         console.log('Upload dataset result:', result);
         toast.success(`Dataset upload started successfully for ${repoId}!`);
@@ -798,17 +815,17 @@ export default function EditDatasetPage() {
     },
 
     downloadDataset: async () => {
-      if (!hfRepoId || hfRepoId.trim() === '') {
+      if (!hfRepoIdDownload || hfRepoIdDownload.trim() === '') {
         toast.error('Please enter a Repo ID first');
         return;
       }
 
       setIsDownloading(true);
       try {
-        const repoId = hfRepoId.trim();
+        const repoId = hfRepoIdDownload.trim();
         // Update the local dir text box with the local cache path
         const localPath = `/root/.cache/huggingface/lerobot/${repoId}`;
-        setHfLocalDir(localPath);
+        setHfLocalDirDownload(localPath);
         const result = await controlHfServer('download', repoId, 'dataset');
         console.log('Download dataset result:', result);
 
@@ -920,8 +937,8 @@ export default function EditDatasetPage() {
                   })}
                   type="text"
                   placeholder="Enter local directory path or browse"
-                  value={hfLocalDir || ''}
-                  onChange={(e) => setHfLocalDir(e.target.value)}
+                  value={hfLocalDirUpload || ''}
+                  onChange={(e) => setHfLocalDirUpload(e.target.value)}
                   disabled={!isEditable}
                 />
                 <button
@@ -954,15 +971,15 @@ export default function EditDatasetPage() {
                     )}
                     type="text"
                     placeholder="Enter repository id"
-                    value={hfRepoId || ''}
-                    onChange={(e) => setHfRepoId(e.target.value)}
+                    value={hfRepoIdUpload || ''}
+                    onChange={(e) => setHfRepoIdUpload(e.target.value)}
                     disabled={!isEditable}
                   />
                 </div>
                 <div className="mt-1 text-xs text-gray-500">
                   Full repository path:{' '}
                   <span className="font-mono text-blue-600">
-                    {userId || ''}/{hfRepoId || ''}
+                    {userId || ''}/{hfRepoIdUpload || ''}
                   </span>
                 </div>
               </div>
@@ -978,32 +995,18 @@ export default function EditDatasetPage() {
                   'font-medium',
                   'rounded-lg',
                   'transition-colors',
-                  'w-32',
                   {
-                    'bg-green-500 text-white hover:bg-green-600':
-                      !isUploading &&
-                      !isDownloading &&
-                      isEditable &&
-                      hfRepoId?.trim() &&
-                      hfLocalDir?.trim(),
-                    'bg-gray-300 text-gray-500 cursor-not-allowed':
-                      isUploading ||
-                      isDownloading ||
-                      !isEditable ||
-                      !hfRepoId?.trim() ||
-                      !hfLocalDir?.trim(),
+                    'bg-green-500 text-white hover:bg-green-600': uploadButtonEnabled,
+                    'bg-gray-300 text-gray-500 cursor-not-allowed': !uploadButtonEnabled,
                   }
                 )}
                 onClick={operations.uploadDataset}
-                disabled={
-                  isUploading ||
-                  isDownloading ||
-                  !isEditable ||
-                  !hfRepoId?.trim() ||
-                  !hfLocalDir?.trim()
-                }
+                disabled={!uploadButtonEnabled}
               >
-                {isUploading ? 'Uploading...' : 'Upload'}
+                <div className="flex items-center justify-center gap-2">
+                  <MdOutlineFileUpload className="w-6 h-6" />
+                  {isUploading ? 'Uploading...' : 'Upload'}
+                </div>
               </button>
             </div>
           </div>
@@ -1021,32 +1024,6 @@ export default function EditDatasetPage() {
             <span className="text-lg font-bold">Download Dataset</span>
           </div>
           <div className="w-full flex flex-col gap-3">
-            {/* Local Directory Input */}
-            <div className="w-full flex flex-col gap-2">
-              <span className="text-lg font-bold">Local Directory</span>
-              <div className="w-full flex flex-row items-center justify-start gap-2">
-                <input
-                  className={clsx(STYLES.textInput, 'flex-1', {
-                    'bg-gray-100 cursor-not-allowed': !isEditable,
-                    'bg-white': isEditable,
-                  })}
-                  type="text"
-                  placeholder="Enter local directory path or browse"
-                  value={hfLocalDir || ''}
-                  onChange={(e) => setHfLocalDir(e.target.value)}
-                  disabled={!isEditable}
-                />
-                <button
-                  type="button"
-                  onClick={() => setShowHfLocalDirBrowserModal(true)}
-                  className="flex items-center justify-center w-8 h-8 text-blue-500 bg-gray-200 rounded-md hover:text-blue-700"
-                  aria-label="Browse files for local directory"
-                >
-                  <MdFolderOpen className="w-6 h-6" />
-                </button>
-              </div>
-            </div>
-
             {/* Repo ID Input */}
             <div className="w-full flex flex-col gap-2">
               <span className="text-lg font-bold">Repository ID</span>
@@ -1066,17 +1043,43 @@ export default function EditDatasetPage() {
                     )}
                     type="text"
                     placeholder="Enter repository id"
-                    value={hfRepoId || ''}
-                    onChange={(e) => setHfRepoId(e.target.value)}
+                    value={hfRepoIdDownload || ''}
+                    onChange={(e) => setHfRepoIdDownload(e.target.value)}
                     disabled={!isEditable}
                   />
                 </div>
                 <div className="mt-1 text-xs text-gray-500">
                   Full repository path:{' '}
                   <span className="font-mono text-blue-600">
-                    {userId || ''}/{hfRepoId || ''}
+                    {userId || ''}/{hfRepoIdDownload || ''}
                   </span>
                 </div>
+              </div>
+            </div>
+
+            {/* Local Directory Input */}
+            <div className="w-full flex flex-col gap-2">
+              <span className="text-lg font-bold">Local Directory</span>
+              <div className="w-full flex flex-row items-center justify-start gap-2">
+                <input
+                  className={clsx(STYLES.textInput, 'flex-1', {
+                    'bg-gray-100 cursor-not-allowed': !isEditable,
+                    'bg-white': isEditable,
+                  })}
+                  type="text"
+                  placeholder="Enter local directory path or browse"
+                  value={hfLocalDirDownload || ''}
+                  onChange={(e) => setHfLocalDirDownload(e.target.value)}
+                  disabled={!isEditable}
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowHfLocalDirDownloadBrowserModal(true)}
+                  className="flex items-center justify-center w-8 h-8 text-blue-500 bg-gray-200 rounded-md hover:text-blue-700"
+                  aria-label="Browse files for local directory"
+                >
+                  <MdFolderOpen className="w-6 h-6" />
+                </button>
               </div>
             </div>
 
@@ -1090,18 +1093,18 @@ export default function EditDatasetPage() {
                   'font-medium',
                   'rounded-lg',
                   'transition-colors',
-                  'w-32',
                   {
-                    'bg-blue-500 text-white hover:bg-blue-600':
-                      !isUploading && !isDownloading && isEditable && hfRepoId?.trim(),
-                    'bg-gray-300 text-gray-500 cursor-not-allowed':
-                      isUploading || isDownloading || !isEditable || !hfRepoId?.trim(),
+                    'bg-blue-500 text-white hover:bg-blue-600': downloadButtonEnabled,
+                    'bg-gray-300 text-gray-500 cursor-not-allowed': !downloadButtonEnabled,
                   }
                 )}
                 onClick={operations.downloadDataset}
-                disabled={isUploading || isDownloading || !isEditable || !hfRepoId?.trim()}
+                disabled={!downloadButtonEnabled}
               >
-                {isDownloading ? 'Downloading...' : 'Download'}
+                <div className="flex items-center justify-center gap-2">
+                  <MdOutlineFileDownload className="w-6 h-6" />
+                  {isDownloading ? 'Downloading...' : 'Download'}
+                </div>
               </button>
             </div>
           </div>
@@ -1416,6 +1419,21 @@ export default function EditDatasetPage() {
           TARGET_FOLDERS.DATASET_DATA,
         ]}
         targetFileLabel="Dataset folder found! 🎯"
+        initialPath={DEFAULT_PATHS.DATASET_PATH}
+        defaultPath={DEFAULT_PATHS.DATASET_PATH}
+        homePath=""
+      />
+
+      <FileBrowserModal
+        isOpen={showHfLocalDirDownloadBrowserModal}
+        onClose={() => setShowHfLocalDirDownloadBrowserModal(false)}
+        onFileSelect={handlers.hfLocalDirDownloadSelect}
+        title="Select Local Directory for Download"
+        selectButtonText="Select"
+        allowDirectorySelect={true}
+        allowFileSelect={false}
+        targetFolderName={[]}
+        targetFileLabel="Local directory found! 🎯"
         initialPath={DEFAULT_PATHS.DATASET_PATH}
         defaultPath={DEFAULT_PATHS.DATASET_PATH}
         homePath=""
