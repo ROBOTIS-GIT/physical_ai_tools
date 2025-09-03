@@ -19,11 +19,11 @@ import clsx from 'clsx';
 import { useSelector, useDispatch } from 'react-redux';
 import toast from 'react-hot-toast';
 import { MdFolderOpen, MdOutlineFileUpload, MdOutlineFileDownload } from 'react-icons/md';
-import { setUserId } from '../features/editDataset/editDatasetSlice';
-import { useRosServiceCaller } from '../hooks/useRosServiceCaller';
-import FileBrowserModal from './FileBrowserModal';
-import TokenInputPopup from './TokenInputPopup';
-import { DEFAULT_PATHS, TARGET_FOLDERS } from '../constants/paths';
+import { setUserId } from '../editDatasetSlice';
+import { useRosServiceCaller } from '../../../hooks/useRosServiceCaller';
+import FileBrowserModal from '../../../components/FileBrowserModal';
+import TokenInputPopup from '../../../components/TokenInputPopup';
+import { DEFAULT_PATHS, TARGET_FOLDERS } from '../../../constants/paths';
 
 // Style Classes
 const STYLES = {
