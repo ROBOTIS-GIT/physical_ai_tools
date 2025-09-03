@@ -42,6 +42,7 @@ from physical_ai_interfaces.srv import (
 
 from physical_ai_server.communication.communicator import Communicator
 from physical_ai_server.data_processing.data_manager import DataManager
+from physical_ai_server.data_processing.hf_api_worker import HfApiWorker
 from physical_ai_server.inference.inference_manager import InferenceManager
 from physical_ai_server.timer.timer_manager import TimerManager
 from physical_ai_server.training.training_manager import TrainingManager
@@ -53,6 +54,7 @@ from physical_ai_server.utils.parameter_utils import (
 
 import rclpy
 from rclpy.node import Node
+from std_msgs.msg import String
 
 
 class PhysicalAIServer(Node):
@@ -93,6 +95,11 @@ class PhysicalAIServer(Node):
         self.training_timer: Optional[TimerManager] = None
         self.inference_manager: Optional[InferenceManager] = None
         self.training_manager: Optional[TrainingManager] = None
+        
+        # Initialize HF API Worker
+        self.hf_api_worker: Optional[HfApiWorker] = None
+        self.hf_status_timer: Optional[TimerManager] = None
+        self._init_hf_api_worker()
 
     def _init_ros_service(self):
         self.get_logger().info('Initializing ROS services...')
@@ -776,6 +783,58 @@ class PhysicalAIServer(Node):
             response.message = f'Failed to set robot type: {str(e)}'
             return response
 
+    def _init_hf_api_worker(self):
+        """Initialize HF API Worker and status monitoring timer."""
+        try:
+            self.hf_api_worker = HfApiWorker()
+            if self.hf_api_worker.start():
+                self.get_logger().info('HF API Worker started successfully')
+                # Idle count 초기화
+                self._hf_idle_count = 0
+                # Initialize status monitoring timer
+                self.hf_status_timer = TimerManager(node=self)
+                self.hf_status_timer.set_timer(
+                    timer_name='hf_status',
+                    timer_frequency=2.0,
+                    callback_function=self._hf_status_timer_callback
+                )
+                self.hf_status_timer.start(timer_name='hf_status')
+                # Create publisher for HF status
+                self.hf_status_publisher = self.create_publisher(
+                    String,
+                    '/huggingface/status',
+                    self.PUB_QOS_SIZE
+                )
+            else:
+                self.get_logger().error('Failed to start HF API Worker')
+        except Exception as e:
+            self.get_logger().error(f'Error initializing HF API Worker: {str(e)}')
+
+    def _hf_status_timer_callback(self):
+        """Timer callback to check HF API Worker status and publish updates."""
+        if self.hf_api_worker is None:
+            return
+        try:
+            status = self.hf_api_worker.check_task_status()
+            # Publish status message
+            status_msg = String()
+            status_msg.data = status
+            self.hf_status_publisher.publish(status_msg)
+            # Log status changes (avoid spamming logs)
+            if hasattr(self, '_last_hf_status') and self._last_hf_status != status:
+                self.get_logger().info(f'HF API Status changed: {self._last_hf_status} -> {status}')
+            self._last_hf_status = status
+            # Idle 상태 카운트 및 자동 종료
+            if status == 'Idle':
+                self._hf_idle_count = getattr(self, '_hf_idle_count', 0) + 1
+                if self._hf_idle_count >= 5:
+                    self.get_logger().info('HF API Worker idle for 5 cycles, shutting down worker and timer.')
+                    self._cleanup_hf_api_worker()
+            else:
+                self._hf_idle_count = 0
+        except Exception as e:
+            self.get_logger().error(f'Error in HF status timer callback: {str(e)}')
+
     def control_hf_server_callback(self, request, response):
         try:
             mode = request.mode
@@ -783,52 +842,38 @@ class PhysicalAIServer(Node):
             local_dir = request.local_dir
             repo_type = request.repo_type
             author = request.author
-
-            if mode == 'upload':
-                DataManager.upload_huggingface_repo(
-                    repo_id=repo_id,
-                    repo_type=repo_type,
-                    local_dir=local_dir
-                )
-                response.message = f'Uploaded Hugging Face repo: {repo_id}'
-            elif mode == 'download':
-                result = DataManager.download_huggingface_repo(
-                    repo_id=repo_id,
-                    repo_type=repo_type
-                )
-                if result:
-                    response.message = f'Downloaded Hugging Face repo: {repo_id}'
-                else:
-                    response.message = f'Failed to download Hugging Face repo: {repo_id}, Please check the repo ID and try again.'
-            elif mode == 'delete':
-                DataManager.delete_huggingface_repo(
-                    repo_id=repo_id,
-                    repo_type=repo_type
-                )
-                response.message = f'Deleted Hugging Face repo: {repo_id}'
-            elif mode == 'get_dataset_list':
-                DataManager.get_huggingface_repo_list(
-                    author=author,
-                    data_type='dataset'
-                )
-                response.message = f'Got dataset list for author: {author}'
-            elif mode == 'get_model_list':
-                DataManager.get_huggingface_repo_list(
-                    author=author,
-                    data_type='model'
-                )
-                response.message = f'Got model list for author: {author}'
-            else:
-                self.get_logger().warning(f'Unknown mode: {mode}')
+            # HF API Worker가 없거나 죽었으면 재시작
+            if self.hf_api_worker is None or not self.hf_api_worker.is_alive():
+                self.get_logger().info('HF API Worker not running, restarting...')
+                self._init_hf_api_worker()
+            # Worker가 busy면 에러 반환
+            if self.hf_api_worker.is_busy():
+                self.get_logger().warning('HF API Worker is currently busy with another task')
                 response.success = False
-                response.message = f'Unknown mode: {mode}'
-            response.success = True
+                response.message = 'HF API Worker is currently busy with another task'
+                return response
+            # Prepare request data for the worker
+            request_data = {
+                'mode': mode,
+                'repo_id': repo_id,
+                'local_dir': local_dir,
+                'repo_type': repo_type,
+                'author': author
+            }
+            # Send request to HF API Worker
+            if self.hf_api_worker.send_request(request_data):
+                self.get_logger().info(f'HF API request sent successfully: {mode} for {repo_id}')
+                response.success = True
+                response.message = f'HF API request started: {mode} for {repo_id}'
+            else:
+                self.get_logger().error('Failed to send request to HF API Worker')
+                response.success = False
+                response.message = 'Failed to send request to HF API Worker'
             return response
-            
         except Exception as e:
-            self.get_logger().error(f'Error occurred: {str(e)}')
+            self.get_logger().error(f'Error in HF server callback: {str(e)}')
             response.success = False
-            response.message = f'Error occurred: {str(e)}'
+            response.message = f'Error in HF server callback: {str(e)}'
             return response
 
     def handle_joystick_trigger(self, joystick_mode: str):
@@ -867,13 +912,34 @@ class PhysicalAIServer(Node):
             self.get_logger().info(
                 f'Received joystick trigger: {joystick_mode}')
 
+    def _cleanup_hf_api_worker(self):
+        """Cleanup HF API Worker and related timers."""
+        try:
+            if self.hf_status_timer is not None:
+                self.hf_status_timer.stop(timer_name='hf_status')
+                self.hf_status_timer = None
+                
+            if self.hf_api_worker is not None:
+                self.hf_api_worker.stop()
+                self.hf_api_worker = None
+                
+            self.get_logger().info('HF API Worker cleaned up successfully')
+        except Exception as e:
+            self.get_logger().error(f'Error cleaning up HF API Worker: {str(e)}')
+
 
 def main(args=None):
     rclpy.init(args=args)
     node = PhysicalAIServer()
-    rclpy.spin(node)
-    node.destroy_node()
-    rclpy.shutdown()
+    try:
+        rclpy.spin(node)
+    except KeyboardInterrupt:
+        pass
+    finally:
+        # Cleanup HF API Worker before destroying node
+        node._cleanup_hf_api_worker()
+        node.destroy_node()
+        rclpy.shutdown()
 
 
 if __name__ == '__main__':

@@ -571,7 +571,8 @@ class DataManager:
             url = HfApi().create_repo(
                 repo_id,
                 repo_type=repo_type,
-                private=False
+                private=False,
+                exist_ok=True,
             )
             result = upload_folder(
                 repo_id   = repo_id,
@@ -612,3 +613,18 @@ class DataManager:
                 repo_id_list.append(model.id)
         reverse = repo_id_list[::-1]
         return reverse
+
+    @staticmethod
+    def get_collections_repo_list(
+        collection_id
+    ):
+        repo_id_list = []
+        collection_list = HfApi().get_collection(collection_id)
+        repo_list_in_collection = []
+        for item in collection_list.items:
+            repo_list_in_collection.append(item.item_id)
+        return repo_list_in_collection
+
+# repo_list = DataManager.get_collections_repo_list('ROBOTIS/pickcoffee-env1-task3-68b4dbb34096a56b85b8b613')
+# for repo_id in repo_list:
+#     DataManager.download_huggingface_repo(repo_id, repo_type='dataset')
