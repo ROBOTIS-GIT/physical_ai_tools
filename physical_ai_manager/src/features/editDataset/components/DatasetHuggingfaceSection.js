@@ -26,6 +26,12 @@ import TokenInputPopup from '../../../components/TokenInputPopup';
 import SectionSelector from './SectionSelector';
 import { DEFAULT_PATHS, TARGET_FOLDERS } from '../../../constants/paths';
 
+// Constants
+const SECTION_NAME = {
+  UPLOAD: 'upload',
+  DOWNLOAD: 'download',
+};
+
 // Style Classes
 const STYLES = {
   textInput: clsx(
@@ -66,13 +72,8 @@ const HuggingfaceSection = ({ isEditable = true }) => {
 
   const { controlHfServer, registerHFUser, getRegisteredHFUser } = useRosServiceCaller();
 
-  const sectionName = {
-    UPLOAD: 'upload',
-    DOWNLOAD: 'download',
-  };
-
   // Local states
-  const [activeSection, setActiveSection] = useState(sectionName.UPLOAD);
+  const [activeSection, setActiveSection] = useState(SECTION_NAME.UPLOAD);
   const [hfRepoIdUpload, setHfRepoIdUpload] = useState('');
   const [hfRepoIdDownload, setHfRepoIdDownload] = useState('');
   const [hfLocalDirUpload, setHfLocalDirUpload] = useState('');
@@ -88,6 +89,10 @@ const HuggingfaceSection = ({ isEditable = true }) => {
 
   // Computed values
   const isProcessing = isUploading || isDownloading;
+
+  // Section availability
+  const canChangeSection = !isProcessing;
+
   const uploadButtonEnabled =
     !isUploading &&
     !isDownloading &&
@@ -100,9 +105,6 @@ const HuggingfaceSection = ({ isEditable = true }) => {
     isEditable &&
     hfRepoIdDownload?.trim() &&
     hfLocalDirDownload?.trim();
-
-  // Section availability
-  const canChangeSection = !isProcessing;
 
   // Button variants helper function
   const getButtonVariant = (variant, isActive = true, isLoading = false) => {
@@ -245,6 +247,19 @@ const HuggingfaceSection = ({ isEditable = true }) => {
     handleLoadUserId();
   }, [handleLoadUserId]);
 
+  useEffect(() => {
+    if (hfStatus === 'upload') {
+      setActiveSection(SECTION_NAME.UPLOAD);
+      setIsUploading(true);
+    } else if (hfStatus === 'download') {
+      setActiveSection(SECTION_NAME.DOWNLOAD);
+      setIsDownloading(true);
+    } else {
+      setIsUploading(false);
+      setIsDownloading(false);
+    }
+  }, [hfStatus]);
+
   return (
     <div className="w-full flex flex-col items-start justify-start bg-gray-100 p-10 gap-4 rounded-xl">
       <div className="w-full flex items-center justify-start">
@@ -331,7 +346,7 @@ const HuggingfaceSection = ({ isEditable = true }) => {
 
         {/* Active Section Content */}
         <div className="w-full">
-          {activeSection === sectionName.UPLOAD && (
+          {activeSection === SECTION_NAME.UPLOAD && (
             <div className="w-full bg-white p-5 rounded-md flex flex-col items-start justify-center gap-2 shadow-md">
               {/* Upload Dataset Section Header */}
               <div className="w-full flex flex-col items-start justify-start gap-2 bg-gray-50 border border-gray-200 p-3 rounded-md">
@@ -451,7 +466,7 @@ const HuggingfaceSection = ({ isEditable = true }) => {
             </div>
           )}
 
-          {activeSection === sectionName.DOWNLOAD && (
+          {activeSection === SECTION_NAME.DOWNLOAD && (
             <div className="w-full bg-white p-5 rounded-md flex flex-col items-start justify-center gap-4 shadow-md">
               {/* Download Dataset Section Header */}
               <div className="w-full flex flex-col items-start justify-start gap-2 bg-gray-50 border border-gray-200 p-3 rounded-md">
