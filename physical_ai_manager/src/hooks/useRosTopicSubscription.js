@@ -296,7 +296,7 @@ export function useRosTopicSubscription() {
     } catch (error) {
       console.error('Failed to subscribe to task status topic:', error);
     }
-  }, [dispatch, rosbridgeUrl]);
+  }, [dispatch, rosbridgeUrl, playBeep]);
 
   const subscribeToHeartbeat = useCallback(async () => {
     try {
