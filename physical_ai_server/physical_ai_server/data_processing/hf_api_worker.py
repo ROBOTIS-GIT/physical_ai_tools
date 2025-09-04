@@ -194,7 +194,7 @@ class HfApiWorker:
 
                         request_count += 1
                         logger.info(f'*** Received HF API request #{request_count} ***')
-                        
+
                         mode = data.get('mode')
                         repo_id = data.get('repo_id')
                         repo_type = data.get('repo_type')
@@ -206,14 +206,21 @@ class HfApiWorker:
                         # Process the request based on mode
                         if mode == 'upload':
                             logger.info(f'Starting upload for repo: {repo_id}')
-                            DataManager.upload_huggingface_repo(
+                            result = DataManager.upload_huggingface_repo(
                                 repo_id=repo_id,
                                 repo_type=repo_type,
                                 local_dir=local_dir
                             )
-                            message = f'Uploaded Hugging Face repo: {repo_id}'
-                            logger.info(f'✅ Upload completed: {repo_id}')
-                            output_queue.put(('success', message))
+                            if result:
+                                message = f'Uploaded Hugging Face repo: {repo_id}'
+                                logger.info(f'✅ Upload completed: {repo_id}')
+                                output_queue.put(('success', message))
+                            else:
+                                message = (
+                                    f'Failed to upload Hugging Face repo: {repo_id}, '
+                                    f'Please check the repo ID and try again.')
+                                logger.error(f'❌ Upload failed: {repo_id}')
+                                output_queue.put(('error', message))
 
                         elif mode == 'download':
                             logger.info(f'Starting download for repo: {repo_id}')

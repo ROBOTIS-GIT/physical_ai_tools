@@ -568,20 +568,40 @@ class DataManager:
         local_dir
     ):
         try:
-            url = HfApi().create_repo(
+            # Verify authentication first
+            api = HfApi()
+            try:
+                user_info = api.whoami()
+                print(f'Authenticated as: {user_info["name"]}')
+            except Exception as auth_e:
+                print(f'Authentication failed: {auth_e}')
+                print('Please make sure you are authenticated with HuggingFace')
+                return False
+
+            # Create repository first
+            print(f'Creating HuggingFace repository: {repo_id}')
+            url = api.create_repo(
                 repo_id,
                 repo_type=repo_type,
                 private=False,
                 exist_ok=True,
             )
-            result = upload_folder(
-                repo_id   = repo_id,
-                folder_path = local_dir,
-                repo_type = repo_type
+            print(f'Repository created/verified: {url}')
+
+            # Upload folder contents
+            print(f'Uploading folder {local_dir} to repository {repo_id}')
+            upload_folder(
+                repo_id=repo_id,
+                folder_path=local_dir,
+                repo_type=repo_type
             )
-            return result
+            print(f'Upload completed successfully for {repo_id}')
+            return True
         except Exception as e:
             print(f'Error Uploading HuggingFace repo: {e}')
+            # Print more detailed error information
+            import traceback
+            print(f'Detailed error traceback:\n{traceback.format_exc()}')
             return False
 
     @staticmethod

@@ -25,6 +25,7 @@ import FileBrowserModal from '../../../components/FileBrowserModal';
 import TokenInputPopup from '../../../components/TokenInputPopup';
 import SectionSelector from './SectionSelector';
 import { DEFAULT_PATHS, TARGET_FOLDERS } from '../../../constants/paths';
+import HFStatus from '../../../constants/HFStatus';
 
 // Constants
 const SECTION_NAME = {
@@ -265,11 +266,12 @@ const HuggingfaceSection = ({ isEditable = true }) => {
     handleLoadUserId();
   }, [handleLoadUserId]);
 
+  // track hf status update
   useEffect(() => {
-    if (hfStatus === 'upload') {
+    if (hfStatus === HFStatus.UPLOADING) {
       setActiveSection(SECTION_NAME.UPLOAD);
       setIsUploading(true);
-    } else if (hfStatus === 'download') {
+    } else if (hfStatus === HFStatus.DOWNLOADING) {
       setActiveSection(SECTION_NAME.DOWNLOAD);
       setIsDownloading(true);
     } else {
