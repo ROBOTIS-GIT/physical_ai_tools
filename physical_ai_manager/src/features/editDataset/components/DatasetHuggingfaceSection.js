@@ -37,7 +37,7 @@ const STYLES = {
   textInput: clsx(
     'text-sm',
     'w-full',
-    'h-8',
+    'h-10',
     'p-2',
     'border',
     'border-gray-300',
@@ -63,6 +63,24 @@ const STYLES = {
     'focus:border-transparent'
   ),
   loadUserButton: clsx('px-3', 'py-1', 'text-md', 'font-medium', 'rounded-xl', 'transition-colors'),
+};
+
+// Folder Browse Button Component
+const FolderBrowseButton = ({ onClick, disabled = false, ariaLabel }) => {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={clsx('flex items-center justify-center w-10 h-10 rounded-md transition-colors', {
+        'text-blue-500 bg-gray-200 hover:text-blue-700': !disabled,
+        'text-gray-400 bg-gray-100 cursor-not-allowed': disabled,
+      })}
+      aria-label={ariaLabel}
+      disabled={disabled}
+    >
+      <MdFolderOpen className="w-8 h-8" />
+    </button>
+  );
 };
 
 const HuggingfaceSection = ({ isEditable = true }) => {
@@ -367,6 +385,11 @@ const HuggingfaceSection = ({ isEditable = true }) => {
                 <div className="w-full flex flex-col gap-2">
                   <span className="text-lg font-bold">Local Directory</span>
                   <div className="w-full flex flex-row items-center justify-start gap-2">
+                    <FolderBrowseButton
+                      onClick={() => setShowHfLocalDirBrowserModal(true)}
+                      disabled={isDownloading}
+                      ariaLabel="Browse files for local directory"
+                    />
                     <input
                       className={clsx(STYLES.textInput, 'flex-1', {
                         'bg-gray-100 cursor-not-allowed': !isEditable || isDownloading,
@@ -378,21 +401,6 @@ const HuggingfaceSection = ({ isEditable = true }) => {
                       onChange={(e) => setHfLocalDirUpload(e.target.value)}
                       disabled={!isEditable || isDownloading}
                     />
-                    <button
-                      type="button"
-                      onClick={() => setShowHfLocalDirBrowserModal(true)}
-                      className={clsx(
-                        'flex items-center justify-center w-10 h-10 rounded-md transition-colors',
-                        {
-                          'text-blue-500 bg-gray-200 hover:text-blue-700': !isDownloading,
-                          'text-gray-400 bg-gray-100 cursor-not-allowed': isDownloading,
-                        }
-                      )}
-                      aria-label="Browse files for local directory"
-                      disabled={isDownloading}
-                    >
-                      <MdFolderOpen className="w-8 h-8" />
-                    </button>
                   </div>
                 </div>
 
@@ -521,6 +529,11 @@ const HuggingfaceSection = ({ isEditable = true }) => {
                 <div className="w-full flex flex-col gap-2">
                   <span className="text-lg font-bold">Local Directory</span>
                   <div className="w-full flex flex-row items-center justify-start gap-2">
+                    <FolderBrowseButton
+                      onClick={() => setShowHfLocalDirDownloadBrowserModal(true)}
+                      disabled={isUploading}
+                      ariaLabel="Browse files for local directory"
+                    />
                     <input
                       className={clsx(STYLES.textInput, 'flex-1', {
                         'bg-gray-100 cursor-not-allowed': !isEditable || isUploading,
@@ -532,21 +545,6 @@ const HuggingfaceSection = ({ isEditable = true }) => {
                       onChange={(e) => setHfLocalDirDownload(e.target.value)}
                       disabled={!isEditable || isUploading}
                     />
-                    <button
-                      type="button"
-                      onClick={() => setShowHfLocalDirDownloadBrowserModal(true)}
-                      className={clsx(
-                        'flex items-center justify-center w-10 h-10 rounded-md transition-colors',
-                        {
-                          'text-blue-500 bg-gray-200 hover:text-blue-700': !isUploading,
-                          'text-gray-400 bg-gray-100 cursor-not-allowed': isUploading,
-                        }
-                      )}
-                      aria-label="Browse files for local directory"
-                      disabled={isUploading}
-                    >
-                      <MdFolderOpen className="w-8 h-8" />
-                    </button>
                   </div>
                 </div>
 
