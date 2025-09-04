@@ -66,8 +66,13 @@ const HuggingfaceSection = ({ isEditable = true }) => {
 
   const { controlHfServer, registerHFUser, getRegisteredHFUser } = useRosServiceCaller();
 
+  const sectionName = {
+    UPLOAD: 'upload',
+    DOWNLOAD: 'download',
+  };
+
   // Local states
-  const [activeSection, setActiveSection] = useState('upload'); // 'upload' | 'download'
+  const [activeSection, setActiveSection] = useState(sectionName.UPLOAD);
   const [hfRepoIdUpload, setHfRepoIdUpload] = useState('');
   const [hfRepoIdDownload, setHfRepoIdDownload] = useState('');
   const [hfLocalDirUpload, setHfLocalDirUpload] = useState('');
@@ -98,8 +103,6 @@ const HuggingfaceSection = ({ isEditable = true }) => {
 
   // Section availability
   const canChangeSection = !isProcessing;
-  const uploadSectionEnabled = activeSection === 'upload' || !canChangeSection;
-  const downloadSectionEnabled = activeSection === 'download' || !canChangeSection;
 
   // Button variants helper function
   const getButtonVariant = (variant, isActive = true, isLoading = false) => {
@@ -328,12 +331,13 @@ const HuggingfaceSection = ({ isEditable = true }) => {
 
         {/* Active Section Content */}
         <div className="w-full">
-          {activeSection === 'upload' && (
+          {activeSection === sectionName.UPLOAD && (
             <div className="w-full bg-white p-5 rounded-md flex flex-col items-start justify-center gap-2 shadow-md">
+              {/* Upload Dataset Section Header */}
               <div className="w-full flex flex-col items-start justify-start gap-2 bg-gray-50 border border-gray-200 p-3 rounded-md">
-                <div className="w-full flex items-center justify-start rounded-md font-medium gap-2">
+                <div className="w-full flex items-center rounded-md font-medium gap-2">
                   <span className="text-lg">⬆️</span>
-                  <span className="text-lg text-gray-800">Upload Dataset</span>
+                  Upload Dataset
                 </div>
                 <div className="text-sm text-gray-600">
                   <div className="mb-1">
@@ -341,6 +345,8 @@ const HuggingfaceSection = ({ isEditable = true }) => {
                   </div>
                 </div>
               </div>
+
+              {/* Upload Dataset Section Content */}
               <div className="w-full flex flex-col gap-3">
                 {/* Local Directory Input */}
                 <div className="w-full flex flex-col gap-2">
@@ -445,18 +451,22 @@ const HuggingfaceSection = ({ isEditable = true }) => {
             </div>
           )}
 
-          {activeSection === 'download' && (
+          {activeSection === sectionName.DOWNLOAD && (
             <div className="w-full bg-white p-5 rounded-md flex flex-col items-start justify-center gap-4 shadow-md">
-              <div className="w-full flex items-center justify-start">
-                <span className="text-lg font-bold">Download Dataset</span>
-              </div>
-
-              <div className="text-sm text-gray-600">
-                <div className="mb-1">
-                  Downloads dataset from Hugging Face hub to local cache directory
+              {/* Download Dataset Section Header */}
+              <div className="w-full flex flex-col items-start justify-start gap-2 bg-gray-50 border border-gray-200 p-3 rounded-md">
+                <div className="w-full flex items-center rounded-md font-medium gap-2">
+                  <span className="text-lg">⬇️</span>
+                  Download Dataset
+                </div>
+                <div className="text-sm text-gray-600">
+                  <div className="mb-1">
+                    Downloads dataset from Hugging Face hub to local cache directory
+                  </div>
                 </div>
               </div>
 
+              {/* Download Dataset Section Content */}
               <div className="w-full flex flex-col gap-3">
                 {/* Repo ID Input */}
                 <div className="w-full flex flex-col gap-2">
