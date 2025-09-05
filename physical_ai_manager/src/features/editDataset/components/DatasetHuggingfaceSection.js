@@ -33,6 +33,51 @@ const SECTION_NAME = {
   DOWNLOAD: 'download',
 };
 
+// HuggingFace repository name validation
+const validateHfRepoName = (repoName) => {
+  if (!repoName) return { isValid: false, message: '' };
+
+  // Check length (max 96 characters)
+  if (repoName.length > 96) {
+    return {
+      isValid: false,
+      message: 'Repository name must be 96 characters or less',
+    };
+  }
+
+  // Check if starts or ends with '-' or '.'
+  if (
+    repoName.startsWith('-') ||
+    repoName.startsWith('.') ||
+    repoName.endsWith('-') ||
+    repoName.endsWith('.')
+  ) {
+    return {
+      isValid: false,
+      message: 'Repository name cannot start or end with "-" or "."',
+    };
+  }
+
+  // Check for forbidden patterns '--' and '..'
+  if (repoName.includes('--') || repoName.includes('..')) {
+    return {
+      isValid: false,
+      message: 'Repository name cannot contain "--" or ".."',
+    };
+  }
+
+  // Check for allowed characters only (alphanumeric, '-', '_', '.')
+  const allowedPattern = /^[a-zA-Z0-9._-]+$/;
+  if (!allowedPattern.test(repoName)) {
+    return {
+      isValid: false,
+      message: 'Repository name can only contain letters, numbers, "-", "_", and "."',
+    };
+  }
+
+  return { isValid: true, message: '' };
+};
+
 // Style Classes
 const STYLES = {
   textInput: clsx(
@@ -106,6 +151,13 @@ const HuggingfaceSection = ({ isEditable = true }) => {
   const [showTokenPopup, setShowTokenPopup] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
 
+  // Validation states
+  const [uploadRepoValidation, setUploadRepoValidation] = useState({ isValid: true, message: '' });
+  const [downloadRepoValidation, setDownloadRepoValidation] = useState({
+    isValid: true,
+    message: '',
+  });
+
   // Computed values
   const isProcessing = isUploading || isDownloading;
 
@@ -117,13 +169,15 @@ const HuggingfaceSection = ({ isEditable = true }) => {
     !isDownloading &&
     isEditable &&
     hfRepoIdUpload?.trim() &&
-    hfLocalDirUpload?.trim();
+    hfLocalDirUpload?.trim() &&
+    uploadRepoValidation.isValid;
   const downloadButtonEnabled =
     !isUploading &&
     !isDownloading &&
     isEditable &&
     hfRepoIdDownload?.trim() &&
-    hfLocalDirDownload?.trim();
+    hfLocalDirDownload?.trim() &&
+    downloadRepoValidation.isValid;
 
   // Button variants helper function
   const getButtonVariant = (variant, isActive = true, isLoading = false) => {
@@ -208,6 +262,19 @@ const HuggingfaceSection = ({ isEditable = true }) => {
     setShowHfLocalDirDownloadBrowserModal(false);
   }, []);
 
+  // Input handlers with validation
+  const handleUploadRepoIdChange = (value) => {
+    setHfRepoIdUpload(value);
+    const validation = validateHfRepoName(value.trim());
+    setUploadRepoValidation(validation);
+  };
+
+  const handleDownloadRepoIdChange = (value) => {
+    setHfRepoIdDownload(value);
+    const validation = validateHfRepoName(value.trim());
+    setDownloadRepoValidation(validation);
+  };
+
   // Operations
   const operations = {
     uploadDataset: async () => {
@@ -218,6 +285,13 @@ const HuggingfaceSection = ({ isEditable = true }) => {
 
       if (!hfLocalDirUpload || hfLocalDirUpload.trim() === '') {
         toast.error('Please select a Local Directory first');
+        return;
+      }
+
+      // Additional validation check
+      const validation = validateHfRepoName(hfRepoIdUpload.trim());
+      if (!validation.isValid) {
+        toast.error(`Invalid repository name: ${validation.message}`);
         return;
       }
 
@@ -239,6 +313,13 @@ const HuggingfaceSection = ({ isEditable = true }) => {
     downloadDataset: async () => {
       if (!hfRepoIdDownload || hfRepoIdDownload.trim() === '') {
         toast.error('Please enter a Repo ID first');
+        return;
+      }
+
+      // Additional validation check
+      const validation = validateHfRepoName(hfRepoIdDownload.trim());
+      if (!validation.isValid) {
+        toast.error(`Invalid repository name: ${validation.message}`);
         return;
       }
 
@@ -410,7 +491,17 @@ const HuggingfaceSection = ({ isEditable = true }) => {
                 <div className="w-full flex flex-col gap-2">
                   <span className="text-lg font-bold">Repository ID</span>
                   <div className="relative">
-                    <div className="flex items-center border border-gray-300 rounded-md overflow-hidden bg-white focus-within:ring-2 focus-within:ring-blue-500 focus-within:border-transparent">
+                    <div
+                      className={clsx(
+                        'flex items-center border rounded-md overflow-hidden bg-white focus-within:ring-2',
+                        {
+                          'border-gray-300 focus-within:ring-blue-500 focus-within:border-transparent':
+                            uploadRepoValidation.isValid || !hfRepoIdUpload,
+                          'border-red-300 focus-within:ring-red-500 focus-within:border-transparent':
+                            !uploadRepoValidation.isValid && hfRepoIdUpload,
+                        }
+                      )}
+                    >
                       <div className="px-3 py-2 bg-gray-50 border-r border-gray-300 text-gray-700 font-medium flex items-center">
                         <span className="text-sm">{userId || 'username'}</span>
                         <span className="mx-1 text-gray-400">/</span>
@@ -427,15 +518,20 @@ const HuggingfaceSection = ({ isEditable = true }) => {
                         type="text"
                         placeholder="Enter repository id"
                         value={hfRepoIdUpload || ''}
-                        onChange={(e) => setHfRepoIdUpload(e.target.value)}
+                        onChange={(e) => handleUploadRepoIdChange(e.target.value)}
                         disabled={!isEditable || isDownloading}
                       />
                     </div>
-                    <div className="mt-1 text-xs text-gray-500">
-                      Full repository path:{' '}
-                      <span className="font-mono text-blue-600">
-                        {userId || ''}/{hfRepoIdUpload || ''}
-                      </span>
+                    <div className="mt-1 text-xs">
+                      <div className="text-gray-500">
+                        Full repository path:{' '}
+                        <span className="font-mono text-blue-600">
+                          {userId || ''}/{hfRepoIdUpload || ''}
+                        </span>
+                      </div>
+                      {!uploadRepoValidation.isValid && hfRepoIdUpload && (
+                        <div className="text-red-500 mt-1">⚠️ {uploadRepoValidation.message}</div>
+                      )}
                     </div>
                   </div>
                 </div>
@@ -497,7 +593,17 @@ const HuggingfaceSection = ({ isEditable = true }) => {
                 <div className="w-full flex flex-col gap-2">
                   <span className="text-lg font-bold">Repository ID</span>
                   <div className="relative">
-                    <div className="flex items-center border border-gray-300 rounded-md overflow-hidden bg-white focus-within:ring-2 focus-within:ring-blue-500 focus-within:border-transparent">
+                    <div
+                      className={clsx(
+                        'flex items-center border rounded-md overflow-hidden bg-white focus-within:ring-2',
+                        {
+                          'border-gray-300 focus-within:ring-blue-500 focus-within:border-transparent':
+                            downloadRepoValidation.isValid || !hfRepoIdDownload,
+                          'border-red-300 focus-within:ring-red-500 focus-within:border-transparent':
+                            !downloadRepoValidation.isValid && hfRepoIdDownload,
+                        }
+                      )}
+                    >
                       <div className="px-3 py-2 bg-gray-50 border-r border-gray-300 text-gray-700 font-medium flex items-center">
                         <span className="text-sm">{userId || 'username'}</span>
                         <span className="mx-1 text-gray-400">/</span>
@@ -514,15 +620,20 @@ const HuggingfaceSection = ({ isEditable = true }) => {
                         type="text"
                         placeholder="Enter repository id"
                         value={hfRepoIdDownload || ''}
-                        onChange={(e) => setHfRepoIdDownload(e.target.value)}
+                        onChange={(e) => handleDownloadRepoIdChange(e.target.value)}
                         disabled={!isEditable || isUploading}
                       />
                     </div>
-                    <div className="mt-1 text-xs text-gray-500">
-                      Full repository path:{' '}
-                      <span className="font-mono text-blue-600">
-                        {userId || ''}/{hfRepoIdDownload || ''}
-                      </span>
+                    <div className="mt-1 text-xs">
+                      <div className="text-gray-500">
+                        Full repository path:{' '}
+                        <span className="font-mono text-blue-600">
+                          {userId || ''}/{hfRepoIdDownload || ''}
+                        </span>
+                      </div>
+                      {!downloadRepoValidation.isValid && hfRepoIdDownload && (
+                        <div className="text-red-500 mt-1">⚠️ {downloadRepoValidation.message}</div>
+                      )}
                     </div>
                   </div>
                 </div>
