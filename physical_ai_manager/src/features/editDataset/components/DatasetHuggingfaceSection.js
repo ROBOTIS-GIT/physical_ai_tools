@@ -223,7 +223,7 @@ const HuggingfaceSection = ({ isEditable = true }) => {
 
       setIsUploading(true);
       try {
-        const repoId = hfRepoIdUpload.trim();
+        const repoId = userId + '/' + hfRepoIdUpload.trim();
         const localDir = hfLocalDirUpload.trim();
         const result = await controlHfServer('upload', repoId, 'dataset', localDir);
         console.log('Upload dataset result:', result);
@@ -244,7 +244,7 @@ const HuggingfaceSection = ({ isEditable = true }) => {
 
       setIsDownloading(true);
       try {
-        const repoId = hfRepoIdDownload.trim();
+        const repoId = userId + '/' + hfRepoIdDownload.trim();
         // Update the local dir text box with the local cache path
         const localPath = `/root/.cache/huggingface/lerobot/${repoId}`;
         setHfLocalDirDownload(localPath);
