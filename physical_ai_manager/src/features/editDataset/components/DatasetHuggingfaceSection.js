@@ -141,12 +141,9 @@ const HuggingfaceSection = ({ isEditable = true }) => {
   const [hfRepoIdUpload, setHfRepoIdUpload] = useState('');
   const [hfRepoIdDownload, setHfRepoIdDownload] = useState('');
   const [hfLocalDirUpload, setHfLocalDirUpload] = useState('');
-  const [hfLocalDirDownload, setHfLocalDirDownload] = useState('');
   const [isUploading, setIsUploading] = useState(false);
   const [isDownloading, setIsDownloading] = useState(false);
   const [showHfLocalDirBrowserModal, setShowHfLocalDirBrowserModal] = useState(false);
-  const [showHfLocalDirDownloadBrowserModal, setShowHfLocalDirDownloadBrowserModal] =
-    useState(false);
   const [userIdList, setUserIdList] = useState([]);
   const [showTokenPopup, setShowTokenPopup] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
@@ -178,7 +175,6 @@ const HuggingfaceSection = ({ isEditable = true }) => {
     !isDownloading &&
     isEditable &&
     hfRepoIdDownload?.trim() &&
-    hfLocalDirDownload?.trim() &&
     downloadRepoValidation.isValid &&
     userId?.trim();
   // Button variants helper function
@@ -259,11 +255,6 @@ const HuggingfaceSection = ({ isEditable = true }) => {
     setShowHfLocalDirBrowserModal(false);
   }, []);
 
-  const handleHfLocalDirDownloadSelect = useCallback((item) => {
-    setHfLocalDirDownload(item.full_path);
-    setShowHfLocalDirDownloadBrowserModal(false);
-  }, []);
-
   // Input handlers with validation
   const handleUploadRepoIdChange = (value) => {
     setHfRepoIdUpload(value);
@@ -328,9 +319,6 @@ const HuggingfaceSection = ({ isEditable = true }) => {
       setIsDownloading(true);
       try {
         const repoId = userId + '/' + hfRepoIdDownload.trim();
-        // Update the local dir text box with the local cache path
-        const localPath = `/root/.cache/huggingface/lerobot/${repoId}`;
-        setHfLocalDirDownload(localPath);
         const result = await controlHfServer('download', repoId, 'dataset');
         console.log('Download dataset result:', result);
 
@@ -640,27 +628,16 @@ const HuggingfaceSection = ({ isEditable = true }) => {
                   </div>
                 </div>
 
-                {/* Local Directory Input */}
-                <div className="w-full flex flex-col gap-2">
-                  <span className="text-lg font-bold">Local Directory</span>
-                  <div className="w-full flex flex-row items-center justify-start gap-2">
-                    <FolderBrowseButton
-                      onClick={() => setShowHfLocalDirDownloadBrowserModal(true)}
-                      disabled={isUploading}
-                      ariaLabel="Browse files for local directory"
-                    />
-                    <input
-                      className={clsx(STYLES.textInput, 'flex-1', {
-                        'bg-gray-100 cursor-not-allowed': !isEditable || isUploading,
-                        'bg-white': isEditable && !isUploading,
-                      })}
-                      type="text"
-                      placeholder="Enter local directory path or browse"
-                      value={hfLocalDirDownload || ''}
-                      onChange={(e) => setHfLocalDirDownload(e.target.value)}
-                      disabled={!isEditable || isUploading}
-                    />
-                  </div>
+                {/* Info message: Dataset save path with folder icon */}
+                <div className="w-full flex flex-row items-center mt-1">
+                  <span className="text-xs text-gray-600 flex items-center gap-1">
+                    {/* The dataset will be saved in the following directory */}
+                    <MdFolderOpen className="inline-block w-4 h-4 text-blue-700 mr-1" />
+                    The dataset will be saved in{' '}
+                    <span className="font-mono text-blue-700">
+                      /root/.cache/huggingface/lerobot/
+                    </span>
+                  </span>
                 </div>
 
                 {/* Download Button */}
@@ -715,21 +692,6 @@ const HuggingfaceSection = ({ isEditable = true }) => {
           TARGET_FOLDERS.DATASET_DATA,
         ]}
         targetFileLabel="Dataset folder found! 🎯"
-        initialPath={DEFAULT_PATHS.DATASET_PATH}
-        defaultPath={DEFAULT_PATHS.DATASET_PATH}
-        homePath=""
-      />
-
-      <FileBrowserModal
-        isOpen={showHfLocalDirDownloadBrowserModal}
-        onClose={() => setShowHfLocalDirDownloadBrowserModal(false)}
-        onFileSelect={handleHfLocalDirDownloadSelect}
-        title="Select Local Directory for Download"
-        selectButtonText="Select"
-        allowDirectorySelect={true}
-        allowFileSelect={false}
-        targetFolderName={[]}
-        targetFileLabel="Local directory found! 🎯"
         initialPath={DEFAULT_PATHS.DATASET_PATH}
         defaultPath={DEFAULT_PATHS.DATASET_PATH}
         homePath=""
