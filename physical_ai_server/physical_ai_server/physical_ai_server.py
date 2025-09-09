@@ -24,7 +24,7 @@ import time
 from typing import Optional
 
 from ament_index_python.packages import get_package_share_directory
-from physical_ai_interfaces.msg import TaskStatus, TrainingStatus
+from physical_ai_interfaces.msg import TaskStatus, TrainingStatus, HFOperationStatus
 from physical_ai_interfaces.srv import (
     ControlHfServer,
     GetDatasetList,
@@ -801,7 +801,7 @@ class PhysicalAIServer(Node):
                 self.hf_status_timer.start(timer_name='hf_status')
                 # Create publisher for HF status
                 self.hf_status_publisher = self.create_publisher(
-                    String,
+                    HFOperationStatus,
                     '/huggingface/status',
                     self.PUB_QOS_SIZE
                 )
@@ -812,20 +812,25 @@ class PhysicalAIServer(Node):
 
     def _hf_status_timer_callback(self):
         """Timer callback to check HF API Worker status and publish updates."""
+        self.get_logger().info('Checking HF API Worker status')
         if self.hf_api_worker is None:
             return
         try:
             status = self.hf_api_worker.check_task_status()
             # Publish status message
-            status_msg = String()
-            status_msg.data = status
+            status_msg = HFOperationStatus()
+            status_msg.operation = status.get('operation', 'Unknown')
+            status_msg.status = status.get('status', 'Unknown')
+            status_msg.repo_id = status.get('repo_id', '')
+            status_msg.local_path = status.get('local_path', '')
+            status_msg.message = status.get('message', '')
             self.hf_status_publisher.publish(status_msg)
             # Log status changes (avoid spamming logs)
             if hasattr(self, '_last_hf_status') and self._last_hf_status != status:
                 self.get_logger().info(f'HF API Status changed: {self._last_hf_status} -> {status}')
             self._last_hf_status = status
-            # Idle 상태 카운트 및 자동 종료
-            if status == 'Idle':
+            # Idle status count and automatic shutdown
+            if status.get('status', 'Unknown') == 'Idle':
                 self._hf_idle_count = getattr(self, '_hf_idle_count', 0) + 1
                 if self._hf_idle_count >= 5:
                     self.get_logger().info('HF API Worker idle for 5 cycles, shutting down worker and timer.')
@@ -842,11 +847,11 @@ class PhysicalAIServer(Node):
             local_dir = request.local_dir
             repo_type = request.repo_type
             author = request.author
-            # HF API Worker가 없거나 죽었으면 재시작
+            # Restart HF API Worker if it does not exist or is not running
             if self.hf_api_worker is None or not self.hf_api_worker.is_alive():
                 self.get_logger().info('HF API Worker not running, restarting...')
                 self._init_hf_api_worker()
-            # Worker가 busy면 에러 반환
+            # Return error if the worker is busy
             if self.hf_api_worker.is_busy():
                 self.get_logger().warning('HF API Worker is currently busy with another task')
                 response.success = False

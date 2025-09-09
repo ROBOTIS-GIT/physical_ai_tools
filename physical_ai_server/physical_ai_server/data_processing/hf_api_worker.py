@@ -111,50 +111,92 @@ class HfApiWorker:
         except queue.Empty:
             return None
 
-    def check_task_status(self):
+    def check_task_status(self) -> dict:
         """Check the current task status and return appropriate message."""
+        result = {
+            'operation': '',
+            'status': '',
+            'repo_id': '',
+            'local_path': '',
+            'message': ''
+        }
+
+        mode = None
+
         if not self.is_alive():
             self.logger.error('HF API worker process died')
-            return 'Failed'
+            result['status'] = 'Failed'
+            result['message'] = 'HF API worker process died'
+            return result
 
         if not self.is_processing:
-            return 'Idle'
+            result['status'] = 'Idle'
+            return result
 
         try:
-            # Check for task result
-            result = self.get_result(block=False, timeout=0.1)
-            if result:
-                status, message = result
-                if status == 'success':
-                    self.logger.info(f'✅ HF API task completed successfully: {message}')
-                    self.is_processing = False
-                    self.current_task = None
-                    return 'Success'
-                elif status == 'error':
-                    self.logger.error(f'❌ HF API task failed: {message}')
-                    self.is_processing = False
-                    self.current_task = None
-                    return 'Failed'
-
-            # Still processing - return appropriate status message
             if self.current_task:
                 mode = self.current_task.get('mode', 'Processing')
-                if mode == 'upload':
-                    return 'Uploading'
-                elif mode == 'download':
-                    return 'Downloading'
-                elif mode == 'delete':
-                    return 'Deleting'
-                elif mode in ['get_dataset_list', 'get_model_list']:
-                    return 'Fetching'
-                else:
-                    return 'Processing'
+                result['repo_id'] = self.current_task.get('repo_id', '')
+                result['local_path'] = self.current_task.get('local_path', '')
 
-            return 'Processing'
+            # Check for task result
+            task_result = self.get_result(block=False, timeout=0.1)
+            if task_result:
+                status, message = task_result
+                if status == 'success':
+                    log_message = f'✅ HF API task completed successfully: {message}'
+                    self.logger.info(log_message)
+                    self.is_processing = False
+                    self.current_task = None
+
+                    result['operation'] = mode
+                    result['status'] = 'Success'
+                    result['message'] = log_message
+                    return result
+                elif status == 'error':
+                    log_message = f'❌ HF API task failed: {message}'
+                    self.logger.error(log_message)
+                    self.is_processing = False
+                    self.current_task = None
+
+                    result['operation'] = mode
+                    result['status'] = 'Failed'
+                    result['message'] = log_message
+                    return result
+
+            # Still processing - return appropriate status message
+            if mode:
+                if mode == 'upload':
+                    result['operation'] = mode
+                    result['status'] = 'Uploading'
+                    return result
+                elif mode == 'download':
+                    result['operation'] = mode
+                    result['status'] = 'Downloading'
+                    return result
+                elif mode == 'delete':
+                    result['operation'] = mode
+                    result['status'] = 'Deleting'
+                    return result
+                elif mode in ['get_dataset_list', 'get_model_list']:
+                    result['operation'] = mode
+                    result['status'] = 'Fetching'
+                    return result
+                else:
+                    result['operation'] = 'Unknown'
+                    result['status'] = 'Processing'
+                    return result
+
+            result['status'] = 'Processing'
+            return result
 
         except Exception as e:
-            self.logger.error(f'Error checking HF API task status: {str(e)}')
-            return 'Failed'
+            log_message = f'Error checking HF API task status: {str(e)}'
+            self.logger.error(log_message)
+            result['operation'] = mode if mode else 'Unknown'
+            result['status'] = 'Failed'
+            result['message'] = log_message
+            return result
 
     def is_busy(self):
         """Check if the worker is currently processing a task."""
