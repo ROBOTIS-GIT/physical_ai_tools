@@ -168,7 +168,8 @@ const HuggingfaceSection = ({ isEditable = true }) => {
     hfRepoIdUpload?.trim() &&
     hfLocalDirUpload?.trim() &&
     uploadRepoValidation.isValid &&
-    userId?.trim();
+    userId?.trim() &&
+    hfStatus === HFStatus.IDLE;
 
   const downloadButtonEnabled =
     !isUploading &&
@@ -176,7 +177,8 @@ const HuggingfaceSection = ({ isEditable = true }) => {
     isEditable &&
     hfRepoIdDownload?.trim() &&
     downloadRepoValidation.isValid &&
-    userId?.trim();
+    userId?.trim() &&
+    hfStatus === HFStatus.IDLE;
   // Button variants helper function
   const getButtonVariant = (variant, isActive = true, isLoading = false) => {
     const variants = {
