@@ -107,7 +107,7 @@ export function useRosTopicSubscription() {
   );
 
   const cleanup = useCallback(() => {
-    console.log('Starting ROS task status cleanup...');
+    console.log('Starting ROS subscriptions cleanup...');
 
     if (taskStatusTopicRef.current) {
       taskStatusTopicRef.current.unsubscribe();
@@ -432,6 +432,95 @@ export function useRosTopicSubscription() {
     }
   }, [dispatch, rosbridgeUrl]);
 
+  const subscribeToHeartbeat = useCallback(async () => {
+    try {
+      const ros = await rosConnectionManager.getConnection(rosbridgeUrl);
+      if (!ros) return;
+
+      // Skip if already subscribed
+      if (heartbeatTopicRef.current) {
+        console.log('Heartbeat already subscribed, skipping...');
+        return;
+      }
+
+      heartbeatTopicRef.current = new ROSLIB.Topic({
+        ros,
+        name: '/heartbeat',
+        messageType: 'std_msgs/msg/Empty',
+      });
+
+      heartbeatTopicRef.current.subscribe(() => {
+        dispatch(setHeartbeatStatus('connected'));
+        dispatch(setLastHeartbeatTime(Date.now()));
+      });
+
+      console.log('Heartbeat subscription established');
+    } catch (error) {
+      console.error('Failed to subscribe to heartbeat topic:', error);
+    }
+  }, [dispatch, rosbridgeUrl]);
+
+  // Manual initialization function
+  const initializeSubscriptions = useCallback(async () => {
+    if (!rosbridgeUrl) {
+      console.warn('Cannot initialize subscriptions: rosbridgeUrl is not set');
+      return;
+    }
+
+    console.log('Manually initializing ROS subscriptions...');
+
+    // Cleanup previous subscriptions before creating new ones
+    cleanup();
+
+    try {
+      await subscribeToTaskStatus();
+      await subscribeToHeartbeat();
+      await subscribeToTrainingStatus();
+      console.log('ROS subscriptions initialized successfully');
+    } catch (error) {
+      console.error('Failed to initialize ROS subscriptions:', error);
+    }
+  }, [
+    rosbridgeUrl,
+    cleanup,
+    subscribeToTaskStatus,
+    subscribeToHeartbeat,
+    subscribeToTrainingStatus,
+  ]);
+
+  // Auto-start connection and subscription (can be disabled by not calling useRosTopicSubscription)
+  useEffect(() => {
+    if (!rosbridgeUrl) return;
+
+    initializeSubscriptions();
+
+    return cleanup;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [rosbridgeUrl]); // Only rosbridgeUrl as dependency to prevent unnecessary re-subscriptions
+
+  // Helper function to get phase name
+  const getPhaseName = useCallback((phase) => {
+    const phaseNames = {
+      [TaskPhase.READY]: 'NONE',
+      [TaskPhase.WARMING_UP]: 'WARMING_UP',
+      [TaskPhase.RESETTING]: 'RESETTING',
+      [TaskPhase.RECORDING]: 'RECORDING',
+      [TaskPhase.SAVING]: 'SAVING',
+      [TaskPhase.STOPPED]: 'STOPPED',
+      [TaskPhase.INFERENCING]: 'INFERENCING',
+    };
+    return phaseNames[phase] || 'UNKNOWN';
+  }, []);
+
+  // Function to reset task to initial state
+  const resetTaskToIdle = useCallback(() => {
+    setTaskStatus((prevStatus) => ({
+      ...prevStatus,
+      running: false,
+      phase: 0,
+    }));
+  }, []);
+
   const subscribeHFStatus = useCallback(async () => {
     try {
       const ros = await rosConnectionManager.getConnection(rosbridgeUrl);
@@ -468,5 +557,6 @@ export function useRosTopicSubscription() {
     resetTaskToIdle,
     subscribeToTrainingStatus,
     subscribeHFStatus,
+    initializeSubscriptions, // Manual initialization function
   };
 }
