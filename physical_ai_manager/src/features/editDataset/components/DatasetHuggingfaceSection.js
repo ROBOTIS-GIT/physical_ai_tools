@@ -376,8 +376,9 @@ const HuggingfaceSection = ({ isEditable = true }) => {
         </div>
       )} */}
 
-        {/* User ID Selection */}
-        <div className="flex flex-col items-center justify-start gap-4">
+        <div className="flex flex-col items-center justify-start gap-12">
+
+          {/* User ID Selection */}
           <div className="bg-white p-5 rounded-md flex flex-col items-start justify-center gap-4 shadow-md">
             <div className="w-full flex items-center justify-start">
               <span className="text-lg font-bold">User ID Configuration</span>
@@ -637,7 +638,7 @@ const HuggingfaceSection = ({ isEditable = true }) => {
                     <MdFolderOpen className="inline-block w-4 h-4 text-blue-700 mr-1" />
                     The dataset will be saved in{' '}
                     <span className="font-mono text-blue-700">
-                      /root/.cache/huggingface/lerobot/
+                      {DEFAULT_PATHS.DATASET_PATH}
                     </span>
                   </span>
                 </div>

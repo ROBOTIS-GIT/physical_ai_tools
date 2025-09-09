@@ -18,10 +18,11 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { useSelector, useDispatch } from 'react-redux';
 import clsx from 'clsx';
 import toast from 'react-hot-toast';
-import { MdVisibility, MdVisibilityOff, MdFolderOpen } from 'react-icons/md';
+import { MdVisibility, MdVisibilityOff, MdFolderOpen, MdDownload } from 'react-icons/md';
 import { useRosServiceCaller } from '../hooks/useRosServiceCaller';
 import TagInput from './TagInput';
 import FileBrowserModal from './FileBrowserModal';
+import PolicyDownloadModal from './PolicyDownloadModal';
 import TaskPhase from '../constants/taskPhases';
 import { DEFAULT_PATHS, TARGET_FILES } from '../constants/paths';
 import { setTaskInfo } from '../features/tasks/taskSlice';
@@ -53,6 +54,9 @@ const InferencePanel = () => {
 
   // File browser modal states
   const [showPolicyPathModal, setShowPolicyPathModal] = useState(false);
+
+  // Policy download modal states
+  const [showPolicyDownloadModal, setShowPolicyDownloadModal] = useState(false);
 
   // Download Policy states
   const [isDownloadingPolicy, setIsDownloadingPolicy] = useState(false);
@@ -132,35 +136,17 @@ const InferencePanel = () => {
     [handleChange]
   );
 
-  const handleDownloadPolicy = useCallback(async () => {
-    if (!info.policyPath || info.policyPath.trim() === '') {
-      toast.error('Please enter a Policy Path or Repo ID first');
-      return;
-    }
-
-    setIsDownloadingPolicy(true);
-    try {
-      const repoId = info.policyPath.trim();
-      // Update the policy path with the local cache path
-      const localPath = `/root/.cache/huggingface/lerobot/${repoId}`;
-      handleChange('policyPath', localPath);
-      const result = await controlHfServer('download', repoId, 'model');
-      console.log('Download policy result:', result);
-      
-      toast.success(`Policy download started successfully for ${repoId}!`);
-    } catch (error) {
-      console.error('Error downloading policy:', error);
-      toast.error(`Failed to download policy: ${error.message}`);
-    } finally {
-      setIsDownloadingPolicy(false);
-    }
-  }, [controlHfServer, info.policyPath, handleChange]);
+  const handleDownloadPolicyComplete = useCallback((repoId) => {
+    // Update the policy path with the local cache path
+    const localPath = `/root/.cache/huggingface/lerobot/${repoId}`;
+    handleChange('policyPath', localPath);
+    // Don't close modal automatically - let user click Finish button
+  }, [handleChange]);
 
   // Update isEditable state when the disabled prop changes
   useEffect(() => {
     setIsEditable(!disabled);
   }, [disabled]);
-
   // Reset dropdown state when Push to Hub is unchecked
   useEffect(() => {
     if (!info.pushToHub) {
@@ -429,6 +415,7 @@ const InferencePanel = () => {
           Policy Path
         </span>
         <div className={clsx('flex', 'flex-col', 'flex-1', 'gap-2')}>
+          {/* Browse Policy Path Button */}
           <button
             onClick={() => setShowPolicyPathModal(true)}
             disabled={!isEditable}
@@ -455,16 +442,10 @@ const InferencePanel = () => {
             <MdFolderOpen size={16} />
             Browse Policy Path
           </button>
-          <textarea
-            className={classPolicyPathTextarea}
-            value={info.policyPath || ''}
-            onChange={(e) => handleChange('policyPath', e.target.value)}
-            disabled={!isEditable}
-            placeholder="Enter Policy Path or Repo ID"
-          />
+          {/* Download Policy Button */}
           <button
-            disabled={!isEditable || isDownloadingPolicy || !info.policyPath}
-            onClick={handleDownloadPolicy}
+            disabled={!isEditable}
+            onClick={() => setShowPolicyDownloadModal(true)}
             className={clsx(
               'flex',
               'items-center',
@@ -485,8 +466,16 @@ const InferencePanel = () => {
               'w-fit'
             )}
           >
-            {isDownloadingPolicy ? 'Downloading...' : 'Download Policy'}
+            <MdDownload size={16} />
+            Download Policy
           </button>
+          <textarea
+            className={classPolicyPathTextarea}
+            value={info.policyPath || ''}
+            onChange={(e) => handleChange('policyPath', e.target.value)}
+            disabled={!isEditable}
+            placeholder="Enter Policy Path or Repo ID"
+          />
         </div>
       </div>
 
@@ -873,6 +862,12 @@ const InferencePanel = () => {
         initialPath={DEFAULT_PATHS.POLICY_MODEL_PATH}
         defaultPath={DEFAULT_PATHS.POLICY_MODEL_PATH}
         homePath=""
+      />
+
+      <PolicyDownloadModal
+        isOpen={showPolicyDownloadModal}
+        onClose={() => setShowPolicyDownloadModal(false)}
+        onDownloadComplete={handleDownloadPolicyComplete}
       />
     </div>
   );
