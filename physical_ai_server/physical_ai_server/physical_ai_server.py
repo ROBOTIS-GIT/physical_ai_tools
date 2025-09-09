@@ -812,7 +812,6 @@ class PhysicalAIServer(Node):
 
     def _hf_status_timer_callback(self):
         """Timer callback to check HF API Worker status and publish updates."""
-        self.get_logger().info('Checking HF API Worker status')
         if self.hf_api_worker is None:
             return
         try:
