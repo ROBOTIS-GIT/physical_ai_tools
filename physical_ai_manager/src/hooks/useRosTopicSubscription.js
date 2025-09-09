@@ -484,12 +484,25 @@ export function useRosTopicSubscription() {
       hfStatusTopicRef.current = new ROSLIB.Topic({
         ros,
         name: '/huggingface/status',
-        messageType: 'std_msgs/msg/String',
+        messageType: 'physical_ai_interfaces/msg/HFOperationStatus',
       });
 
       hfStatusTopicRef.current.subscribe((msg) => {
         console.log('Received HF status:', msg);
-        dispatch(setHFStatus(msg.data));
+
+        const status = msg.status;
+        const operation = msg.operation;
+        const repoId = msg.repo_id;
+        const localPath = msg.local_path;
+        const message = msg.message;
+
+        if (status === 'Failed') {
+          toast.error(message);
+        } else if (status === 'Success') {
+          toast.success(message);
+        }
+
+        dispatch(setHFStatus(status));
       });
 
       console.log('HF status subscription established');
