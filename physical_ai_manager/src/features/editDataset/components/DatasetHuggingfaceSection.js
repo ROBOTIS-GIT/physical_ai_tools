@@ -170,15 +170,17 @@ const HuggingfaceSection = ({ isEditable = true }) => {
     isEditable &&
     hfRepoIdUpload?.trim() &&
     hfLocalDirUpload?.trim() &&
-    uploadRepoValidation.isValid;
+    uploadRepoValidation.isValid &&
+    userId?.trim();
+
   const downloadButtonEnabled =
     !isUploading &&
     !isDownloading &&
     isEditable &&
     hfRepoIdDownload?.trim() &&
     hfLocalDirDownload?.trim() &&
-    downloadRepoValidation.isValid;
-
+    downloadRepoValidation.isValid &&
+    userId?.trim();
   // Button variants helper function
   const getButtonVariant = (variant, isActive = true, isLoading = false) => {
     const variants = {
