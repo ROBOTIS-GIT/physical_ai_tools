@@ -444,7 +444,7 @@ const HuggingfaceSection = ({ isEditable = true }) => {
               {/* Upload Dataset Section Header */}
               <div className="w-full flex flex-col items-start justify-start gap-2 bg-gray-50 border border-gray-200 p-3 rounded-md">
                 <div className="w-full flex items-center rounded-md font-medium gap-2">
-                  <span className="text-lg">⬆️</span>
+                  <MdOutlineFileUpload className="text-lg text-green-600" />
                   Upload Dataset
                 </div>
                 <div className="text-sm text-gray-600">
@@ -569,7 +569,7 @@ const HuggingfaceSection = ({ isEditable = true }) => {
               {/* Download Dataset Section Header */}
               <div className="w-full flex flex-col items-start justify-start gap-2 bg-gray-50 border border-gray-200 p-3 rounded-md">
                 <div className="w-full flex items-center rounded-md font-medium gap-2">
-                  <span className="text-lg">⬇️</span>
+                  <MdOutlineFileDownload className="text-lg text-blue-600" />
                   Download Dataset
                 </div>
                 <div className="text-sm text-gray-600">
