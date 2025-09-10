@@ -52,6 +52,16 @@ class DataManager:
     RECORD_COMPLETED = True
     RAM_LIMIT_GB = 2  # GB
     SKIP_TIME = 0.1  # Seconds
+    
+    # Download progress tracking
+    _download_progress = {
+        'current': 0,
+        'total': 0,
+        'percentage': 0.0,
+        'is_downloading': False,
+        'repo_id': '',
+        'repo_type': ''
+    }
 
     class ProgressTqdm(tqdm):
         """Custom tqdm class for HuggingFace download progress"""
@@ -70,16 +80,21 @@ class DataManager:
         def update(self, n=1):
             super().update(n)
             
+            # Update DataManager's progress tracking
+            progress_info = {
+                'current': self.n,
+                'total': self.total if self.total else 0,
+                'percentage': (self.n / self.total * 100) if self.total and self.total > 0 else 0.0,
+                'is_downloading': True,
+                'repo_id': self.repo_id,
+                'repo_type': self.repo_type
+            }
+            
+            # Update DataManager's class variable
+            DataManager._download_progress.update(progress_info)
+            
             # Call progress callback if provided
             if self.progress_callback:
-                progress_info = {
-                    'current': self.n,
-                    'total': self.total if self.total else 0,
-                    'percentage': (self.n / self.total * 100) if self.total and self.total > 0 else 0.0,
-                    'is_downloading': True,
-                    'repo_id': self.repo_id,
-                    'repo_type': self.repo_type
-                }
                 self.progress_callback(progress_info)
             
             # Print progress every 10 files or every 0.5 seconds, whichever comes first
@@ -611,6 +626,16 @@ class DataManager:
         try:
             print(f"Starting download of {repo_id} ({repo_type})...")
             
+            # Initialize progress tracking
+            DataManager._download_progress.update({
+                'current': 0,
+                'total': 0,
+                'percentage': 0.0,
+                'is_downloading': True,
+                'repo_id': repo_id,
+                'repo_type': repo_type
+            })
+            
             result = snapshot_download(
                 repo_id=repo_id,
                 repo_type=repo_type,
@@ -618,19 +643,43 @@ class DataManager:
                 tqdm_class=DataManager.ProgressTqdm
             )
             
+            # Mark download as completed
+            DataManager._download_progress['is_downloading'] = False
             print(f"Download completed: {repo_id}")
             return result
         except Exception as e:
+            # Mark download as failed
+            DataManager._download_progress['is_downloading'] = False
             print(f'Error downloading HuggingFace repo: {e}')
             return False
 
-    def get_download_progress(self):
-        """Get current instance download progress information"""
-        return self._download_progress.copy()
+    @classmethod
+    def get_download_progress(cls):
+        """Get current download progress information"""
+        return cls._download_progress.copy()
     
-    def get_download_percentage(self):
-        """Get current instance download percentage"""
-        return self._download_progress['percentage']
+    @classmethod
+    def get_download_percentage(cls):
+        """Get current download percentage"""
+        return cls._download_progress['percentage']
+    
+    @classmethod
+    def is_downloading(cls):
+        """Check if currently downloading"""
+        return cls._download_progress['is_downloading']
+    
+    @classmethod
+    def get_download_status(cls):
+        """Get current download status"""
+        return {
+            'is_downloading': cls._download_progress['is_downloading'],
+            'current': cls._download_progress['current'],
+            'total': cls._download_progress['total'],
+            'percentage': cls._download_progress['percentage'],
+            'repo_id': cls._download_progress['repo_id'],
+            'repo_type': cls._download_progress['repo_type']
+        }
+    
     
     def get_download_status(self):
         """Get current instance download status (is_downloading, repo_id, etc.)"""
