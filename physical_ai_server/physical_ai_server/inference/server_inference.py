@@ -19,83 +19,98 @@
 from dataclasses import dataclass
 from io import BytesIO
 from typing import Callable
+import time
 
-from inference_manager import InferenceManager
 import torch
 import zmq
 
 
-class TorchSerializer:
-
-    @staticmethod
-    def to_bytes(data: dict) -> bytes:
-        buffer = BytesIO()
-        torch.save(data, buffer)
-        return buffer.getvalue()
-
-    @staticmethod
-    def from_bytes(data: bytes) -> dict:
-        buffer = BytesIO(data)
-        obj = torch.load(buffer, weights_only=False)
-        return obj
-
-
-@dataclass
-class EndpointHandler:
-
-    handler: Callable
-    requires_input: bool = True
-
-
-class ServerInference:
-
+class ZmqInferenceServer:
     def __init__(
             self,
-            policy_type: str,
-            policy_path: str,
-            device: str,
             server_address: str,
             port: int = 5555):
-
-        self.inference_manager = InferenceManager(
-            policy_type=policy_type,
-            policy_path=policy_path,
-            device=device
-        )
 
         self.running = True
         self.context = zmq.Context()
         self.socket = self.context.socket(zmq.REP)
         self.socket.bind(f'tcp://{server_address}:{port}')
+        self._callback_group = {}
+        self.policy = None
 
-        self.inference_manager = InferenceManager(
-            policy_type=policy_type,
-            policy_path=policy_path,
-            device=device
-        )
+        self.add_callback(name='ping', callback=self._ping_callback)
+        self.add_callback(name='kill', callback=self._kill_server_callback)
+        self.add_callback(name='load_policy', callback=self._load_policy_callback)
+        self.add_callback(name='unload_policy', callback=self._unload_policy_callback)
 
-        # Register the ping endpoint by default
-        self.register_endpoint('ping', self._handle_ping, requires_input=False)
-        self.register_endpoint('kill', self._kill_server, requires_input=False)
-        self.register_endpoint('get_action', self.inference_manager.predict)
-        self.register_endpoint(
-            'get_modality_config',
-            self.inference_manager.get_policy_config,
-            requires_input=False
-        )
-
-    def _kill_server(self):
-        self.running = False
-
-    def _handle_ping(self) -> dict:
-        return {'status': 'ok', 'message': 'Server is running'}
-
-    def register_endpoint(
+    def add_callback(
             self,
             name: str,
-            handler: Callable,
-            requires_input: bool = True):
-        self._endpoints[name] = EndpointHandler(handler, requires_input)
+            callback: Callable):
+        self._callback_group[name] = callback
+
+    def convert_dict_to_bytes(self, data: dict) -> bytes:
+        bytes_buffer = BytesIO()
+        torch.save(data, bytes_buffer)
+        return bytes_buffer.getvalue()
+
+    def convert_dict_from_bytes(self, data: bytes) -> dict:
+        bytes_buffer = BytesIO(data)
+        dict_data = torch.load(bytes_buffer, weights_only=False)
+        return dict_data
+
+    def _ping_callback(self, data) -> dict:
+        return {'status': 'ok', 'message': 'Server is running'}
+
+    def _kill_server_callback(self, data):
+        self.running = False
+
+    def _load_policy_callback(self, data: dict) -> dict:
+        if (
+            'policy_type' not in data or
+            'policy_path' not in data or
+            'robot_type' not in data
+        ):
+            return {
+                'status': 'error',
+                'message': "Missing required fields: 'policy_type', 'policy_path', 'robot_type'"
+            }
+
+        try:
+            if data['policy_type'] == 'GR00T_N1_5':
+                from gr00t.experiment.data_config import load_data_config
+                from gr00t.model.policy import Gr00tPolicy
+                data_config = load_data_config(data['robot_type'])
+                self.policy = Gr00tPolicy(
+                    model_path=data['policy_path'],
+                    modality_config=data_config.modality_config(),
+                    modality_transform=data_config.transform(),
+                    embodiment_tag='new_embodiment',
+                    denoising_steps=data.get('denoising_steps', 4),
+                )
+                self.add_callback('get_action', self.policy.get_action)
+                return {
+                    'status': 'ok',
+                    'message': 'Policy loaded successfully'
+                }
+            else:
+                return {
+                    'status': 'error',
+                    'message': 'Policy not supported yet'
+                }
+        except Exception as e:
+            return {
+                'status': 'error',
+                'message': f"Failed to load policy: {e}"
+            }
+
+    def _unload_policy_callback(self, data) -> dict:
+        if self.policy is None:
+            return {'status': 'error', 'message': 'No policy loaded'}
+        self.policy = None
+        if 'get_action' in self._callback_group:
+            del self._callback_group['get_action']
+        return {'status': 'ok', 'message': 'Policy unloaded successfully'}
 
     def run(self):
         addr = self.socket.getsockopt_string(zmq.LAST_ENDPOINT)
@@ -103,22 +118,66 @@ class ServerInference:
         while self.running:
             try:
                 message = self.socket.recv()
-                request = TorchSerializer.from_bytes(message)
-                endpoint = request.get('endpoint', 'get_action')
+                request = self.convert_dict_from_bytes(message)
+                command = request.get('command', 'get_action')
 
-                if endpoint not in self._endpoints:
-                    raise ValueError(f'Unknown endpoint: {endpoint}')
+                if command not in self._callback_group:
+                    error_response = {
+                        'status': 'error',
+                        'message': f'Unknown command: {command}', 
+                    }
+                    self.socket.send(self.convert_dict_to_bytes(error_response))
+                    continue
 
-                handler = self._endpoints[endpoint]
+                if command == 'load_policy' and self.policy is not None:
+                    error_response = {
+                        'status': 'error',
+                        'message': 'Policy already loaded. Unload it first.'
+                    }
+                    self.socket.send(self.convert_dict_to_bytes(error_response))
+                    continue
+
+                callback = self._callback_group[command]
                 result = (
-                    handler.handler(request.get('data', {}))
-                    if handler.requires_input
-                    else handler.handler()
+                    callback(request.get('data', {}))
                 )
-                self.socket.send(TorchSerializer.to_bytes(result))
+                self.socket.send(self.convert_dict_to_bytes(result))
             except Exception as e:
                 print(f'Error in server: {e}')
                 import traceback
 
                 print(traceback.format_exc())
-                self.socket.send(b'ERROR')
+                error_response = {'status': 'error', 'message': str(e)}
+                self.socket.send(self.convert_dict_to_bytes(error_response))
+        
+        # Cleanup when server stops
+        self.socket.close()
+        self.context.term()
+
+def main():
+    """Main function for testing the server"""
+    import argparse
+    import time
+    
+    parser = argparse.ArgumentParser(description='ZMQ Inference Server')
+    parser.add_argument('--host', default='localhost', help='Server host (default: localhost)')
+    parser.add_argument('--port', type=int, default=5555, help='Server port (default: 5555)')
+
+    args = parser.parse_args()
+
+    print(f"Starting ZMQ Inference Server on {args.host}:{args.port}")
+
+    server = ZmqInferenceServer(args.host, args.port)
+
+    try:
+        server.run()
+    except KeyboardInterrupt:
+        print("\nShutting down server...")
+    except Exception as e:
+        print(f"Server error: {e}")
+        import traceback
+        traceback.print_exc()
+
+
+if __name__ == "__main__":
+    main()
