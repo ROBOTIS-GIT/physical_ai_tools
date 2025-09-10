@@ -30,6 +30,7 @@ class HfApiWorker:
     def __init__(self):
         self.input_queue = multiprocessing.Queue()
         self.output_queue = multiprocessing.Queue()
+        self.progress_queue = multiprocessing.Queue()
         self.process = None
         self.logger = logging.getLogger('HfApiWorker')
 
@@ -37,6 +38,16 @@ class HfApiWorker:
         self.is_processing = False
         self.current_task = None
         self.start_time = None
+
+        # Progress tracking
+        self.current_progress = {
+            'current': 0,
+            'total': 0,
+            'percentage': 0.0,
+            'is_downloading': False,
+            'repo_id': '',
+            'repo_type': ''
+        }
 
         # Basic config for the main process logger
         logging.basicConfig(
@@ -55,7 +66,8 @@ class HfApiWorker:
                 target=self._worker_process_loop,
                 args=(
                     self.input_queue,
-                    self.output_queue
+                    self.output_queue,
+                    self.progress_queue
                 )
             )
 
@@ -133,6 +145,11 @@ class HfApiWorker:
             result['status'] = 'Idle'
             return result
 
+        # Check for progress updates from worker process
+        self.current_progress = self.get_progress_from_progress_queue()
+
+        self.logger.info(f'Download progrss: {self.current_progress}')
+
         try:
             if self.current_task:
                 mode = self.current_task.get('mode', 'Processing')
@@ -202,8 +219,24 @@ class HfApiWorker:
         """Check if the worker is currently processing a task."""
         return self.is_processing
 
+    def get_progress_from_progress_queue(self):
+        """Get the latest progress information from worker process and clear queue"""
+        latest_progress = None
+        try:
+            # Drain the queue and keep only the latest progress data
+            while True:
+                try:
+                    latest_progress = self.progress_queue.get(block=False, timeout=0.01)
+                except queue.Empty:
+                    break
+        except Exception as e:
+            self.logger.error(f'Error updating progress from worker: {e}')
+
+        # Return the latest progress or current progress if no new data
+        return latest_progress if latest_progress else self.current_progress
+
     @staticmethod
-    def _worker_process_loop(input_queue, output_queue):
+    def _worker_process_loop(input_queue, output_queue, progress_queue):
         # Set up logging for the worker process
         logging.basicConfig(
             level=logging.INFO,
@@ -214,6 +247,9 @@ class HfApiWorker:
             logger.info(f'HF API worker process started with PID: {os.getpid()}')
             logger.info('Worker is ready and waiting for requests')
 
+            # Set progress queue for DataManager
+            DataManager.set_progress_queue(progress_queue)
+
             request_count = 0
             last_log_time = time.time()
 
@@ -222,7 +258,8 @@ class HfApiWorker:
                     # Log periodic status
                     current_time = time.time()
                     if current_time - last_log_time > 30.0:  # Log every 30 seconds
-                        logger.info(f'Worker still alive, processed {request_count} requests so far')
+                        msg = f'Worker still alive, processed {request_count} requests so far'
+                        logger.info(msg)
                         logger.info(f'Input queue size: {input_queue.qsize()}')
                         last_log_time = current_time
 
@@ -258,9 +295,9 @@ class HfApiWorker:
                                 logger.info(f'✅ Upload completed: {repo_id}')
                                 output_queue.put(('success', message))
                             else:
-                                message = (
-                                    f'Failed to upload Hugging Face repo: {repo_id}, '
-                                    f'Please check the repo ID and try again.')
+                                message = (f'Failed to upload Hugging Face repo: '
+                                          f'{repo_id}, Please check the repo ID '
+                                          f'and try again.')
                                 logger.error(f'❌ Upload failed: {repo_id}')
                                 output_queue.put(('error', message))
 
@@ -275,7 +312,9 @@ class HfApiWorker:
                                 logger.info(f'✅ Download completed: {repo_id}')
                                 output_queue.put(('success', message))
                             else:
-                                message = f'Failed to download Hugging Face repo: {repo_id}, Please check the repo ID and try again.'
+                                message = (f'Failed to download Hugging Face repo: '
+                                          f'{repo_id}, Please check the repo ID '
+                                          f'and try again.')
                                 logger.error(f'❌ Download failed: {repo_id}')
                                 output_queue.put(('error', message))
 

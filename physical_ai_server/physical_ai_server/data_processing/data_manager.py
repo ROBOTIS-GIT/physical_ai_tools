@@ -30,7 +30,6 @@ from huggingface_hub import (
     snapshot_download,
     upload_folder
 )
-from tqdm import tqdm
 from lerobot.datasets.utils import DEFAULT_FEATURES
 
 
@@ -45,6 +44,9 @@ from physical_ai_server.device_manager.storage_checker import StorageChecker
 import requests
 from sensor_msgs.msg import JointState
 from trajectory_msgs.msg import JointTrajectory
+from physical_ai_server.data_processing.progress_tracker import (
+    HuggingFaceProgressTqdm
+)
 
 
 class DataManager:
@@ -52,65 +54,9 @@ class DataManager:
     RECORD_COMPLETED = True
     RAM_LIMIT_GB = 2  # GB
     SKIP_TIME = 0.1  # Seconds
-    
-    # Download progress tracking
-    _download_progress = {
-        'current': 0,
-        'total': 0,
-        'percentage': 0.0,
-        'is_downloading': False,
-        'repo_id': '',
-        'repo_type': ''
-    }
 
-    class ProgressTqdm(tqdm):
-        """Custom tqdm class for HuggingFace download progress"""
-        def __init__(self, *args, **kwargs):
-            # Set default parameters for better visibility
-            kwargs.setdefault('desc', 'Downloading')
-            kwargs.setdefault('unit', 'files')
-            kwargs.setdefault('unit_scale', True)
-            kwargs.setdefault('miniters', 1)
-            super().__init__(*args, **kwargs)
-            self.last_update = time.time()
-            self.repo_id = kwargs.get('repo_id', '')
-            self.repo_type = kwargs.get('repo_type', '')
-            self.progress_callback = kwargs.get('progress_callback', None)
-        
-        def update(self, n=1):
-            super().update(n)
-            
-            # Update DataManager's progress tracking
-            progress_info = {
-                'current': self.n,
-                'total': self.total if self.total else 0,
-                'percentage': (self.n / self.total * 100) if self.total and self.total > 0 else 0.0,
-                'is_downloading': True,
-                'repo_id': self.repo_id,
-                'repo_type': self.repo_type
-            }
-            
-            # Update DataManager's class variable
-            DataManager._download_progress.update(progress_info)
-            
-            # Call progress callback if provided
-            if self.progress_callback:
-                self.progress_callback(progress_info)
-            
-            # Print progress every 10 files or every 0.5 seconds, whichever comes first
-            current_time = time.time()
-            should_print = (
-                (current_time - self.last_update >= 0.5) or  # Time-based
-                (self.n % 10 == 0) or  # Every 10 files
-                (self.n == self.total)  # Final file
-            )
-            
-            if should_print:
-                if self.total and self.total > 0:
-                    print(f"[HF Download] Progress: {self.n}/{self.total} files ({self.n/self.total*100:.1f}%)")
-                else:
-                    print(f"[HF Download] Progress: {self.n} files downloaded")
-                self.last_update = current_time
+    # Progress queue for multiprocessing communication
+    _progress_queue = None
 
     def __init__(
             self,
@@ -123,16 +69,7 @@ class DataManager:
         self._on_saving = False
         self._single_task = len(task_info.task_instruction) == 1
         self._task_info = task_info
-        
-        # Instance-level download progress tracking
-        self._download_progress = {
-            'current': 0,
-            'total': 0,
-            'percentage': 0.0,
-            'is_downloading': False,
-            'repo_id': '',
-            'repo_type': ''
-        }
+
         self._lerobot_dataset = None
         self._record_episode_count = 0
         self._start_time_s = 0
@@ -566,7 +503,7 @@ class DataManager:
 
     def get_task_info(self):
         return self._task_info
-    
+
     def _init_task_limits(self):
         if not self._single_task:
             self._task_info.num_episodes = 1_000_000
@@ -622,76 +559,31 @@ class DataManager:
     ):
         save_path = Path.home() / '.cache/huggingface/lerobot'
         save_dir = save_path / repo_id
-        
+
         try:
             print(f"Starting download of {repo_id} ({repo_type})...")
-            
-            # Initialize progress tracking
-            DataManager._download_progress.update({
-                'current': 0,
-                'total': 0,
-                'percentage': 0.0,
-                'is_downloading': True,
-                'repo_id': repo_id,
-                'repo_type': repo_type
-            })
-            
+
             result = snapshot_download(
                 repo_id=repo_id,
                 repo_type=repo_type,
                 local_dir=save_dir,
-                tqdm_class=DataManager.ProgressTqdm
+                tqdm_class=lambda *args, **kwargs: HuggingFaceProgressTqdm(
+                    *args,
+                    progress_queue=DataManager._progress_queue,
+                    **kwargs
+                )
             )
-            
-            # Mark download as completed
-            DataManager._download_progress['is_downloading'] = False
+
             print(f"Download completed: {repo_id}")
             return result
         except Exception as e:
-            # Mark download as failed
-            DataManager._download_progress['is_downloading'] = False
             print(f'Error downloading HuggingFace repo: {e}')
             return False
 
     @classmethod
-    def get_download_progress(cls):
-        """Get current download progress information"""
-        return cls._download_progress.copy()
-    
-    @classmethod
-    def get_download_percentage(cls):
-        """Get current download percentage"""
-        return cls._download_progress['percentage']
-    
-    @classmethod
-    def is_downloading(cls):
-        """Check if currently downloading"""
-        return cls._download_progress['is_downloading']
-    
-    @classmethod
-    def get_download_status(cls):
-        """Get current download status"""
-        return {
-            'is_downloading': cls._download_progress['is_downloading'],
-            'current': cls._download_progress['current'],
-            'total': cls._download_progress['total'],
-            'percentage': cls._download_progress['percentage'],
-            'repo_id': cls._download_progress['repo_id'],
-            'repo_type': cls._download_progress['repo_type']
-        }
-    
-    
-    def get_download_status(self):
-        """Get current instance download status (is_downloading, repo_id, etc.)"""
-        return {
-            'is_downloading': self._download_progress['is_downloading'],
-            'repo_id': self._download_progress['repo_id'],
-            'repo_type': self._download_progress['repo_type']
-        }
-    
-    def is_downloading(self):
-        """Check if currently downloading for this instance"""
-        return self._download_progress['is_downloading']
+    def set_progress_queue(cls, progress_queue):
+        """Set progress queue for multiprocessing communication"""
+        cls._progress_queue = progress_queue
 
     @staticmethod
     def upload_huggingface_repo(
