@@ -563,21 +563,26 @@ class DataManager:
         try:
             print(f"Starting download of {repo_id} ({repo_type})...")
 
+            # Create a wrapper class that includes the progress_queue
+            class ProgressTqdmWrapper(HuggingFaceProgressTqdm):
+                def __init__(self, *args, **kwargs):
+                    kwargs['progress_queue'] = DataManager._progress_queue
+                    super().__init__(*args, **kwargs)
+
             result = snapshot_download(
                 repo_id=repo_id,
                 repo_type=repo_type,
                 local_dir=save_dir,
-                tqdm_class=lambda *args, **kwargs: HuggingFaceProgressTqdm(
-                    *args,
-                    progress_queue=DataManager._progress_queue,
-                    **kwargs
-                )
+                tqdm_class=ProgressTqdmWrapper
             )
 
             print(f"Download completed: {repo_id}")
             return result
         except Exception as e:
             print(f'Error downloading HuggingFace repo: {e}')
+            # Print more detailed error information
+            import traceback
+            print(f'Detailed error traceback:\n{traceback.format_exc()}')
             return False
 
     @classmethod
