@@ -246,6 +246,14 @@ class PhysicalAIServer(Node):
         if self.timer_manager is not None:
             self.timer_manager = None
 
+        if self.heartbeat_timer is not None:
+            self.heartbeat_timer.stop(timer_name='heartbeat')
+            self.heartbeat_timer = None
+
+        if self.training_timer is not None:
+            self.training_timer.stop(timer_name='training_status')
+            self.training_timer = None
+
         self.params = None
         self.total_joint_order = None
         self.joint_order = None

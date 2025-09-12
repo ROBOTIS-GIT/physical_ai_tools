@@ -203,6 +203,12 @@ class Communicator:
                     )
         self.node.get_logger().info('Initializing joint publishers... done')
 
+        self.publisher_names = [
+            'status_publisher',
+            'training_status_publisher',
+            'heartbeat_publisher'
+        ]
+
         self.status_publisher = self.node.create_publisher(
             TaskStatus,
             '/task/status',
@@ -221,6 +227,13 @@ class Communicator:
             self.heartbeat_qos_profile)
 
     def init_services(self):
+        self.service_names = [
+            'image_topic_list_service',
+            'file_browser_service',
+            'data_editor_service',
+            'get_dataset_info_service'
+        ]
+
         self.image_topic_list_service = self.node.create_service(
             GetImageTopicList,
             '/image/get_available_list',
@@ -463,26 +476,44 @@ class Communicator:
             msg_types[publisher_name] = publisher.msg_type
         return msg_types
 
+    def _destroy_service_if_exists(self, service_attr_name: str):
+        """Helper method to safely destroy a service if it exists"""
+        if hasattr(self, service_attr_name):
+            service = getattr(self, service_attr_name)
+            if service is not None:
+                self.node.destroy_service(service)
+                setattr(self, service_attr_name, None)
+
+    def _destroy_publisher_if_exists(self, publisher_attr_name: str):
+        """Helper method to safely destroy a publisher if it exists"""
+        if hasattr(self, publisher_attr_name):
+            publisher = getattr(self, publisher_attr_name)
+            if publisher is not None:
+                self.node.destroy_publisher(publisher)
+                setattr(self, publisher_attr_name, None)
+
     def cleanup(self):
-        self.node.get_logger().info(
-            'Cleaning up Communicator resources...')
+        self.node.get_logger().info('Cleaning up Communicator resources...')
 
-        if hasattr(self, 'status_publisher'):
-            self.node.destroy_publisher(self.status_publisher)
-            self.status_publisher = None
+        # Clean up publishers
+        for publisher_name in self.publisher_names:
+            self._destroy_publisher_if_exists(publisher_name)
 
+        # Clean up joint publishers
         for _, publisher in self.joint_publishers.items():
             self.node.destroy_publisher(publisher)
         self.joint_publishers.clear()
 
-        if hasattr(self, 'multi_subscriber'):
+        # Clean up multi subscriber
+        if hasattr(self, 'multi_subscriber') and self.multi_subscriber is not None:
             self.multi_subscriber.cleanup()
             self.multi_subscriber = None
 
-        if hasattr(self, 'image_topic_list_service'):
-            self.node.destroy_service(self.image_topic_list_service)
-            self.image_topic_list_service = None
+        # Clean up services using helper method
+        for service_name in self.service_names:
+            self._destroy_service_if_exists(service_name)
 
+        # Clear message containers
         self.camera_topic_msgs.clear()
         self.follower_topic_msgs.clear()
         self.leader_topic_msgs.clear()
