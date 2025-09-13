@@ -127,10 +127,15 @@ class HfApiWorker:
         """Check the current task status and return appropriate message."""
         result = {
             'operation': '',
-            'status': '',
+            'status': 'Idle',
             'repo_id': '',
             'local_path': '',
-            'message': ''
+            'message': '',
+            'download_progress': {
+                'current': 0,
+                'total': 0,
+                'percentage': 0.0,
+            }
         }
 
         mode = None
@@ -138,17 +143,23 @@ class HfApiWorker:
         if not self.is_alive():
             self.logger.error('HF API worker process died')
             result['status'] = 'Failed'
-            result['message'] = 'HF API worker process died'
-            return result
 
         if not self.is_processing:
+            result['message'] = 'HF API worker process died'
+            return result
             result['status'] = 'Idle'
             return result
 
         # Check for progress updates from worker process
         self.current_progress = self.get_progress_from_progress_queue()
+        current = self.current_progress.get('current', 0)
+        total = self.current_progress.get('total', 0)
+        percentage = self.current_progress.get('percentage', 0.0)
+        result['download_progress']['current'] = current
+        result['download_progress']['total'] = total
+        result['download_progress']['percentage'] = percentage
 
-        self.logger.info(f'Download progrss: {self.current_progress}')
+        self.logger.info(f'Download {current}/{total} ({percentage}%)')
 
         try:
             if self.current_task:

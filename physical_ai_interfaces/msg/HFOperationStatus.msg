@@ -3,3 +3,6 @@ string status
 string repo_id
 string local_path
 string message
+uint16 download_current
+uint16 download_total
+float32 download_percentage

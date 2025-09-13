@@ -816,17 +816,16 @@ class PhysicalAIServer(Node):
             return
         try:
             status = self.hf_api_worker.check_task_status()
-            # Publish status message
-            status_msg = HFOperationStatus()
-            status_msg.operation = status.get('operation', 'Unknown')
-            status_msg.status = status.get('status', 'Unknown')
-            status_msg.repo_id = status.get('repo_id', '')
-            status_msg.local_path = status.get('local_path', '')
-            status_msg.message = status.get('message', '')
-            self.hf_status_publisher.publish(status_msg)
+            self._publish_hf_operation_status_msg(status)
+
             # Log status changes (avoid spamming logs)
-            if hasattr(self, '_last_hf_status') and self._last_hf_status != status:
-                self.get_logger().info(f'HF API Status changed: {self._last_hf_status} -> {status}')
+            last_status = self._last_hf_status.get('status', 'Unknown') \
+                if hasattr(self, '_last_hf_status') else 'Unknown'
+            current_status = status.get('status', 'Unknown')
+
+            if hasattr(self, '_last_hf_status') and last_status != current_status:
+                self.get_logger().info(f'HF API Status changed: {last_status} -> {current_status}')
+    
             self._last_hf_status = status
             # Idle status count and automatic shutdown
             if status.get('status', 'Unknown') == 'Idle':
@@ -838,6 +837,24 @@ class PhysicalAIServer(Node):
                 self._hf_idle_count = 0
         except Exception as e:
             self.get_logger().error(f'Error in HF status timer callback: {str(e)}')
+
+    
+    def _publish_hf_operation_status_msg(self, status):
+        status_msg = HFOperationStatus()
+        status_msg.operation = status.get('operation', 'Unknown')
+        status_msg.status = status.get('status', 'Unknown')
+        status_msg.repo_id = status.get('repo_id', '')
+        status_msg.local_path = status.get('local_path', '')
+        status_msg.message = status.get('message', '')
+
+        download_progress = status.get('download_progress', {})
+
+        status_msg.download_current = download_progress.get('current', 0)
+        status_msg.download_total = download_progress.get('total', 0)
+        status_msg.download_percentage = download_progress.get('percentage', 0.0)
+
+        # self.get_logger().info(f'HF API Status: {status_msg}')
+        self.hf_status_publisher.publish(status_msg)
 
     def control_hf_server_callback(self, request, response):
         try:
