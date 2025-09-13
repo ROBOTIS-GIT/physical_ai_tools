@@ -531,7 +531,7 @@ const MergeSection = ({ isEditable = true }) => {
               <span className="min-w-24 text-sm text-white font-bold bg-blue-400 py-1 px-2 rounded-full shadow-sm">
                 Output path
               </span>
-              <span className="text-sm text-blue-600">
+              <span className="text-sm text-blue-600 break-all">
                 {/* Remove trailing slash from mergeOutputPath before displaying */}
                 {(mergeOutputPath || '').replace(/\/$/, '')}/{mergeOutputFolderName}
               </span>

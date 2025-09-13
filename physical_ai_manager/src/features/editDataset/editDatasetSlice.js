@@ -34,6 +34,11 @@ const initialState = {
   uploadHuggingface: false,
   userId: '',
   hfStatus: 'Idle',
+  downloadStatus: {
+    current: 0,
+    total: 0,
+    percentage: 0.0,
+  },
 };
 
 const editDatasetSlice = createSlice({
@@ -67,6 +72,9 @@ const editDatasetSlice = createSlice({
     setHFStatus: (state, action) => {
       state.hfStatus = action.payload;
     },
+    setDownloadStatus: (state, action) => {
+      state.downloadStatus = action.payload;
+    },
   },
 });
 
@@ -80,6 +88,7 @@ export const {
   setUploadHuggingface,
   setUserId,
   setHFStatus,
+  setDownloadStatus,
 } = editDatasetSlice.actions;
 
 export default editDatasetSlice.reducer;

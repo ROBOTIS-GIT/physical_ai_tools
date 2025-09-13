@@ -37,7 +37,7 @@ import {
   setSelectedDataset,
   setCurrentLoss,
 } from '../features/training/trainingSlice';
-import { setHFStatus } from '../features/editDataset/editDatasetSlice';
+import { setHFStatus, setDownloadStatus } from '../features/editDataset/editDatasetSlice';
 import rosConnectionManager from '../utils/rosConnectionManager';
 
 export function useRosTopicSubscription() {
@@ -495,6 +495,9 @@ export function useRosTopicSubscription() {
         const repoId = msg.repo_id;
         const localPath = msg.local_path;
         const message = msg.message;
+        const downloadCurrent = msg.download_current;
+        const downloadTotal = msg.download_total;
+        const downloadPercentage = msg.download_percentage;
 
         if (status === 'Failed') {
           toast.error(message);
@@ -503,6 +506,11 @@ export function useRosTopicSubscription() {
         }
 
         dispatch(setHFStatus(status));
+        dispatch(setDownloadStatus({
+          current: downloadCurrent,
+          total: downloadTotal,
+          percentage: downloadPercentage.toFixed(2),
+        }));
       });
 
       console.log('HF status subscription established');

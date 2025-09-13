@@ -133,6 +133,7 @@ const HuggingfaceSection = ({ isEditable = true }) => {
   const dispatch = useDispatch();
   const userId = useSelector((state) => state.editDataset.userId);
   const hfStatus = useSelector((state) => state.editDataset.hfStatus);
+  const downloadStatus = useSelector((state) => state.editDataset.downloadStatus);
 
   const { controlHfServer, registerHFUser, getRegisteredHFUser } = useRosServiceCaller();
 
@@ -674,6 +675,26 @@ const HuggingfaceSection = ({ isEditable = true }) => {
                       {!isDownloading && hfStatus}
                     </span>
                   </div>
+
+                  {/* Download Progress Bar */}
+                  {isDownloading && (
+                    <div className="w-full">
+                      <div className="flex flex-row items-center justify-between mb-1">
+                        <span className="text-sm text-gray-500">
+                          {downloadStatus.current}/{downloadStatus.total}
+                        </span>
+                        <span className="text-sm text-gray-500">
+                          {downloadStatus.percentage}%
+                        </span>
+                      </div>
+                      <div className="w-full bg-gray-200 rounded-full h-2">
+                        <div 
+                          className="bg-blue-600 h-2 rounded-full transition-all duration-300 ease-out"
+                          style={{ width: `${downloadStatus.percentage}%` }}
+                        ></div>
+                      </div>
+                    </div>
+                  )}
                 </div>
               </div>
             </div>
