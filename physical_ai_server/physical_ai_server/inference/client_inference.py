@@ -134,7 +134,7 @@ def test_basic_communication(host='localhost', port=5555):
     try:
         policy_info = {
             'policy_type': 'GR00T_N1_5',
-            'policy_path': '/workspace/checkpoints/Dongkkka/ffw_gr00t_1_5_test',
+            'policy_path': '/workspace/checkpoints/ROBOTIS/gr00t_test',
             'robot_type': 'ffw_bg2'
         }
         response = client.execute_command('load_policy', policy_info)
@@ -147,8 +147,8 @@ def test_basic_communication(host='localhost', port=5555):
     try:
         start_time = time.time()
         obs = {
-            "video.cam_head": np.random.randint(0, 256, (1, 376, 672, 3), dtype=np.uint8),
-            "video.cam_head_right": np.random.randint(0, 256, (1, 376, 672, 3), dtype=np.uint8),
+            "video.cam_head": np.random.randint(0, 256, (1, 224, 224, 3), dtype=np.uint8),
+            "video.cam_head_right": np.random.randint(0, 256, (1, 224, 224, 3), dtype=np.uint8),
             "state.left_arm": np.random.rand(1, 8),
             "state.right_arm": np.random.rand(1, 8),
             "annotation.human.action.task_description": ["TEST"],
@@ -166,8 +166,8 @@ def test_basic_communication(host='localhost', port=5555):
     print("\n4. Testing get_action...")
     try:
         obs = {
-            "video.cam_head": np.random.randint(0, 256, (1, 376, 672, 3), dtype=np.uint8),
-            "video.cam_head_right": np.random.randint(0, 256, (1, 376, 672, 3), dtype=np.uint8),
+            "video.cam_head": np.random.randint(0, 256, (1, 224, 224, 3), dtype=np.uint8),
+            "video.cam_head_right": np.random.randint(0, 256, (1, 224, 224, 3), dtype=np.uint8),
             "state.left_arm": np.random.rand(1, 8),
             "state.right_arm": np.random.rand(1, 8),
             "annotation.human.action.task_description": ["TEST"],

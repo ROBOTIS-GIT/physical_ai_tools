@@ -22,6 +22,10 @@ from pathlib import Path
 import threading
 import time
 from typing import Optional
+import traceback
+import cv2
+
+import numpy as np
 
 from ament_index_python.packages import get_package_share_directory
 from physical_ai_interfaces.msg import TaskStatus, TrainingStatus
@@ -42,6 +46,7 @@ from physical_ai_interfaces.srv import (
 from physical_ai_server.communication.communicator import Communicator
 from physical_ai_server.data_processing.data_manager import DataManager
 from physical_ai_server.inference.inference_manager import InferenceManager
+from physical_ai_server.inference.client_inference import ZmqInferenceClient
 from physical_ai_server.timer.timer_manager import TimerManager
 from physical_ai_server.training.training_manager import TrainingManager
 from physical_ai_server.utils.parameter_utils import (
@@ -84,6 +89,13 @@ class PhysicalAIServer(Node):
 
         self._setup_timer_callbacks()
 
+        self.previous_data_manager_status = None
+
+        self.goal_repo_id = None
+        
+        self.zmq_client: Optional[ZmqInferenceClient] = None
+        self.remain_action = []
+
     def _init_core_components(self):
         self.communicator: Optional[Communicator] = None
         self.data_manager: Optional[DataManager] = None
@@ -122,7 +134,7 @@ class PhysicalAIServer(Node):
     def _setup_timer_callbacks(self):
         self.timer_callback_dict = {
             'collection': self._data_collection_timer_callback,
-            'inference': self._inference_timer_callback
+            'inference': self._zmq_inference_timer_callback
         }
 
     def init_ros_params(self, robot_type):
@@ -231,7 +243,7 @@ class PhysicalAIServer(Node):
         self.timer_manager = TimerManager(node=self)
         self.timer_manager.set_timer(
             timer_name=self.operation_mode,
-            timer_frequency=task_info.fps,
+            timer_frequency=10,
             callback_function=self.timer_callback_dict[self.operation_mode]
         )
         self.timer_manager.start(timer_name=self.operation_mode)
@@ -295,6 +307,45 @@ class PhysicalAIServer(Node):
 
         self.get_logger().info(f'Available robot types: {robot_type_list}')
         return robot_type_list
+
+    def process_rosbag_recording(self):
+        if self.data_manager.get_status() == 'run' and self.previous_data_manager_status != 'run':
+            self.get_logger().info(f'Starting rosbag recording, previous status: {self.previous_data_manager_status}')
+            rosbag_path = self.data_manager.get_save_rosbag_path()
+            if rosbag_path is None:
+                self.get_logger().error('Failed to get rosbag path')
+                raise RuntimeError('Failed to get rosbag path')
+            rosbag_topics = self.communicator.get_all_topics()
+
+            if self.communicator.start_rosbag_recording(
+                uri=rosbag_path,
+                topics=rosbag_topics
+            ):
+                self.get_logger().info('Started rosbag recording')
+            else:
+                self.get_logger().error('Failed to start rosbag recording')
+
+        elif self.data_manager.get_status() == 'save' and self.previous_data_manager_status == 'run':
+            self.get_logger().info('Stopping rosbag recording')
+            if self.communicator.stop_rosbag_recording():
+                self.get_logger().info('Stopped rosbag recording')
+            else:
+                self.get_logger().error('Failed to stop rosbag recording')
+        elif self.data_manager.get_status() == 'finish' and self.previous_data_manager_status != 'finish':
+            self.get_logger().info('Stopping rosbag recording')
+            if self.communicator.stop_rosbag_recording():
+                self.get_logger().info('Stopped rosbag recording')
+            else:
+                self.get_logger().error('Failed to stop rosbag recording')
+
+        elif self.data_manager.get_status() == 'reset' and self.previous_data_manager_status == 'run':
+            self.get_logger().info('Stopping rosbag recording and delete recorded bag')
+            if self.communicator.stop_and_delete_rosbag_recording():
+                self.get_logger().info('Stopped and deleted rosbag recording')
+            else:
+                self.get_logger().error('Failed to stop and delete rosbag recording')
+
+        self.previous_data_manager_status = self.data_manager.get_status()
 
     def _data_collection_timer_callback(self):
         error_msg = ''
@@ -378,6 +429,13 @@ class PhysicalAIServer(Node):
             self.timer_manager.stop(timer_name=self.operation_mode)
             return
 
+        try:
+            self.process_rosbag_recording()
+        except Exception as e:
+            error_msg = f'Error in rosbag recording: {str(e)}'
+            self.get_logger().error(traceback.format_exc())
+            self.get_logger().error(error_msg)
+
     def _inference_timer_callback(self):
         error_msg = ''
         current_status = TaskStatus()
@@ -420,14 +478,146 @@ class PhysicalAIServer(Node):
                 self.timer_manager.stop(timer_name=self.operation_mode)
                 return
 
-            action = self.inference_manager.predict(
-                images=camera_data,
-                state=follower_data,
-                task_instruction=self.task_instruction[0]
-            )
+            try:
+                action = self.inference_manager.predict(
+                    images=camera_data,
+                    state=follower_data,
+                    task_instruction=self.task_instruction[0]
+                )
+            except Exception as e:
+                self.get_logger().error(f'Inference failed, please check : {str(e)}')
+                # Stop inference on error
+                self.on_inference = False
+                current_status = self.data_manager.get_current_record_status()
+                current_status.phase = TaskStatus.READY
+                self.communicator.publish_status(status=current_status)
+                self.inference_manager.clear_policy()
+                self.timer_manager.stop(timer_name=self.operation_mode)
+                return
 
             self.get_logger().info(
                 f'Action data: {action}')
+            action_pub_msgs = self.data_manager.data_converter.tensor_array2joint_msgs(
+                action,
+                self.joint_topic_types,
+                self.joint_order
+            )
+
+            self.communicator.publish_action(
+                joint_msg_datas=action_pub_msgs
+            )
+            current_status = self.data_manager.get_current_record_status()
+            current_status.phase = TaskStatus.INFERENCING
+            self.communicator.publish_status(status=current_status)
+
+        except Exception as e:
+            self.get_logger().error(f'Inference failed, please check : {str(e)}')
+            error_msg = f'Inference failed, please check : {str(e)}'
+            self.on_recording = False
+            self.on_inference = False
+            current_status = self.data_manager.get_current_record_status()
+            current_status.phase = TaskStatus.READY
+            current_status.error = error_msg
+            self.communicator.publish_status(status=current_status)
+            self.inference_manager.clear_policy()
+            self.timer_manager.stop(timer_name=self.operation_mode)
+            return
+        
+    def _zmq_inference_timer_callback(self):
+        error_msg = ''
+        current_status = TaskStatus()
+        camera_msgs, follower_msgs, _ = self.communicator.get_latest_data()
+        if (camera_msgs is None or
+                len(camera_msgs) != len(self.params['camera_topic_list'])):
+            self.get_logger().info('Waiting for camera data...')
+            return
+        elif follower_msgs is None:
+            self.get_logger().info('Waiting for follower data...')
+            return
+
+        try:
+            camera_data, follower_data, _ = self.data_manager.convert_msgs_to_raw_datas(
+                camera_msgs,
+                follower_msgs,
+                self.total_joint_order)
+        except Exception as e:
+            error_msg = f'Failed to convert messages: {str(e)}, please check the robot type again!'
+            self.on_inference = False
+            current_status.phase = TaskStatus.READY
+            current_status.error = error_msg
+            self.communicator.publish_status(status=current_status)
+            if self.zmq_client is not None:
+                self.zmq_client.kill_server()
+                self.zmq_client = None
+            self.timer_manager.stop(timer_name=self.operation_mode)
+            return
+
+        if self.zmq_client is None:
+            self.zmq_client = ZmqInferenceClient(
+                host='192.168.6.129',
+                port=5555,
+                timeout_ms=50000
+            )
+            is_alive = self.zmq_client.ping()
+            if not is_alive:
+                self.get_logger().error('Failed opening ZMQ client')
+                return
+            self.get_logger().info('ZMQ client connected to server')
+            policy_info = {
+                'policy_type': 'GR00T_N1_5',
+                'policy_path': '/workspace/checkpoints/ROBOTIS/gr00t_test',
+                'robot_type': 'ffw_bg2'
+            }
+            response = self.zmq_client.execute_command('load_policy', policy_info)
+            self.get_logger().info(f'ZMQ load_policy response: {response}')
+
+        try:
+            if not self.on_inference:
+                self.get_logger().info('Inference mode is not active')
+                current_status = self.data_manager.get_current_record_status()
+                current_status.phase = TaskStatus.READY
+                self.communicator.publish_status(status=current_status)
+                if self.zmq_client is not None:
+                    self.zmq_client.kill_server()
+                    self.zmq_client = None
+                self.timer_manager.stop(timer_name=self.operation_mode)
+                return
+
+            try:
+                resized_cam_head = cv2.resize(camera_data['cam_head'], (224, 224))
+                resized_cam_head_right = cv2.resize(camera_data['cam_head_right'], (224, 224))
+                if len(self.remain_action) == 0:
+                    cam_head_obs = resized_cam_head[np.newaxis, ...]
+                    cam_head_right_obs = resized_cam_head_right[np.newaxis, ...]
+                    left_arm_obs = np.array(follower_data)[np.newaxis, :8]
+                    right_arm_obs = np.array(follower_data)[np.newaxis, 8:16]
+                    obs = {
+                        "video.cam_head": cam_head_obs,
+                        "video.cam_head_right": cam_head_right_obs,
+                        "state.left_arm": left_arm_obs,
+                        "state.right_arm": right_arm_obs,
+                        "annotation.human.action.task_description": [
+                            "Pick up the coffee bottles and place it into the carton"],
+                    }
+                    start_time = time.time()
+                    left_action, right_action = self.zmq_client.get_action(obs).values()
+                    end_time = time.time()
+                    self.get_logger().info(f'ZMQ inference time: {end_time - start_time:.4f} seconds')
+                    self.remain_action = np.hstack((left_action, right_action)).tolist()
+
+                action = self.remain_action.pop(0)
+                
+            except Exception as e:
+                self.get_logger().error(f'Inference failed, please check : {str(e)}')
+                # Stop inference on error
+                self.on_inference = False
+                current_status = self.data_manager.get_current_record_status()
+                current_status.phase = TaskStatus.READY
+                self.communicator.publish_status(status=current_status)
+                self.inference_manager.clear_policy()
+                self.timer_manager.stop(timer_name=self.operation_mode)
+                return
+
             action_pub_msgs = self.data_manager.data_converter.tensor_array2joint_msgs(
                 action,
                 self.joint_topic_types,
@@ -742,9 +932,17 @@ class PhysicalAIServer(Node):
         return response
 
     def get_saved_policies_callback(self, request, response):
-        saved_policy_path, saved_policy_type = InferenceManager.get_saved_policies()
-        if not saved_policy_path and not saved_policy_type:
-            self.get_logger().warning('No saved policies found')
+        try:
+            saved_policy_path, saved_policy_type = InferenceManager.get_saved_policies()
+            if not saved_policy_path and not saved_policy_type:
+                self.get_logger().warning('No saved policies found')
+                response.saved_policy_path = []
+                response.saved_policy_type = []
+            else:
+                response.saved_policy_path = saved_policy_path
+                response.saved_policy_type = saved_policy_type
+        except Exception as e:
+            self.get_logger().error(f'Error getting saved policies: {str(e)}')
             response.saved_policy_path = []
             response.saved_policy_type = []
             response.success = False
