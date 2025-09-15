@@ -457,7 +457,6 @@ class Communicator:
         return msg_types
 
     def _destroy_service_if_exists(self, service_attr_name: str):
-        """Helper method to safely destroy a service if it exists"""
         if hasattr(self, service_attr_name):
             service = getattr(self, service_attr_name)
             if service is not None:
@@ -465,7 +464,6 @@ class Communicator:
                 setattr(self, service_attr_name, None)
 
     def _destroy_publisher_if_exists(self, publisher_attr_name: str):
-        """Helper method to safely destroy a publisher if it exists"""
         if hasattr(self, publisher_attr_name):
             publisher = getattr(self, publisher_attr_name)
             if publisher is not None:
