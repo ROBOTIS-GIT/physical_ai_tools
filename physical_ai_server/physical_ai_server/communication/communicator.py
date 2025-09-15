@@ -203,12 +203,6 @@ class Communicator:
                     )
         self.node.get_logger().info('Initializing joint publishers... done')
 
-        self.publisher_names = [
-            'status_publisher',
-            'training_status_publisher',
-            'heartbeat_publisher'
-        ]
-
         self.status_publisher = self.node.create_publisher(
             TaskStatus,
             '/task/status',
@@ -227,13 +221,6 @@ class Communicator:
             self.heartbeat_qos_profile)
 
     def init_services(self):
-        self.service_names = [
-            'image_topic_list_service',
-            'file_browser_service',
-            'data_editor_service',
-            'get_dataset_info_service'
-        ]
-
         self.image_topic_list_service = self.node.create_service(
             GetImageTopicList,
             '/image/get_available_list',
@@ -495,8 +482,24 @@ class Communicator:
     def cleanup(self):
         self.node.get_logger().info('Cleaning up Communicator resources...')
 
-        # Clean up publishers
-        for publisher_name in self.publisher_names:
+        self._cleanup_publishers()
+        self._cleanup_subscribers()
+        self._cleanup_services()
+
+        # Clear message containers
+        self.camera_topic_msgs.clear()
+        self.follower_topic_msgs.clear()
+        self.leader_topic_msgs.clear()
+
+        self.node.get_logger().info('Communicator cleanup completed')
+
+    def _cleanup_publishers(self):
+        publisher_names = [
+            'status_publisher',
+            'training_status_publisher',
+            'heartbeat_publisher'
+        ]
+        for publisher_name in publisher_names:
             self._destroy_publisher_if_exists(publisher_name)
 
         # Clean up joint publishers
@@ -504,6 +507,7 @@ class Communicator:
             self.node.destroy_publisher(publisher)
         self.joint_publishers.clear()
 
+    def _cleanup_subscribers(self):
         # Clean up multi subscriber
         if hasattr(self, 'multi_subscriber') and self.multi_subscriber is not None:
             self.multi_subscriber.cleanup()
@@ -515,16 +519,15 @@ class Communicator:
             self.node.destroy_subscription(self.joystick_trigger_subscriber)
             self.joystick_trigger_subscriber = None
 
-        # Clean up services using helper method
-        for service_name in self.service_names:
+    def _cleanup_services(self):
+        service_names = [
+            'image_topic_list_service',
+            'file_browser_service',
+            'data_editor_service',
+            'get_dataset_info_service'
+        ]
+        for service_name in service_names:
             self._destroy_service_if_exists(service_name)
-
-        # Clear message containers
-        self.camera_topic_msgs.clear()
-        self.follower_topic_msgs.clear()
-        self.leader_topic_msgs.clear()
-
-        self.node.get_logger().info('Communicator cleanup completed')
 
     def heartbeat_timer_callback(self):
         heartbeat_msg = Empty()
