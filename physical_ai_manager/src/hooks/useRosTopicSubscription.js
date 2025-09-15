@@ -37,7 +37,15 @@ import {
   setSelectedDataset,
   setCurrentLoss,
 } from '../features/training/trainingSlice';
-import { setHFStatus, setDownloadStatus } from '../features/editDataset/editDatasetSlice';
+import {
+  setHFStatus,
+  setDownloadStatus,
+  setHFUserId,
+  setHFRepoIdUpload,
+  setHFRepoIdDownload,
+} from '../features/editDataset/editDatasetSlice';
+import HFStatus from '../constants/HFStatus';
+import store from '../store/store';
 import rosConnectionManager from '../utils/rosConnectionManager';
 
 export function useRosTopicSubscription() {
@@ -432,44 +440,6 @@ export function useRosTopicSubscription() {
     }
   }, [dispatch, rosbridgeUrl]);
 
-  // Manual initialization function
-  const initializeSubscriptions = useCallback(async () => {
-    if (!rosbridgeUrl) {
-      console.warn('Cannot initialize subscriptions: rosbridgeUrl is not set');
-      return;
-    }
-
-    console.log('Manually initializing ROS subscriptions...');
-
-    // Cleanup previous subscriptions before creating new ones
-    cleanup();
-
-    try {
-      await subscribeToTaskStatus();
-      await subscribeToHeartbeat();
-      await subscribeToTrainingStatus();
-      console.log('ROS subscriptions initialized successfully');
-    } catch (error) {
-      console.error('Failed to initialize ROS subscriptions:', error);
-    }
-  }, [
-    rosbridgeUrl,
-    cleanup,
-    subscribeToTaskStatus,
-    subscribeToHeartbeat,
-    subscribeToTrainingStatus,
-  ]);
-
-  // Auto-start connection and subscription (can be disabled by not calling useRosTopicSubscription)
-  useEffect(() => {
-    if (!rosbridgeUrl) return;
-
-    initializeSubscriptions();
-
-    return cleanup;
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [rosbridgeUrl]); // Only rosbridgeUrl as dependency to prevent unnecessary re-subscriptions
-
   const subscribeHFStatus = useCallback(async () => {
     try {
       const ros = await rosConnectionManager.getConnection(rosbridgeUrl);
@@ -505,12 +475,41 @@ export function useRosTopicSubscription() {
           toast.success(message);
         }
 
-        dispatch(setHFStatus(status));
-        dispatch(setDownloadStatus({
-          current: downloadCurrent,
-          total: downloadTotal,
-          percentage: downloadPercentage.toFixed(2),
-        }));
+        console.log('status:', status);
+
+        // Check the current status from the store
+        const currentStatus = store.getState().editDataset.hfStatus;
+
+        if (
+          (currentStatus === HFStatus.SUCCESS || currentStatus === HFStatus.FAILED) &&
+          status === HFStatus.IDLE
+        ) {
+          console.log('Maintaining SUCCESS status, skipping IDLE update');
+          // Skip updating the status
+        } else {
+          console.log('Updating HF status to:', status);
+          dispatch(setHFStatus(status));
+        }
+
+        dispatch(
+          setDownloadStatus({
+            current: downloadCurrent,
+            total: downloadTotal,
+            percentage: downloadPercentage.toFixed(2),
+          })
+        );
+        const userId = repoId.split('/')[0];
+        const repoName = repoId.split('/')[1];
+
+        if (userId?.trim() && repoName?.trim()) {
+          dispatch(setHFUserId(userId));
+
+          if (operation === 'upload') {
+            dispatch(setHFRepoIdUpload(repoName));
+          } else if (operation === 'download') {
+            dispatch(setHFRepoIdDownload(repoName));
+          }
+        }
       });
 
       console.log('HF status subscription established');
@@ -518,6 +517,46 @@ export function useRosTopicSubscription() {
       console.error('Failed to subscribe to HF status topic:', error);
     }
   }, [dispatch, rosbridgeUrl]);
+
+  // Manual initialization function
+  const initializeSubscriptions = useCallback(async () => {
+    if (!rosbridgeUrl) {
+      console.warn('Cannot initialize subscriptions: rosbridgeUrl is not set');
+      return;
+    }
+
+    console.log('Manually initializing ROS subscriptions...');
+
+    // Cleanup previous subscriptions before creating new ones
+    cleanup();
+
+    try {
+      await subscribeToTaskStatus();
+      await subscribeToHeartbeat();
+      await subscribeToTrainingStatus();
+      await subscribeHFStatus();
+      console.log('ROS subscriptions initialized successfully');
+    } catch (error) {
+      console.error('Failed to initialize ROS subscriptions:', error);
+    }
+  }, [
+    rosbridgeUrl,
+    cleanup,
+    subscribeToTaskStatus,
+    subscribeToHeartbeat,
+    subscribeToTrainingStatus,
+    subscribeHFStatus,
+  ]);
+
+  // Auto-start connection and subscription (can be disabled by not calling useRosTopicSubscription)
+  useEffect(() => {
+    if (!rosbridgeUrl) return;
+
+    initializeSubscriptions();
+
+    return cleanup;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [rosbridgeUrl]); // Only rosbridgeUrl as dependency to prevent unnecessary re-subscriptions
 
   return {
     connected,

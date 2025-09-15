@@ -32,7 +32,9 @@ const initialState = {
   mergeOutputFolderName: '',
   deleteEpisodeNums: [],
   uploadHuggingface: false,
-  userId: '',
+  hfUserId: '',
+  hfRepoIdUpload: '',
+  hfRepoIdDownload: '',
   hfStatus: 'Idle',
   downloadStatus: {
     current: 0,
@@ -66,8 +68,14 @@ const editDatasetSlice = createSlice({
     setUploadHuggingface: (state, action) => {
       state.uploadHuggingface = action.payload;
     },
-    setUserId: (state, action) => {
-      state.userId = action.payload;
+    setHFUserId: (state, action) => {
+      state.hfUserId = action.payload;
+    },
+    setHFRepoIdUpload: (state, action) => {
+      state.hfRepoIdUpload = action.payload;
+    },
+    setHFRepoIdDownload: (state, action) => {
+      state.hfRepoIdDownload = action.payload;
     },
     setHFStatus: (state, action) => {
       state.hfStatus = action.payload;
@@ -86,7 +94,9 @@ export const {
   setMergeOutputFolderName,
   setDeleteEpisodeNums,
   setUploadHuggingface,
-  setUserId,
+  setHFUserId,
+  setHFRepoIdUpload,
+  setHFRepoIdDownload,
   setHFStatus,
   setDownloadStatus,
 } = editDatasetSlice.actions;

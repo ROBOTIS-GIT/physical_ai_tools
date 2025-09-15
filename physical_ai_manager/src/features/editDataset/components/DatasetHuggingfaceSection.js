@@ -19,7 +19,7 @@ import clsx from 'clsx';
 import { useSelector, useDispatch } from 'react-redux';
 import toast from 'react-hot-toast';
 import { MdFolderOpen, MdOutlineFileUpload, MdOutlineFileDownload } from 'react-icons/md';
-import { setUserId } from '../editDatasetSlice';
+import { setHFUserId, setHFRepoIdUpload, setHFRepoIdDownload } from '../editDatasetSlice';
 import { useRosServiceCaller } from '../../../hooks/useRosServiceCaller';
 import FileBrowserModal from '../../../components/FileBrowserModal';
 import TokenInputPopup from '../../../components/TokenInputPopup';
@@ -129,9 +129,11 @@ const FolderBrowseButton = ({ onClick, disabled = false, ariaLabel }) => {
   );
 };
 
-const HuggingfaceSection = ({ isEditable = true }) => {
+const HuggingfaceSection = () => {
   const dispatch = useDispatch();
-  const userId = useSelector((state) => state.editDataset.userId);
+  const userId = useSelector((state) => state.editDataset.hfUserId);
+  const hfRepoIdUpload = useSelector((state) => state.editDataset.hfRepoIdUpload);
+  const hfRepoIdDownload = useSelector((state) => state.editDataset.hfRepoIdDownload);
   const hfStatus = useSelector((state) => state.editDataset.hfStatus);
   const downloadStatus = useSelector((state) => state.editDataset.downloadStatus);
 
@@ -139,8 +141,6 @@ const HuggingfaceSection = ({ isEditable = true }) => {
 
   // Local states
   const [activeSection, setActiveSection] = useState(SECTION_NAME.UPLOAD);
-  const [hfRepoIdUpload, setHfRepoIdUpload] = useState('');
-  const [hfRepoIdDownload, setHfRepoIdDownload] = useState('');
   const [hfLocalDirUpload, setHfLocalDirUpload] = useState('');
   const [isUploading, setIsUploading] = useState(false);
   const [isDownloading, setIsDownloading] = useState(false);
@@ -162,24 +162,25 @@ const HuggingfaceSection = ({ isEditable = true }) => {
   // Section availability
   const canChangeSection = !isProcessing;
 
+  const isHfStatusReady =
+    hfStatus === HFStatus.IDLE || hfStatus === HFStatus.SUCCESS || hfStatus === HFStatus.FAILED;
+
   const uploadButtonEnabled =
     !isUploading &&
     !isDownloading &&
-    isEditable &&
     hfRepoIdUpload?.trim() &&
     hfLocalDirUpload?.trim() &&
     uploadRepoValidation.isValid &&
     userId?.trim() &&
-    hfStatus === HFStatus.IDLE;
+    isHfStatusReady;
 
   const downloadButtonEnabled =
     !isUploading &&
     !isDownloading &&
-    isEditable &&
     hfRepoIdDownload?.trim() &&
     downloadRepoValidation.isValid &&
     userId?.trim() &&
-    hfStatus === HFStatus.IDLE;
+    isHfStatusReady;
   // Button variants helper function
   const getButtonVariant = (variant, isActive = true, isLoading = false) => {
     const variants = {
@@ -260,13 +261,13 @@ const HuggingfaceSection = ({ isEditable = true }) => {
 
   // Input handlers with validation
   const handleUploadRepoIdChange = (value) => {
-    setHfRepoIdUpload(value);
+    dispatch(setHFRepoIdUpload(value));
     const validation = validateHfRepoName(value.trim());
     setUploadRepoValidation(validation);
   };
 
   const handleDownloadRepoIdChange = (value) => {
-    setHfRepoIdDownload(value);
+    dispatch(setHFRepoIdDownload(value));
     const validation = validateHfRepoName(value.trim());
     setDownloadRepoValidation(validation);
   };
@@ -297,7 +298,7 @@ const HuggingfaceSection = ({ isEditable = true }) => {
         const localDir = hfLocalDirUpload.trim();
         const result = await controlHfServer('upload', repoId, 'dataset', localDir);
         console.log('Upload dataset result:', result);
-        toast.success(`Dataset upload started successfully for ${repoId}!`);
+        toast.success(`Upload started! (${repoId})`);
       } catch (error) {
         console.error('Error uploading dataset:', error);
         toast.error(`Failed to upload dataset: ${error.message}`);
@@ -325,7 +326,7 @@ const HuggingfaceSection = ({ isEditable = true }) => {
         const result = await controlHfServer('download', repoId, 'dataset');
         console.log('Download dataset result:', result);
 
-        toast.success(`Dataset download started successfully for ${repoId}!`);
+        toast.success(`Download started! (${repoId})`);
       } catch (error) {
         console.error('Error downloading dataset:', error);
         toast.error(`Failed to download dataset: ${error.message}`);
@@ -378,17 +379,21 @@ const HuggingfaceSection = ({ isEditable = true }) => {
       )} */}
 
         <div className="flex flex-col items-center justify-start gap-12">
-
           {/* User ID Selection */}
           <div className="bg-white p-5 rounded-md flex flex-col items-start justify-center gap-4 shadow-md">
             <div className="w-full flex items-center justify-start">
               <span className="text-lg font-bold">User ID Configuration</span>
             </div>
-            <div className="w-full flex flex-row gap-3">
+            <div
+              className={clsx('w-full flex flex-row gap-3', {
+                'opacity-50': isDownloading || isUploading,
+              })}
+            >
               <select
                 className={STYLES.selectUserID}
                 value={userId || ''}
-                onChange={(e) => dispatch(setUserId(e.target.value))}
+                onChange={(e) => dispatch(setHFUserId(e.target.value))}
+                disabled={isDownloading || isUploading}
               >
                 <option value="">Select User ID</option>
                 {userIdList.map((userId) => (
@@ -399,30 +404,27 @@ const HuggingfaceSection = ({ isEditable = true }) => {
               </select>
               <div className="flex gap-2">
                 <button
-                  className={clsx(
-                    STYLES.loadUserButton,
-                    getButtonVariant('blue', isEditable, isLoading)
-                  )}
+                  className={clsx(STYLES.loadUserButton, getButtonVariant('blue', true, isLoading))}
                   onClick={() => {
-                    if (isEditable && !isLoading) {
+                    if (!isLoading) {
                       handleLoadUserId();
                     }
                   }}
-                  disabled={!isEditable || isLoading}
+                  disabled={isLoading}
                 >
                   {isLoading ? 'Loading...' : 'Load'}
                 </button>
                 <button
                   className={clsx(
                     STYLES.loadUserButton,
-                    getButtonVariant('green', isEditable, isLoading)
+                    getButtonVariant('green', true, isLoading)
                   )}
                   onClick={() => {
-                    if (isEditable && !isLoading) {
+                    if (!isLoading) {
                       setShowTokenPopup(true);
                     }
                   }}
-                  disabled={!isEditable || isLoading}
+                  disabled={isLoading}
                 >
                   Change
                 </button>
@@ -469,14 +471,14 @@ const HuggingfaceSection = ({ isEditable = true }) => {
                     />
                     <input
                       className={clsx(STYLES.textInput, 'flex-1', {
-                        'bg-gray-100 cursor-not-allowed': !isEditable || isDownloading,
-                        'bg-white': isEditable && !isDownloading,
+                        'bg-gray-100 cursor-not-allowed': isDownloading,
+                        'bg-white': !isDownloading,
                       })}
                       type="text"
                       placeholder="Enter local directory path or browse"
                       value={hfLocalDirUpload || ''}
                       onChange={(e) => setHfLocalDirUpload(e.target.value)}
-                      disabled={!isEditable || isDownloading}
+                      disabled={isDownloading}
                     />
                   </div>
                 </div>
@@ -504,16 +506,15 @@ const HuggingfaceSection = ({ isEditable = true }) => {
                         className={clsx(
                           'flex-1 px-3 py-2 text-sm bg-transparent border-none outline-none',
                           {
-                            'bg-gray-100 cursor-not-allowed text-gray-500':
-                              !isEditable || isDownloading,
-                            'text-gray-900': isEditable && !isDownloading,
+                            'bg-gray-100 cursor-not-allowed text-gray-500': isUploading,
+                            'text-gray-900': !isUploading,
                           }
                         )}
                         type="text"
                         placeholder="Enter repository id"
                         value={hfRepoIdUpload || ''}
                         onChange={(e) => handleUploadRepoIdChange(e.target.value)}
-                        disabled={!isEditable || isDownloading}
+                        disabled={isUploading}
                       />
                     </div>
                     <div className="mt-1 text-xs">
@@ -550,7 +551,7 @@ const HuggingfaceSection = ({ isEditable = true }) => {
                   >
                     <div className="flex items-center justify-center gap-2">
                       <MdOutlineFileUpload className="w-6 h-6" />
-                      {isUploading ? 'Uploading...' : 'Upload'}
+                      Upload
                     </div>
                   </button>
 
@@ -606,16 +607,15 @@ const HuggingfaceSection = ({ isEditable = true }) => {
                         className={clsx(
                           'flex-1 px-3 py-2 text-sm bg-transparent border-none outline-none',
                           {
-                            'bg-gray-100 cursor-not-allowed text-gray-500':
-                              !isEditable || isUploading,
-                            'text-gray-900': isEditable && !isUploading,
+                            'bg-gray-100 cursor-not-allowed text-gray-500': isDownloading,
+                            'text-gray-900': !isDownloading,
                           }
                         )}
                         type="text"
                         placeholder="Enter repository id"
                         value={hfRepoIdDownload || ''}
                         onChange={(e) => handleDownloadRepoIdChange(e.target.value)}
-                        disabled={!isEditable || isUploading}
+                        disabled={isDownloading}
                       />
                     </div>
                     <div className="mt-1 text-xs">
@@ -638,9 +638,7 @@ const HuggingfaceSection = ({ isEditable = true }) => {
                     {/* The dataset will be saved in the following directory */}
                     <MdFolderOpen className="inline-block w-4 h-4 text-blue-700 mr-1" />
                     The dataset will be saved in{' '}
-                    <span className="font-mono text-blue-700">
-                      {DEFAULT_PATHS.DATASET_PATH}
-                    </span>
+                    <span className="font-mono text-blue-700">{DEFAULT_PATHS.DATASET_PATH}</span>
                   </span>
                 </div>
 
@@ -664,7 +662,7 @@ const HuggingfaceSection = ({ isEditable = true }) => {
                   >
                     <div className="flex items-center justify-center gap-2">
                       <MdOutlineFileDownload className="w-6 h-6" />
-                      {isDownloading ? 'Downloading...' : 'Download'}
+                      Download
                     </div>
                   </button>
 
@@ -683,12 +681,10 @@ const HuggingfaceSection = ({ isEditable = true }) => {
                         <span className="text-sm text-gray-500">
                           {downloadStatus.current}/{downloadStatus.total}
                         </span>
-                        <span className="text-sm text-gray-500">
-                          {downloadStatus.percentage}%
-                        </span>
+                        <span className="text-sm text-gray-500">{downloadStatus.percentage}%</span>
                       </div>
                       <div className="w-full bg-gray-200 rounded-full h-2">
-                        <div 
+                        <div
                           className="bg-blue-600 h-2 rounded-full transition-all duration-300 ease-out"
                           style={{ width: `${downloadStatus.percentage}%` }}
                         ></div>
