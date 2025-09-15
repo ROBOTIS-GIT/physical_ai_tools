@@ -25,7 +25,6 @@ from physical_ai_interfaces.msg import (
     BrowserItem,
     DatasetInfo,
     TaskStatus,
-    TrainingStatus
 )
 from physical_ai_interfaces.srv import (
     BrowseFile,
@@ -206,12 +205,6 @@ class Communicator:
         self.status_publisher = self.node.create_publisher(
             TaskStatus,
             '/task/status',
-            self.PUB_QOS_SIZE
-        )
-
-        self.training_status_publisher = self.node.create_publisher(
-            TrainingStatus,
-            '/training/status',
             self.PUB_QOS_SIZE
         )
 
@@ -496,7 +489,6 @@ class Communicator:
     def _cleanup_publishers(self):
         publisher_names = [
             'status_publisher',
-            'training_status_publisher',
             'heartbeat_publisher'
         ]
         for publisher_name in publisher_names:
@@ -532,9 +524,6 @@ class Communicator:
     def heartbeat_timer_callback(self):
         heartbeat_msg = Empty()
         self.heartbeat_publisher.publish(heartbeat_msg)
-
-    def publish_training_status(self, status: TrainingStatus):
-        self.training_status_publisher.publish(status)
 
     def joystick_trigger_callback(self, msg: String):
         self.node.get_logger().info(f'Received joystick trigger: {msg.data}')
