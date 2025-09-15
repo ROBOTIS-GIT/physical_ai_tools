@@ -211,8 +211,25 @@ const PolicyDownloadModal = ({ isOpen, onClose, onDownloadComplete }) => {
 
   // Input handlers with validation
   const handleRepoIdChange = (value) => {
-    setHfRepoId(value);
-    const validation = validateHfRepoName(value.trim());
+    let repo_id = '';
+
+    if (value.includes('/')) {
+      const head = value.split('/')[0];
+      const tail = value.split('/')[1];
+
+      if (userIdList.includes(head)) {
+        setUserId(head);
+        repo_id = tail;
+      } else {
+        // If the head is not in userIdList, treat the whole value as repo_id
+        repo_id = value;
+      }
+    } else {
+      repo_id = value;
+    }
+
+    setHfRepoId(repo_id);
+    const validation = validateHfRepoName(repo_id.trim());
     setRepoValidation(validation);
   };
 
@@ -425,7 +442,7 @@ const PolicyDownloadModal = ({ isOpen, onClose, onDownloadComplete }) => {
                               }
                             )}
                             type="text"
-                            placeholder="Enter repository id"
+                            placeholder="Enter repository id or username/repo"
                             value={hfRepoId || ''}
                             onChange={(e) => handleRepoIdChange(e.target.value)}
                             disabled={isDownloading}

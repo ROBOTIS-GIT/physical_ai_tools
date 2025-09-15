@@ -267,8 +267,25 @@ const HuggingfaceSection = () => {
   };
 
   const handleDownloadRepoIdChange = (value) => {
-    dispatch(setHFRepoIdDownload(value));
-    const validation = validateHfRepoName(value.trim());
+    let repo_id = ''
+
+    if (value.includes('/')) {
+      const head = value.split('/')[0];
+      const tail = value.split('/')[1];
+
+      if (userIdList.includes(head)) {
+        dispatch(setHFUserId(head));
+        repo_id = tail;
+      } else {
+        // If the head is not in userIdList, treat the whole value as repo_id
+        repo_id = value;
+      }
+    } else {
+      repo_id = value;
+    }
+
+    dispatch(setHFRepoIdDownload(repo_id));
+    const validation = validateHfRepoName(repo_id.trim());
     setDownloadRepoValidation(validation);
   };
 
