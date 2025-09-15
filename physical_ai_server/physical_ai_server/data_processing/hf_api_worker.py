@@ -307,8 +307,8 @@ class HfApiWorker:
                                 output_queue.put(('success', message))
                             else:
                                 message = (f'Failed to upload Hugging Face repo: '
-                                          f'{repo_id}, Please check the repo ID '
-                                          f'and try again.')
+                                           f'{repo_id}, Please check the repo ID '
+                                           f'and try again.')
                                 logger.error(f'❌ Upload failed: {repo_id}')
                                 output_queue.put(('error', message))
 
@@ -324,8 +324,8 @@ class HfApiWorker:
                                 output_queue.put(('success', message))
                             else:
                                 message = (f'Failed to download Hugging Face repo: '
-                                          f'{repo_id}, Please check the repo ID '
-                                          f'and try again.')
+                                           f'{repo_id}, Please check the repo ID '
+                                           f'and try again.')
                                 logger.error(f'❌ Download failed: {repo_id}')
                                 output_queue.put(('error', message))
 

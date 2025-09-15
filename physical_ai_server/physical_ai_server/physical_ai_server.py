@@ -54,7 +54,6 @@ from physical_ai_server.utils.parameter_utils import (
 
 import rclpy
 from rclpy.node import Node
-from std_msgs.msg import String
 
 
 class PhysicalAIServer(Node):
@@ -95,7 +94,7 @@ class PhysicalAIServer(Node):
         self.training_timer: Optional[TimerManager] = None
         self.inference_manager: Optional[InferenceManager] = None
         self.training_manager: Optional[TrainingManager] = None
-        
+
         # Initialize HF API Worker
         self.hf_api_worker: Optional[HfApiWorker] = None
         self.hf_status_timer: Optional[TimerManager] = None
@@ -825,20 +824,20 @@ class PhysicalAIServer(Node):
 
             if hasattr(self, '_last_hf_status') and last_status != current_status:
                 self.get_logger().info(f'HF API Status changed: {last_status} -> {current_status}')
-    
+
             self._last_hf_status = status
             # Idle status count and automatic shutdown
             if status.get('status', 'Unknown') == 'Idle':
                 self._hf_idle_count = getattr(self, '_hf_idle_count', 0) + 1
                 if self._hf_idle_count >= 5:
-                    self.get_logger().info('HF API Worker idle for 5 cycles, shutting down worker and timer.')
+                    self.get_logger().info(
+                        'HF API Worker idle for 5 cycles, shutting down worker and timer.')
                     self._cleanup_hf_api_worker()
             else:
                 self._hf_idle_count = 0
         except Exception as e:
             self.get_logger().error(f'Error in HF status timer callback: {str(e)}')
 
-    
     def _publish_hf_operation_status_msg(self, status):
         status_msg = HFOperationStatus()
         status_msg.operation = status.get('operation', 'Unknown')
@@ -853,7 +852,7 @@ class PhysicalAIServer(Node):
         status_msg.download_total = download_progress.get('total', 0)
         status_msg.download_percentage = download_progress.get('percentage', 0.0)
 
-        # self.get_logger().info(f'HF API Status: {status_msg}')
+        self.get_logger().info(f'HF API Status: {status_msg}')
         self.hf_status_publisher.publish(status_msg)
 
     def control_hf_server_callback(self, request, response):
@@ -939,11 +938,11 @@ class PhysicalAIServer(Node):
             if self.hf_status_timer is not None:
                 self.hf_status_timer.stop(timer_name='hf_status')
                 self.hf_status_timer = None
-                
+
             if self.hf_api_worker is not None:
                 self.hf_api_worker.stop()
                 self.hf_api_worker = None
-                
+
             self.get_logger().info('HF API Worker cleaned up successfully')
         except Exception as e:
             self.get_logger().error(f'Error cleaning up HF API Worker: {str(e)}')
