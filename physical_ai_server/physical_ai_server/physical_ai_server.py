@@ -852,7 +852,7 @@ class PhysicalAIServer(Node):
         status_msg.download_total = download_progress.get('total', 0)
         status_msg.download_percentage = download_progress.get('percentage', 0.0)
 
-        self.get_logger().info(f'HF API Status: {status_msg}')
+        # self.get_logger().info(f'HF API Status: {status_msg}')
         self.hf_status_publisher.publish(status_msg)
 
     def control_hf_server_callback(self, request, response):

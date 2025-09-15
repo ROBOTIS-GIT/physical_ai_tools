@@ -557,7 +557,16 @@ class DataManager:
         repo_id,
         repo_type='dataset'
     ):
-        save_path = Path.home() / '.cache/huggingface/lerobot'
+        download_path = {
+            'dataset': Path.home() / '.cache/huggingface/lerobot',
+            'model': Path.home() /'ros2_ws/src/physical_ai_tools/lerobot/outputs/train/'
+        }
+
+        save_path = download_path.get(repo_type)
+
+        if save_path is None:
+            raise ValueError(f'Invalid repo type: {repo_type}')
+
         save_dir = save_path / repo_id
 
         try:
