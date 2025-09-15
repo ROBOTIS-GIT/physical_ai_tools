@@ -509,6 +509,12 @@ class Communicator:
             self.multi_subscriber.cleanup()
             self.multi_subscriber = None
 
+        # Clean up joystick trigger subscriber
+        if hasattr(self, 'joystick_trigger_subscriber') and \
+           self.joystick_trigger_subscriber is not None:
+            self.node.destroy_subscription(self.joystick_trigger_subscriber)
+            self.joystick_trigger_subscriber = None
+
         # Clean up services using helper method
         for service_name in self.service_names:
             self._destroy_service_if_exists(service_name)
