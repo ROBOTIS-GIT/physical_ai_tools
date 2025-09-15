@@ -451,6 +451,6 @@ export function useRosTopicSubscription() {
     getPhaseName,
     resetTaskToIdle,
     subscribeToTrainingStatus,
-    initializeSubscriptions, // Manual initialization function
+    initializeSubscriptions,
   };
 }
