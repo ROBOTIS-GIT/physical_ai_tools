@@ -6,6 +6,7 @@ Changelog for package physical_ai_tools
 ------------------
 * Prevent duplicate ROS2 services when changing robot type repeatedly.
 * Added auto-reconnect subscriptions when setting robot type after physical_ai_server restart.
+* Fixed a bug in the file browser component that caused multiple calls to the browseFile service.
 * Contributors: Kiwoong Park
 
 0.6.8 (2025-08-21)
