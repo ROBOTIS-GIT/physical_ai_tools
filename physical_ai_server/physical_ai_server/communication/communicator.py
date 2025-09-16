@@ -24,13 +24,13 @@ from nav_msgs.msg import Odometry
 from physical_ai_interfaces.msg import (
     BrowserItem,
     DatasetInfo,
-    TaskStatus,
+    TaskStatus
 )
 from physical_ai_interfaces.srv import (
     BrowseFile,
     EditDataset,
     GetDatasetInfo,
-    GetImageTopicList,
+    GetImageTopicList
 )
 from physical_ai_server.communication.multi_subscriber import MultiSubscriber
 from physical_ai_server.data_processing.data_editor import DataEditor

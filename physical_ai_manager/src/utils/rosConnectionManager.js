@@ -55,7 +55,6 @@ class RosConnectionManager {
 
     // If already connected, return existing connection
     if (this.ros && this.ros.isConnected) {
-      console.log('Using existing ROS connection');
       return this.ros;
     }
 

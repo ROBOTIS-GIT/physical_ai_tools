@@ -667,15 +667,8 @@ export default function FileBrowser({
     };
 
     initializeBrowser();
-  }, [
-    initialPath,
-    homePath,
-    browseFile,
-    checkDirectoriesForTargetFile,
-    onPathChange,
-    targetFileName,
-    targetFolderName,
-  ]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [initialPath, homePath, targetFileName, targetFolderName]);
 
   const classMainContainer = clsx(
     'h-full',
