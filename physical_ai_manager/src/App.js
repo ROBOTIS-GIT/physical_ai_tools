@@ -377,17 +377,29 @@ function App() {
           style: {
             background: '#363636',
             color: '#fff',
+            maxWidth: '500px',
+            wordWrap: 'break-word',
+            whiteSpace: 'pre-wrap',
+            lineHeight: '1.4',
           },
           success: {
             duration: 3000,
             style: {
               background: '#10b981',
+              maxWidth: '500px',
+              wordWrap: 'break-word',
+              whiteSpace: 'pre-wrap',
+              lineHeight: '1.4',
             },
           },
           error: {
             duration: 6000,
             style: {
               background: '#ef4444',
+              maxWidth: '500px',
+              wordWrap: 'break-word',
+              whiteSpace: 'pre-wrap',
+              lineHeight: '1.4',
             },
           },
         }}
