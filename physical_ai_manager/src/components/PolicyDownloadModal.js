@@ -261,7 +261,7 @@ const PolicyDownloadModal = ({ isOpen, onClose, onDownloadComplete }) => {
 
       toast.success(`Policy download started successfully for ${repoId}!`);
       setDownloadedRepoId(repoId);
-      
+
       // Call the completion callback if provided
       if (onDownloadComplete) {
         onDownloadComplete(repoId);
@@ -292,7 +292,11 @@ const PolicyDownloadModal = ({ isOpen, onClose, onDownloadComplete }) => {
   useEffect(() => {
     if (hfStatus === HFStatus.DOWNLOADING && !downloadCompleted) {
       setIsDownloading(true);
-    } else if ((hfStatus === HFStatus.SUCCESS || hfStatus === HFStatus.FAILED) && !downloadCompleted && !finalStatus) {
+    } else if (
+      (hfStatus === HFStatus.SUCCESS || hfStatus === HFStatus.FAILED) &&
+      !downloadCompleted &&
+      !finalStatus
+    ) {
       // Download completed (success or failed) - only process once
       setIsDownloading(false);
       setDownloadCompleted(true);
@@ -320,7 +324,7 @@ const PolicyDownloadModal = ({ isOpen, onClose, onDownloadComplete }) => {
       {/* Modal Overlay */}
       <div className="fixed inset-0 z-50 overflow-y-auto">
         <div className="fixed inset-0 bg-black bg-opacity-50 transition-opacity" />
-        
+
         {/* Modal Container */}
         <div className="flex min-h-full items-center justify-center p-4">
           <div className="relative bg-white rounded-lg shadow-xl max-w-2xl w-full max-h-[90vh] flex flex-col">
@@ -343,9 +347,22 @@ const PolicyDownloadModal = ({ isOpen, onClose, onDownloadComplete }) => {
 
             {/* Modal Content */}
             <div className="flex-1 p-6 overflow-y-auto">
-              <div className="space-y-6">
+              {/* Download Policy Section Header */}
+              <div className="w-full flex flex-col items-start justify-start gap-2 bg-gray-50 border border-gray-200 p-3 mb-2 rounded-md">
+                <div className="w-full flex items-center rounded-md font-medium gap-2">
+                  <MdOutlineFileDownload className="text-lg text-blue-600" />
+                  Download Policy
+                </div>
+                <div className="text-sm text-gray-600">
+                  <div className="mb-1">
+                    Downloads policy model from Hugging Face hub to local directory
+                  </div>
+                </div>
+              </div>
+
+              <div className="space-y-3">
                 {/* User ID Selection */}
-                <div className="bg-white p-5 rounded-md flex flex-col items-start justify-center gap-4 shadow-md">
+                <div className="bg-white p-4 rounded-md flex flex-col items-start justify-center gap-4 shadow-md">
                   <div className="w-full flex items-center justify-start">
                     <span className="text-lg font-bold">User ID Configuration</span>
                   </div>
@@ -401,19 +418,7 @@ const PolicyDownloadModal = ({ isOpen, onClose, onDownloadComplete }) => {
                 </div>
 
                 {/* Repository ID Input */}
-                <div className="w-full bg-white p-5 rounded-md flex flex-col items-start justify-center gap-2 shadow-md">
-                  <div className="w-full flex flex-col items-start justify-start gap-2 bg-gray-50 border border-gray-200 p-3 rounded-md">
-                    <div className="w-full flex items-center rounded-md font-medium gap-2">
-                      <MdOutlineFileDownload className="text-lg text-blue-600" />
-                      Download Policy
-                    </div>
-                    <div className="text-sm text-gray-600">
-                      <div className="mb-1">
-                        Downloads policy model from Hugging Face hub to local cache directory
-                      </div>
-                    </div>
-                  </div>
-
+                <div className="w-full bg-white p-4 rounded-md flex flex-col items-start justify-center gap-2 shadow-md">
                   <div className="w-full flex flex-col gap-3">
                     <div className="w-full flex flex-col gap-2">
                       <span className="text-lg font-bold">Repository ID</span>
@@ -501,7 +506,8 @@ const PolicyDownloadModal = ({ isOpen, onClose, onDownloadComplete }) => {
                       <div className="flex flex-row items-center justify-start">
                         <span className="text-sm text-gray-500">
                           {isDownloading && '⏳ Downloading...'}
-                          {!isDownloading && hfStatus}                        </span>
+                          {!isDownloading && hfStatus}{' '}
+                        </span>
                       </div>
 
                       {/* Download Progress Bar */}
@@ -511,7 +517,9 @@ const PolicyDownloadModal = ({ isOpen, onClose, onDownloadComplete }) => {
                             <span className="text-sm text-gray-500">
                               {downloadStatus.current}/{downloadStatus.total}
                             </span>
-                            <span className="text-sm text-gray-500">{downloadStatus.percentage}%</span>
+                            <span className="text-sm text-gray-500">
+                              {downloadStatus.percentage}%
+                            </span>
                           </div>
                           <div className="w-full bg-gray-200 rounded-full h-2">
                             <div
@@ -531,14 +539,13 @@ const PolicyDownloadModal = ({ isOpen, onClose, onDownloadComplete }) => {
             <div className="flex items-center justify-end gap-3 px-6 py-4 border-t border-gray-200">
               <button
                 onClick={handleFinish}
-                className={clsx(
-                  'px-4 py-2 text-sm font-medium rounded-md transition-colors',
-                  {
-                    'bg-green-500 text-white hover:bg-green-600': downloadCompleted && finalStatus === HFStatus.SUCCESS,
-                    'bg-gray-500 text-white hover:bg-gray-600': downloadCompleted && finalStatus === HFStatus.FAILED,
-                    'bg-gray-300 text-gray-500 cursor-not-allowed': !downloadCompleted,
-                  }
-                )}
+                className={clsx('px-4 py-2 text-sm font-medium rounded-md transition-colors', {
+                  'bg-green-500 text-white hover:bg-green-600':
+                    downloadCompleted && finalStatus === HFStatus.SUCCESS,
+                  'bg-gray-500 text-white hover:bg-gray-600':
+                    downloadCompleted && finalStatus === HFStatus.FAILED,
+                  'bg-gray-300 text-gray-500 cursor-not-allowed': !downloadCompleted,
+                })}
                 disabled={!downloadCompleted}
               >
                 Finish
