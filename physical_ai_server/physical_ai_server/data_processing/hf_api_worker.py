@@ -150,22 +150,24 @@ class HfApiWorker:
             result['status'] = 'Idle'
             return result
 
-        # Check for progress updates from worker process
-        self.current_progress = self.get_progress_from_progress_queue()
-        current = self.current_progress.get('current', 0)
-        total = self.current_progress.get('total', 0)
-        percentage = self.current_progress.get('percentage', 0.0)
-        result['download_progress']['current'] = current
-        result['download_progress']['total'] = total
-        result['download_progress']['percentage'] = percentage
-
-        self.logger.info(f'Download {current}/{total} ({percentage}%)')
-
         try:
             if self.current_task:
                 mode = self.current_task.get('mode', 'Processing')
                 result['repo_id'] = self.current_task.get('repo_id', '')
                 result['local_path'] = self.current_task.get('local_path', '')
+
+            # Check for download progress
+            if mode == 'download':
+                # Check for progress updates from worker process
+                self.current_progress = self.get_progress_from_progress_queue()
+                current = self.current_progress.get('current', 0)
+                total = self.current_progress.get('total', 0)
+                percentage = self.current_progress.get('percentage', 0.0)
+                result['download_progress']['current'] = current
+                result['download_progress']['total'] = total
+                result['download_progress']['percentage'] = percentage
+
+                self.logger.info(f'Download {current}/{total} ({percentage}%)')
 
             # Check for task result
             task_result = self.get_result(block=False, timeout=0.1)
