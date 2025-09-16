@@ -621,15 +621,46 @@ export default function FileBrowser({
   useEffect(() => {
     const initializeBrowser = async () => {
       const targetPath = initialPath || homePath;
-      if (targetPath) {
-        await browsePath(targetPath, 'browse');
-      } else {
-        await browsePath('', 'browse');
+      setLoading(true);
+      setError(null);
+      setSelectedItem(null);
+
+      try {
+        const targetFiles = targetFileName ? targetFileName : null;
+        const targetFolders = targetFolderName ? targetFolderName : null;
+        const result = await browseFile('browse', targetPath || '', '', targetFiles, targetFolders);
+
+        if (result.success) {
+          setCurrentPath(result.current_path);
+          setParentPath(result.parent_path);
+          setItems(result.items || []);
+
+          if (onPathChange) {
+            onPathChange(result.current_path);
+          }
+
+          if (targetFileName && result.items) {
+            checkDirectoriesForTargetFile(result.items);
+          } else if (targetFolderName && result.items) {
+            checkDirectoriesForTargetFile(result.items);
+          } else if (!targetFileName && !targetFolderName) {
+            setDirectoriesWithTarget(new Set());
+          }
+        } else {
+          setError(result.message || 'Failed to browse directory');
+          toast.error(result.message || 'Failed to browse directory');
+        }
+      } catch (err) {
+        const errorMessage = err.message || 'Failed to browse directory';
+        setError(errorMessage);
+        toast.error(errorMessage);
+      } finally {
+        setLoading(false);
       }
     };
 
     initializeBrowser();
-  }, [initialPath, homePath, browsePath]);
+  }, [initialPath, homePath]);
 
   const classMainContainer = clsx(
     'h-full',
