@@ -608,6 +608,7 @@ class DataManager:
         try:
             # Verify authentication first
             api = HfApi()
+
             try:
                 user_info = api.whoami()
                 print(f'Authenticated as: {user_info["name"]}')
@@ -615,7 +616,6 @@ class DataManager:
                 print(f'Authentication failed: {auth_e}')
                 print('Please make sure you are authenticated with HuggingFace')
                 return False
-
             # Create repository first
             print(f'Creating HuggingFace repository: {repo_id}')
             url = api.create_repo(
@@ -634,6 +634,16 @@ class DataManager:
                 repo_type=repo_type
             )
             print(f'Upload completed successfully for {repo_id}')
+
+            # Create tag after successful upload
+            try:
+                print(f'Creating tag for {repo_id} ({repo_type})')
+                api.create_tag(repo_id=repo_id, tag='v2.1', repo_type=repo_type)
+                print(f'Tag "v2.1" created successfully for {repo_id}')
+            except Exception as e:
+                print(f'Warning: Failed to create tag for {repo_id} ({repo_type}): {e}')
+                # Don't fail the entire upload just because tag creation failed
+
             return True
         except Exception as e:
             print(f'Error Uploading HuggingFace repo: {e}')
