@@ -20,6 +20,8 @@ from dataclasses import dataclass
 from io import BytesIO
 from typing import Callable
 import time
+import threading
+import uuid
 
 import torch
 import zmq
@@ -37,11 +39,18 @@ class ZmqInferenceServer:
         self.socket.bind(f'tcp://{server_address}:{port}')
         self._callback_group = {}
         self.policy = None
+        
+        # Async inference management
+        self.inference_tasks = {}  # task_id -> {status, result, thread}
+        self.inference_lock = threading.Lock()
 
         self.add_callback(name='ping', callback=self._ping_callback)
         self.add_callback(name='kill', callback=self._kill_server_callback)
         self.add_callback(name='load_policy', callback=self._load_policy_callback)
         self.add_callback(name='unload_policy', callback=self._unload_policy_callback)
+        self.add_callback(name='start_inference', callback=self._start_inference_callback)
+        self.add_callback(name='check_inference', callback=self._check_inference_callback)
+        self.add_callback(name='get_inference_result', callback=self._get_inference_result_callback)
 
     def add_callback(
             self,
@@ -110,7 +119,118 @@ class ZmqInferenceServer:
         self.policy = None
         if 'get_action' in self._callback_group:
             del self._callback_group['get_action']
+        
+        # Clear all pending inference tasks
+        with self.inference_lock:
+            self.inference_tasks.clear()
+            
         return {'status': 'ok', 'message': 'Policy unloaded successfully'}
+
+    def _start_inference_callback(self, data: dict) -> dict:
+        """Start async inference and return task ID immediately"""
+        if self.policy is None:
+            return {
+                'status': 'error',
+                'message': 'No policy loaded'
+            }
+        
+        # Generate unique task ID
+        task_id = str(uuid.uuid4())
+        
+        # Create task entry
+        with self.inference_lock:
+            self.inference_tasks[task_id] = {
+                'status': 'processing',
+                'result': None,
+                'thread': None
+            }
+        
+        # Start inference in background thread
+        def run_inference():
+            try:
+                result = self.policy.get_action(data)
+                with self.inference_lock:
+                    if task_id in self.inference_tasks:
+                        self.inference_tasks[task_id]['status'] = 'completed'
+                        self.inference_tasks[task_id]['result'] = result
+            except Exception as e:
+                with self.inference_lock:
+                    if task_id in self.inference_tasks:
+                        self.inference_tasks[task_id]['status'] = 'error'
+                        self.inference_tasks[task_id]['result'] = {'error': str(e)}
+        
+        thread = threading.Thread(target=run_inference)
+        thread.daemon = True
+        
+        with self.inference_lock:
+            self.inference_tasks[task_id]['thread'] = thread
+        
+        thread.start()
+        
+        return {
+            'status': 'ok',
+            'task_id': task_id,
+            'message': 'Inference started'
+        }
+
+    def _check_inference_callback(self, data: dict) -> dict:
+        """Check if inference task is completed without heavy data transfer"""
+        task_id = data.get('task_id')
+        if not task_id:
+            return {
+                'status': 'error',
+                'message': 'task_id required'
+            }
+        
+        with self.inference_lock:
+            if task_id not in self.inference_tasks:
+                return {
+                    'status': 'error',
+                    'message': 'Task not found'
+                }
+            
+            task_status = self.inference_tasks[task_id]['status']
+            
+        return {
+            'status': 'ok',
+            'task_status': task_status,
+            'is_ready': task_status in ['completed', 'error']
+        }
+
+    def _get_inference_result_callback(self, data: dict) -> dict:
+        """Get inference result and clean up task"""
+        task_id = data.get('task_id')
+        if not task_id:
+            return {
+                'status': 'error',
+                'message': 'task_id required'
+            }
+        
+        with self.inference_lock:
+            if task_id not in self.inference_tasks:
+                return {
+                    'status': 'error',
+                    'message': 'Task not found'
+                }
+            
+            task = self.inference_tasks[task_id]
+            if task['status'] == 'processing':
+                return {
+                    'status': 'error',
+                    'message': 'Inference still processing'
+                }
+            
+            result = task['result']
+            # Clean up completed task
+            del self.inference_tasks[task_id]
+            
+        if task['status'] == 'error':
+            return {
+                'status': 'error',
+                'message': f"Inference failed: {result.get('error', 'Unknown error')}"
+            }
+        
+        return result
 
     def run(self):
         addr = self.socket.getsockopt_string(zmq.LAST_ENDPOINT)

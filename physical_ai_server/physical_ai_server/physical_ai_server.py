@@ -95,6 +95,7 @@ class PhysicalAIServer(Node):
         
         self.zmq_client: Optional[ZmqInferenceClient] = None
         self.remain_action = []
+        self.wait_inference = False
 
     def _init_core_components(self):
         self.communicator: Optional[Communicator] = None
@@ -585,27 +586,52 @@ class PhysicalAIServer(Node):
 
             try:
                 resized_cam_head = cv2.resize(camera_data['cam_head'], (224, 224))
-                resized_cam_head_right = cv2.resize(camera_data['cam_head_right'], (224, 224))
-                if len(self.remain_action) == 0:
+                # resized_cam_head_right = cv2.resize(camera_data['cam_head_right'], (224, 224))
+                
+                # Check if we need to start a new inference
+                if len(self.remain_action) < 3 and not self.wait_inference:
                     cam_head_obs = resized_cam_head[np.newaxis, ...]
-                    cam_head_right_obs = resized_cam_head_right[np.newaxis, ...]
+                    # cam_head_right_obs = resized_cam_head_right[np.newaxis, ...]
                     left_arm_obs = np.array(follower_data)[np.newaxis, :8]
                     right_arm_obs = np.array(follower_data)[np.newaxis, 8:16]
                     obs = {
                         "video.cam_head": cam_head_obs,
-                        "video.cam_head_right": cam_head_right_obs,
+                        # "video.cam_head_right": cam_head_right_obs,
                         "state.left_arm": left_arm_obs,
                         "state.right_arm": right_arm_obs,
                         "annotation.human.action.task_description": [
                             "Pick up the coffee bottles and place it into the carton"],
                     }
-                    start_time = time.time()
-                    left_action, right_action = self.zmq_client.get_action(obs).values()
-                    end_time = time.time()
-                    self.get_logger().info(f'ZMQ inference time: {end_time - start_time:.4f} seconds')
-                    self.remain_action = np.hstack((left_action, right_action)).tolist()
+                    
+                    # Start async inference
+                    try:
+                        task_id = self.zmq_client.start_inference(obs)
+                        self.wait_inference = True
+                        self.get_logger().info(f'Started inference task: {task_id}')
+                    except Exception as e:
+                        self.get_logger().error(f'Failed to start inference: {str(e)}')
 
-                action = self.remain_action.pop(0)
+                # Check if inference is ready
+                if self.wait_inference and self.zmq_client.has_pending_inference():
+                    if self.zmq_client.check_inference_ready():
+                        start_time = time.time()
+                        try:
+                            result = self.zmq_client.get_inference_result()
+                            left_action, right_action = result.values()
+                            end_time = time.time()
+                            self.get_logger().info(f'ZMQ inference completed in: {end_time - start_time:.4f} seconds')
+                            self.remain_action = np.hstack((left_action, right_action)).tolist()
+                            self.wait_inference = False
+                        except Exception as e:
+                            self.get_logger().error(f'Failed to get inference result: {str(e)}')
+                            self.wait_inference = False
+
+                # Use action if available
+                if self.remain_action:
+                    action = self.remain_action.pop(0)
+                else:
+                    # No action available, skip this cycle
+                    return
                 
             except Exception as e:
                 self.get_logger().error(f'Inference failed, please check : {str(e)}')
@@ -614,7 +640,9 @@ class PhysicalAIServer(Node):
                 current_status = self.data_manager.get_current_record_status()
                 current_status.phase = TaskStatus.READY
                 self.communicator.publish_status(status=current_status)
-                self.inference_manager.clear_policy()
+                if self.zmq_client is not None:
+                    self.zmq_client.kill_server()
+                    self.zmq_client = None
                 self.timer_manager.stop(timer_name=self.operation_mode)
                 return
 
@@ -640,7 +668,9 @@ class PhysicalAIServer(Node):
             current_status.phase = TaskStatus.READY
             current_status.error = error_msg
             self.communicator.publish_status(status=current_status)
-            self.inference_manager.clear_policy()
+            if self.zmq_client is not None:
+                self.zmq_client.kill_server()
+                self.zmq_client = None
             self.timer_manager.stop(timer_name=self.operation_mode)
             return
 

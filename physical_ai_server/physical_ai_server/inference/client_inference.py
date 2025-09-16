@@ -35,6 +35,7 @@ class ZmqInferenceClient:
         self.host = host
         self.port = port
         self.timeout_ms = timeout_ms
+        self.current_task_id = None
         self._init_socket()
 
     def _init_socket(self):
@@ -92,6 +93,47 @@ class ZmqInferenceClient:
 
     def get_action(self, observations: Dict[str, Any]) -> Dict[str, Any]:
         return self.execute_command('get_action', observations)
+
+    def start_inference(self, observations: Dict[str, Any]) -> str:
+        """Start async inference and return task ID"""
+        response = self.execute_command('start_inference', observations)
+        if response.get('status') == 'ok':
+            self.current_task_id = response.get('task_id')
+            return self.current_task_id
+        else:
+            raise RuntimeError(f"Failed to start inference: {response.get('message')}")
+
+    def check_inference_ready(self, task_id: str = None) -> bool:
+        """Check if inference is ready (lightweight check)"""
+        if task_id is None:
+            task_id = self.current_task_id
+        if task_id is None:
+            return False
+            
+        try:
+            response = self.execute_command('check_inference', {'task_id': task_id})
+            return response.get('is_ready', False)
+        except Exception:
+            return False
+
+    def get_inference_result(self, task_id: str = None) -> Dict[str, Any]:
+        """Get inference result and clean up task"""
+        if task_id is None:
+            task_id = self.current_task_id
+        if task_id is None:
+            raise RuntimeError("No task ID provided")
+            
+        result = self.execute_command('get_inference_result', {'task_id': task_id})
+        
+        # Clear current task if this was the current one
+        if task_id == self.current_task_id:
+            self.current_task_id = None
+            
+        return result
+
+    def has_pending_inference(self) -> bool:
+        """Check if there's a pending inference task"""
+        return self.current_task_id is not None
 
     def load_policy(
             self,
