@@ -14,7 +14,7 @@
 //
 // Author: Kiwoong Park
 
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useState, useRef } from 'react';
 import clsx from 'clsx';
 import toast from 'react-hot-toast';
 import {
@@ -481,6 +481,7 @@ export default function FileBrowser({
   allowFileSelect = true,
 }) {
   const { browseFile } = useRosServiceCaller();
+  const isInitializedRef = useRef(false);
 
   const [currentPath, setCurrentPath] = useState(initialPath);
   const [parentPath, setParentPath] = useState('');
@@ -619,6 +620,12 @@ export default function FileBrowser({
   const filteredItems = filterItems(items, targetFileName, fileFilter);
 
   useEffect(() => {
+    // Prevent multiple initializations
+    if (isInitializedRef.current) {
+      return;
+    }
+    isInitializedRef.current = true;
+
     const initializeBrowser = async () => {
       const targetPath = initialPath || homePath;
       setLoading(true);
@@ -660,7 +667,15 @@ export default function FileBrowser({
     };
 
     initializeBrowser();
-  }, [initialPath, homePath]);
+  }, [
+    initialPath,
+    homePath,
+    browseFile,
+    checkDirectoriesForTargetFile,
+    onPathChange,
+    targetFileName,
+    targetFolderName,
+  ]);
 
   const classMainContainer = clsx(
     'h-full',
