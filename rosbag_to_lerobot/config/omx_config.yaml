@@ -1,13 +1,18 @@
 rosbag_to_lerobot_converter:
   ros__parameters:
     # Basic conversion parameters
+    # Support both single directory (string) and multiple directories (list)
     rosbag_dir: '/workspace/physical_ai_server/test/omx_pickcoffeepat9'
+    # rosbag_dir: ['/path/to/dir1', '/path/to/dir2']  # Example for multiple directories
     output_repo_id: 'test/omx_pickcoffeepat9_converted'
     task_name: 'pick_coffee_pat9'
     fps: 10
     use_videos: true
     robot_type: 'mobile_robot'
     use_optimized_save_mode: true
+    # Map from rosbag directory path to list of episode indices to skip
+    skip_episodes:
+      '/workspace/physical_ai_server/test/omx_pickcoffeepat9': []
 
     # Camera configuration
     camera_topics:

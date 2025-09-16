@@ -1,13 +1,30 @@
 rosbag_to_lerobot_converter:
   ros__parameters:
     # Basic conversion parameters
-    rosbag_dir: '/workspace/physical_ai_server/ROBOTIS/ffw_bg2_rev4_PickMultiCoffee_Env3_Task1'
-    output_repo_id: 'ROBOTIS/ffw_bg2_rev4_PickMultiCoffee_Env3_Task1_converted'
-    task_name: 'ffw_bg2_rev4_PickMultiCoffee_Env3_Task1'
+    # Support both single directory (string) and multiple directories (list)
+    rosbag_dir: 
+    - '/workspace/physical_ai_server/ROBOTIS/ffw_bg2_rev4_PickMultiCoffee_Env3_Task2'
+    - '/workspace/physical_ai_server/ROBOTIS/ffw_bg2_rev4_PickMultiCoffee_Env3_Task3'
+    - '/workspace/physical_ai_server/ROBOTIS/ffw_bg2_rev4_PickMultiCoffee_Env3_Task4'
+    - '/workspace/physical_ai_server/ROBOTIS/ffw_bg2_rev4_PickMultiCoffee_Env3_Task5'
+    - '/workspace/physical_ai_server/ROBOTIS/ffw_bg2_rev4_PickMultiCoffee_Env4_Task1_2'
+    - '/workspace/physical_ai_server/ROBOTIS/ffw_bg2_rev4_PickMultiCoffee_Env4_Task1_3'
+    - '/workspace/physical_ai_server/ROBOTIS/ffw_bg2_rev4_PickMultiCoffee_Env4_Task1_4'
+    output_repo_id: 'ROBOTIS/ffw_bg2_rev4_PickMultiCoffee_250904_1_rosbag'
+    task_name: 'Pick up the coffee and place it into the carton'
     fps: 10
     use_videos: true
     robot_type: 'ffw_arm_only'
     use_optimized_save_mode: true
+    # Map from rosbag directory path to list of episode indices to skip
+    skip_episodes:
+      '/workspace/physical_ai_server/ROBOTIS/ffw_bg2_rev4_PickMultiCoffee_Env3_Task2': []
+      '/workspace/physical_ai_server/ROBOTIS/ffw_bg2_rev4_PickMultiCoffee_Env3_Task3': []
+      '/workspace/physical_ai_server/ROBOTIS/ffw_bg2_rev4_PickMultiCoffee_Env3_Task4': [0, 12]
+      '/workspace/physical_ai_server/ROBOTIS/ffw_bg2_rev4_PickMultiCoffee_Env3_Task5': []
+      '/workspace/physical_ai_server/ROBOTIS/ffw_bg2_rev4_PickMultiCoffee_Env4_Task1_2': []
+      '/workspace/physical_ai_server/ROBOTIS/ffw_bg2_rev4_PickMultiCoffee_Env4_Task1_3': [21, 22, 23, 24, 25, 31]
+      '/workspace/physical_ai_server/ROBOTIS/ffw_bg2_rev4_PickMultiCoffee_Env4_Task1_4': []
 
     # Camera configuration
     camera_topics:
