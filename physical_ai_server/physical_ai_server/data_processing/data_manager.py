@@ -484,7 +484,10 @@ class DataManager:
 
     def _upload_dataset(self, tags, private=False):
         try:
-            self._lerobot_dataset.push_to_hub(tags=tags, private=private)
+            self._lerobot_dataset.push_to_hub(
+                tags=tags,
+                private=private,
+                upload_large_folder=True)
         except Exception as e:
             print(f'Error uploading dataset: {e}')
 
