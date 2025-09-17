@@ -43,6 +43,7 @@ import {
   setHFUserId,
   setHFRepoIdUpload,
   setHFRepoIdDownload,
+  setUploadStatus,
 } from '../features/editDataset/editDatasetSlice';
 import HFStatus from '../constants/HFStatus';
 import store from '../store/store';
@@ -114,24 +115,23 @@ export function useRosTopicSubscription() {
     [initializeAudioContext]
   );
 
+  // Helper function to unsubscribe from a topic
+  const unsubscribeFromTopic = useCallback((topicRef, topicName) => {
+    if (topicRef.current) {
+      topicRef.current.unsubscribe();
+      topicRef.current = null;
+      console.log(`${topicName} topic unsubscribed`);
+    }
+  }, []);
+
   const cleanup = useCallback(() => {
     console.log('Starting ROS subscriptions cleanup...');
 
-    if (taskStatusTopicRef.current) {
-      taskStatusTopicRef.current.unsubscribe();
-      taskStatusTopicRef.current = null;
-      console.log('Task status topic unsubscribed');
-    }
-    if (heartbeatTopicRef.current) {
-      heartbeatTopicRef.current.unsubscribe();
-      heartbeatTopicRef.current = null;
-      console.log('Heartbeat topic unsubscribed');
-    }
-    if (trainingStatusTopicRef.current) {
-      trainingStatusTopicRef.current.unsubscribe();
-      trainingStatusTopicRef.current = null;
-      console.log('Training status topic unsubscribed');
-    }
+    // Unsubscribe from all topics
+    unsubscribeFromTopic(taskStatusTopicRef, 'Task status');
+    unsubscribeFromTopic(heartbeatTopicRef, 'Heartbeat');
+    unsubscribeFromTopic(trainingStatusTopicRef, 'Training status');
+    unsubscribeFromTopic(hfStatusTopicRef, 'HF status');
 
     // Reset previous phase tracking
     previousPhaseRef.current = null;
@@ -144,7 +144,7 @@ export function useRosTopicSubscription() {
     setConnected(false);
     dispatch(setHeartbeatStatus('disconnected'));
     console.log('ROS task status cleanup completed');
-  }, [dispatch]);
+  }, [dispatch, unsubscribeFromTopic]);
 
   useEffect(() => {
     const enableAudioOnUserGesture = () => {
@@ -465,9 +465,9 @@ export function useRosTopicSubscription() {
         const repoId = msg.repo_id;
         const localPath = msg.local_path;
         const message = msg.message;
-        const downloadCurrent = msg.download_current;
-        const downloadTotal = msg.download_total;
-        const downloadPercentage = msg.download_percentage;
+        const progressCurrent = msg.progress_current;
+        const progressTotal = msg.progress_total;
+        const progressPercentage = msg.progress_percentage;
 
         if (status === 'Failed') {
           toast.error(message);
@@ -491,13 +491,23 @@ export function useRosTopicSubscription() {
           dispatch(setHFStatus(status));
         }
 
-        dispatch(
-          setDownloadStatus({
-            current: downloadCurrent,
-            total: downloadTotal,
-            percentage: downloadPercentage.toFixed(2),
-          })
-        );
+        if (operation === 'upload') {
+          dispatch(
+            setUploadStatus({
+              current: progressCurrent,
+              total: progressTotal,
+              percentage: progressPercentage.toFixed(2),
+            })
+          );
+        } else if (operation === 'download') {
+          dispatch(
+            setDownloadStatus({
+              current: progressCurrent,
+              total: progressTotal,
+              percentage: progressPercentage.toFixed(2),
+            })
+          );
+        }
         const userId = repoId.split('/')[0];
         const repoName = repoId.split('/')[1];
 

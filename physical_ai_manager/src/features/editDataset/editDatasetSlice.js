@@ -36,6 +36,11 @@ const initialState = {
   hfRepoIdUpload: '',
   hfRepoIdDownload: '',
   hfStatus: 'Idle',
+  uploadStatus: {
+    current: 0,
+    total: 0,
+    percentage: 0.0,
+  },
   downloadStatus: {
     current: 0,
     total: 0,
@@ -80,6 +85,9 @@ const editDatasetSlice = createSlice({
     setHFStatus: (state, action) => {
       state.hfStatus = action.payload;
     },
+    setUploadStatus: (state, action) => {
+      state.uploadStatus = action.payload;
+    },
     setDownloadStatus: (state, action) => {
       state.downloadStatus = action.payload;
     },
@@ -98,6 +106,7 @@ export const {
   setHFRepoIdUpload,
   setHFRepoIdDownload,
   setHFStatus,
+  setUploadStatus,
   setDownloadStatus,
 } = editDatasetSlice.actions;
 

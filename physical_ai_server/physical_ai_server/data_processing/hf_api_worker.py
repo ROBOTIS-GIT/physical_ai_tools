@@ -131,7 +131,7 @@ class HfApiWorker:
             'repo_id': '',
             'local_path': '',
             'message': '',
-            'download_progress': {
+            'progress': {
                 'current': 0,
                 'total': 0,
                 'percentage': 0.0,
@@ -157,17 +157,17 @@ class HfApiWorker:
                 result['local_path'] = self.current_task.get('local_path', '')
 
             # Check for download progress
-            if mode == 'download':
+            if mode == 'download' or mode == 'upload':
                 # Check for progress updates from worker process
                 self.current_progress = self.get_progress_from_progress_queue()
                 current = self.current_progress.get('current', 0)
                 total = self.current_progress.get('total', 0)
                 percentage = self.current_progress.get('percentage', 0.0)
-                result['download_progress']['current'] = current
-                result['download_progress']['total'] = total
-                result['download_progress']['percentage'] = percentage
+                result['progress']['current'] = current
+                result['progress']['total'] = total
+                result['progress']['percentage'] = percentage
 
-                self.logger.info(f'Download {current}/{total} ({percentage}%)')
+                self.logger.info(f'{mode.capitalize()} {current}/{total} ({percentage}%)')
 
             # Check for task result
             task_result = self.get_result(block=False, timeout=0.1)
@@ -233,7 +233,7 @@ class HfApiWorker:
         return self.is_processing
 
     def get_progress_from_progress_queue(self):
-        """Get the latest progress information from worker process and clear queue"""
+        """Get the latest progress information from worker process and clear queue."""
         latest_progress = None
         try:
             # Drain the queue and keep only the latest progress data

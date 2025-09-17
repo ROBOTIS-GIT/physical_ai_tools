@@ -846,11 +846,11 @@ class PhysicalAIServer(Node):
         status_msg.local_path = status.get('local_path', '')
         status_msg.message = status.get('message', '')
 
-        download_progress = status.get('download_progress', {})
+        progress_progress = status.get('progress', {})
 
-        status_msg.download_current = download_progress.get('current', 0)
-        status_msg.download_total = download_progress.get('total', 0)
-        status_msg.download_percentage = download_progress.get('percentage', 0.0)
+        status_msg.progress_current = progress_progress.get('current', 0)
+        status_msg.progress_total = progress_progress.get('total', 0)
+        status_msg.progress_percentage = progress_progress.get('percentage', 0.0)
 
         # self.get_logger().info(f'HF API Status: {status_msg}')
         self.hf_status_publisher.publish(status_msg)

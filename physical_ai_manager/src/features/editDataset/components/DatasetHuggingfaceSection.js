@@ -136,6 +136,7 @@ const HuggingfaceSection = () => {
   const hfRepoIdDownload = useSelector((state) => state.editDataset.hfRepoIdDownload);
   const hfStatus = useSelector((state) => state.editDataset.hfStatus);
   const downloadStatus = useSelector((state) => state.editDataset.downloadStatus);
+  const uploadStatus = useSelector((state) => state.editDataset.uploadStatus);
 
   const { controlHfServer, registerHFUser, getRegisteredHFUser } = useRosServiceCaller();
 
@@ -267,7 +268,7 @@ const HuggingfaceSection = () => {
   };
 
   const handleDownloadRepoIdChange = (value) => {
-    let repo_id = ''
+    let repo_id = '';
 
     if (value.includes('/')) {
       const head = value.split('/')[0];
@@ -379,22 +380,6 @@ const HuggingfaceSection = () => {
       </div>
 
       <div className="w-full flex flex-row items-start justify-start gap-4">
-        {/* Progress Status Bar */}
-        {/* {isProcessing && (
-        <div className="w-full bg-blue-50 border border-blue-200 p-4 rounded-lg">
-          <div className="flex items-center gap-3">
-            <div className="animate-spin w-5 h-5 border-2 border-blue-500 border-t-transparent rounded-full"></div>
-            <span className="text-blue-800 font-medium">
-              {isUploading && 'Upload in progress...'}
-              {isDownloading && 'Download in progress...'}
-            </span>
-            <span className="text-blue-600 text-sm ml-auto">
-              Section switching disabled during transfer
-            </span>
-          </div>
-        </div>
-      )} */}
-
         <div className="flex flex-col items-center justify-start gap-12">
           {/* User ID Selection */}
           <div className="bg-white p-5 rounded-md flex flex-col items-start justify-center gap-4 shadow-md">
@@ -579,6 +564,24 @@ const HuggingfaceSection = () => {
                       {!isUploading && hfStatus}
                     </span>
                   </div>
+
+                  {/* Upload Progress Bar */}
+                  {isUploading && (
+                    <div className="w-full">
+                      <div className="flex flex-row items-center justify-between mb-1">
+                        <span className="text-sm text-gray-500">
+                          {uploadStatus.current}/{uploadStatus.total}
+                        </span>
+                        <span className="text-sm text-gray-500">{uploadStatus.percentage}%</span>
+                      </div>
+                      <div className="w-full bg-gray-200 rounded-full h-2">
+                        <div
+                          className="bg-blue-600 h-2 rounded-full transition-all duration-300 ease-out"
+                          style={{ width: `${uploadStatus.percentage}%` }}
+                        ></div>
+                      </div>
+                    </div>
+                  )}
                 </div>
               </div>
             </div>

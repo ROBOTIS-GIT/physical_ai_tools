@@ -28,7 +28,7 @@ from geometry_msgs.msg import Twist
 from huggingface_hub import (
     HfApi,
     snapshot_download,
-    upload_folder
+    upload_large_folder
 )
 from lerobot.datasets.utils import DEFAULT_FEATURES
 
@@ -559,7 +559,7 @@ class DataManager:
     ):
         download_path = {
             'dataset': Path.home() / '.cache/huggingface/lerobot',
-            'model': Path.home() /'ros2_ws/src/physical_ai_tools/lerobot/outputs/train/'
+            'model': Path.home() / 'ros2_ws/src/physical_ai_tools/lerobot/outputs/train/'
         }
 
         save_path = download_path.get(repo_type)
@@ -596,7 +596,7 @@ class DataManager:
 
     @classmethod
     def set_progress_queue(cls, progress_queue):
-        """Set progress queue for multiprocessing communication"""
+        """Set progress queue for multiprocessing communication."""
         cls._progress_queue = progress_queue
 
     @staticmethod
@@ -626,16 +626,24 @@ class DataManager:
             )
             print(f'Repository created/verified: {url}')
 
-            # Upload folder contents
+            # Upload folder contents (use upload_large_folder for better handling)
             print(f'Uploading folder {local_dir} to repository {repo_id}')
-            upload_folder(
-                repo_id=repo_id,
-                folder_path=local_dir,
-                repo_type=repo_type
-            )
-            print(f'Upload completed successfully for {repo_id}')
 
-            # Create tag after successful upload
+            # Capture stdout for logging
+            from contextlib import redirect_stdout
+            from .progress_tracker import HuggingFaceLogCapture
+
+            # Use log capture with progress queue
+            log_capture = HuggingFaceLogCapture(progress_queue=DataManager._progress_queue)
+
+            with redirect_stdout(log_capture):
+                upload_large_folder(
+                    repo_id=repo_id,
+                    folder_path=local_dir,
+                    repo_type=repo_type,
+                    print_report=True,
+                    print_report_every=1,
+                )
             try:
                 print(f'Creating tag for {repo_id} ({repo_type})')
                 api.create_tag(repo_id=repo_id, tag='v2.1', repo_type=repo_type)
