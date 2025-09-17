@@ -73,6 +73,8 @@ class PhysicalAIServer(Node):
         self.on_recording = False
         self.on_inference = False
 
+        self.hf_cancel_on_progress = False
+
         self.robot_type_list = self.get_robot_type_list()
         self.start_recording_time: float = 0.0
 
@@ -862,6 +864,25 @@ class PhysicalAIServer(Node):
             local_dir = request.local_dir
             repo_type = request.repo_type
             author = request.author
+
+            if self.hf_cancel_on_progress:
+                response.success = False
+                response.message = 'HF API Worker is currently canceling'
+                return response
+
+            if mode == 'cancel':
+                # Immediate cleanup - force stop the worker
+                try:
+                    self.hf_cancel_on_progress = True
+                    self._cleanup_hf_api_worker_with_threading()
+                    response.success = True
+                    response.message = 'Cancellation started.'
+                except Exception as e:
+                    self.get_logger().error(f'Error during cancel: {e}')
+                finally:
+                    self.hf_cancel_on_progress = False
+                    return response
+
             # Restart HF API Worker if it does not exist or is not running
             if self.hf_api_worker is None or not self.hf_api_worker.is_alive():
                 self.get_logger().info('HF API Worker not running, restarting...')
@@ -931,6 +952,67 @@ class PhysicalAIServer(Node):
         else:
             self.get_logger().info(
                 f'Received joystick trigger: {joystick_mode}')
+
+    def _cleanup_hf_api_worker_with_threading(self):
+        """
+        Non-blocking cleanup of HF API Worker using threading.
+        
+        This method starts a separate thread to run the existing
+        _cleanup_hf_api_worker method, preventing the main process 
+        from blocking during shutdown.
+        """
+        import threading
+        import time
+        
+        def cleanup_worker_thread():
+            """Worker thread to run _cleanup_hf_api_worker."""
+            try:
+                # Call the existing cleanup method
+                self._cleanup_hf_api_worker()
+            except Exception as e:
+                self.get_logger().error(f'Error in cleanup worker thread: {e}')
+        
+        try:
+            if self.hf_status_timer is None and self.hf_api_worker is None:
+                self.get_logger().info('No HF API components to cleanup')
+                return
+            
+            self.get_logger().info('Starting non-blocking HF API Worker cleanup...')
+
+            # Start cleanup thread
+            cleanup_thread = threading.Thread(target=cleanup_worker_thread, daemon=True)
+            cleanup_thread.start()
+
+            # Reset references immediately (don't wait for cleanup to complete)
+            self.hf_status_timer = None
+            self.hf_api_worker = None
+
+            self.get_logger().info('HF API Worker cleanup thread started')
+
+            # Publish cancel status messages
+            for i in range(3):  # Reduced from 5 to 3
+                self._publish_hf_operation_status_msg({
+                    'status': 'Idle',
+                    'operation': 'stop',
+                    'repo_id': '',
+                    'local_path': '',
+                    'message': 'Canceled by stop command',
+                    'progress': {
+                        'current': 0,
+                        'total': 0,
+                        'percentage': 0.0,
+                    }
+                })
+                time.sleep(0.5)  # Reduced from 1 to 0.5 seconds
+                
+        except Exception as e:
+            self.get_logger().error(
+                f'Error starting non-blocking HF API Worker cleanup: {str(e)}'
+            )
+            # Fallback to blocking cleanup if threading fails
+            self._cleanup_hf_api_worker()
+        finally:
+            self.hf_cancel_on_progress = False
 
     def _cleanup_hf_api_worker(self):
         """Cleanup HF API Worker and related timers."""

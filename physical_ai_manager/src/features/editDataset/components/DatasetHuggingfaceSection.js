@@ -109,6 +109,7 @@ const STYLES = {
     'focus:border-transparent'
   ),
   loadUserButton: clsx('px-3', 'py-1', 'text-md', 'font-medium', 'rounded-xl', 'transition-colors'),
+  cancelButton: clsx('px-6', 'py-2', 'text-sm', 'font-medium', 'rounded-lg', 'transition-colors'),
 };
 
 // Folder Browse Button Component
@@ -352,6 +353,16 @@ const HuggingfaceSection = () => {
         setIsDownloading(false);
       }
     },
+    cancelOperation: async () => {
+      try {
+        const result = await controlHfServer('cancel', hfRepoIdDownload, 'dataset');
+        console.log('Cancel download result:', result);
+        toast.success(`Cancelling... (${hfRepoIdDownload})`);
+      } catch (error) {
+        console.error('Error canceling download:', error);
+        toast.error(`Failed to cancel download: ${error.message}`);
+      }
+    },
   };
 
   // Auto-load User ID list on component mount
@@ -557,6 +568,18 @@ const HuggingfaceSection = () => {
                     </div>
                   </button>
 
+                  {/* Cancel Button */}
+                  <button
+                    className={clsx(STYLES.cancelButton, {
+                      'bg-red-500 text-white hover:bg-red-600': isUploading,
+                      'bg-gray-300 text-gray-500 cursor-not-allowed': !isUploading,
+                    })}
+                    onClick={operations.cancelOperation}
+                    disabled={!isUploading}
+                  >
+                    Cancel
+                  </button>
+
                   {/* Status */}
                   <div className="flex flex-row items-center justify-start">
                     <span className="text-sm text-gray-500">
@@ -684,6 +707,18 @@ const HuggingfaceSection = () => {
                       <MdOutlineFileDownload className="w-6 h-6" />
                       Download
                     </div>
+                  </button>
+
+                  {/* Cancel Button */}
+                  <button
+                    className={clsx(STYLES.cancelButton, {
+                      'bg-red-500 text-white hover:bg-red-600': isDownloading,
+                      'bg-gray-300 text-gray-500 cursor-not-allowed': !isDownloading,
+                    })}
+                    onClick={operations.cancelOperation}
+                    disabled={!isDownloading}
+                  >
+                    Cancel
                   </button>
 
                   {/* Status */}

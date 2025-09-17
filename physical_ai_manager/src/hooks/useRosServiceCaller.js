@@ -489,19 +489,19 @@ export function useRosServiceCaller() {
   );
 
   const controlHfServer = useCallback(
-    async (mode, repoId, repoType, localDir = '') => {
+    async (mode, repoId = '', repoType = '', localDir = '') => {
       try {
-        console.log('Calling service /huggingface/control with request:', { 
-          mode: mode, 
-          repo_id: repoId, 
+        console.log('Calling service /huggingface/control with request:', {
+          mode: mode,
+          repo_id: repoId,
           repo_type: repoType,
-          local_dir: localDir
+          local_dir: localDir,
         });
 
         const request = {
           mode: mode,
           repo_id: repoId,
-          repo_type: repoType
+          repo_type: repoType,
         };
 
         // Only add local_dir if it's provided and not empty

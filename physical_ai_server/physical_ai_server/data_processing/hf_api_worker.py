@@ -79,21 +79,31 @@ class HfApiWorker:
             self.logger.error(f'Failed to start HF API worker: {str(e)}')
             return False
 
-    def stop(self, timeout=5.0):
+    def stop(self, timeout=3.0):
         if not self.is_alive():
             self.logger.info('HF API worker process is not running or already stopped.')
             return
 
         try:
             self.logger.info('Sending shutdown signal to HF API worker...')
-            self.input_queue.put(None)
-            self.process.join(timeout)
+            # Send graceful shutdown signal first
+            try:
+                self.input_queue.put_nowait(None)
+            except Exception:
+                # If queue is full/unavailable, proceed to force terminate
+                pass
+
+            # Give a very short grace period, then force terminate if still alive
+            grace_timeout = min(max(timeout, 0.0), 1.0)
+            if grace_timeout > 0:
+                self.process.join(grace_timeout)
+
             if self.process.is_alive():
                 self.logger.warning(
-                    'HF API worker process did not terminate gracefully. Forcing termination.')
-                self.process.terminate()
-                self.process.join()
-            self.logger.info('HF API worker process stopped.')
+                    'HF API worker did not terminate gracefully. Forcing termination now.')
+                self.process.kill()
+                # Ensure the process is reaped promptly
+                self.process.join(1.0)
         except Exception as e:
             self.logger.error(f'Error stopping HF API worker process: {e}')
         finally:
