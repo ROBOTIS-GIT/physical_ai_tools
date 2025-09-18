@@ -21,8 +21,10 @@ import os
 from typing import Any
 
 from ament_index_python.packages import get_package_share_directory
-from physical_ai_interfaces.srv import GetRobotTypeList
+from physical_ai_interfaces.msg import BrowserItem
+from physical_ai_interfaces.srv import BrowseFile, GetRobotTypeList
 from physical_ai_server.service_managers.base_service_manager import BaseServiceManager
+from physical_ai_server.utils.file_browse_utils import FileBrowseUtils
 
 from rclpy.node import Node
 
@@ -47,6 +49,9 @@ class SystemInfoServiceManager(BaseServiceManager):
         super().__init__(node)
         self.main_server = main_server
         self.robot_type_list = self._get_robot_type_list()
+        self.file_browse_utils = FileBrowseUtils(
+            max_workers=8,
+            logger=self.node.get_logger())
 
     def initialize_services(self) -> None:
         """Initialize system info related services."""
@@ -54,6 +59,7 @@ class SystemInfoServiceManager(BaseServiceManager):
 
         service_definitions = [
             ('/get_robot_types', GetRobotTypeList, self.get_robot_types_callback),
+            ('/browse_file', BrowseFile, self.browse_file_callback),
         ]
 
         self.register_services(service_definitions)
@@ -103,4 +109,101 @@ class SystemInfoServiceManager(BaseServiceManager):
         response.robot_types = self.robot_type_list
         response.success = True
         response.message = 'Robot type list retrieved successfully'
+        return response
+
+    def browse_file_callback(self, request, response):
+        """
+        Handle file browsing requests.
+
+        Args:
+            request: Service request
+            response: Service response
+
+        Returns:
+            Service response
+        """
+        try:
+            if request.action == 'get_path':
+                result = self.file_browse_utils.handle_get_path_action(
+                    request.current_path)
+            elif request.action == 'go_parent':
+                # Check if target_files or target_folders are provided
+                target_files = None
+                target_folders = None
+
+                if hasattr(request, 'target_files') and request.target_files:
+                    target_files = set(request.target_files)
+                if hasattr(request, 'target_folders') and request.target_folders:
+                    target_folders = set(request.target_folders)
+
+                if target_files or target_folders:
+                    # Use parallel target checking for go_parent
+                    result = self.file_browse_utils.handle_go_parent_with_target_check(
+                        request.current_path,
+                        target_files,
+                        target_folders)
+                else:
+                    # Use standard go_parent (no targets specified)
+                    result = self.file_browse_utils.handle_go_parent_action(
+                        request.current_path)
+            elif request.action == 'browse':
+                # Check if target_files or target_folders are provided
+                target_files = None
+                target_folders = None
+
+                if hasattr(request, 'target_files') and request.target_files:
+                    target_files = set(request.target_files)
+                if hasattr(request, 'target_folders') and request.target_folders:
+                    target_folders = set(request.target_folders)
+
+                if target_files or target_folders:
+                    # Use parallel target checking
+                    result = self.file_browse_utils.handle_browse_with_target_check(
+                        request.current_path,
+                        request.target_name,
+                        target_files,
+                        target_folders)
+                else:
+                    # Use standard browsing (no targets specified)
+                    result = self.file_browse_utils.handle_browse_action(
+                        request.current_path, request.target_name)
+            else:
+                result = {
+                    'success': False,
+                    'message': f'Unknown action: {request.action}',
+                    'current_path': '',
+                    'parent_path': '',
+                    'selected_path': '',
+                    'items': []
+                }
+
+            # Convert result dict to response object
+            response.success = result['success']
+            response.message = result['message']
+            response.current_path = result['current_path']
+            response.parent_path = result['parent_path']
+            response.selected_path = result['selected_path']
+
+            # Convert item dicts to BrowserItem objects
+            response.items = []
+            for item_dict in result['items']:
+                item = BrowserItem()
+                item.name = item_dict['name']
+                item.full_path = item_dict['full_path']
+                item.is_directory = item_dict['is_directory']
+                item.size = item_dict['size']
+                item.modified_time = item_dict['modified_time']
+                # Set has_target_file field (default False for files)
+                item.has_target_file = item_dict.get('has_target_file', False)
+                response.items.append(item)
+
+        except Exception as e:
+            self.node.get_logger().error(f'Error in browse file handler: {str(e)}')
+            response.success = False
+            response.message = f'Error: {str(e)}'
+            response.current_path = ''
+            response.parent_path = ''
+            response.selected_path = ''
+            response.items = []
+
         return response

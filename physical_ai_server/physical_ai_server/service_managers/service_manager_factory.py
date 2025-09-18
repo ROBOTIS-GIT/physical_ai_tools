@@ -21,6 +21,8 @@ from typing import Any, Dict, List
 from physical_ai_server.service_managers.base_service_manager import BaseServiceManager
 from physical_ai_server.service_managers.data_collection_service_manager \
     import DataCollectionServiceManager
+from physical_ai_server.service_managers.edit_data_service_manager \
+    import EditDataServiceManager
 from physical_ai_server.service_managers.huggingface_service_manager \
     import HuggingFaceServiceManager
 from physical_ai_server.service_managers.inference_service_manager import InferenceServiceManager
@@ -66,6 +68,7 @@ class ServiceManagerFactory:
             'data_collection': DataCollectionServiceManager(self.node, self.main_server),
             'inference': InferenceServiceManager(self.node, self.main_server),
             'training': TrainingServiceManager(self.node, self.main_server),
+            'edit_data': EditDataServiceManager(self.node, self.main_server),
             'huggingface': HuggingFaceServiceManager(self.node, self.main_server),
             'system_info': SystemInfoServiceManager(self.node, self.main_server),
         }
