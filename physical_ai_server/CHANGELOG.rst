@@ -2,6 +2,11 @@
 Changelog for package physical_ai_server
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
+0.6.9 (2025-09-18)
+------------------
+* Changed omx_config.yaml file.
+* Contributors: Junha Cha
+
 0.6.8 (2025-08-21)
 ------------------
 * Added functionality to edit data in the Physical AI Server, including merge and delete operations.
