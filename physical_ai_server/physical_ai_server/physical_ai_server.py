@@ -26,7 +26,7 @@ from physical_ai_server.communication.communicator import Communicator
 from physical_ai_server.data_processing.data_manager import DataManager
 from physical_ai_server.data_processing.hf_api_worker import HfApiWorker
 from physical_ai_server.inference.inference_manager import InferenceManager
-from physical_ai_server.service_managers import ServiceManagerFactory
+from physical_ai_server.service_managers.service_manager_factory import ServiceManagerFactory
 from physical_ai_server.timer.timer_manager import TimerManager
 from physical_ai_server.training.training_manager import TrainingManager
 from physical_ai_server.utils.parameter_utils import (
