@@ -189,14 +189,6 @@ function App() {
       return;
     }
 
-    // Block navigation if robot type is not set
-    if (!robotType || robotType.trim() === '') {
-      toast.error('Please select a robot type first in the Home page', {
-        duration: 4000,
-      });
-      return;
-    }
-
     // Allow navigation if conditions are met
     dispatch(moveToPage(PageType.EDIT_DATASET));
   };
