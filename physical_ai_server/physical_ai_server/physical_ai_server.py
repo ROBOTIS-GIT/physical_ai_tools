@@ -16,37 +16,19 @@
 #
 # Author: Dongyun Kim, Seongwoo Kim
 
-import glob
-import os
 from pathlib import Path
 import threading
 import time
 from typing import Optional
 
-from ament_index_python.packages import get_package_share_directory
-from physical_ai_interfaces.msg import TaskStatus, TrainingStatus, HFOperationStatus
-from physical_ai_interfaces.srv import (
-    ControlHfServer,
-    GetDatasetList,
-    GetHFUser,
-    GetModelWeightList,
-    GetPolicyList,
-    GetRobotTypeList,
-    GetSavedPolicyList,
-    GetUserList,
-    SendCommand,
-    SendTrainingCommand,
-    SetHFUser,
-    SetRobotType,
-)
-
+from physical_ai_interfaces.msg import HFOperationStatus, TaskStatus, TrainingStatus
 from physical_ai_server.communication.communicator import Communicator
 from physical_ai_server.data_processing.data_manager import DataManager
 from physical_ai_server.data_processing.hf_api_worker import HfApiWorker
 from physical_ai_server.inference.inference_manager import InferenceManager
+from physical_ai_server.service_managers import ServiceManagerFactory
 from physical_ai_server.timer.timer_manager import TimerManager
 from physical_ai_server.training.training_manager import TrainingManager
-from physical_ai_server.service_managers import ServiceManagerFactory
 from physical_ai_server.utils.parameter_utils import (
     declare_parameters,
     load_parameters,
@@ -103,7 +85,6 @@ class PhysicalAIServer(Node):
         self.hf_api_worker: Optional[HfApiWorker] = None
         self.hf_status_timer: Optional[TimerManager] = None
         self._init_hf_api_worker()
-
 
     def _setup_timer_callbacks(self):
         self.timer_callback_dict = {
@@ -235,8 +216,6 @@ class PhysicalAIServer(Node):
         self.params = None
         self.total_joint_order = None
         self.joint_order = None
-
-
 
     def _data_collection_timer_callback(self):
         error_msg = ''
@@ -396,9 +375,6 @@ class PhysicalAIServer(Node):
             self.timer_manager.stop(timer_name=self.operation_mode)
             return
 
-
-
-
     def _init_hf_api_worker(self):
         """Initialize HF API Worker and status monitoring timer."""
         try:
@@ -472,7 +448,6 @@ class PhysicalAIServer(Node):
         # self.get_logger().info(f'HF API Status: {status_msg}')
         self.hf_status_publisher.publish(status_msg)
 
-
     def handle_joystick_trigger(self, joystick_mode: str):
         self.get_logger().info(
             f'Joystick mode updated: {joystick_mode}')
@@ -512,14 +487,12 @@ class PhysicalAIServer(Node):
     def _cleanup_hf_api_worker_with_threading(self):
         """
         Non-blocking cleanup of HF API Worker using threading.
-        
+
         This method starts a separate thread to run the existing
-        _cleanup_hf_api_worker method, preventing the main process 
+        _cleanup_hf_api_worker method, preventing the main process
         from blocking during shutdown.
         """
-        import threading
-        import time
-        
+
         def cleanup_worker_thread():
             """Worker thread to run _cleanup_hf_api_worker."""
             try:
@@ -527,12 +500,12 @@ class PhysicalAIServer(Node):
                 self._cleanup_hf_api_worker()
             except Exception as e:
                 self.get_logger().error(f'Error in cleanup worker thread: {e}')
-        
+
         try:
             if self.hf_status_timer is None and self.hf_api_worker is None:
                 self.get_logger().info('No HF API components to cleanup')
                 return
-            
+
             self.get_logger().info('Starting non-blocking HF API Worker cleanup...')
 
             # Start cleanup thread
@@ -560,7 +533,7 @@ class PhysicalAIServer(Node):
                     }
                 })
                 time.sleep(0.5)  # Reduced from 1 to 0.5 seconds
-                
+
         except Exception as e:
             self.get_logger().error(
                 f'Error starting non-blocking HF API Worker cleanup: {str(e)}'

@@ -17,54 +17,55 @@
 # Author: Dongyun Kim, Seongwoo Kim
 
 from typing import Any
-from rclpy.node import Node
 
-from physical_ai_interfaces.srv import ControlHfServer, SetHFUser, GetHFUser
-from physical_ai_server.service_managers.base_service_manager import BaseServiceManager
+from physical_ai_interfaces.srv import ControlHfServer, GetHFUser, SetHFUser
 from physical_ai_server.data_processing.data_manager import DataManager
+from physical_ai_server.service_managers.base_service_manager import BaseServiceManager
+
+from rclpy.node import Node
 
 
 class HuggingFaceServiceManager(BaseServiceManager):
     """
     Service manager for HuggingFace related operations.
-    
+
     Manages services for:
     - HF server control (upload/download/cancel)
     - HF user registration and management
     """
-    
+
     def __init__(self, node: Node, main_server: Any):
         """
         Initialize the HuggingFace service manager.
-        
+
         Args:
             node: ROS2 node instance
             main_server: Reference to the main PhysicalAIServer instance
         """
         super().__init__(node)
         self.main_server = main_server
-    
+
     def initialize_services(self) -> None:
         """Initialize HuggingFace related services."""
         self.logger.info('Initializing HuggingFace services...')
-        
+
         service_definitions = [
             ('/huggingface/control', ControlHfServer, self.control_hf_server_callback),
             ('/register_hf_user', SetHFUser, self.set_hf_user_callback),
             ('/get_registered_hf_user', GetHFUser, self.get_hf_user_callback),
         ]
-        
+
         self.register_services(service_definitions)
         self.logger.info('HuggingFace services initialized successfully')
-    
+
     def control_hf_server_callback(self, request, response):
         """
         Handle HuggingFace server control requests.
-        
+
         Args:
             request: Service request
             response: Service response
-            
+
         Returns:
             Service response
         """
@@ -94,7 +95,8 @@ class HuggingFaceServiceManager(BaseServiceManager):
                     return response
 
             # Restart HF API Worker if it does not exist or is not running
-            if self.main_server.hf_api_worker is None or not self.main_server.hf_api_worker.is_alive():
+            if self.main_server.hf_api_worker is None or \
+               not self.main_server.hf_api_worker.is_alive():
                 self.logger.info('HF API Worker not running, restarting...')
                 self.main_server._init_hf_api_worker()
             # Return error if the worker is busy
@@ -130,11 +132,11 @@ class HuggingFaceServiceManager(BaseServiceManager):
     def set_hf_user_callback(self, request, response):
         """
         Handle HuggingFace user registration requests.
-        
+
         Args:
             request: Service request
             response: Service response
-            
+
         Returns:
             Service response
         """
@@ -154,11 +156,11 @@ class HuggingFaceServiceManager(BaseServiceManager):
     def get_hf_user_callback(self, request, response):
         """
         Handle HuggingFace user retrieval requests.
-        
+
         Args:
             request: Service request
             response: Service response
-            
+
         Returns:
             Service response
         """

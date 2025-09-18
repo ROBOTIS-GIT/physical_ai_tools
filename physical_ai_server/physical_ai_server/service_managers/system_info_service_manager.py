@@ -19,26 +19,27 @@
 import glob
 import os
 from typing import Any
-from rclpy.node import Node
 
 from ament_index_python.packages import get_package_share_directory
 from physical_ai_interfaces.srv import GetRobotTypeList
 from physical_ai_server.service_managers.base_service_manager import BaseServiceManager
 
+from rclpy.node import Node
+
 
 class SystemInfoServiceManager(BaseServiceManager):
     """
     Service manager for system information related operations.
-    
+
     Manages services for:
     - Robot type information
     - System configuration details
     """
-    
+
     def __init__(self, node: Node, main_server: Any):
         """
         Initialize the system info service manager.
-        
+
         Args:
             node: ROS2 node instance
             main_server: Reference to the main PhysicalAIServer instance
@@ -46,22 +47,22 @@ class SystemInfoServiceManager(BaseServiceManager):
         super().__init__(node)
         self.main_server = main_server
         self.robot_type_list = self._get_robot_type_list()
-    
+
     def initialize_services(self) -> None:
         """Initialize system info related services."""
         self.logger.info('Initializing system info services...')
-        
+
         service_definitions = [
             ('/get_robot_types', GetRobotTypeList, self.get_robot_types_callback),
         ]
-        
+
         self.register_services(service_definitions)
         self.logger.info('System info services initialized successfully')
-    
+
     def _get_robot_type_list(self):
         """
         Get the list of available robot types from configuration files.
-        
+
         Returns:
             List of available robot types
         """
@@ -83,11 +84,11 @@ class SystemInfoServiceManager(BaseServiceManager):
     def get_robot_types_callback(self, request, response):
         """
         Handle robot type list retrieval requests.
-        
+
         Args:
             request: Service request
             response: Service response
-            
+
         Returns:
             Service response
         """

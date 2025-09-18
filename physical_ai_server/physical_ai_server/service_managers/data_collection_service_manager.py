@@ -16,53 +16,54 @@
 #
 # Author: Dongyun Kim, Seongwoo Kim
 
-from typing import Any, Optional
-from rclpy.node import Node
+from typing import Any
 
 from physical_ai_interfaces.srv import SendCommand, SetRobotType
 from physical_ai_server.service_managers.base_service_manager import BaseServiceManager
+
+from rclpy.node import Node
 
 
 class DataCollectionServiceManager(BaseServiceManager):
     """
     Service manager for data collection related operations.
-    
+
     Manages services for:
     - Task commands (start/stop recording, inference, etc.)
     - Robot type configuration
     """
-    
+
     def __init__(self, node: Node, main_server: Any):
         """
         Initialize the data collection service manager.
-        
+
         Args:
             node: ROS2 node instance
             main_server: Reference to the main PhysicalAIServer instance
         """
         super().__init__(node)
         self.main_server = main_server
-    
+
     def initialize_services(self) -> None:
         """Initialize data collection related services."""
         self.logger.info('Initializing data collection services...')
-        
+
         service_definitions = [
             ('/task/command', SendCommand, self.user_interaction_callback),
             ('/set_robot_type', SetRobotType, self.set_robot_type_callback),
         ]
-        
+
         self.register_services(service_definitions)
         self.logger.info('Data collection services initialized successfully')
-    
+
     def user_interaction_callback(self, request, response):
         """
         Handle user interaction commands for data collection and inference.
-        
+
         Args:
             request: Service request
             response: Service response
-            
+
         Returns:
             Service response
         """
@@ -89,7 +90,8 @@ class DataCollectionServiceManager(BaseServiceManager):
                 response.message = 'Recording started'
 
             elif request.command == SendCommand.Request.START_INFERENCE:
-                self.main_server.joint_topic_types = self.main_server.communicator.get_publisher_msg_types()
+                self.main_server.joint_topic_types = \
+                    self.main_server.communicator.get_publisher_msg_types()
                 self.main_server.operation_mode = 'inference'
                 task_info = request.task_info
                 self.main_server.task_instruction = task_info.task_instruction
@@ -163,11 +165,11 @@ class DataCollectionServiceManager(BaseServiceManager):
     def set_robot_type_callback(self, request, response):
         """
         Handle robot type setting requests.
-        
+
         Args:
             request: Service request
             response: Service response
-            
+
         Returns:
             Service response
         """

@@ -18,10 +18,10 @@
 
 import gc
 import os
+from pathlib import Path
 import shutil
 import subprocess
 import time
-from pathlib import Path
 
 import cv2
 from geometry_msgs.msg import Twist
@@ -38,15 +38,15 @@ import numpy as np
 from physical_ai_interfaces.msg import TaskStatus
 from physical_ai_server.data_processing.data_converter import DataConverter
 from physical_ai_server.data_processing.lerobot_dataset_wrapper import LeRobotDatasetWrapper
+from physical_ai_server.data_processing.progress_tracker import (
+    HuggingFaceProgressTqdm
+)
 from physical_ai_server.device_manager.cpu_checker import CPUChecker
 from physical_ai_server.device_manager.ram_checker import RAMChecker
 from physical_ai_server.device_manager.storage_checker import StorageChecker
 import requests
 from sensor_msgs.msg import JointState
 from trajectory_msgs.msg import JointTrajectory
-from physical_ai_server.data_processing.progress_tracker import (
-    HuggingFaceProgressTqdm
-)
 
 
 class DataManager:
@@ -697,13 +697,8 @@ class DataManager:
     def get_collections_repo_list(
         collection_id
     ):
-        repo_id_list = []
         collection_list = HfApi().get_collection(collection_id)
         repo_list_in_collection = []
         for item in collection_list.items:
             repo_list_in_collection.append(item.item_id)
         return repo_list_in_collection
-
-# repo_list = DataManager.get_collections_repo_list('ROBOTIS/pickcoffee-env1-task3-68b4dbb34096a56b85b8b613')
-# for repo_id in repo_list:
-#     DataManager.download_huggingface_repo(repo_id, repo_type='dataset')

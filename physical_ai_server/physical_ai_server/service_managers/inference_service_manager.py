@@ -17,53 +17,54 @@
 # Author: Dongyun Kim, Seongwoo Kim
 
 from typing import Any
-from rclpy.node import Node
 
 from physical_ai_interfaces.srv import GetPolicyList, GetSavedPolicyList
-from physical_ai_server.service_managers.base_service_manager import BaseServiceManager
 from physical_ai_server.inference.inference_manager import InferenceManager
+from physical_ai_server.service_managers.base_service_manager import BaseServiceManager
+
+from rclpy.node import Node
 
 
 class InferenceServiceManager(BaseServiceManager):
     """
     Service manager for inference related operations.
-    
+
     Manages services for:
     - Policy listing and management
     - Saved policy retrieval
     """
-    
+
     def __init__(self, node: Node, main_server: Any):
         """
         Initialize the inference service manager.
-        
+
         Args:
             node: ROS2 node instance
             main_server: Reference to the main PhysicalAIServer instance
         """
         super().__init__(node)
         self.main_server = main_server
-    
+
     def initialize_services(self) -> None:
         """Initialize inference related services."""
         self.logger.info('Initializing inference services...')
-        
+
         service_definitions = [
             ('/get_policy_list', GetPolicyList, self.get_policy_list_callback),
             ('/get_saved_policies', GetSavedPolicyList, self.get_saved_policies_callback),
         ]
-        
+
         self.register_services(service_definitions)
         self.logger.info('Inference services initialized successfully')
-    
+
     def get_policy_list_callback(self, request, response):
         """
         Handle policy list retrieval requests.
-        
+
         Args:
             request: Service request
             response: Service response
-            
+
         Returns:
             Service response
         """
@@ -82,11 +83,11 @@ class InferenceServiceManager(BaseServiceManager):
     def get_saved_policies_callback(self, request, response):
         """
         Handle saved policies retrieval requests.
-        
+
         Args:
             request: Service request
             response: Service response
-            
+
         Returns:
             Service response
         """

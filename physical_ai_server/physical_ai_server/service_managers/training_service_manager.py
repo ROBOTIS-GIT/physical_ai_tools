@@ -19,33 +19,34 @@
 import os
 from pathlib import Path
 from typing import Any
-from rclpy.node import Node
 
 from physical_ai_interfaces.srv import (
-    SendTrainingCommand,
+    GetDatasetList,
+    GetModelWeightList,
     GetPolicyList,
     GetUserList,
-    GetDatasetList,
-    GetModelWeightList
+    SendTrainingCommand
 )
 from physical_ai_server.service_managers.base_service_manager import BaseServiceManager
 from physical_ai_server.training.training_manager import TrainingManager
+
+from rclpy.node import Node
 
 
 class TrainingServiceManager(BaseServiceManager):
     """
     Service manager for training related operations.
-    
+
     Manages services for:
     - Training commands (start/stop training)
     - Training resource management (users, datasets, model weights)
     - Available training resources listing
     """
-    
+
     def __init__(self, node: Node, main_server: Any):
         """
         Initialize the training service manager.
-        
+
         Args:
             node: ROS2 node instance
             main_server: Reference to the main PhysicalAIServer instance
@@ -53,30 +54,32 @@ class TrainingServiceManager(BaseServiceManager):
         super().__init__(node)
         self.main_server = main_server
         self.DEFAULT_SAVE_ROOT_PATH = Path.home() / '.cache/huggingface/lerobot'
-    
+
     def initialize_services(self) -> None:
         """Initialize training related services."""
         self.logger.info('Initializing training services...')
-        
+
         service_definitions = [
             ('/training/command', SendTrainingCommand, self.user_training_interaction_callback),
             ('/training/get_available_policy', GetPolicyList, self.get_available_list_callback),
             ('/training/get_user_list', GetUserList, self.get_user_list_callback),
             ('/training/get_dataset_list', GetDatasetList, self.get_dataset_list_callback),
-            ('/training/get_model_weight_list', GetModelWeightList, self.get_model_weight_list_callback),
+            ('/training/get_model_weight_list',
+             GetModelWeightList,
+             self.get_model_weight_list_callback),
         ]
-        
+
         self.register_services(service_definitions)
         self.logger.info('Training services initialized successfully')
-    
+
     def user_training_interaction_callback(self, request, response):
         """
         Handle training command requests.
-        
+
         Args:
             request: Service request
             response: Service response
-            
+
         Returns:
             Service response
         """
@@ -88,13 +91,16 @@ class TrainingServiceManager(BaseServiceManager):
                 self.main_server.training_timer.set_timer(
                     timer_name='training_status',
                     timer_frequency=self.main_server.TRAINING_STATUS_TIMER_FREQUENCY,
-                    callback_function=lambda: self.main_server.communicator.publish_training_status(
-                        self.main_server.get_training_status()
+                    callback_function=lambda: (
+                        self.main_server.communicator.publish_training_status(
+                            self.main_server.get_training_status()
+                        )
                     )
                 )
                 self.main_server.training_timer.start(timer_name='training_status')
 
-                if self.main_server.training_thread and self.main_server.training_thread.is_alive():
+                if self.main_server.training_thread and \
+                   self.main_server.training_thread.is_alive():
                     response.success = False
                     response.message = 'Training is already in progress'
                     return response
@@ -133,7 +139,8 @@ class TrainingServiceManager(BaseServiceManager):
                         self.main_server.training_timer.stop('training_status')
 
                 import threading
-                self.main_server.training_thread = threading.Thread(target=run_training, daemon=True)
+                self.main_server.training_thread = threading.Thread(target=run_training,
+                                                                    daemon=True)
                 self.main_server.training_thread.start()
                 self.main_server.is_training = True
 
@@ -147,7 +154,8 @@ class TrainingServiceManager(BaseServiceManager):
                         self.main_server.get_training_status()
                     )
                     self.main_server.training_timer.stop('training_status')
-                    if self.main_server.training_thread and self.main_server.training_thread.is_alive():
+                    if self.main_server.training_thread and \
+                       self.main_server.training_thread.is_alive():
                         self.main_server.training_manager.stop_event.set()
                         self.main_server.training_thread.join()
                         response.success = True
@@ -166,11 +174,11 @@ class TrainingServiceManager(BaseServiceManager):
     def get_available_list_callback(self, request, response):
         """
         Handle available training resources listing requests.
-        
+
         Args:
             request: Service request
             response: Service response
-            
+
         Returns:
             Service response
         """
@@ -182,11 +190,11 @@ class TrainingServiceManager(BaseServiceManager):
     def get_user_list_callback(self, request, response):
         """
         Handle user folder list retrieval requests.
-        
+
         Args:
             request: Service request
             response: Service response
-            
+
         Returns:
             Service response
         """
@@ -216,11 +224,11 @@ class TrainingServiceManager(BaseServiceManager):
     def get_dataset_list_callback(self, request, response):
         """
         Handle dataset list retrieval requests.
-        
+
         Args:
             request: Service request
             response: Service response
-            
+
         Returns:
             Service response
         """
@@ -253,11 +261,11 @@ class TrainingServiceManager(BaseServiceManager):
     def get_model_weight_list_callback(self, request, response):
         """
         Handle model weight list retrieval requests.
-        
+
         Args:
             request: Service request
             response: Service response
-            
+
         Returns:
             Service response
         """

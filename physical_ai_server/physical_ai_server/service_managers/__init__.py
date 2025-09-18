@@ -16,27 +16,4 @@
 #
 # Author: Kiwoong Park
 
-"""
-Service managers package for Physical AI Server.
-
-This package contains modular service managers that handle different
-groups of related ROS services, improving code organization and maintainability.
-"""
-
-from .base_service_manager import BaseServiceManager
-from .data_collection_service_manager import DataCollectionServiceManager
-from .inference_service_manager import InferenceServiceManager
-from .training_service_manager import TrainingServiceManager
-from .huggingface_service_manager import HuggingFaceServiceManager
-from .system_info_service_manager import SystemInfoServiceManager
-from .service_manager_factory import ServiceManagerFactory
-
-__all__ = [
-    'BaseServiceManager',
-    'DataCollectionServiceManager',
-    'InferenceServiceManager',
-    'TrainingServiceManager',
-    'HuggingFaceServiceManager',
-    'SystemInfoServiceManager',
-    'ServiceManagerFactory',
-]
+# This file makes the directory a Python package
