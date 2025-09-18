@@ -4,7 +4,7 @@ Changelog for package physical_ai_tools
 
 0.6.9 (2025-09-18)
 ------------------
-* changed omx_config.yaml file
+* Changed omx_config.yaml file..
 * Contributors: Junha Cha
 
 0.6.8 (2025-08-21)
