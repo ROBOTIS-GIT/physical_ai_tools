@@ -16,7 +16,7 @@
 
 import React, { useState, useCallback, useEffect } from 'react';
 import clsx from 'clsx';
-import { useSelector, useDispatch } from 'react-redux';
+import { useSelector } from 'react-redux';
 import toast from 'react-hot-toast';
 import { MdOutlineFileDownload, MdClose } from 'react-icons/md';
 import { useRosServiceCaller } from '../hooks/useRosServiceCaller';
@@ -100,10 +100,10 @@ const STYLES = {
     'focus:border-transparent'
   ),
   loadUserButton: clsx('px-3', 'py-1', 'text-md', 'font-medium', 'rounded-xl', 'transition-colors'),
+  cancelButton: clsx('px-6', 'py-2', 'text-sm', 'font-medium', 'rounded-lg', 'transition-colors'),
 };
 
 const PolicyDownloadModal = ({ isOpen, onClose, onDownloadComplete }) => {
-  const dispatch = useDispatch();
   const hfStatus = useSelector((state) => state.editDataset.hfStatus);
   const downloadStatus = useSelector((state) => state.editDataset.downloadStatus);
 
@@ -113,9 +113,7 @@ const PolicyDownloadModal = ({ isOpen, onClose, onDownloadComplete }) => {
   const [hfRepoId, setHfRepoId] = useState('');
   const [userId, setUserId] = useState('');
   const [isDownloading, setIsDownloading] = useState(false);
-  const [downloadCompleted, setDownloadCompleted] = useState(false);
   const [finalStatus, setFinalStatus] = useState(null); // Store final SUCCESS/FAILED status
-  const [downloadedRepoId, setDownloadedRepoId] = useState('');
   const [userIdList, setUserIdList] = useState([]);
   const [showTokenPopup, setShowTokenPopup] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
@@ -129,7 +127,6 @@ const PolicyDownloadModal = ({ isOpen, onClose, onDownloadComplete }) => {
 
   const downloadButtonEnabled =
     !isDownloading &&
-    !downloadCompleted &&
     hfRepoId?.trim() &&
     userId?.trim() &&
     repoValidation.isValid &&
@@ -253,14 +250,12 @@ const PolicyDownloadModal = ({ isOpen, onClose, onDownloadComplete }) => {
     }
 
     setIsDownloading(true);
-    setDownloadCompleted(false);
     try {
       const repoId = userId + '/' + hfRepoId.trim();
       const result = await controlHfServer('download', repoId, 'model');
       console.log('Download policy result:', result);
 
       toast.success(`Policy download started successfully for ${repoId}!`);
-      setDownloadedRepoId(repoId);
 
       // Call the completion callback if provided
       if (onDownloadComplete) {
@@ -274,10 +269,19 @@ const PolicyDownloadModal = ({ isOpen, onClose, onDownloadComplete }) => {
     }
   };
 
+  const handleCancelDownload = async () => {
+    try {
+      const result = await controlHfServer('cancel', hfRepoId, 'model');
+      console.log('Cancel download result:', result);
+      toast.success(`Cancelling... (${hfRepoId})`);
+    } catch (error) {
+      console.error('Error canceling download:', error);
+      toast.error(`Failed to cancel download: ${error.message}`);
+    }
+  };
+
   // Handle finish button click
   const handleFinish = () => {
-    setDownloadCompleted(false);
-    setDownloadedRepoId('');
     onClose();
   };
 
@@ -288,21 +292,25 @@ const PolicyDownloadModal = ({ isOpen, onClose, onDownloadComplete }) => {
     }
   }, [isOpen, handleLoadUserId]);
 
+  // track hf status update
+  useEffect(() => {
+    if (hfStatus === HFStatus.DOWNLOADING) {
+      setIsDownloading(true);
+    } else {
+      setIsDownloading(false);
+    }
+  }, [hfStatus]);
+
   // Track HF status updates
   useEffect(() => {
-    if (hfStatus === HFStatus.DOWNLOADING && !downloadCompleted) {
+    if (hfStatus === HFStatus.DOWNLOADING) {
       setIsDownloading(true);
-    } else if (
-      (hfStatus === HFStatus.SUCCESS || hfStatus === HFStatus.FAILED) &&
-      !downloadCompleted &&
-      !finalStatus
-    ) {
+    } else if (hfStatus === HFStatus.SUCCESS || hfStatus === HFStatus.FAILED) {
       // Download completed (success or failed) - only process once
       setIsDownloading(false);
-      setDownloadCompleted(true);
       setFinalStatus(hfStatus); // Store the final status
     }
-  }, [hfStatus, isDownloading, downloadCompleted]);
+  }, [hfStatus, isDownloading]);
 
   // Reset form when modal closes
   useEffect(() => {
@@ -311,9 +319,7 @@ const PolicyDownloadModal = ({ isOpen, onClose, onDownloadComplete }) => {
       setUserId('');
       setRepoValidation({ isValid: true, message: '' });
       setIsDownloading(false);
-      setDownloadCompleted(false);
       setFinalStatus(null);
-      setDownloadedRepoId('');
     }
   }, [isOpen]);
 
@@ -502,6 +508,18 @@ const PolicyDownloadModal = ({ isOpen, onClose, onDownloadComplete }) => {
                         </div>
                       </button>
 
+                      {/* Cancel Button */}
+                      <button
+                        className={clsx(STYLES.cancelButton, {
+                          'bg-red-500 text-white hover:bg-red-600': isDownloading,
+                          'bg-gray-300 text-gray-500 cursor-not-allowed': !isDownloading,
+                        })}
+                        onClick={handleCancelDownload}
+                        disabled={!isDownloading}
+                      >
+                        Cancel
+                      </button>
+
                       {/* Status */}
                       <div className="flex flex-row items-center justify-start">
                         <span className="text-sm text-gray-500">
@@ -540,13 +558,12 @@ const PolicyDownloadModal = ({ isOpen, onClose, onDownloadComplete }) => {
               <button
                 onClick={handleFinish}
                 className={clsx('px-4 py-2 text-sm font-medium rounded-md transition-colors', {
-                  'bg-green-500 text-white hover:bg-green-600':
-                    downloadCompleted && finalStatus === HFStatus.SUCCESS,
-                  'bg-gray-500 text-white hover:bg-gray-600':
-                    downloadCompleted && finalStatus === HFStatus.FAILED,
-                  'bg-gray-300 text-gray-500 cursor-not-allowed': !downloadCompleted,
+                  'bg-green-500 text-white hover:bg-green-600': finalStatus === HFStatus.SUCCESS,
+                  'bg-gray-500 text-white hover:bg-gray-600 cursor-not-allowed':
+                    finalStatus === HFStatus.FAILED,
+                  'bg-gray-300 text-gray-500 cursor-not-allowed': !finalStatus,
                 })}
-                disabled={!downloadCompleted}
+                disabled={!finalStatus}
               >
                 Finish
               </button>

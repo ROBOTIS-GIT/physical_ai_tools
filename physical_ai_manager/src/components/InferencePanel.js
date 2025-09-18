@@ -58,10 +58,7 @@ const InferencePanel = () => {
   // Policy download modal states
   const [showPolicyDownloadModal, setShowPolicyDownloadModal] = useState(false);
 
-  // Download Policy states
-  const [isDownloadingPolicy, setIsDownloadingPolicy] = useState(false);
-
-  const { registerHFUser, getRegisteredHFUser, controlHfServer } = useRosServiceCaller();
+  const { registerHFUser, getRegisteredHFUser } = useRosServiceCaller();
 
   const handleChange = useCallback(
     (field, value) => {
@@ -136,12 +133,15 @@ const InferencePanel = () => {
     [handleChange]
   );
 
-  const handleDownloadPolicyComplete = useCallback((repoId) => {
-    // Update the policy path with the local cache path
-    const localPath = `/root/.cache/huggingface/lerobot/${repoId}`;
-    handleChange('policyPath', localPath);
-    // Don't close modal automatically - let user click Finish button
-  }, [handleChange]);
+  const handleDownloadPolicyComplete = useCallback(
+    (repoId) => {
+      // Update the policy path with the local cache path
+      const localPath = `/root/.cache/huggingface/lerobot/${repoId}`;
+      handleChange('policyPath', localPath);
+      // Don't close modal automatically - let user click Finish button
+    },
+    [handleChange]
+  );
 
   // Update isEditable state when the disabled prop changes
   useEffect(() => {
