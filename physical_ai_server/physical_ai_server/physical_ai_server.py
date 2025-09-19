@@ -80,6 +80,7 @@ class PhysicalAIServer(Node):
 
         self._init_core_components()
 
+        self._init_ros_publisher()
         self._init_ros_service()
 
         self._setup_timer_callbacks()
@@ -92,6 +93,15 @@ class PhysicalAIServer(Node):
         self.training_timer: Optional[TimerManager] = None
         self.inference_manager: Optional[InferenceManager] = None
         self.training_manager: Optional[TrainingManager] = None
+
+    def _init_ros_publisher(self):
+        self.get_logger().info('Initializing ROS publishers...')
+        pub_qos_size = 100
+        self.training_status_publisher = self.create_publisher(
+            TrainingStatus,
+            '/training/status',
+            pub_qos_size
+        )
 
     def _init_ros_service(self):
         self.get_logger().info('Initializing ROS services...')
@@ -245,6 +255,14 @@ class PhysicalAIServer(Node):
 
         if self.timer_manager is not None:
             self.timer_manager = None
+
+        if self.heartbeat_timer is not None:
+            self.heartbeat_timer.stop(timer_name='heartbeat')
+            self.heartbeat_timer = None
+
+        if self.training_timer is not None:
+            self.training_timer.stop(timer_name='training_status')
+            self.training_timer = None
 
         self.params = None
         self.total_joint_order = None
@@ -462,7 +480,7 @@ class PhysicalAIServer(Node):
                 self.training_timer.set_timer(
                     timer_name='training_status',
                     timer_frequency=self.TRAINING_STATUS_TIMER_FREQUENCY,
-                    callback_function=lambda: self.communicator.publish_training_status(
+                    callback_function=lambda: self.training_status_publisher.publish(
                         self.get_training_status()
                     )
                 )
@@ -484,9 +502,8 @@ class PhysicalAIServer(Node):
                     response.success = False
                     response.message = f'Output folder already exists: {output_path}'
                     self.is_training = False
-                    self.communicator.publish_training_status(
-                        self.get_training_status()
-                    )
+                    training_status = self.get_training_status()
+                    self.training_status_publisher.publish(training_status)
 
                     self.training_manager.stop_event.set()
                     self.training_timer.stop('training_status')
@@ -500,9 +517,8 @@ class PhysicalAIServer(Node):
                     finally:
                         self.is_training = False
                         self.get_logger().info('Training completed.')
-                        self.communicator.publish_training_status(
-                            self.get_training_status()
-                        )
+                        training_status = self.get_training_status()
+                        self.training_status_publisher.publish(training_status)
                         self.training_manager.stop_event.set()
                         self.training_timer.stop('training_status')
 
@@ -516,9 +532,8 @@ class PhysicalAIServer(Node):
             else:
                 if request.command == SendTrainingCommand.Request.FINISH:
                     self.is_training = False
-                    self.communicator.publish_training_status(
-                        self.get_training_status()
-                    )
+                    training_status = self.get_training_status()
+                    self.training_status_publisher.publish(training_status)
                     self.training_timer.stop('training_status')
                     if self.training_thread and self.training_thread.is_alive():
                         self.training_manager.stop_event.set()

@@ -57,49 +57,55 @@ export function useRosTopicSubscription() {
     return audioContextRef.current;
   }, []);
 
-  const playBeep = useCallback(async (frequency = 1000, duration = 400) => {
-    const INITIAL_GAIN = 1.0;
-    const FINAL_GAIN = 0.01;
-    const FALLBACK_VIBRATION_PATTERN = [200, 100, 200];
+  const playBeep = useCallback(
+    async (frequency = 1000, duration = 400) => {
+      const INITIAL_GAIN = 1.0;
+      const FINAL_GAIN = 0.01;
+      const FALLBACK_VIBRATION_PATTERN = [200, 100, 200];
 
-    try {
-      const audioContext = initializeAudioContext();
-
-      if (audioContext.state === 'suspended') {
-        await audioContext.resume();
-      }
-      
-      const oscillator = audioContext.createOscillator();
-      const gainNode = audioContext.createGain();
-      
-      oscillator.connect(gainNode);
-      gainNode.connect(audioContext.destination);
-      
-      oscillator.frequency.value = frequency;
-      oscillator.type = 'sine';
-
-      gainNode.gain.setValueAtTime(INITIAL_GAIN, audioContext.currentTime);
-      gainNode.gain.exponentialRampToValueAtTime(FINAL_GAIN, audioContext.currentTime + duration / 1000);
-
-      oscillator.start(audioContext.currentTime);
-      oscillator.stop(audioContext.currentTime + duration / 1000);
-      
-      console.log('🔊 Beep played successfully');
-    } catch (error) {
-      console.warn('Audio playback failed:', error);
       try {
-        if (window.navigator && window.navigator.vibrate) {
-          window.navigator.vibrate(FALLBACK_VIBRATION_PATTERN);
-          console.log('📳 Fallback to vibration');
+        const audioContext = initializeAudioContext();
+
+        if (audioContext.state === 'suspended') {
+          await audioContext.resume();
         }
-      } catch (vibrationError) {
-        console.warn('Vibration fallback also failed:', vibrationError);
+
+        const oscillator = audioContext.createOscillator();
+        const gainNode = audioContext.createGain();
+
+        oscillator.connect(gainNode);
+        gainNode.connect(audioContext.destination);
+
+        oscillator.frequency.value = frequency;
+        oscillator.type = 'sine';
+
+        gainNode.gain.setValueAtTime(INITIAL_GAIN, audioContext.currentTime);
+        gainNode.gain.exponentialRampToValueAtTime(
+          FINAL_GAIN,
+          audioContext.currentTime + duration / 1000
+        );
+
+        oscillator.start(audioContext.currentTime);
+        oscillator.stop(audioContext.currentTime + duration / 1000);
+
+        console.log('🔊 Beep played successfully');
+      } catch (error) {
+        console.warn('Audio playback failed:', error);
+        try {
+          if (window.navigator && window.navigator.vibrate) {
+            window.navigator.vibrate(FALLBACK_VIBRATION_PATTERN);
+            console.log('📳 Fallback to vibration');
+          }
+        } catch (vibrationError) {
+          console.warn('Vibration fallback also failed:', vibrationError);
+        }
       }
-    }
-  }, [initializeAudioContext]);
+    },
+    [initializeAudioContext]
+  );
 
   const cleanup = useCallback(() => {
-    console.log('Starting ROS task status cleanup...');
+    console.log('Starting ROS subscriptions cleanup...');
 
     if (taskStatusTopicRef.current) {
       taskStatusTopicRef.current.unsubscribe();
@@ -116,15 +122,15 @@ export function useRosTopicSubscription() {
       trainingStatusTopicRef.current = null;
       console.log('Training status topic unsubscribed');
     }
-    
+
     // Reset previous phase tracking
     previousPhaseRef.current = null;
-    
+
     if (audioContextRef.current && audioContextRef.current.state !== 'closed') {
       audioContextRef.current.close();
       audioContextRef.current = null;
     }
-    
+
     setConnected(false);
     dispatch(setHeartbeatStatus('disconnected'));
     console.log('ROS task status cleanup completed');
@@ -134,21 +140,24 @@ export function useRosTopicSubscription() {
     const enableAudioOnUserGesture = () => {
       const audioContext = initializeAudioContext();
       if (audioContext.state === 'suspended') {
-        audioContext.resume().then(() => {
-          console.log('🎵 Audio enabled by user gesture');
-        }).catch(error => {
-          console.warn('Failed to resume AudioContext on user gesture:', error);
-        });
+        audioContext
+          .resume()
+          .then(() => {
+            console.log('🎵 Audio enabled by user gesture');
+          })
+          .catch((error) => {
+            console.warn('Failed to resume AudioContext on user gesture:', error);
+          });
       }
     };
 
     const events = ['touchstart', 'touchend', 'mousedown', 'keydown', 'click'];
-    events.forEach(event => {
+    events.forEach((event) => {
       document.addEventListener(event, enableAudioOnUserGesture, { once: true, passive: true });
     });
 
     return () => {
-      events.forEach(event => {
+      events.forEach((event) => {
         document.removeEventListener(event, enableAudioOnUserGesture);
       });
     };
@@ -189,17 +198,17 @@ export function useRosTopicSubscription() {
 
         const currentPhase = msg.phase;
         const previousPhase = previousPhaseRef.current;
-        
+
         if (currentPhase === TaskPhase.RECORDING && previousPhase !== TaskPhase.RECORDING) {
           console.log('🔊 Recording started - playing beep sound');
-          
+
           setTimeout(() => {
             playBeep(RECORDING_BEEP_FREQUENCY, RECORDING_BEEP_DURATION);
           }, BEEP_DELAY);
-          
+
           toast.success('Recording started! 🎬');
         }
-        
+
         previousPhaseRef.current = currentPhase;
 
         // Calculate progress percentage
@@ -285,81 +294,7 @@ export function useRosTopicSubscription() {
     } catch (error) {
       console.error('Failed to subscribe to task status topic:', error);
     }
-  }, [dispatch, rosbridgeUrl]);
-
-  const subscribeToHeartbeat = useCallback(async () => {
-    try {
-      const ros = await rosConnectionManager.getConnection(rosbridgeUrl);
-      if (!ros) return;
-
-      // Skip if already subscribed
-      if (heartbeatTopicRef.current) {
-        console.log('Heartbeat already subscribed, skipping...');
-        return;
-      }
-
-      heartbeatTopicRef.current = new ROSLIB.Topic({
-        ros,
-        name: '/heartbeat',
-        messageType: 'std_msgs/msg/Empty',
-      });
-
-      heartbeatTopicRef.current.subscribe(() => {
-        dispatch(setHeartbeatStatus('connected'));
-        dispatch(setLastHeartbeatTime(Date.now()));
-      });
-
-      console.log('Heartbeat subscription established');
-    } catch (error) {
-      console.error('Failed to subscribe to heartbeat topic:', error);
-    }
-  }, [dispatch, rosbridgeUrl]);
-
-  // Start connection and subscription
-  useEffect(() => {
-    if (!rosbridgeUrl) return;
-
-    const initializeSubscriptions = async () => {
-      // Cleanup previous subscriptions before creating new ones
-      cleanup();
-
-      try {
-        await subscribeToTaskStatus();
-        await subscribeToHeartbeat();
-        await subscribeToTrainingStatus();
-      } catch (error) {
-        console.error('Failed to initialize ROS subscriptions:', error);
-      }
-    };
-
-    initializeSubscriptions();
-
-    return cleanup;
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [rosbridgeUrl]); // Only rosbridgeUrl as dependency to prevent unnecessary re-subscriptions
-
-  // Helper function to get phase name
-  const getPhaseName = useCallback((phase) => {
-    const phaseNames = {
-      [TaskPhase.READY]: 'NONE',
-      [TaskPhase.WARMING_UP]: 'WARMING_UP',
-      [TaskPhase.RESETTING]: 'RESETTING',
-      [TaskPhase.RECORDING]: 'RECORDING',
-      [TaskPhase.SAVING]: 'SAVING',
-      [TaskPhase.STOPPED]: 'STOPPED',
-      [TaskPhase.INFERENCING]: 'INFERENCING',
-    };
-    return phaseNames[phase] || 'UNKNOWN';
-  }, []);
-
-  // Function to reset task to initial state
-  const resetTaskToIdle = useCallback(() => {
-    setTaskStatus((prevStatus) => ({
-      ...prevStatus,
-      running: false,
-      phase: 0,
-    }));
-  }, []);
+  }, [dispatch, rosbridgeUrl, playBeep]);
 
   const subscribeToTrainingStatus = useCallback(async () => {
     try {
@@ -420,6 +355,95 @@ export function useRosTopicSubscription() {
     }
   }, [dispatch, rosbridgeUrl]);
 
+  const subscribeToHeartbeat = useCallback(async () => {
+    try {
+      const ros = await rosConnectionManager.getConnection(rosbridgeUrl);
+      if (!ros) return;
+
+      // Skip if already subscribed
+      if (heartbeatTopicRef.current) {
+        console.log('Heartbeat already subscribed, skipping...');
+        return;
+      }
+
+      heartbeatTopicRef.current = new ROSLIB.Topic({
+        ros,
+        name: '/heartbeat',
+        messageType: 'std_msgs/msg/Empty',
+      });
+
+      heartbeatTopicRef.current.subscribe(() => {
+        dispatch(setHeartbeatStatus('connected'));
+        dispatch(setLastHeartbeatTime(Date.now()));
+      });
+
+      console.log('Heartbeat subscription established');
+    } catch (error) {
+      console.error('Failed to subscribe to heartbeat topic:', error);
+    }
+  }, [dispatch, rosbridgeUrl]);
+
+  // Manual initialization function
+  const initializeSubscriptions = useCallback(async () => {
+    if (!rosbridgeUrl) {
+      console.warn('Cannot initialize subscriptions: rosbridgeUrl is not set');
+      return;
+    }
+
+    console.log('Manually initializing ROS subscriptions...');
+
+    // Cleanup previous subscriptions before creating new ones
+    cleanup();
+
+    try {
+      await subscribeToTaskStatus();
+      await subscribeToHeartbeat();
+      await subscribeToTrainingStatus();
+      console.log('ROS subscriptions initialized successfully');
+    } catch (error) {
+      console.error('Failed to initialize ROS subscriptions:', error);
+    }
+  }, [
+    rosbridgeUrl,
+    cleanup,
+    subscribeToTaskStatus,
+    subscribeToHeartbeat,
+    subscribeToTrainingStatus,
+  ]);
+
+  // Auto-start connection and subscription (can be disabled by not calling useRosTopicSubscription)
+  useEffect(() => {
+    if (!rosbridgeUrl) return;
+
+    initializeSubscriptions();
+
+    return cleanup;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [rosbridgeUrl]); // Only rosbridgeUrl as dependency to prevent unnecessary re-subscriptions
+
+  // Helper function to get phase name
+  const getPhaseName = useCallback((phase) => {
+    const phaseNames = {
+      [TaskPhase.READY]: 'NONE',
+      [TaskPhase.WARMING_UP]: 'WARMING_UP',
+      [TaskPhase.RESETTING]: 'RESETTING',
+      [TaskPhase.RECORDING]: 'RECORDING',
+      [TaskPhase.SAVING]: 'SAVING',
+      [TaskPhase.STOPPED]: 'STOPPED',
+      [TaskPhase.INFERENCING]: 'INFERENCING',
+    };
+    return phaseNames[phase] || 'UNKNOWN';
+  }, []);
+
+  // Function to reset task to initial state
+  const resetTaskToIdle = useCallback(() => {
+    setTaskStatus((prevStatus) => ({
+      ...prevStatus,
+      running: false,
+      phase: 0,
+    }));
+  }, []);
+
   return {
     connected,
     subscribeToTaskStatus,
@@ -427,5 +451,6 @@ export function useRosTopicSubscription() {
     getPhaseName,
     resetTaskToIdle,
     subscribeToTrainingStatus,
+    initializeSubscriptions,
   };
 }
