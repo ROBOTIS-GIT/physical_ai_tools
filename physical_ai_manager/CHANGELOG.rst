@@ -2,6 +2,12 @@
 Changelog for package physical_ai_manager
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
+0.6.10 (2025-09-19)
+------------------
+* Added auto-reconnect subscriptions when setting robot type after physical_ai_server restart.
+* Fixed a bug in the file browser component that caused multiple calls to the browseFile service.
+* Contributors: Kiwoong Park
+
 0.6.9 (2025-09-18)
 ------------------
 * None

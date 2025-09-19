@@ -48,7 +48,8 @@ function App() {
   const isFirstLoad = useRef(true);
 
   // Subscribe to task status from ROS topic (always active)
-  useRosTopicSubscription();
+  const rosSubscriptionControls = useRosTopicSubscription();
+  rosConnectionManager.setOnConnected(rosSubscriptionControls.initializeSubscriptions);
 
   // Disconnect ROS connection when app unmounts
   useEffect(() => {
