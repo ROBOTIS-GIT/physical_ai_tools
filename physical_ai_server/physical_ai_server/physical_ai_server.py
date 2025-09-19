@@ -98,6 +98,12 @@ class PhysicalAIServer(Node):
         self.wait_inference = False
         self.inference_check_time = time.time()
 
+        self.visualizer = InferenceResultVisualizer(
+            logger=self.get_logger(),
+            enabled=True
+        )
+        self._used_action_count = 0
+
     def _init_core_components(self):
         self.communicator: Optional[Communicator] = None
         self.data_manager: Optional[DataManager] = None
@@ -252,6 +258,8 @@ class PhysicalAIServer(Node):
         self.get_logger().info(
             'Robot control parameters initialized successfully')
 
+        self._used_action_count = 0
+
     def clear_parameters(self):
         if self.communicator is not None:
             self.communicator.cleanup()
@@ -259,6 +267,11 @@ class PhysicalAIServer(Node):
 
         if self.timer_manager is not None:
             self.timer_manager = None
+
+        # Clear visualization data
+        if self.visualizer:
+            self.visualizer.clear_data()
+
 
         self.params = None
         self.total_joint_order = None
@@ -616,16 +629,23 @@ class PhysicalAIServer(Node):
                         try:
                             result = self.zmq_client.get_inference_result()
                             left_action, right_action = result.values()
-                            skip_action = re_inference_threshold - len(self.remain_action) + 1
-                            self.get_logger().info(f'Skipping first {skip_action} actions for smoothing')
-                            # old_action = self.remain_action.copy()
-                            # self.get_logger().info(f'Old action for smoothing: {old_action}')
                             new_action = np.hstack((left_action, right_action)).tolist()
-                            # self.get_logger().info(f'New left action: {new_action[:skip_action]}')
-                            # smoothed_action = [(x + y) / 2 for x, y in zip(new_action[:skip_action], old_action)]
-                            self.remain_action = new_action[skip_action:]
+                            skip_action = 0
+                            if len(self.remain_action) > 0:
+                                skip_action = re_inference_threshold - len(self.remain_action)
+                                self.get_logger().info(f'Skipping first {skip_action} actions for smoothing')
+                                self.remain_action = new_action[skip_action:]
+                            else:
+                                self.remain_action = new_action
 
                             self.wait_inference = False
+                            if self.visualizer.is_enabled():
+                                self.visualizer.process_complete_inference_visualization(
+                                    self.remain_action, 0.1, self.used_action_count - skip_action,
+                                    new_chunk, self._used_action_count,
+                                    skip_action,
+                                    self.get_logger()
+                                )
                         except Exception as e:
                             self.get_logger().error(f'Failed to get inference result: {str(e)}')
                             self.wait_inference = False
@@ -633,8 +653,17 @@ class PhysicalAIServer(Node):
                 # Use action if available
                 if self.remain_action:
                     action = self.remain_action.pop(0)
+                    if self.visualizer.is_enabled():
+                            self.visualizer.add_action_data(
+                                action_number=self._used_action_count,
+                                timestamp=time.time(),
+                                action_values=action,
+                                remaining_in_buffer=remaining_count
+                            )
+                    self._used_action_count += 1
                 else:
                     # No action available, skip this cycle
+                    self.get_logger().info('No action available, skipping this cycle')
                     return
                 
             except Exception as e:
