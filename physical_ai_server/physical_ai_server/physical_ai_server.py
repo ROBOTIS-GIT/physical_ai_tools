@@ -96,6 +96,7 @@ class PhysicalAIServer(Node):
         self.zmq_client: Optional[ZmqInferenceClient] = None
         self.remain_action = []
         self.wait_inference = False
+        self.inference_check_time = time.time()
 
     def _init_core_components(self):
         self.communicator: Optional[Communicator] = None
@@ -566,7 +567,7 @@ class PhysicalAIServer(Node):
             self.get_logger().info('ZMQ client connected to server')
             policy_info = {
                 'policy_type': 'GR00T_N1_5',
-                'policy_path': '/workspace/checkpoints/ROBOTIS/gr00t_test',
+                'policy_path': '/workspace/checkpoints/ROBOTIS/ROBOTIS/ffw_bg2_rev4_pick_coffee_bottle_env5_1to12/checkpoint-10000',
                 'robot_type': 'ffw_bg2'
             }
             response = self.zmq_client.execute_command('load_policy', policy_info)
@@ -585,22 +586,20 @@ class PhysicalAIServer(Node):
                 return
 
             try:
-                resized_cam_head = cv2.resize(camera_data['cam_head'], (224, 224))
-                # resized_cam_head_right = cv2.resize(camera_data['cam_head_right'], (224, 224))
+                re_inference_threshold = 4
                 
                 # Check if we need to start a new inference
-                if len(self.remain_action) < 3 and not self.wait_inference:
+                if len(self.remain_action) <= re_inference_threshold and not self.wait_inference:
+                    resized_cam_head = cv2.resize(camera_data['cam_head'], (224, 224))
                     cam_head_obs = resized_cam_head[np.newaxis, ...]
-                    # cam_head_right_obs = resized_cam_head_right[np.newaxis, ...]
                     left_arm_obs = np.array(follower_data)[np.newaxis, :8]
                     right_arm_obs = np.array(follower_data)[np.newaxis, 8:16]
                     obs = {
                         "video.cam_head": cam_head_obs,
-                        # "video.cam_head_right": cam_head_right_obs,
                         "state.left_arm": left_arm_obs,
                         "state.right_arm": right_arm_obs,
                         "annotation.human.action.task_description": [
-                            "Pick up the coffee bottles and place it into the carton"],
+                            "Place bottles in color-matching boxes: red→top left, green→bottom left, white→top right, orange→bottom right"],
                     }
                     
                     # Start async inference
@@ -614,13 +613,18 @@ class PhysicalAIServer(Node):
                 # Check if inference is ready
                 if self.wait_inference and self.zmq_client.has_pending_inference():
                     if self.zmq_client.check_inference_ready():
-                        start_time = time.time()
                         try:
                             result = self.zmq_client.get_inference_result()
                             left_action, right_action = result.values()
-                            end_time = time.time()
-                            self.get_logger().info(f'ZMQ inference completed in: {end_time - start_time:.4f} seconds')
-                            self.remain_action = np.hstack((left_action, right_action)).tolist()
+                            skip_action = re_inference_threshold - len(self.remain_action) + 1
+                            self.get_logger().info(f'Skipping first {skip_action} actions for smoothing')
+                            # old_action = self.remain_action.copy()
+                            # self.get_logger().info(f'Old action for smoothing: {old_action}')
+                            new_action = np.hstack((left_action, right_action)).tolist()
+                            # self.get_logger().info(f'New left action: {new_action[:skip_action]}')
+                            # smoothed_action = [(x + y) / 2 for x, y in zip(new_action[:skip_action], old_action)]
+                            self.remain_action = new_action[skip_action:]
+
                             self.wait_inference = False
                         except Exception as e:
                             self.get_logger().error(f'Failed to get inference result: {str(e)}')
@@ -651,6 +655,9 @@ class PhysicalAIServer(Node):
                 self.joint_topic_types,
                 self.joint_order
             )
+            pub_time = time.time()
+            self.get_logger().info(f'Action Length: {len(self.remain_action)}, time : {pub_time - self.inference_check_time}s')
+            self.inference_check_time = pub_time
 
             self.communicator.publish_action(
                 joint_msg_datas=action_pub_msgs
