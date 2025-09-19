@@ -2,7 +2,7 @@
 Changelog for package physical_ai_tools
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-0.6.9 (2025-09-19)
+0.6.10 (2025-09-19)
 ------------------
 * Prevent duplicate ROS2 services when changing robot type repeatedly.
 * Added auto-reconnect subscriptions when setting robot type after physical_ai_server restart.
