@@ -956,14 +956,14 @@ class PhysicalAIServer(Node):
     def _cleanup_hf_api_worker_with_threading(self):
         """
         Non-blocking cleanup of HF API Worker using threading.
-        
+
         This method starts a separate thread to run the existing
-        _cleanup_hf_api_worker method, preventing the main process 
+        _cleanup_hf_api_worker method, preventing the main process.
         from blocking during shutdown.
         """
         import threading
         import time
-        
+
         def cleanup_worker_thread():
             """Worker thread to run _cleanup_hf_api_worker."""
             try:
@@ -971,12 +971,12 @@ class PhysicalAIServer(Node):
                 self._cleanup_hf_api_worker()
             except Exception as e:
                 self.get_logger().error(f'Error in cleanup worker thread: {e}')
-        
+
         try:
             if self.hf_status_timer is None and self.hf_api_worker is None:
                 self.get_logger().info('No HF API components to cleanup')
                 return
-            
+
             self.get_logger().info('Starting non-blocking HF API Worker cleanup...')
 
             # Start cleanup thread
@@ -1004,7 +1004,7 @@ class PhysicalAIServer(Node):
                     }
                 })
                 time.sleep(0.5)  # Reduced from 1 to 0.5 seconds
-                
+
         except Exception as e:
             self.get_logger().error(
                 f'Error starting non-blocking HF API Worker cleanup: {str(e)}'
