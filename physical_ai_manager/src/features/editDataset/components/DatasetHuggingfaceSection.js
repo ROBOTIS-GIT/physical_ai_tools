@@ -19,7 +19,12 @@ import clsx from 'clsx';
 import { useSelector, useDispatch } from 'react-redux';
 import toast from 'react-hot-toast';
 import { MdFolderOpen, MdOutlineFileUpload, MdOutlineFileDownload } from 'react-icons/md';
-import { setHFUserId, setHFRepoIdUpload, setHFRepoIdDownload } from '../editDatasetSlice';
+import {
+  setHFUserId,
+  setHFRepoIdUpload,
+  setHFRepoIdDownload,
+  setHFDataType,
+} from '../editDatasetSlice';
 import { useRosServiceCaller } from '../../../hooks/useRosServiceCaller';
 import FileBrowserModal from '../../../components/FileBrowserModal';
 import TokenInputPopup from '../../../components/TokenInputPopup';
@@ -138,6 +143,7 @@ const HuggingfaceSection = () => {
   const hfStatus = useSelector((state) => state.editDataset.hfStatus);
   const downloadStatus = useSelector((state) => state.editDataset.downloadStatus);
   const uploadStatus = useSelector((state) => state.editDataset.uploadStatus);
+  const hfDataType = useSelector((state) => state.editDataset.hfDataType);
 
   const { controlHfServer, registerHFUser, getRegisteredHFUser } = useRosServiceCaller();
 
@@ -443,7 +449,36 @@ const HuggingfaceSection = () => {
                 </button>
               </div>
             </div>
+            {/* Data Type Selection */}
+            <div className="w-full flex items-center justify-start">
+              <span className="text-lg font-bold">Data Type</span>
+            </div>
+            <div className="w-full flex flex-row items-center justify-start">
+              <div className="flex items-center bg-gray-200 rounded-lg p-1">
+                <button
+                  className={`px-6 py-2 rounded-md text-sm font-medium transition-colors ${
+                    hfDataType === 'dataset'
+                      ? 'bg-blue-500 text-white'
+                      : 'text-gray-600 hover:text-gray-800'
+                  }`}
+                  onClick={() => dispatch(setHFDataType('dataset'))}
+                >
+                  Dataset
+                </button>
+                <button
+                  className={`px-6 py-2 rounded-md text-sm font-medium transition-colors ${
+                    hfDataType === 'model'
+                      ? 'bg-blue-500 text-white'
+                      : 'text-gray-600 hover:text-gray-800'
+                  }`}
+                  onClick={() => dispatch(setHFDataType('model'))}
+                >
+                  Model
+                </button>
+              </div>
+            </div>
           </div>
+
           {/* Section Selector */}
           <div className="flex items-center justify-start">
             <SectionSelector
@@ -462,11 +497,11 @@ const HuggingfaceSection = () => {
               <div className="w-full flex flex-col items-start justify-start gap-2 bg-gray-50 border border-gray-200 p-3 rounded-md">
                 <div className="w-full flex items-center rounded-md font-medium gap-2">
                   <MdOutlineFileUpload className="text-lg text-green-600" />
-                  Upload Dataset
+                  Upload {hfDataType.charAt(0).toUpperCase() + hfDataType.slice(1)}
                 </div>
                 <div className="text-sm text-gray-600">
                   <div className="mb-1">
-                    Uploads dataset from local directory to Hugging Face hub
+                    Uploads {hfDataType} from local directory to Hugging Face hub
                   </div>
                 </div>
               </div>
@@ -616,11 +651,11 @@ const HuggingfaceSection = () => {
               <div className="w-full flex flex-col items-start justify-start gap-2 bg-gray-50 border border-gray-200 p-3 rounded-md">
                 <div className="w-full flex items-center rounded-md font-medium gap-2">
                   <MdOutlineFileDownload className="text-lg text-blue-600" />
-                  Download Dataset
+                  Download {hfDataType.charAt(0).toUpperCase() + hfDataType.slice(1)}
                 </div>
                 <div className="text-sm text-gray-600">
                   <div className="mb-1">
-                    Downloads dataset from Hugging Face hub to local cache directory
+                    Downloads {hfDataType} from Hugging Face hub to local cache directory
                   </div>
                 </div>
               </div>
@@ -681,7 +716,11 @@ const HuggingfaceSection = () => {
                     {/* The dataset will be saved in the following directory */}
                     <MdFolderOpen className="inline-block w-4 h-4 text-blue-700 mr-1" />
                     The dataset will be saved in{' '}
-                    <span className="font-mono text-blue-700">{DEFAULT_PATHS.DATASET_PATH}</span>
+                    <span className="font-mono text-blue-700">
+                      {hfDataType === 'dataset'
+                        ? DEFAULT_PATHS.DATASET_PATH
+                        : DEFAULT_PATHS.POLICY_MODEL_PATH}
+                    </span>
                   </span>
                 </div>
 
