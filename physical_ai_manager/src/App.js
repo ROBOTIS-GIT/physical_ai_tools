@@ -217,136 +217,78 @@ function App() {
     };
   }, [page]);
 
+  const classPageButton = clsx(
+    'flex',
+    'flex-col',
+    'items-center',
+    'rounded-2xl',
+    'border-none',
+    'py-5',
+    'px-4',
+    'text-base',
+    'text-gray-800',
+    'cursor-pointer',
+    'transition-colors',
+    'duration-150',
+    'outline-none',
+    'w-24'
+  );
+
   return (
     <div className="flex min-h-screen w-screen">
       <aside className="w-30 bg-gray-100 min-h-screen flex flex-col items-center gap-4 shadow-[inset_0_0_2px_rgba(0,0,0,0.1)]">
         <div className="w-full h-screen flex flex-col gap-2 items-center overflow-y-auto scrollbar-thin">
           <div className="w-full h-8"></div>
+          {/* Home page button */}
           <button
-            className={clsx(
-              'flex',
-              'flex-col',
-              'items-center',
-              'rounded-2xl',
-              'border-none',
-              'py-5',
-              'px-4',
-              'text-base',
-              'text-gray-800',
-              'cursor-pointer',
-              'transition-colors',
-              'duration-150',
-              'outline-none',
-              'min-w-24',
-              {
-                'hover:bg-gray-200 active:bg-gray-400': page !== PageType.HOME,
-                'bg-gray-300': page === PageType.HOME,
-              }
-            )}
+            className={clsx(classPageButton, {
+              'hover:bg-gray-200 active:bg-gray-400': page !== PageType.HOME,
+              'bg-gray-300': page === PageType.HOME,
+            })}
             onClick={handleHomePageNavigation}
           >
             <MdHome size={32} className="mb-1.5" />
             <span className="mt-1 text-sm">Home</span>
           </button>
+          {/* Record page button */}
           <button
-            className={clsx(
-              'flex',
-              'flex-col',
-              'items-center',
-              'rounded-2xl',
-              'border-none',
-              'py-5',
-              'px-4',
-              'text-base',
-              'text-gray-800',
-              'cursor-pointer',
-              'transition-colors',
-              'duration-150',
-              'outline-none',
-              'min-w-24',
-              {
-                'hover:bg-gray-200 active:bg-gray-400': page !== PageType.RECORD,
-                'bg-gray-300': page === PageType.RECORD,
-              }
-            )}
+            className={clsx(classPageButton, {
+              'hover:bg-gray-200 active:bg-gray-400': page !== PageType.RECORD,
+              'bg-gray-300': page === PageType.RECORD,
+            })}
             onClick={handleRecordPageNavigation}
           >
             <MdVideocam size={32} className="mb-1.5" />
             <span className="mt-1 text-sm">Record</span>
           </button>
+          {/* Inference page button */}
           <button
-            className={clsx(
-              'flex',
-              'flex-col',
-              'items-center',
-              'rounded-2xl',
-              'border-none',
-              'py-5',
-              'px-4',
-              'text-base',
-              'text-gray-800',
-              'cursor-pointer',
-              'transition-colors',
-              'duration-150',
-              'outline-none',
-              'w-24',
-              {
-                'hover:bg-gray-200 active:bg-gray-400': page !== PageType.INFERENCE,
-                'bg-gray-300': page === PageType.INFERENCE,
-              }
-            )}
+            className={clsx(classPageButton, {
+              'hover:bg-gray-200 active:bg-gray-400': page !== PageType.INFERENCE,
+              'bg-gray-300': page === PageType.INFERENCE,
+            })}
             onClick={handleInferencePageNavigation}
           >
             <MdMemory size={32} className="mb-1.5" />
             <span className="mt-1 text-sm">Inference</span>
           </button>
+          {/* Training page button */}
           <button
-            className={clsx(
-              'flex',
-              'flex-col',
-              'items-center',
-              'rounded-2xl',
-              'border-none',
-              'py-5',
-              'px-4',
-              'text-base',
-              'text-gray-800',
-              'cursor-pointer',
-              'transition-colors',
-              'duration-150',
-              'outline-none',
-              'w-24',
-              {
-                'hover:bg-gray-200 active:bg-gray-400': page !== PageType.TRAINING,
-                'bg-gray-300': page === PageType.TRAINING,
-              }
-            )}
+            className={clsx(classPageButton, {
+              'hover:bg-gray-200 active:bg-gray-400': page !== PageType.TRAINING,
+              'bg-gray-300': page === PageType.TRAINING,
+            })}
             onClick={handleTrainingPageNavigation}
           >
             <GoGraph size={28} className="mb-1.5" />
             <span className="mt-1 text-sm">Training</span>
           </button>
+          {/* Edit dataset page button */}
           <button
-            className={clsx(
-              'flex',
-              'flex-col',
-              'items-center',
-              'rounded-2xl',
-              'border-none',
-              'py-5',
-              'px-4',
-              'text-base',
-              'text-gray-800',
-              'cursor-pointer',
-              'transition-colors',
-              'duration-150',
-              'outline-none',
-              'w-24',
-              {
-                'hover:bg-gray-200 active:bg-gray-400': page !== PageType.EDIT_DATASET,
-                'bg-gray-300': page === PageType.EDIT_DATASET,
-              }
-            )}
+            className={clsx(classPageButton, {
+              'hover:bg-gray-200 active:bg-gray-400': page !== PageType.EDIT_DATASET,
+              'bg-gray-300': page === PageType.EDIT_DATASET,
+            })}
             onClick={handleEditDatasetPageNavigation}
           >
             <MdDataset size={28} className="mb-1.5" />
