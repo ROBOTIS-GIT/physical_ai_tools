@@ -170,20 +170,16 @@ export default function ControlPanel() {
   // Check if button should be enabled based on phase
   const isButtonEnabled = useCallback(
     (label) => {
-      if (
-        page === PageType.RECORD &&
-        taskInfo?.taskType !== 'record' &&
-        taskInfo?.taskType !== ''
-      ) {
-        return false;
-      }
-
-      if (
-        page === PageType.INFERENCE &&
-        taskInfo?.taskType !== 'inference' &&
-        taskInfo?.taskType !== ''
-      ) {
-        return false;
+      if (taskStatus.running) {
+        if (page === PageType.RECORD) {
+          if (taskInfo?.taskType !== 'record' || taskInfo?.taskType !== '') {
+            return false;
+          } // disable buttons in Record page when inference task is running
+        } else if (page === PageType.INFERENCE) {
+          if (taskInfo?.taskType !== 'inference' || taskInfo?.taskType !== '') {
+            return false;
+          } // disable buttons in Inference page when record task is running
+        }
       }
 
       const isRecordTaskType = taskInfo?.taskType === 'record';
