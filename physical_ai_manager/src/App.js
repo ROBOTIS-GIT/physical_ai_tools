@@ -261,17 +261,6 @@ function App() {
             <MdVideocam size={32} className="mb-1.5" />
             <span className="mt-1 text-sm">Record</span>
           </button>
-          {/* Inference page button */}
-          <button
-            className={clsx(classPageButton, {
-              'hover:bg-gray-200 active:bg-gray-400': page !== PageType.INFERENCE,
-              'bg-gray-300': page === PageType.INFERENCE,
-            })}
-            onClick={handleInferencePageNavigation}
-          >
-            <MdMemory size={32} className="mb-1.5" />
-            <span className="mt-1 text-sm">Inference</span>
-          </button>
           {/* Training page button */}
           <button
             className={clsx(classPageButton, {
@@ -283,6 +272,21 @@ function App() {
             <GoGraph size={28} className="mb-1.5" />
             <span className="mt-1 text-sm">Training</span>
           </button>
+          {/* Inference page button */}
+          <button
+            className={clsx(classPageButton, {
+              'hover:bg-gray-200 active:bg-gray-400': page !== PageType.INFERENCE,
+              'bg-gray-300': page === PageType.INFERENCE,
+            })}
+            onClick={handleInferencePageNavigation}
+          >
+            <MdMemory size={32} className="mb-1.5" />
+            <span className="mt-1 text-sm">Inference</span>
+          </button>
+
+          {/* Divider line */}
+          <div className="w-16 h-px bg-gray-400 my-2"></div>
+
           {/* Edit dataset page button */}
           <button
             className={clsx(classPageButton, {
@@ -291,8 +295,8 @@ function App() {
             })}
             onClick={handleEditDatasetPageNavigation}
           >
-            <MdDataset size={28} className="mb-1.5" />
-            <span className="mt-1 text-sm">Edit Dataset</span>
+            <MdDataset size={28} className="mb-2" />
+            <span className="mt-1 text-sm whitespace-nowrap">Data Tools</span>
           </button>
         </div>
       </aside>
