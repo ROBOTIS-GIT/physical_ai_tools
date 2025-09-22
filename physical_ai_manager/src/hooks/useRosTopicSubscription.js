@@ -463,7 +463,7 @@ export function useRosTopicSubscription() {
         const status = msg.status;
         const operation = msg.operation;
         const repoId = msg.repo_id;
-        const localPath = msg.local_path;
+        // const localPath = msg.local_path;
         const message = msg.message;
         const progressCurrent = msg.progress_current;
         const progressTotal = msg.progress_total;

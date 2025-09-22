@@ -170,6 +170,7 @@ const HuggingfaceSection = () => {
 
   // Section availability
   const canChangeSection = !isProcessing;
+  const canChangeDataType = !isProcessing;
 
   const isHfStatusReady =
     hfStatus === HFStatus.IDLE || hfStatus === HFStatus.SUCCESS || hfStatus === HFStatus.FAILED;
@@ -321,7 +322,7 @@ const HuggingfaceSection = () => {
       try {
         const repoId = userId + '/' + hfRepoIdUpload.trim();
         const localDir = hfLocalDirUpload.trim();
-        const result = await controlHfServer('upload', repoId, 'dataset', localDir);
+        const result = await controlHfServer('upload', repoId, hfDataType.toLowerCase(), localDir);
         console.log('Upload dataset result:', result);
         toast.success(`Upload started! (${repoId})`);
       } catch (error) {
@@ -348,7 +349,7 @@ const HuggingfaceSection = () => {
       setIsDownloading(true);
       try {
         const repoId = userId + '/' + hfRepoIdDownload.trim();
-        const result = await controlHfServer('download', repoId, 'dataset');
+        const result = await controlHfServer('download', repoId, hfDataType.toLowerCase());
         console.log('Download dataset result:', result);
 
         toast.success(`Download started! (${repoId})`);
@@ -361,7 +362,7 @@ const HuggingfaceSection = () => {
     },
     cancelOperation: async () => {
       try {
-        const result = await controlHfServer('cancel', hfRepoIdDownload, 'dataset');
+        const result = await controlHfServer('cancel', hfRepoIdDownload, hfDataType.toLowerCase());
         console.log('Cancel download result:', result);
         toast.success(`Cancelling... (${hfRepoIdDownload})`);
       } catch (error) {
@@ -460,7 +461,7 @@ const HuggingfaceSection = () => {
                     hfDataType === 'dataset'
                       ? 'bg-blue-500 text-white'
                       : 'text-gray-600 hover:text-gray-800'
-                  }`}
+                  } ${!canChangeDataType ? 'cursor-not-allowed' : 'cursor-pointer'}`}
                   onClick={() => dispatch(setHFDataType('dataset'))}
                 >
                   Dataset
@@ -470,7 +471,7 @@ const HuggingfaceSection = () => {
                     hfDataType === 'model'
                       ? 'bg-blue-500 text-white'
                       : 'text-gray-600 hover:text-gray-800'
-                  }`}
+                  } ${!canChangeDataType ? 'cursor-not-allowed' : 'cursor-pointer'}`}
                   onClick={() => dispatch(setHFDataType('model'))}
                 >
                   Model
