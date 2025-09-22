@@ -184,7 +184,7 @@ class HfApiWorker:
             if task_result:
                 status, message = task_result
                 if status == 'success':
-                    log_message = f'✅ HF API task completed successfully: {message}'
+                    log_message = f'✅ HF API task completed successfully:\n{message}'
                     self.logger.info(log_message)
                     self.is_processing = False
                     self.current_task = None
@@ -194,7 +194,7 @@ class HfApiWorker:
                     result['message'] = log_message
                     return result
                 elif status == 'error':
-                    log_message = f'❌ HF API task failed: {message}'
+                    log_message = f'❌ HF API task failed:\n{message}'
                     self.logger.error(log_message)
                     self.is_processing = False
                     self.current_task = None
