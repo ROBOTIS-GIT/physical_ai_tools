@@ -172,11 +172,11 @@ export default function ControlPanel() {
     (label) => {
       if (taskStatus.running) {
         if (page === PageType.RECORD) {
-          if (taskInfo?.taskType !== 'record' || taskInfo?.taskType !== '') {
+          if (taskInfo?.taskType !== 'record' && taskInfo?.taskType !== '') {
             return false;
           } // disable buttons in Record page when inference task is running
         } else if (page === PageType.INFERENCE) {
-          if (taskInfo?.taskType !== 'inference' || taskInfo?.taskType !== '') {
+          if (taskInfo?.taskType !== 'inference' && taskInfo?.taskType !== '') {
             return false;
           } // disable buttons in Inference page when record task is running
         }

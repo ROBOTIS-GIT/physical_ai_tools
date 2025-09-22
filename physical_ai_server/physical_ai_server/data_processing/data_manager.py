@@ -672,8 +672,8 @@ class DataManager:
             print(f'Detailed error traceback:\n{traceback.format_exc()}')
             return False
 
-    @classmethod
-    def _delete_dot_cache_folder_before_upload(self, local_dir):
+    @staticmethod
+    def _delete_dot_cache_folder_before_upload(local_dir):
         dot_cache_path = Path(local_dir) / '.cache'
         if dot_cache_path.exists():
             shutil.rmtree(dot_cache_path)
