@@ -16,7 +16,7 @@
 
 import React, { useEffect, useRef } from 'react';
 import clsx from 'clsx';
-import { MdHome, MdVideocam, MdMemory, MdDataset } from 'react-icons/md';
+import { MdHome, MdVideocam, MdMemory, MdWidgets } from 'react-icons/md';
 import { GoGraph } from 'react-icons/go';
 import { Toaster } from 'react-hot-toast';
 import toast from 'react-hot-toast';
@@ -296,7 +296,7 @@ function App() {
             })}
             onClick={handleEditDatasetPageNavigation}
           >
-            <MdDataset size={28} className="mb-2" />
+            <MdWidgets size={28} className="mb-2" />
             <span className="mt-1 text-sm whitespace-nowrap">Data Tools</span>
           </button>
         </div>

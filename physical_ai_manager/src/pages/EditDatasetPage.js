@@ -18,7 +18,7 @@ import React, { useEffect, useState } from 'react';
 import clsx from 'clsx';
 import toast, { useToasterStore } from 'react-hot-toast';
 import {
-  MdDataset,
+  MdWidgets,
   MdCloudUpload,
   MdMerge,
   MdDeleteSweep,
@@ -163,7 +163,7 @@ export default function EditDatasetPage() {
     <div className={STYLES.container}>
       <div className="w-full flex flex-col items-start justify-start p-10 gap-6">
         <h1 className="text-4xl font-bold flex flex-row items-center justify-start gap-2">
-          <MdDataset className="w-10 h-10" />
+          <MdWidgets className="w-10 h-10" />
           Data Tools
         </h1>
 
