@@ -108,31 +108,31 @@ export default function EditDatasetPage() {
               key={sectionType}
               onClick={() => setActiveSection(sectionType)}
               className={clsx(
-                'flex flex-col items-center justify-center p-4 rounded-lg border-2 transition-all duration-200',
-                'hover:shadow-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-opacity-50',
+                'flex flex-col items-center justify-center p-4 rounded-lg border transition-all duration-200',
+                'hover:shadow-sm focus:outline-none focus:ring-1 focus:ring-blue-400 focus:ring-opacity-30',
                 {
-                  'border-blue-500 bg-blue-50 shadow-md': isActive,
-                  'border-gray-200 bg-gray-50 hover:border-gray-300 hover:bg-gray-100': !isActive,
+                  'border-blue-300 bg-blue-50/50 shadow-sm': isActive,
+                  'border-gray-200 bg-white hover:border-gray-300 hover:shadow-sm': !isActive,
                 }
               )}
             >
               <IconComponent
                 className={clsx('w-6 h-6 mb-2', {
-                  'text-blue-600': isActive,
-                  'text-gray-500': !isActive,
+                  'text-blue-500': isActive,
+                  'text-gray-400': !isActive,
                 })}
               />
               <h3
                 className={clsx('text-base font-medium mb-1', {
-                  'text-blue-900': isActive,
-                  'text-gray-700': !isActive,
+                  'text-blue-700': isActive,
+                  'text-gray-600': !isActive,
                 })}
               >
                 {config.label}
               </h3>
               <p
                 className={clsx('text-xs text-center', {
-                  'text-blue-700': isActive,
+                  'text-blue-600': isActive,
                   'text-gray-500': !isActive,
                 })}
               >
