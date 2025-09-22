@@ -24,7 +24,7 @@ import time
 from typing import Optional
 
 from ament_index_python.packages import get_package_share_directory
-from physical_ai_interfaces.msg import TaskStatus, TrainingStatus, HFOperationStatus
+from physical_ai_interfaces.msg import HFOperationStatus, TaskStatus, TrainingStatus
 from physical_ai_interfaces.srv import (
     ControlHfServer,
     GetDatasetList,

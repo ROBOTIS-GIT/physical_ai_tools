@@ -20,6 +20,7 @@ import io
 import re
 import sys
 import time
+
 from tqdm import tqdm
 
 
@@ -74,13 +75,13 @@ class HuggingFaceProgressTqdm(tqdm):
         if should_print:
             if self.total and self.total > 0:
                 progress_msg = (
-                    f"[HF Download] Progress: {self.n}/{self.total} "
-                    f"files ({percentage}%)"
+                    f'[HF Download] Progress: {self.n}/{self.total} '
+                    f'files ({percentage}%)'
                 )
                 print(progress_msg, flush=True)
             else:
                 progress_msg = (
-                    f"[HF Download] Progress: {self.n} files downloaded"
+                    f'[HF Download] Progress: {self.n} files downloaded'
                 )
                 print(progress_msg, flush=True)
             self.last_update = current_time
@@ -91,7 +92,8 @@ class HuggingFaceLogCapture(io.StringIO):
     Captures HuggingFace upload output and parses progress information.
 
     This class redirects stdout to capture HuggingFace upload logs while
-    simultaneously parsing progress information and sending it to a progress queue.
+    simultaneously parsing progress information and sending it to a progress
+    queue.
     """
 
     def __init__(self, progress_queue=None):
@@ -148,11 +150,14 @@ class HuggingFaceLogCapture(io.StringIO):
             return
 
         try:
-            # Parse "Files: hashed X/Y (size) | pre-uploaded: A/B (size) | committed: C/D (size)"
+            # Parse HF upload progress line format:
+            # "Files: hashed X/Y (size) | pre-uploaded: A/B (size) | committed: C/D (size)"
             if 'Files:' in line and 'hashed' in line:
                 # Extract all progress indicators
                 hashed_match = re.search(r'hashed (\d+)/(\d+)', line)
-                pre_uploaded_match = re.search(r'pre-uploaded: (\d+)/(\d+)', line)
+                pre_uploaded_match = re.search(
+                    r'pre-uploaded: (\d+)/(\d+)', line
+                )
                 committed_match = re.search(r'committed: (\d+)/(\d+)', line)
 
                 if hashed_match:
@@ -178,31 +183,40 @@ class HuggingFaceLogCapture(io.StringIO):
 
                         preupload_progress = 0
                         if pre_uploaded_total > 0:
-                            preupload_progress = (pre_uploaded_current / pre_uploaded_total) * 40
+                            preupload_progress = (
+                                pre_uploaded_current / pre_uploaded_total
+                            ) * 40
 
                         commit_progress = 0
                         if committed_total > 0:
-                            commit_progress = (committed_current / committed_total) * 30
+                            commit_progress = (
+                                committed_current / committed_total
+                            ) * 30
 
                         # Total composite progress
-                        composite_percent = hash_progress + preupload_progress + commit_progress
+                        composite_percent = (
+                            hash_progress + preupload_progress + commit_progress
+                        )
 
                         # Use total files as the consistent total (usually hashed_total)
                         total_files = hashed_total
 
                         # Calculate equivalent current files based on composite progress
-                        current_files = int((composite_percent / 100) * total_files)
+                        current_files = int(
+                            (composite_percent / 100) * total_files
+                        )
 
                         # Determine current stage for display
-                        if committed_current == committed_total and committed_total > 0:
-                            stage = "✅ Upload Complete"
+                        if (committed_current == committed_total and
+                                committed_total > 0):
+                            stage = '✅ Upload Complete'
                             current_files = total_files  # Show 100% completion
                         elif committed_current > 0:
-                            stage = "📤 Committing"
+                            stage = '📤 Committing'
                         elif pre_uploaded_current > 0:
-                            stage = "⬆️ Uploading"
+                            stage = '⬆️ Uploading'
                         else:
-                            stage = "🔄 Hashing"
+                            stage = '🔄 Hashing'
 
                         progress_data = {
                             'type': 'upload_progress',

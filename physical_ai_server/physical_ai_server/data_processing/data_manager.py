@@ -18,10 +18,10 @@
 
 import gc
 import os
+from pathlib import Path
 import shutil
 import subprocess
 import time
-from pathlib import Path
 
 import cv2
 from geometry_msgs.msg import Twist
@@ -32,21 +32,25 @@ from huggingface_hub import (
 )
 from lerobot.datasets.utils import DEFAULT_FEATURES
 
-
 from nav_msgs.msg import Odometry
+
 import numpy as np
+
 from physical_ai_interfaces.msg import TaskStatus
+
 from physical_ai_server.data_processing.data_converter import DataConverter
 from physical_ai_server.data_processing.lerobot_dataset_wrapper import LeRobotDatasetWrapper
-from physical_ai_server.device_manager.cpu_checker import CPUChecker
-from physical_ai_server.device_manager.ram_checker import RAMChecker
-from physical_ai_server.device_manager.storage_checker import StorageChecker
-import requests
-from sensor_msgs.msg import JointState
-from trajectory_msgs.msg import JointTrajectory
 from physical_ai_server.data_processing.progress_tracker import (
     HuggingFaceProgressTqdm
 )
+from physical_ai_server.device_manager.cpu_checker import CPUChecker
+from physical_ai_server.device_manager.ram_checker import RAMChecker
+from physical_ai_server.device_manager.storage_checker import StorageChecker
+
+import requests
+
+from sensor_msgs.msg import JointState
+from trajectory_msgs.msg import JointTrajectory
 
 
 class DataManager:
@@ -573,10 +577,11 @@ class DataManager:
         save_dir = save_path / repo_id
 
         try:
-            print(f"Starting download of {repo_id} ({repo_type})...")
+            print(f'Starting download of {repo_id} ({repo_type})...')
 
             # Create a wrapper class that includes the progress_queue
             class ProgressTqdmWrapper(HuggingFaceProgressTqdm):
+
                 def __init__(self, *args, **kwargs):
                     kwargs['progress_queue'] = DataManager._progress_queue
                     super().__init__(*args, **kwargs)
@@ -588,7 +593,7 @@ class DataManager:
                 tqdm_class=ProgressTqdmWrapper
             )
 
-            print(f"Download completed: {repo_id}")
+            print(f'Download completed: {repo_id}')
             return result
         except Exception as e:
             print(f'Error downloading HuggingFace repo: {e}')
