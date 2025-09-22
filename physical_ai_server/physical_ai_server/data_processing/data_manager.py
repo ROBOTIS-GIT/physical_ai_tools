@@ -629,6 +629,9 @@ class DataManager:
             )
             print(f'Repository created/verified: {url}')
 
+            # Delete .cache folder before upload
+            DataManager._delete_dot_cache_folder_before_upload(local_dir)
+
             # Upload folder contents (use upload_large_folder for better handling)
             print(f'Uploading folder {local_dir} to repository {repo_id}')
 
@@ -663,6 +666,13 @@ class DataManager:
             import traceback
             print(f'Detailed error traceback:\n{traceback.format_exc()}')
             return False
+
+    @classmethod
+    def _delete_dot_cache_folder_before_upload(self, local_dir):
+        dot_cache_path = Path(local_dir) / '.cache'
+        if dot_cache_path.exists():
+            shutil.rmtree(dot_cache_path)
+            print(f'🗑️ Deleted {local_dir}/.cache folder before upload')
 
     @staticmethod
     def delete_huggingface_repo(
