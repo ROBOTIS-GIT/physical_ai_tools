@@ -48,6 +48,7 @@ class HfApiWorker:
             'repo_id': '',
             'repo_type': ''
         }
+        self.last_logged_current_progress = -1  # Track last logged current value
 
         # Basic config for the main process logger
         logging.basicConfig(
@@ -177,7 +178,10 @@ class HfApiWorker:
                 result['progress']['total'] = total
                 result['progress']['percentage'] = percentage
 
-                self.logger.info(f'{mode.capitalize()} {current}/{total} ({percentage}%)')
+                # Only log when current value changes
+                if current != self.last_logged_current_progress:
+                    self.logger.info(f'{mode.capitalize()} {current}/{total} ({percentage}%)')
+                    self.last_logged_current_progress = current
 
             # Check for task result
             task_result = self.get_result(block=False, timeout=0.1)
@@ -318,9 +322,9 @@ class HfApiWorker:
                                 logger.info(f'✅ Upload completed: {repo_id}')
                                 output_queue.put(('success', message))
                             else:
-                                message = (f'Failed to upload Hugging Face repo: '
-                                           f'{repo_id}, Please check the repo ID '
-                                           f'and try again.')
+                                message = (f'Failed to upload Hugging Face repo'
+                                           f'\n{repo_id}, '
+                                           f'\nPlease check the repo ID and try again.')
                                 logger.error(f'❌ Upload failed: {repo_id}')
                                 output_queue.put(('error', message))
 
@@ -335,9 +339,9 @@ class HfApiWorker:
                                 logger.info(f'✅ Download completed: {repo_id}')
                                 output_queue.put(('success', message))
                             else:
-                                message = (f'Failed to download Hugging Face repo: '
-                                           f'{repo_id}, Please check the repo ID '
-                                           f'and try again.')
+                                message = (f'Failed to download Hugging Face repo:'
+                                           f'\n{repo_id}, '
+                                           f'\nPlease check the repo ID and try again.')
                                 logger.error(f'❌ Download failed: {repo_id}')
                                 output_queue.put(('error', message))
 

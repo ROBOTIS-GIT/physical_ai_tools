@@ -352,7 +352,7 @@ const HuggingfaceSection = () => {
         const result = await controlHfServer('download', repoId, hfDataType.toLowerCase());
         console.log('Download dataset result:', result);
 
-        toast.success(`Download started! (${repoId})`);
+        toast.success(`Download started!\n(${repoId})`);
       } catch (error) {
         console.error('Error downloading dataset:', error);
         toast.error(`Failed to download dataset: ${error.message}`);
