@@ -1,8 +1,7 @@
-string operation
-string status
-string repo_id
-string local_path
-string message
-uint16 progress_current
-uint16 progress_total
-float32 progress_percentage
+string operation              # upload, download
+string status                 # Idle, Uploading, Downloading, Success, Failed
+string local_path             # local path of the dataset or model
+string message                # message of the operation
+uint16 progress_current       # current progress
+uint16 progress_total         # total progress
+float32 progress_percentage   # percentage of the progress
