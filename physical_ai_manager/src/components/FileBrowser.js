@@ -14,7 +14,7 @@
 //
 // Author: Kiwoong Park
 
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useState, useRef } from 'react';
 import clsx from 'clsx';
 import toast from 'react-hot-toast';
 import {
@@ -481,6 +481,7 @@ export default function FileBrowser({
   allowFileSelect = true,
 }) {
   const { browseFile } = useRosServiceCaller();
+  const isInitializedRef = useRef(false);
 
   const [currentPath, setCurrentPath] = useState(initialPath);
   const [parentPath, setParentPath] = useState('');
@@ -619,17 +620,55 @@ export default function FileBrowser({
   const filteredItems = filterItems(items, targetFileName, fileFilter);
 
   useEffect(() => {
+    // Prevent multiple initializations
+    if (isInitializedRef.current) {
+      return;
+    }
+    isInitializedRef.current = true;
+
     const initializeBrowser = async () => {
       const targetPath = initialPath || homePath;
-      if (targetPath) {
-        await browsePath(targetPath, 'browse');
-      } else {
-        await browsePath('', 'browse');
+      setLoading(true);
+      setError(null);
+      setSelectedItem(null);
+
+      try {
+        const targetFiles = targetFileName ? targetFileName : null;
+        const targetFolders = targetFolderName ? targetFolderName : null;
+        const result = await browseFile('browse', targetPath || '', '', targetFiles, targetFolders);
+
+        if (result.success) {
+          setCurrentPath(result.current_path);
+          setParentPath(result.parent_path);
+          setItems(result.items || []);
+
+          if (onPathChange) {
+            onPathChange(result.current_path);
+          }
+
+          if (targetFileName && result.items) {
+            checkDirectoriesForTargetFile(result.items);
+          } else if (targetFolderName && result.items) {
+            checkDirectoriesForTargetFile(result.items);
+          } else if (!targetFileName && !targetFolderName) {
+            setDirectoriesWithTarget(new Set());
+          }
+        } else {
+          setError(result.message || 'Failed to browse directory');
+          toast.error(result.message || 'Failed to browse directory');
+        }
+      } catch (err) {
+        const errorMessage = err.message || 'Failed to browse directory';
+        setError(errorMessage);
+        toast.error(errorMessage);
+      } finally {
+        setLoading(false);
       }
     };
 
     initializeBrowser();
-  }, [initialPath, homePath, browsePath]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [initialPath, homePath, targetFileName, targetFolderName]);
 
   const classMainContainer = clsx(
     'h-full',

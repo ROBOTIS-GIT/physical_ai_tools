@@ -24,14 +24,13 @@ from nav_msgs.msg import Odometry
 from physical_ai_interfaces.msg import (
     BrowserItem,
     DatasetInfo,
-    TaskStatus,
-    TrainingStatus
+    TaskStatus
 )
 from physical_ai_interfaces.srv import (
     BrowseFile,
     EditDataset,
     GetDatasetInfo,
-    GetImageTopicList,
+    GetImageTopicList
 )
 from physical_ai_server.communication.multi_subscriber import MultiSubscriber
 from physical_ai_server.data_processing.data_editor import DataEditor
@@ -206,12 +205,6 @@ class Communicator:
         self.status_publisher = self.node.create_publisher(
             TaskStatus,
             '/task/status',
-            self.PUB_QOS_SIZE
-        )
-
-        self.training_status_publisher = self.node.create_publisher(
-            TrainingStatus,
-            '/training/status',
             self.PUB_QOS_SIZE
         )
 
@@ -463,38 +456,72 @@ class Communicator:
             msg_types[publisher_name] = publisher.msg_type
         return msg_types
 
+    def _destroy_service_if_exists(self, service_attr_name: str):
+        if hasattr(self, service_attr_name):
+            service = getattr(self, service_attr_name)
+            if service is not None:
+                self.node.destroy_service(service)
+                setattr(self, service_attr_name, None)
+
+    def _destroy_publisher_if_exists(self, publisher_attr_name: str):
+        if hasattr(self, publisher_attr_name):
+            publisher = getattr(self, publisher_attr_name)
+            if publisher is not None:
+                self.node.destroy_publisher(publisher)
+                setattr(self, publisher_attr_name, None)
+
     def cleanup(self):
-        self.node.get_logger().info(
-            'Cleaning up Communicator resources...')
+        self.node.get_logger().info('Cleaning up Communicator resources...')
 
-        if hasattr(self, 'status_publisher'):
-            self.node.destroy_publisher(self.status_publisher)
-            self.status_publisher = None
+        self._cleanup_publishers()
+        self._cleanup_subscribers()
+        self._cleanup_services()
 
-        for _, publisher in self.joint_publishers.items():
-            self.node.destroy_publisher(publisher)
-        self.joint_publishers.clear()
-
-        if hasattr(self, 'multi_subscriber'):
-            self.multi_subscriber.cleanup()
-            self.multi_subscriber = None
-
-        if hasattr(self, 'image_topic_list_service'):
-            self.node.destroy_service(self.image_topic_list_service)
-            self.image_topic_list_service = None
-
+        # Clear message containers
         self.camera_topic_msgs.clear()
         self.follower_topic_msgs.clear()
         self.leader_topic_msgs.clear()
 
         self.node.get_logger().info('Communicator cleanup completed')
 
+    def _cleanup_publishers(self):
+        publisher_names = [
+            'status_publisher',
+            'heartbeat_publisher'
+        ]
+        for publisher_name in publisher_names:
+            self._destroy_publisher_if_exists(publisher_name)
+
+        # Clean up joint publishers
+        for _, publisher in self.joint_publishers.items():
+            self.node.destroy_publisher(publisher)
+        self.joint_publishers.clear()
+
+    def _cleanup_subscribers(self):
+        # Clean up multi subscriber
+        if hasattr(self, 'multi_subscriber') and self.multi_subscriber is not None:
+            self.multi_subscriber.cleanup()
+            self.multi_subscriber = None
+
+        # Clean up joystick trigger subscriber
+        if hasattr(self, 'joystick_trigger_subscriber') and \
+           self.joystick_trigger_subscriber is not None:
+            self.node.destroy_subscription(self.joystick_trigger_subscriber)
+            self.joystick_trigger_subscriber = None
+
+    def _cleanup_services(self):
+        service_names = [
+            'image_topic_list_service',
+            'file_browser_service',
+            'data_editor_service',
+            'get_dataset_info_service'
+        ]
+        for service_name in service_names:
+            self._destroy_service_if_exists(service_name)
+
     def heartbeat_timer_callback(self):
         heartbeat_msg = Empty()
         self.heartbeat_publisher.publish(heartbeat_msg)
-
-    def publish_training_status(self, status: TrainingStatus):
-        self.training_status_publisher.publish(status)
 
     def joystick_trigger_callback(self, msg: String):
         self.node.get_logger().info(f'Received joystick trigger: {msg.data}')
