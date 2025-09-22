@@ -29,7 +29,7 @@ import { useRosServiceCaller } from '../../../hooks/useRosServiceCaller';
 import FileBrowserModal from '../../../components/FileBrowserModal';
 import TokenInputPopup from '../../../components/TokenInputPopup';
 import SectionSelector from './SectionSelector';
-import { DEFAULT_PATHS, TARGET_FOLDERS } from '../../../constants/paths';
+import { DEFAULT_PATHS, TARGET_FOLDERS, TARGET_FILES } from '../../../constants/paths';
 import HFStatus from '../../../constants/HFStatus';
 
 // Constants
@@ -153,6 +153,7 @@ const HuggingfaceSection = () => {
   const [isUploading, setIsUploading] = useState(false);
   const [isDownloading, setIsDownloading] = useState(false);
   const [showHfLocalDirBrowserModal, setShowHfLocalDirBrowserModal] = useState(false);
+  const [showHfLocalModelDirBrowserModal, setShowHfLocalModelDirBrowserModal] = useState(false);
   const [userIdList, setUserIdList] = useState([]);
   const [showTokenPopup, setShowTokenPopup] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
@@ -264,7 +265,6 @@ const HuggingfaceSection = () => {
   // File browser handlers
   const handleHfLocalDirSelect = useCallback((item) => {
     setHfLocalDirUpload(item.full_path);
-    setShowHfLocalDirBrowserModal(false);
   }, []);
 
   // Input handlers with validation
@@ -513,7 +513,11 @@ const HuggingfaceSection = () => {
                   <span className="text-lg font-bold">Local Directory</span>
                   <div className="w-full flex flex-row items-center justify-start gap-2">
                     <FolderBrowseButton
-                      onClick={() => setShowHfLocalDirBrowserModal(true)}
+                      onClick={() =>
+                        hfDataType === 'dataset'
+                          ? setShowHfLocalDirBrowserModal(true)
+                          : setShowHfLocalModelDirBrowserModal(true)
+                      }
                       disabled={isDownloading}
                       ariaLabel="Browse files for local directory"
                     />
@@ -792,7 +796,7 @@ const HuggingfaceSection = () => {
         </div>
       </div>
 
-      {/* File Browser Modals */}
+      {/* File Browser Modals for Dataset*/}
       <FileBrowserModal
         isOpen={showHfLocalDirBrowserModal}
         onClose={() => setShowHfLocalDirBrowserModal(false)}
@@ -808,6 +812,21 @@ const HuggingfaceSection = () => {
         targetFileLabel="Dataset folder found! 🎯"
         initialPath={DEFAULT_PATHS.DATASET_PATH}
         defaultPath={DEFAULT_PATHS.DATASET_PATH}
+        homePath=""
+      />
+
+      {/* File Browser Modals for Model*/}
+      <FileBrowserModal
+        isOpen={showHfLocalModelDirBrowserModal}
+        onClose={() => setShowHfLocalModelDirBrowserModal(false)}
+        onFileSelect={handleHfLocalDirSelect}
+        title="Select Local Directory for Upload"
+        selectButtonText="Select"
+        allowDirectorySelect={true}
+        targetFileName={[TARGET_FILES.POLICY_MODEL]}
+        targetFileLabel="Policy file found! 🎯"
+        initialPath={DEFAULT_PATHS.POLICY_MODEL_PATH}
+        defaultPath={DEFAULT_PATHS.POLICY_MODEL_PATHs}
         homePath=""
       />
 
