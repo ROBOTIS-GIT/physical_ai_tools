@@ -17,13 +17,43 @@
 import React, { useEffect, useState } from 'react';
 import clsx from 'clsx';
 import toast, { useToasterStore } from 'react-hot-toast';
-import { MdDataset } from 'react-icons/md';
+import {
+  MdDataset,
+  MdCloudUpload,
+  MdMerge,
+  MdDeleteSweep,
+  MdOutlineTouchApp,
+} from 'react-icons/md';
 import HuggingfaceSection from '../features/editDataset/components/DatasetHuggingfaceSection';
 import MergeSection from '../features/editDataset/components/DatasetMergeSection';
 import DeleteSection from '../features/editDataset/components/DatasetDeleteSection';
 
 // Constants
 const TOAST_LIMIT = 3;
+
+const SECTION_TYPES = {
+  HUGGINGFACE: 'huggingface',
+  MERGE: 'merge',
+  DELETE: 'delete',
+};
+
+const SECTION_CONFIG = {
+  [SECTION_TYPES.HUGGINGFACE]: {
+    label: 'Hugging Face',
+    icon: MdCloudUpload,
+    description: 'Upload & Download data',
+  },
+  [SECTION_TYPES.MERGE]: {
+    label: 'Merge Dataset',
+    icon: MdMerge,
+    description: 'Combine multiple datasets',
+  },
+  [SECTION_TYPES.DELETE]: {
+    label: 'Delete Episodes',
+    icon: MdDeleteSweep,
+    description: 'Remove specific episodes from dataset',
+  },
+};
 
 // Style Classes
 const STYLES = {
@@ -52,27 +82,93 @@ export default function EditDatasetPage() {
 
   // Local state
   const [isEditable] = useState(true);
+  const [activeSection, setActiveSection] = useState(SECTION_TYPES.HUGGINGFACE);
 
   // Effects
   useEffect(() => {
     manageTostLimit(toasts);
   }, [toasts]);
 
-  // Render sections
-  const renderHuggingfaceSection = () => <HuggingfaceSection isEditable={isEditable} />;
-  const renderMergeSection = () => <MergeSection isEditable={isEditable} />;
-  const renderDeleteSection = () => <DeleteSection isEditable={isEditable} />;
+  // Section selector component
+  const renderSectionSelector = () => (
+    <div className="w-full bg-white rounded-xl shadow-sm border border-gray-200 p-3 mb-2">
+      <div className="flex items-center text-sm text-gray-500 mb-2">
+        <span className="mr-2">
+          <MdOutlineTouchApp className="inline-block w-5 h-5 text-gray-400" />
+        </span>
+        What would you like to do?
+      </div>
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+        {Object.entries(SECTION_CONFIG).map(([sectionType, config]) => {
+          const IconComponent = config.icon;
+          const isActive = activeSection === sectionType;
+
+          return (
+            <button
+              key={sectionType}
+              onClick={() => setActiveSection(sectionType)}
+              className={clsx(
+                'flex flex-col items-center justify-center p-4 rounded-lg border-2 transition-all duration-200',
+                'hover:shadow-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-opacity-50',
+                {
+                  'border-blue-500 bg-blue-50 shadow-md': isActive,
+                  'border-gray-200 bg-gray-50 hover:border-gray-300 hover:bg-gray-100': !isActive,
+                }
+              )}
+            >
+              <IconComponent
+                className={clsx('w-6 h-6 mb-2', {
+                  'text-blue-600': isActive,
+                  'text-gray-500': !isActive,
+                })}
+              />
+              <h3
+                className={clsx('text-base font-medium mb-1', {
+                  'text-blue-900': isActive,
+                  'text-gray-700': !isActive,
+                })}
+              >
+                {config.label}
+              </h3>
+              <p
+                className={clsx('text-xs text-center', {
+                  'text-blue-700': isActive,
+                  'text-gray-500': !isActive,
+                })}
+              >
+                {config.description}
+              </p>
+            </button>
+          );
+        })}
+      </div>
+    </div>
+  );
+
+  // Render active section
+  const renderActiveSection = () => {
+    switch (activeSection) {
+      case SECTION_TYPES.HUGGINGFACE:
+        return <HuggingfaceSection isEditable={isEditable} />;
+      case SECTION_TYPES.MERGE:
+        return <MergeSection isEditable={isEditable} />;
+      case SECTION_TYPES.DELETE:
+        return <DeleteSection isEditable={isEditable} />;
+      default:
+        return <HuggingfaceSection isEditable={isEditable} />;
+    }
+  };
 
   return (
     <div className={STYLES.container}>
       <div className="w-full flex flex-col items-start justify-start p-10 gap-6">
         <h1 className="text-4xl font-bold flex flex-row items-center justify-start gap-2">
           <MdDataset className="w-10 h-10" />
-          Edit Dataset
+          Data Tools
         </h1>
-        {renderHuggingfaceSection()}
-        {renderMergeSection()}
-        {renderDeleteSection()}
+
+        {renderSectionSelector()}
+        {renderActiveSection()}
       </div>
     </div>
   );
