@@ -805,7 +805,7 @@ class PhysicalAIServer(Node):
             self.hf_api_worker = HfApiWorker()
             if self.hf_api_worker.start():
                 self.get_logger().info('HF API Worker started successfully')
-                # Idle count 초기화
+                # Initialize idle count
                 self._hf_idle_count = 0
                 # Initialize status monitoring timer
                 self.hf_status_timer = TimerManager(node=self)
