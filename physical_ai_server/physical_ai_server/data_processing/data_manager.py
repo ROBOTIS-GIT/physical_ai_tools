@@ -31,13 +31,9 @@ from huggingface_hub import (
     upload_large_folder
 )
 from lerobot.datasets.utils import DEFAULT_FEATURES
-
 from nav_msgs.msg import Odometry
-
 import numpy as np
-
 from physical_ai_interfaces.msg import TaskStatus
-
 from physical_ai_server.data_processing.data_converter import DataConverter
 from physical_ai_server.data_processing.lerobot_dataset_wrapper import LeRobotDatasetWrapper
 from physical_ai_server.data_processing.progress_tracker import (
@@ -46,9 +42,7 @@ from physical_ai_server.data_processing.progress_tracker import (
 from physical_ai_server.device_manager.cpu_checker import CPUChecker
 from physical_ai_server.device_manager.ram_checker import RAMChecker
 from physical_ai_server.device_manager.storage_checker import StorageChecker
-
 import requests
-
 from sensor_msgs.msg import JointState
 from trajectory_msgs.msg import JointTrajectory
 
@@ -614,9 +608,9 @@ class DataManager:
         local_dir
     ):
         try:
-            # Verify authentication first
             api = HfApi()
 
+            # Verify authentication first
             try:
                 user_info = api.whoami()
                 print(f'Authenticated as: {user_info["name"]}')
@@ -624,7 +618,8 @@ class DataManager:
                 print(f'Authentication failed: {auth_e}')
                 print('Please make sure you are authenticated with HuggingFace')
                 return False
-            # Create repository first
+
+            # Create repository
             print(f'Creating HuggingFace repository: {repo_id}')
             url = api.create_repo(
                 repo_id,
@@ -637,7 +632,6 @@ class DataManager:
             # Delete .cache folder before upload
             DataManager._delete_dot_cache_folder_before_upload(local_dir)
 
-            # Upload folder contents (use upload_large_folder for better handling)
             print(f'Uploading folder {local_dir} to repository {repo_id}')
 
             # Capture stdout for logging
@@ -648,6 +642,7 @@ class DataManager:
             log_capture = HuggingFaceLogCapture(progress_queue=DataManager._progress_queue)
 
             with redirect_stdout(log_capture):
+                # Upload folder contents
                 upload_large_folder(
                     repo_id=repo_id,
                     folder_path=local_dir,
@@ -655,6 +650,8 @@ class DataManager:
                     print_report=True,
                     print_report_every=1,
                 )
+
+            # Create tag
             if repo_type == 'dataset':
                 try:
                     print(f'Creating tag for {repo_id} ({repo_type})')

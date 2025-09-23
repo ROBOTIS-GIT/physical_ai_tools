@@ -138,7 +138,6 @@ const InferencePanel = () => {
       // Update the policy path with the local cache path
       const localPath = `/root/.cache/huggingface/lerobot/${repoId}`;
       handleChange('policyPath', localPath);
-      // Don't close modal automatically - let user click Finish button
     },
     [handleChange]
   );

@@ -1005,7 +1005,7 @@ class PhysicalAIServer(Node):
             self.get_logger().info('HF API Worker cleanup thread started')
 
             # Publish cancel status messages
-            for i in range(3):  # Reduced from 5 to 3
+            for i in range(3):
                 self._publish_hf_operation_status_msg({
                     'status': 'Idle',
                     'operation': 'stop',
@@ -1018,7 +1018,7 @@ class PhysicalAIServer(Node):
                         'percentage': 0.0,
                     }
                 })
-                time.sleep(0.5)  # Reduced from 1 to 0.5 seconds
+                time.sleep(0.5)
 
         except Exception as e:
             self.get_logger().error(
