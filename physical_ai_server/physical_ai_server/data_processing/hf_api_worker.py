@@ -180,7 +180,7 @@ class HfApiWorker:
 
                 # Only log when current value changes
                 if current != self.last_logged_current_progress:
-                    self.logger.info(f'{mode.capitalize()} {current}/{total} ({percentage}%)')
+                    # self.logger.info(f'{mode.capitalize()} {current}/{total} ({percentage}%)')
                     self.last_logged_current_progress = current
 
             # Check for task result

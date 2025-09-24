@@ -36,7 +36,7 @@ class HuggingFaceProgressTqdm(tqdm):
 
         # Extract custom parameters
         self.progress_queue = kwargs.pop('progress_queue', None)
-        self.print_progress = kwargs.pop('print_progress', False)
+        self.print_progress = kwargs.pop('print_progress', True)
 
         super().__init__(*args, **kwargs)
         self.last_update = time.time()
@@ -74,16 +74,11 @@ class HuggingFaceProgressTqdm(tqdm):
 
         if should_print:
             if self.total and self.total > 0:
-                progress_msg = (
-                    f'[HF Download] Progress: {self.n}/{self.total} '
-                    f'files ({percentage}%)'
-                )
-                print(progress_msg, flush=True)
-            else:
-                progress_msg = (
-                    f'[HF Download] Progress: {self.n} files downloaded'
-                )
-                print(progress_msg, flush=True)
+                # Use logging for better visibility in multiprocessing
+                import logging
+                logger = logging.getLogger('hf_progress')
+                progress_msg = f'📥 {self.n}/{self.total} files ({percentage:.1f}%)'
+                logger.info(progress_msg)
             self.last_update = current_time
 
 
