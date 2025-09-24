@@ -39,9 +39,9 @@ const SECTION_TYPES = {
 
 const SECTION_CONFIG = {
   [SECTION_TYPES.HUGGINGFACE]: {
-    label: 'Hugging Face',
+    label: 'Upload & Download data',
     icon: MdCloudUpload,
-    description: 'Upload & Download data',
+    description: 'Hugging Face',
   },
   [SECTION_TYPES.MERGE]: {
     label: 'Merge Dataset',
@@ -117,7 +117,7 @@ export default function EditDatasetPage() {
               )}
             >
               <IconComponent
-                className={clsx('w-6 h-6 mb-2', {
+                className={clsx('w-10 h-10 mb-2', {
                   'text-blue-500': isActive,
                   'text-gray-400': !isActive,
                 })}
