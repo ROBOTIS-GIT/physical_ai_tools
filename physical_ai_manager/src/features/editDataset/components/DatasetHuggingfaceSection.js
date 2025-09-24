@@ -766,15 +766,19 @@ const HuggingfaceSection = () => {
                   </button>
 
                   {/* Status */}
-                  <div className="flex flex-row items-center justify-start">
+                  <div className="flex flex-row items-center justify-start gap-2">
                     <span className="text-sm text-gray-500">
                       {isDownloading && '⏳ Downloading...'}
                       {!isDownloading && hfStatus}
                     </span>
+                    {/* Spinner for model downloads - right next to status text */}
+                    {isDownloading && hfDataType.toLowerCase() === 'model' && (
+                      <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-blue-600"></div>
+                    )}
                   </div>
 
-                  {/* Download Progress Bar */}
-                  {isDownloading && (
+                  {/* Download Progress Bar - Only for datasets */}
+                  {isDownloading && hfDataType.toLowerCase() === 'dataset' && (
                     <div className="w-full">
                       <div className="flex flex-row items-center justify-between mb-1">
                         <span className="text-sm text-gray-500">

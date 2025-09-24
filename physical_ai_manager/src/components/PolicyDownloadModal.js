@@ -521,32 +521,16 @@ const PolicyDownloadModal = ({ isOpen, onClose, onDownloadComplete }) => {
                       </button>
 
                       {/* Status */}
-                      <div className="flex flex-row items-center justify-start">
+                      <div className="flex flex-row items-center justify-start gap-2">
                         <span className="text-sm text-gray-500">
                           {isDownloading && '⏳ Downloading...'}
                           {!isDownloading && hfStatus}{' '}
                         </span>
+                        {/* Spinner for model downloads - right next to status text */}
+                        {isDownloading && (
+                          <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-blue-600"></div>
+                        )}
                       </div>
-
-                      {/* Download Progress Bar */}
-                      {isDownloading && (
-                        <div className="w-full">
-                          <div className="flex flex-row items-center justify-between mb-1">
-                            <span className="text-sm text-gray-500">
-                              {downloadStatus.current}/{downloadStatus.total}
-                            </span>
-                            <span className="text-sm text-gray-500">
-                              {downloadStatus.percentage}%
-                            </span>
-                          </div>
-                          <div className="w-full bg-gray-200 rounded-full h-2">
-                            <div
-                              className="bg-blue-600 h-2 rounded-full transition-all duration-300 ease-out"
-                              style={{ width: `${downloadStatus.percentage}%` }}
-                            ></div>
-                          </div>
-                        </div>
-                      )}
                     </div>
                   </div>
                 </div>
