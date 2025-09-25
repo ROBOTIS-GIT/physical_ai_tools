@@ -75,7 +75,7 @@ class RosConnectionManager {
         this.connecting = false;
         this.connectionPromise = null;
         reject(new Error('ROS connection timeout - rosbridge server is not running'));
-      }, 5000);
+      }, 10000); // Increased timeout for 0.6.10+ compatibility
 
       ros.on('connection', () => {
         clearTimeout(connectionTimeout);
@@ -108,6 +108,8 @@ class RosConnectionManager {
         this.ros = null;
         this.connecting = false;
         this.connectionPromise = null;
+        // Reset connection attempts on close to allow reconnection
+        this.connectionAttempts = 0;
       });
     });
 

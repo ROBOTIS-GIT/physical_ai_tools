@@ -36,6 +36,11 @@ export function useRosServiceCaller() {
         console.log(`Attempting to call service: ${serviceName}`);
         const ros = await rosConnectionManager.getConnection(rosbridgeUrl);
 
+        // Additional check for connection health
+        if (!ros || !ros.isConnected) {
+          throw new Error('ROS connection is not available or not connected');
+        }
+
         return new Promise((resolve, reject) => {
           const service = new ROSLIB.Service({
             ros,
@@ -44,10 +49,10 @@ export function useRosServiceCaller() {
           });
           const req = new ROSLIB.ServiceRequest(request);
 
-          // Set a timeout for the service call
+          // Set a timeout for the service call - increased for 0.6.10+ compatibility
           const serviceTimeout = setTimeout(() => {
             reject(new Error(`Service call timeout for ${serviceName}`));
-          }, 10000); // 10 second timeout
+          }, 20000); // 20 second timeout for better compatibility
 
           service.callService(
             req,
