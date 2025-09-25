@@ -629,8 +629,9 @@ class DataManager:
             )
             print(f'Repository created/verified: {url}')
 
-            # Delete .cache folder before upload
-            DataManager._delete_dot_cache_folder_before_upload(local_dir)
+            if repo_type == 'dataset':
+                # Delete .cache folder before upload
+                DataManager._delete_dot_cache_folder_before_upload(local_dir)
 
             print(f'Uploading folder {local_dir} to repository {repo_id}')
 
