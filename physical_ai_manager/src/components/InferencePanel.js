@@ -136,7 +136,7 @@ const InferencePanel = () => {
   const handleDownloadPolicyComplete = useCallback(
     (repoId) => {
       // Update the policy path with the local cache path
-      const localPath = `/root/.cache/huggingface/lerobot/${repoId}`;
+      const localPath = `${DEFAULT_PATHS.POLICY_MODEL_PATH}${repoId}`;
       handleChange('policyPath', localPath);
     },
     [handleChange]
