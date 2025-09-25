@@ -49,10 +49,10 @@ export function useRosServiceCaller() {
           });
           const req = new ROSLIB.ServiceRequest(request);
 
-          // Set a timeout for the service call - increased for 0.6.10+ compatibility
+          // Set a timeout for the service call
           const serviceTimeout = setTimeout(() => {
             reject(new Error(`Service call timeout for ${serviceName}`));
-          }, 20000); // 20 second timeout for better compatibility
+          }, 20000); // 20 second timeout
 
           service.callService(
             req,
