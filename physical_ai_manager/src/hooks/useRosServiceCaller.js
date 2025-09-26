@@ -31,7 +31,7 @@ export function useRosServiceCaller() {
   const rosbridgeUrl = useSelector((state) => state.ros.rosbridgeUrl);
 
   const callService = useCallback(
-    async (serviceName, serviceType, request) => {
+    async (serviceName, serviceType, request, timeoutMs = 10000) => {
       try {
         console.log(`Attempting to call service: ${serviceName}`);
         const ros = await rosConnectionManager.getConnection(rosbridgeUrl);
@@ -52,7 +52,7 @@ export function useRosServiceCaller() {
           // Set a timeout for the service call
           const serviceTimeout = setTimeout(() => {
             reject(new Error(`Service call timeout for ${serviceName}`));
-          }, 20000); // 20 second timeout
+          }, timeoutMs);
 
           service.callService(
             req,
@@ -244,7 +244,8 @@ export function useRosServiceCaller() {
       const result = await callService(
         '/get_registered_hf_user',
         'physical_ai_interfaces/srv/GetHFUser',
-        {}
+        {},
+        3000
       );
 
       console.log('getRegisteredHFUser service response:', result);
