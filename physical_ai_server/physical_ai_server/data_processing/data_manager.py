@@ -19,8 +19,10 @@
 import gc
 import os
 from pathlib import Path
+import queue
 import shutil
 import subprocess
+import threading
 import time
 
 import cv2
@@ -512,29 +514,70 @@ class DataManager:
 
     @staticmethod
     def get_huggingface_user_id():
-        api = HfApi()
-        try:
-            user_info = api.whoami()
-            user_ids = [user_info['name']]
-            for org_info in user_info['orgs']:
-                user_ids.append(org_info['name'])
-            print(user_ids)
-            return user_ids
+        def api_call():
+            api = HfApi()
+            try:
+                user_info = api.whoami()
+                user_ids = [user_info['name']]
+                for org_info in user_info['orgs']:
+                    user_ids.append(org_info['name'])
+                return user_ids
+            except Exception as e:
+                print(f'Token validation failed: {e}')
+                return None
 
-        except Exception as e:
-            print(f'Token validation failed: {e}')
+        # Use queue to get result from thread
+        result_queue = queue.Queue()
+
+        def worker():
+            result = api_call()
+            result_queue.put(result)
+
+        # Start thread and wait with timeout
+        thread = threading.Thread(target=worker, daemon=True)
+        thread.start()
+
+        try:
+            # Wait for result with 1.5 second timeout
+            result = result_queue.get(timeout=1.5)
+            if result:
+                print(result)
+            return result
+        except queue.Empty:
+            print('Token validation timed out after 1.5 seconds')
             return None
 
     @staticmethod
     def register_huggingface_token(hf_token):
-        api = HfApi(token=hf_token)
-        try:
-            user_info = api.whoami()
-            user_name = user_info['name']
-            print(f'Successfully validated HuggingFace token for user: {user_name}')
+        def validate_token():
+            api = HfApi(token=hf_token)
+            try:
+                user_info = api.whoami()
+                user_name = user_info['name']
+                print(f'Successfully validated HuggingFace token for user: {user_name}')
+                return True
+            except Exception as e:
+                print(f'Token is invalid, please check hf token: {e}')
+                return False
 
-        except Exception as e:
-            print(f'Token is invalid, please check hf token: {e}')
+        # Use queue to get result from thread
+        result_queue = queue.Queue()
+
+        def worker():
+            result = validate_token()
+            result_queue.put(result)
+
+        # Start thread and wait with timeout
+        thread = threading.Thread(target=worker, daemon=True)
+        thread.start()
+
+        try:
+            # Wait for result with 1.5 second timeout
+            is_valid = result_queue.get(timeout=1.5)
+            if not is_valid:
+                return False
+        except queue.Empty:
+            print('Token validation timed out after 1.5 seconds')
             return False
 
         try:
