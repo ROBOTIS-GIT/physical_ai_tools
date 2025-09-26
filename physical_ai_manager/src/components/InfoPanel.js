@@ -135,7 +135,7 @@ const InfoPanel = () => {
           toast.success('User ID list loaded successfully!');
           setShowUserIdDropdown(true);
         } else {
-          toast.error('Failed to get user ID list: ' + result.message);
+          toast.error('Failed to get user ID list:\n' + result.message);
         }
       } else {
         toast.error('Failed to get user ID list from response');

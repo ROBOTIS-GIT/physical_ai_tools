@@ -250,7 +250,7 @@ const HuggingfaceSection = () => {
           setUserIdList(result.user_id_list);
           toast.success('User ID list loaded successfully!');
         } else {
-          toast.error('Failed to get user ID list: ' + result.message);
+          toast.error('Failed to get user ID list:\n' + result.message);
         }
       } else {
         toast.error('Failed to get user ID list from response');

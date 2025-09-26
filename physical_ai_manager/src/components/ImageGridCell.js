@@ -139,7 +139,7 @@ export default function ImageGridCell({
       };
 
       img.onload = () => {
-        console.log(`Image stream started for idx ${idx}, topic: ${topic}`);
+        // console.log(`Image stream started for idx ${idx}, topic: ${topic}`);
       };
 
       if (containerRef.current && isCreatingRef.current) {
