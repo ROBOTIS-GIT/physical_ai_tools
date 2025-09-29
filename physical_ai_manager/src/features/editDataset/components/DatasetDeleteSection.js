@@ -147,7 +147,7 @@ const EpisodeNumberInput = ({ value, onChange, disabled = false, className, pars
       {value && (
         <div className="text-sm text-gray-600" role="status" aria-live="polite">
           <span className="font-medium">Preview:</span> {previewText} ({parsedNumbers.length}{' '}
-          episodes)
+          {parsedNumbers.length === 1 ? 'episode' : 'episodes'})
         </div>
       )}
     </div>
