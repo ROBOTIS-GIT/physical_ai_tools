@@ -138,9 +138,7 @@ export default function ImageGridCell({
         console.error(`Image stream error for idx ${idx}, topic: ${topic}`);
       };
 
-      img.onload = () => {
-        // console.log(`Image stream started for idx ${idx}, topic: ${topic}`);
-      };
+      img.onload = () => {};
 
       if (containerRef.current && isCreatingRef.current) {
         containerRef.current.appendChild(img);
