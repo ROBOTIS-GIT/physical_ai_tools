@@ -93,6 +93,7 @@ class PhysicalAIServer(Node):
 
         self.goal_repo_id = None
         
+        self.inference_mode = 'zmq'  # 'local' or 'zmq'
         self.zmq_client: Optional[ZmqInferenceClient] = None
         self.remain_action = []
         self.wait_inference = False
@@ -100,7 +101,7 @@ class PhysicalAIServer(Node):
 
         self.visualizer = InferenceResultVisualizer(
             logger=self.get_logger(),
-            enabled=True
+            enabled=False
         )
         self._used_action_count = 0
 
@@ -251,7 +252,7 @@ class PhysicalAIServer(Node):
         self.timer_manager = TimerManager(node=self)
         self.timer_manager.set_timer(
             timer_name=self.operation_mode,
-            timer_frequency=10,
+            timer_frequency=task_info.fps,
             callback_function=self.timer_callback_dict[self.operation_mode]
         )
         self.timer_manager.start(timer_name=self.operation_mode)
@@ -823,14 +824,15 @@ class PhysicalAIServer(Node):
                 task_info = request.task_info
                 self.task_instruction = task_info.task_instruction
 
-                valid_result, result_message = self.inference_manager.validate_policy(
-                    policy_path=task_info.policy_path)
+                if self.inference_mode == 'local':
+                    valid_result, result_message = self.inference_manager.validate_policy(
+                        policy_path=task_info.policy_path)
 
-                if not valid_result:
-                    response.success = False
-                    response.message = result_message
-                    self.get_logger().error(response.message)
-                    return response
+                    if not valid_result:
+                        response.success = False
+                        response.message = result_message
+                        self.get_logger().error(response.message)
+                        return response
 
                 self.init_robot_control_parameters_from_user_task(
                     task_info

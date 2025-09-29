@@ -90,18 +90,24 @@ class ZmqInferenceServer:
                 from gr00t.experiment.data_config import load_data_config
                 from gr00t.model.policy import Gr00tPolicy
                 data_config = load_data_config(data['robot_type'])
-                self.policy = Gr00tPolicy(
-                    model_path=data['policy_path'],
-                    modality_config=data_config.modality_config(),
-                    modality_transform=data_config.transform(),
-                    embodiment_tag='new_embodiment',
-                    denoising_steps=data.get('denoising_steps', 4),
-                )
-                self.add_callback('get_action', self.policy.get_action)
-                return {
-                    'status': 'ok',
-                    'message': 'Policy loaded successfully'
-                }
+                if self.policy is None:
+                    self.policy = Gr00tPolicy(
+                        model_path=data['policy_path'],
+                        modality_config=data_config.modality_config(),
+                        modality_transform=data_config.transform(),
+                        embodiment_tag='new_embodiment',
+                        denoising_steps=data.get('denoising_steps', 4),
+                    )
+                    self.add_callback('get_action', self.policy.get_action)
+                    return {
+                        'status': 'ok',
+                        'message': 'Policy loaded successfully'
+                    }
+                else:
+                    return {
+                        'status': 'ok',
+                        'message': 'Policy already loaded'
+                    }
             else:
                 return {
                     'status': 'error',
@@ -113,7 +119,7 @@ class ZmqInferenceServer:
                 'message': f"Failed to load policy: {e}"
             }
 
-    def _unload_policy_callback(self, data) -> dict:
+    def _unload_policy_callback(self, data=None) -> dict:
         if self.policy is None:
             return {'status': 'error', 'message': 'No policy loaded'}
         self.policy = None
@@ -144,7 +150,7 @@ class ZmqInferenceServer:
                 'result': None,
                 'thread': None
             }
-        
+
         # Start inference in background thread
         def run_inference():
             try:
@@ -158,15 +164,15 @@ class ZmqInferenceServer:
                     if task_id in self.inference_tasks:
                         self.inference_tasks[task_id]['status'] = 'error'
                         self.inference_tasks[task_id]['result'] = {'error': str(e)}
-        
+
         thread = threading.Thread(target=run_inference)
         thread.daemon = True
-        
+
         with self.inference_lock:
             self.inference_tasks[task_id]['thread'] = thread
-        
+
         thread.start()
-        
+
         return {
             'status': 'ok',
             'task_id': task_id,
