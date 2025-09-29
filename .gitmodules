@@ -2,3 +2,6 @@
 	path = lerobot
 	url = https://github.com/huggingface/lerobot.git
   branch = feature-robotis
+[submodule "Isaac-GR00T"]
+	path = Isaac-GR00T
+	url = https://github.com/NVIDIA/Isaac-GR00T.git
