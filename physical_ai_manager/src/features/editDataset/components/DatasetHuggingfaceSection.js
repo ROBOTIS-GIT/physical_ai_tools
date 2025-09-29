@@ -720,7 +720,7 @@ const HuggingfaceSection = () => {
                   <span className="text-xs text-gray-600 flex items-center gap-1">
                     {/* The dataset will be saved in the following directory */}
                     <MdFolderOpen className="inline-block w-4 h-4 text-blue-700 mr-1" />
-                    The dataset will be saved in{' '}
+                    The {hfDataType} will be saved in{' '}
                     <span className="font-mono text-blue-700">
                       {hfDataType === 'dataset'
                         ? DEFAULT_PATHS.DATASET_PATH
