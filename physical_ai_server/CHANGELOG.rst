@@ -2,7 +2,7 @@
 Changelog for package physical_ai_server
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-0.6.11 (2025-09-22)
+0.6.11 (2025-09-30)
 ------------------
 * Added Hugging Face upload & download functionality.
 * Contributors: Dongyun Kim, Kiwoong Park

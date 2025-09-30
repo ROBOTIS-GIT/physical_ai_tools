@@ -2,7 +2,7 @@
 Changelog for package physical_ai_interfaces
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-0.6.11 (2025-09-22)
+0.6.11 (2025-09-30)
 ------------------
 * Added HFOperationStatus.msg, ControlHfServer.srv for HuggingFace operation.
 * Contributors: Dongyun Kim, Kiwoong Park
