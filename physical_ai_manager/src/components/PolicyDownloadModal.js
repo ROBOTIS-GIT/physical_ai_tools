@@ -305,6 +305,7 @@ const PolicyDownloadModal = ({ isOpen, onClose, onDownloadComplete }) => {
   useEffect(() => {
     if (hfStatus === HFStatus.DOWNLOADING) {
       setIsDownloading(true);
+      setFinalStatus(null);
     } else if (hfStatus === HFStatus.SUCCESS || hfStatus === HFStatus.FAILED) {
       // Download completed (success or failed) - only process once
       setIsDownloading(false);
