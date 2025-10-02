@@ -31,10 +31,15 @@ export function useRosServiceCaller() {
   const rosbridgeUrl = useSelector((state) => state.ros.rosbridgeUrl);
 
   const callService = useCallback(
-    async (serviceName, serviceType, request) => {
+    async (serviceName, serviceType, request, timeoutMs = 10000) => {
       try {
         console.log(`Attempting to call service: ${serviceName}`);
         const ros = await rosConnectionManager.getConnection(rosbridgeUrl);
+
+        // Additional check for connection health
+        if (!ros || !ros.isConnected) {
+          throw new Error('ROS connection is not available or not connected');
+        }
 
         return new Promise((resolve, reject) => {
           const service = new ROSLIB.Service({
@@ -47,7 +52,7 @@ export function useRosServiceCaller() {
           // Set a timeout for the service call
           const serviceTimeout = setTimeout(() => {
             reject(new Error(`Service call timeout for ${serviceName}`));
-          }, 10000); // 10 second timeout
+          }, timeoutMs);
 
           service.callService(
             req,
@@ -239,7 +244,8 @@ export function useRosServiceCaller() {
       const result = await callService(
         '/get_registered_hf_user',
         'physical_ai_interfaces/srv/GetHFUser',
-        {}
+        {},
+        3000
       );
 
       console.log('getRegisteredHFUser service response:', result);
@@ -488,6 +494,43 @@ export function useRosServiceCaller() {
     [callService]
   );
 
+  const controlHfServer = useCallback(
+    async (mode, repoId = '', repoType = '', localDir = '') => {
+      try {
+        console.log('Calling service /huggingface/control with request:', {
+          mode: mode,
+          repo_id: repoId,
+          repo_type: repoType,
+          local_dir: localDir,
+        });
+
+        const request = {
+          mode: mode,
+          repo_id: repoId,
+          repo_type: repoType,
+        };
+
+        // Only add local_dir if it's provided and not empty
+        if (localDir && localDir.trim() !== '') {
+          request.local_dir = localDir;
+        }
+
+        const result = await callService(
+          '/huggingface/control',
+          'physical_ai_interfaces/srv/ControlHfServer',
+          request
+        );
+
+        console.log('controlHfServer service response:', result);
+        return result;
+      } catch (error) {
+        console.error('Failed to control HF server:', error);
+        throw new Error(`${error.message || error}`);
+      }
+    },
+    [callService]
+  );
+
   return {
     callService,
     sendRecordCommand,
@@ -504,5 +547,6 @@ export function useRosServiceCaller() {
     browseFile,
     sendEditDatasetCommand,
     getDatasetInfo,
+    controlHfServer,
   };
 }

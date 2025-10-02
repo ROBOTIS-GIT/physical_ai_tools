@@ -18,19 +18,29 @@
 
 import gc
 import os
+from pathlib import Path
+import queue
 import shutil
 import subprocess
+import threading
 import time
 
 import cv2
 from geometry_msgs.msg import Twist
-from huggingface_hub import HfApi, snapshot_download
+from huggingface_hub import (
+    HfApi,
+    snapshot_download,
+    upload_large_folder
+)
 from lerobot.datasets.utils import DEFAULT_FEATURES
 from nav_msgs.msg import Odometry
 import numpy as np
 from physical_ai_interfaces.msg import TaskStatus
 from physical_ai_server.data_processing.data_converter import DataConverter
 from physical_ai_server.data_processing.lerobot_dataset_wrapper import LeRobotDatasetWrapper
+from physical_ai_server.data_processing.progress_tracker import (
+    HuggingFaceProgressTqdm
+)
 from physical_ai_server.device_manager.cpu_checker import CPUChecker
 from physical_ai_server.device_manager.ram_checker import RAMChecker
 from physical_ai_server.device_manager.storage_checker import StorageChecker
@@ -45,6 +55,9 @@ class DataManager:
     RAM_LIMIT_GB = 2  # GB
     SKIP_TIME = 0.1  # Seconds
 
+    # Progress queue for multiprocessing communication
+    _progress_queue = None
+
     def __init__(
             self,
             save_root_path,
@@ -56,6 +69,7 @@ class DataManager:
         self._on_saving = False
         self._single_task = len(task_info.task_instruction) == 1
         self._task_info = task_info
+
         self._lerobot_dataset = None
         self._record_episode_count = 0
         self._start_time_s = 0
@@ -470,7 +484,10 @@ class DataManager:
 
     def _upload_dataset(self, tags, private=False):
         try:
-            self._lerobot_dataset.push_to_hub(tags=tags, private=private)
+            self._lerobot_dataset.push_to_hub(
+                tags=tags,
+                private=private,
+                upload_large_folder=True)
         except Exception as e:
             print(f'Error uploading dataset: {e}')
 
@@ -490,31 +507,77 @@ class DataManager:
     def get_task_info(self):
         return self._task_info
 
+    def _init_task_limits(self):
+        if not self._single_task:
+            self._task_info.num_episodes = 1_000_000
+            self._task_info.episode_time_s = 1_000_000
+
     @staticmethod
     def get_huggingface_user_id():
-        api = HfApi()
-        try:
-            user_info = api.whoami()
-            user_ids = [user_info['name']]
-            for org_info in user_info['orgs']:
-                user_ids.append(org_info['name'])
-            print(user_ids)
-            return user_ids
+        def api_call():
+            api = HfApi()
+            try:
+                user_info = api.whoami()
+                user_ids = [user_info['name']]
+                for org_info in user_info['orgs']:
+                    user_ids.append(org_info['name'])
+                return user_ids
+            except Exception as e:
+                print(f'Token validation failed: {e}')
+                return None
 
-        except Exception as e:
-            print(f'Token validation failed: {e}')
+        # Use queue to get result from thread
+        result_queue = queue.Queue()
+
+        def worker():
+            result = api_call()
+            result_queue.put(result)
+
+        # Start thread and wait with timeout
+        thread = threading.Thread(target=worker, daemon=True)
+        thread.start()
+
+        try:
+            # Wait for result with 1.5 second timeout
+            result = result_queue.get(timeout=1.5)
+            if result:
+                print(result)
+            return result
+        except queue.Empty:
+            print('Token validation timed out after 1.5 seconds')
             return None
 
     @staticmethod
     def register_huggingface_token(hf_token):
-        api = HfApi(token=hf_token)
-        try:
-            user_info = api.whoami()
-            user_name = user_info['name']
-            print(f'Successfully validated HuggingFace token for user: {user_name}')
+        def validate_token():
+            api = HfApi(token=hf_token)
+            try:
+                user_info = api.whoami()
+                user_name = user_info['name']
+                print(f'Successfully validated HuggingFace token for user: {user_name}')
+                return True
+            except Exception as e:
+                print(f'Token is invalid, please check hf token: {e}')
+                return False
 
-        except Exception as e:
-            print(f'Token is invalid, please check hf token: {e}')
+        # Use queue to get result from thread
+        result_queue = queue.Queue()
+
+        def worker():
+            result = validate_token()
+            result_queue.put(result)
+
+        # Start thread and wait with timeout
+        thread = threading.Thread(target=worker, daemon=True)
+        thread.start()
+
+        try:
+            # Wait for result with 1.5 second timeout
+            is_valid = result_queue.get(timeout=1.5)
+            if not is_valid:
+                return False
+        except queue.Empty:
+            print('Token validation timed out after 1.5 seconds')
             return False
 
         try:
@@ -533,7 +596,165 @@ class DataManager:
             print('huggingface-cli not found. Please install package.')
             return False
 
-    def _init_task_limits(self):
-        if not self._single_task:
-            self._task_info.num_episodes = 1_000_000
-            self._task_info.episode_time_s = 1_000_000
+    @staticmethod
+    def download_huggingface_repo(
+        repo_id,
+        repo_type='dataset'
+    ):
+        download_path = {
+            'dataset': Path.home() / '.cache/huggingface/lerobot',
+            'model': Path.home() / 'ros2_ws/src/physical_ai_tools/lerobot/outputs/train/'
+        }
+
+        save_path = download_path.get(repo_type)
+
+        if save_path is None:
+            raise ValueError(f'Invalid repo type: {repo_type}')
+
+        save_dir = save_path / repo_id
+
+        try:
+            print(f'Starting download of {repo_id} ({repo_type})...')
+
+            # Create a wrapper class that includes the progress_queue
+            class ProgressTqdmWrapper(HuggingFaceProgressTqdm):
+
+                def __init__(self, *args, **kwargs):
+                    kwargs['progress_queue'] = DataManager._progress_queue
+                    super().__init__(*args, **kwargs)
+
+            result = snapshot_download(
+                repo_id=repo_id,
+                repo_type=repo_type,
+                local_dir=save_dir,
+                tqdm_class=ProgressTqdmWrapper
+            )
+
+            print(f'Download completed: {repo_id}')
+            return result
+        except Exception as e:
+            print(f'Error downloading HuggingFace repo: {e}')
+            # Print more detailed error information
+            import traceback
+            print(f'Detailed error traceback:\n{traceback.format_exc()}')
+            return False
+
+    @classmethod
+    def set_progress_queue(cls, progress_queue):
+        """Set progress queue for multiprocessing communication."""
+        cls._progress_queue = progress_queue
+
+    @staticmethod
+    def upload_huggingface_repo(
+        repo_id,
+        repo_type,
+        local_dir
+    ):
+        try:
+            api = HfApi()
+
+            # Verify authentication first
+            try:
+                user_info = api.whoami()
+                print(f'Authenticated as: {user_info["name"]}')
+            except Exception as auth_e:
+                print(f'Authentication failed: {auth_e}')
+                print('Please make sure you are authenticated with HuggingFace')
+                return False
+
+            # Create repository
+            print(f'Creating HuggingFace repository: {repo_id}')
+            url = api.create_repo(
+                repo_id,
+                repo_type=repo_type,
+                private=False,
+                exist_ok=True,
+            )
+            print(f'Repository created/verified: {url}')
+
+            # Delete .cache folder before upload
+            DataManager._delete_dot_cache_folder_before_upload(local_dir)
+
+            print(f'Uploading folder {local_dir} to repository {repo_id}')
+
+            # Capture stdout for logging
+            from contextlib import redirect_stdout
+            from .progress_tracker import HuggingFaceLogCapture
+
+            # Use log capture with progress queue
+            log_capture = HuggingFaceLogCapture(progress_queue=DataManager._progress_queue)
+
+            with redirect_stdout(log_capture):
+                # Upload folder contents
+                upload_large_folder(
+                    repo_id=repo_id,
+                    folder_path=local_dir,
+                    repo_type=repo_type,
+                    print_report=True,
+                    print_report_every=1,
+                )
+
+            # Create tag
+            if repo_type == 'dataset':
+                try:
+                    print(f'Creating tag for {repo_id} ({repo_type})')
+                    api.create_tag(repo_id=repo_id, tag='v2.1', repo_type=repo_type)
+                    print(f'Tag "v2.1" created successfully for {repo_id}')
+                except Exception as e:
+                    print(f'Warning: Failed to create tag for {repo_id} ({repo_type}): {e}')
+                    # Don't fail the entire upload just because tag creation failed
+
+            return True
+        except Exception as e:
+            print(f'Error Uploading HuggingFace repo: {e}')
+            # Print more detailed error information
+            import traceback
+            print(f'Detailed error traceback:\n{traceback.format_exc()}')
+            return False
+
+    @staticmethod
+    def _delete_dot_cache_folder_before_upload(local_dir):
+        dot_cache_path = Path(local_dir) / '.cache'
+        if dot_cache_path.exists():
+            shutil.rmtree(dot_cache_path)
+            print(f'🗑️ Deleted {local_dir}/.cache folder before upload')
+
+    @staticmethod
+    def delete_huggingface_repo(
+        repo_id,
+        repo_type='dataset',
+    ):
+        try:
+            result = HfApi().delete_repo(repo_id, repo_type=repo_type)
+            return result
+        except Exception as e:
+            print(f'Error deleting HuggingFace repo: {e}')
+            return False
+
+    @staticmethod
+    def get_huggingface_repo_list(
+        author,
+        data_type='dataset'
+    ):
+        repo_id_list = []
+        if data_type == 'dataset':
+            dataset_list = HfApi().list_datasets(author=author)
+            for dataset in dataset_list:
+                repo_id_list.append(dataset.id)
+
+        elif data_type == 'model':
+            model_list = HfApi().list_models(author=author)
+            for model in model_list:
+                repo_id_list.append(model.id)
+        reverse = repo_id_list[::-1]
+        return reverse
+
+    @staticmethod
+    def get_collections_repo_list(
+        collection_id
+    ):
+        collection_list = HfApi().get_collection(collection_id)
+        repo_list_in_collection = []
+        for item in collection_list.items:
+            repo_list_in_collection.append(item.item_id)
+        return repo_list_in_collection

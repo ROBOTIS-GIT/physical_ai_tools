@@ -126,7 +126,19 @@ export default function DatasetSelector() {
       dispatch(setSelectedUser(userId));
       dispatch(setSelectedDataset(datasetPath));
       dispatch(setDatasetRepoId(`${userId}/${datasetPath}`));
-      toast.success(`Dataset selected: ${userId}/${datasetPath}`);
+
+      // Truncate long dataset path for toast display
+      const fullPath = `${userId}/${datasetPath}`;
+      const maxLength = 50;
+      let displayPath = fullPath;
+
+      if (fullPath.length > maxLength) {
+        const start = fullPath.substring(0, 20);
+        const end = fullPath.substring(fullPath.length - 25);
+        displayPath = `${start}...${end}`;
+      }
+
+      toast.success(`Dataset selected:\n${displayPath}`);
     },
     [dispatch]
   );
@@ -252,9 +264,18 @@ export default function DatasetSelector() {
       {/* Current Selection Display */}
       {selectedUser && selectedDataset && (
         <div className={classCurrentSelection}>
-          <div>
-            <strong>Selected:</strong> <span className="text-blue-500">{selectedUser}/</span>
-            <span className="text-blue-500">{selectedDataset}</span>
+          <div className="truncate">
+            <strong>Selected: </strong>
+            <span className="text-blue-500" title={`${selectedUser}/${selectedDataset}`}>
+              {selectedUser.length > 15 ? `${selectedUser.substring(0, 12)}...` : selectedUser}/
+            </span>
+            <span className="text-blue-500" title={`${selectedUser}/${selectedDataset}`}>
+              {selectedDataset.length > 30
+                ? `${selectedDataset.substring(0, 25)}...${selectedDataset.substring(
+                    selectedDataset.length - 10
+                  )}`
+                : selectedDataset}
+            </span>
           </div>
         </div>
       )}

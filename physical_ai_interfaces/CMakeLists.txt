@@ -7,11 +7,13 @@ find_package(rosidl_default_generators REQUIRED)
 rosidl_generate_interfaces(${PROJECT_NAME}
   "msg/BrowserItem.msg"
   "msg/DatasetInfo.msg"
+  "msg/HFOperationStatus.msg"
   "msg/TaskInfo.msg"
   "msg/TaskStatus.msg"
   "msg/TrainingInfo.msg"
   "msg/TrainingStatus.msg"
   "srv/BrowseFile.srv"
+  "srv/ControlHfServer.srv"
   "srv/EditDataset.srv"
   "srv/GetDatasetInfo.srv"
   "srv/GetDatasetList.srv"

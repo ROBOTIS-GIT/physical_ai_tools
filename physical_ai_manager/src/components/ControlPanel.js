@@ -88,42 +88,62 @@ export default function ControlPanel() {
       label: 'Start',
       icon: MdPlayArrow,
       color: '#1976d2',
-      description: 'Start recording task',
+      description: page === PageType.RECORD ? 'Start recording task' : 'Start inference',
       shortcut: 'Space',
     },
     {
       label: 'Stop',
       icon: MdStop,
       color: '#d32f2f',
-      description: useMultiTaskMode ? 'Stop current task' : 'Stop and save current episode',
+      description:
+        page === PageType.RECORD
+          ? useMultiTaskMode
+            ? 'Stop current task'
+            : 'Stop and save current episode'
+          : '',
       shortcut: 'Space',
     },
     {
       label: 'Skip\nTask',
       icon: MdNavigateNext,
       color: '#388e3c',
-      description: 'Skip current task',
+      description: page === PageType.RECORD ? 'Skip current task' : '',
       shortcut: 'Ctrl+Shift+N',
     },
     {
       label: 'Retry',
       icon: MdReplay,
       color: '#fbc02d',
-      description: useMultiTaskMode ? 'Retry current task' : 'Retry current episode',
+      description:
+        page === PageType.RECORD
+          ? useMultiTaskMode
+            ? 'Retry current task'
+            : 'Retry current episode'
+          : '',
       shortcut: '←',
     },
     {
       label: 'Next',
       icon: MdSkipNext,
       color: '#388e3c',
-      description: useMultiTaskMode ? 'Move to next task' : 'Move to next episode',
+      description:
+        page === PageType.RECORD
+          ? useMultiTaskMode
+            ? 'Move to next task'
+            : 'Move to next episode'
+          : '',
       shortcut: '→',
     },
     {
       label: 'Finish',
       icon: MdCheck,
       color: '#388e3c',
-      description: useMultiTaskMode ? 'Finish and save' : 'Finish and save task',
+      description:
+        page === PageType.RECORD
+          ? useMultiTaskMode
+            ? 'Finish and save'
+            : 'Finish and save task'
+          : 'Finish inference',
       shortcut: 'Ctrl+Shift+X',
     },
   ];
@@ -170,20 +190,16 @@ export default function ControlPanel() {
   // Check if button should be enabled based on phase
   const isButtonEnabled = useCallback(
     (label) => {
-      if (
-        page === PageType.RECORD &&
-        taskInfo?.taskType !== 'record' &&
-        taskInfo?.taskType !== ''
-      ) {
-        return false;
-      }
-
-      if (
-        page === PageType.INFERENCE &&
-        taskInfo?.taskType !== 'inference' &&
-        taskInfo?.taskType !== ''
-      ) {
-        return false;
+      if (taskStatus.running) {
+        if (page === PageType.RECORD) {
+          if (taskInfo?.taskType !== 'record' && taskInfo?.taskType !== '') {
+            return false;
+          } // disable buttons in Record page when inference task is running
+        } else if (page === PageType.INFERENCE) {
+          if (taskInfo?.taskType !== 'inference' && taskInfo?.taskType !== '') {
+            return false;
+          } // disable buttons in Inference page when record task is running
+        }
       }
 
       const isRecordTaskType = taskInfo?.taskType === 'record';

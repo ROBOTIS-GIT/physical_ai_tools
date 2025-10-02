@@ -18,10 +18,11 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { useSelector, useDispatch } from 'react-redux';
 import clsx from 'clsx';
 import toast from 'react-hot-toast';
-import { MdVisibility, MdVisibilityOff, MdFolderOpen } from 'react-icons/md';
+import { MdVisibility, MdVisibilityOff, MdFolderOpen, MdDownload } from 'react-icons/md';
 import { useRosServiceCaller } from '../hooks/useRosServiceCaller';
 import TagInput from './TagInput';
 import FileBrowserModal from './FileBrowserModal';
+import PolicyDownloadModal from './PolicyDownloadModal';
 import TaskPhase from '../constants/taskPhases';
 import { DEFAULT_PATHS, TARGET_FILES } from '../constants/paths';
 import { setTaskInfo } from '../features/tasks/taskSlice';
@@ -53,6 +54,9 @@ const InferencePanel = () => {
 
   // File browser modal states
   const [showPolicyPathModal, setShowPolicyPathModal] = useState(false);
+
+  // Policy download modal states
+  const [showPolicyDownloadModal, setShowPolicyDownloadModal] = useState(false);
 
   const { registerHFUser, getRegisteredHFUser } = useRosServiceCaller();
 
@@ -129,11 +133,19 @@ const InferencePanel = () => {
     [handleChange]
   );
 
+  const handleDownloadPolicyComplete = useCallback(
+    (repoId) => {
+      // Update the policy path with the local cache path
+      const localPath = `${DEFAULT_PATHS.POLICY_MODEL_PATH}${repoId}`;
+      handleChange('policyPath', localPath);
+    },
+    [handleChange]
+  );
+
   // Update isEditable state when the disabled prop changes
   useEffect(() => {
     setIsEditable(!disabled);
   }, [disabled]);
-
   // Reset dropdown state when Push to Hub is unchecked
   useEffect(() => {
     if (!info.pushToHub) {
@@ -402,6 +414,7 @@ const InferencePanel = () => {
           Policy Path
         </span>
         <div className={clsx('flex', 'flex-col', 'flex-1', 'gap-2')}>
+          {/* Browse Policy Path Button */}
           <button
             onClick={() => setShowPolicyPathModal(true)}
             disabled={!isEditable}
@@ -428,210 +441,44 @@ const InferencePanel = () => {
             <MdFolderOpen size={16} />
             Browse Policy Path
           </button>
+          {/* Download Policy Button */}
+          <button
+            disabled={!isEditable}
+            onClick={() => setShowPolicyDownloadModal(true)}
+            className={clsx(
+              'flex',
+              'items-center',
+              'gap-2',
+              'px-3',
+              'py-2',
+              'text-sm',
+              'bg-green-50',
+              'text-green-700',
+              'border',
+              'border-green-200',
+              'rounded-lg',
+              'hover:bg-green-100',
+              'transition-colors',
+              'disabled:bg-gray-100',
+              'disabled:text-gray-400',
+              'disabled:cursor-not-allowed',
+              'w-fit'
+            )}
+          >
+            <MdDownload size={16} />
+            Download Policy
+          </button>
           <textarea
             className={classPolicyPathTextarea}
             value={info.policyPath || ''}
             onChange={(e) => handleChange('policyPath', e.target.value)}
             disabled={!isEditable}
-            placeholder="Enter Policy Path"
+            placeholder="Enter Policy Path or Repo ID"
           />
         </div>
       </div>
 
       <div className="w-full h-1 my-2 border-t border-gray-300"></div>
-
-      <div className="text-xs text-gray-400 mt-1 ml-2">
-        Recording during inference will be supported in a future update
-      </div>
-
-      <div className="h-3 w-full"></div>
-
-      <div className={clsx('flex', 'items-center', 'mb-2')}>
-        <span className={classLabel}>Record</span>
-        <div className={clsx('flex', 'items-center')}>
-          <input
-            className={classCheckbox}
-            type="checkbox"
-            checked={info.recordInferenceMode}
-            onChange={(e) => handleChange('recordInferenceMode', e.target.checked)}
-            disabled={true}
-          />
-          <span className={clsx('ml-2', 'text-sm', 'text-gray-500')}>
-            {info.recordInferenceMode ? 'Enabled' : 'Disabled'}
-          </span>
-        </div>
-      </div>
-
-      <div className={clsx('flex', 'items-center', 'mb-2.5')}>
-        <span className={classLabel}>Task Name</span>
-        <textarea
-          className={classTaskNameTextarea}
-          value={info.taskName || ''}
-          onChange={(e) => handleChange('taskName', e.target.value)}
-          disabled={!isEditable || !info.recordInferenceMode}
-          placeholder="Enter Task Name"
-        />
-      </div>
-
-      <div className={clsx('flex', 'items-center', 'mb-2')}>
-        <span className={classLabel}>Push to Hub</span>
-        <div className={clsx('flex', 'items-center')}>
-          <input
-            className={classCheckbox}
-            type="checkbox"
-            checked={!!info.pushToHub}
-            onChange={(e) => handleChange('pushToHub', e.target.checked)}
-            disabled={!isEditable || !info.recordInferenceMode}
-          />
-          <span className={clsx('ml-2', 'text-sm', 'text-gray-500')}>
-            {info.pushToHub ? 'Enabled' : 'Disabled'}
-          </span>
-        </div>
-      </div>
-
-      {info.pushToHub && (
-        <div className={clsx('flex', 'items-center', 'mb-2')}>
-          <span className={classLabel}>Private Mode</span>
-          <div className={clsx('flex', 'items-center')}>
-            <input
-              className={classCheckbox}
-              type="checkbox"
-              checked={!!info.privateMode}
-              onChange={(e) => handleChange('privateMode', e.target.checked)}
-              disabled={!isEditable || !info.recordInferenceMode}
-            />
-            <span className={clsx('ml-2', 'text-sm', 'text-gray-500')}>
-              {info.privateMode ? 'Enabled' : 'Disabled'}
-            </span>
-          </div>
-        </div>
-      )}
-
-      <div className={clsx('flex', 'items-start', 'mb-2.5')}>
-        <span
-          className={clsx(
-            'text-sm',
-            'text-gray-600',
-            'w-28',
-            'flex-shrink-0',
-            'font-medium',
-            'pt-2'
-          )}
-        >
-          User ID
-        </span>
-
-        <div className="flex-1 min-w-0">
-          {/* Common Load button for both modes */}
-          <div className="flex gap-2 mb-2">
-            <button
-              className={clsx(
-                classButtonBase,
-                getButtonVariant('blue', isEditable && info.recordInferenceMode, isLoading)
-              )}
-              onClick={() => {
-                if (isEditable && !isLoading && info.recordInferenceMode) {
-                  handleLoadUserId();
-                }
-              }}
-              disabled={!isEditable || isLoading || !info.recordInferenceMode}
-            >
-              {isLoading ? 'Loading...' : 'Load'}
-            </button>
-            {!info.pushToHub && showUserIdDropdown && (
-              <button
-                className={clsx(
-                  classButtonBase,
-                  getButtonVariant('red', isEditable && info.recordInferenceMode)
-                )}
-                onClick={() => setShowUserIdDropdown(false)}
-                disabled={!isEditable || !info.recordInferenceMode}
-              >
-                Manual Input
-              </button>
-            )}
-            {info.pushToHub && (
-              <button
-                className={clsx(
-                  classButtonBase,
-                  getButtonVariant('green', isEditable && info.recordInferenceMode, isLoading)
-                )}
-                onClick={() => {
-                  if (isEditable && !isLoading && info.recordInferenceMode) {
-                    setShowTokenPopup(true);
-                  }
-                }}
-                disabled={!isEditable || isLoading || !info.recordInferenceMode}
-              >
-                Change
-              </button>
-            )}
-          </div>
-
-          {info.pushToHub ? (
-            /* Dropdown selection only when Push to Hub is enabled */
-            <>
-              <select
-                className={classSelect}
-                value={info.userId || ''}
-                onChange={(e) => handleChange('userId', e.target.value)}
-                disabled={!isEditable || !info.recordInferenceMode}
-              >
-                <option value="">Select User ID</option>
-                {userIdList.map((userId) => (
-                  <option key={userId} value={userId}>
-                    {userId}
-                  </option>
-                ))}
-              </select>
-              <div className="text-xs text-gray-500 mt-1 leading-relaxed">
-                Select from registered User IDs (required for Hub upload)
-              </div>
-            </>
-          ) : (
-            /* Text input with optional registered ID selection when Push to Hub is disabled */
-            <>
-              {!showUserIdDropdown ? (
-                <>
-                  <textarea
-                    className={classRepoIdTextarea}
-                    value={info.userId || ''}
-                    onChange={(e) => handleChange('userId', e.target.value)}
-                    disabled={!isEditable || !info.recordInferenceMode}
-                    placeholder="Enter User ID or load from registered ID"
-                  />
-                  <div className="text-xs text-gray-500 mt-1 leading-relaxed">
-                    Enter any User ID manually or load from registered IDs
-                  </div>
-                </>
-              ) : (
-                <>
-                  <select
-                    className={classSelect}
-                    value=""
-                    onChange={(e) => {
-                      if (e.target.value) {
-                        handleUserIdSelect(e.target.value);
-                      }
-                    }}
-                    disabled={!isEditable || !info.recordInferenceMode}
-                  >
-                    <option value="">Select from registered User IDs</option>
-                    {userIdList.map((userId) => (
-                      <option key={userId} value={userId}>
-                        {userId}
-                      </option>
-                    ))}
-                  </select>
-                  <div className="text-xs text-gray-500 mt-1 leading-relaxed">
-                    Select a registered User ID or use Cancel button above
-                  </div>
-                </>
-              )}
-            </>
-          )}
-        </div>
-      </div>
 
       <div className={clsx('flex', 'items-center', 'mb-2.5')}>
         <span className={classLabel}>FPS</span>
@@ -641,95 +488,291 @@ const InferencePanel = () => {
           step="5"
           value={info.fps || ''}
           onChange={(e) => handleChange('fps', Number(e.target.value))}
-          disabled={!isEditable || !info.recordInferenceMode}
+          disabled={!isEditable}
         />
       </div>
 
-      <div className={clsx('flex', 'items-start', 'mb-2.5')}>
-        <span className={clsx(classLabel, 'pt-2')}>Tags</span>
-        <div className="flex-1 min-w-0">
-          <TagInput
-            tags={info.tags || []}
-            onChange={(newTags) => handleChange('tags', newTags)}
-            disabled={!isEditable || !info.recordInferenceMode}
-          />
-          <div className="text-xs text-gray-500 mt-1 leading-relaxed">
-            Press Enter or use comma to add tags
+      <div className="text-xs text-gray-400 mt-1 ml-2">
+        Recording during inference will be supported in a future update
+      </div>
+
+      {false && (
+        <>
+          <div className="h-3 w-full"></div>
+          <div className={clsx('flex', 'items-center', 'mb-2')}>
+            <span className={classLabel}>Record</span>
+            <div className={clsx('flex', 'items-center')}>
+              <input
+                className={classCheckbox}
+                type="checkbox"
+                checked={info.recordInferenceMode}
+                onChange={(e) => handleChange('recordInferenceMode', e.target.checked)}
+                disabled={true}
+              />
+              <span className={clsx('ml-2', 'text-sm', 'text-gray-500')}>
+                {info.recordInferenceMode ? 'Enabled' : 'Disabled'}
+              </span>
+            </div>
           </div>
-        </div>
-      </div>
 
-      <div className={clsx('flex', 'items-center', 'mb-2.5')}>
-        <span className={classLabel}>Warmup Time (s)</span>
-        <input
-          className={classTextInput}
-          type="number"
-          step="5"
-          min={0}
-          max={65535}
-          value={info.warmupTime || ''}
-          onChange={(e) => handleChange('warmupTime', Number(e.target.value) || 0)}
-          disabled={!isEditable || !info.recordInferenceMode}
-        />
-      </div>
+          <div className={clsx('flex', 'items-center', 'mb-2.5')}>
+            <span className={classLabel}>Task Name</span>
+            <textarea
+              className={classTaskNameTextarea}
+              value={info.taskName || ''}
+              onChange={(e) => handleChange('taskName', e.target.value)}
+              disabled={!isEditable || !info.recordInferenceMode}
+              placeholder="Enter Task Name"
+            />
+          </div>
 
-      <div className={clsx('flex', 'items-center', 'mb-2.5')}>
-        <span className={classLabel}>Episode Time (s)</span>
-        <input
-          className={classTextInput}
-          type="number"
-          step="5"
-          min={0}
-          max={65535}
-          value={info.episodeTime || ''}
-          onChange={(e) => handleChange('episodeTime', Number(e.target.value) || 0)}
-          disabled={!isEditable || !info.recordInferenceMode}
-        />
-      </div>
+          <div className={clsx('flex', 'items-center', 'mb-2')}>
+            <span className={classLabel}>Push to Hub</span>
+            <div className={clsx('flex', 'items-center')}>
+              <input
+                className={classCheckbox}
+                type="checkbox"
+                checked={!!info.pushToHub}
+                onChange={(e) => handleChange('pushToHub', e.target.checked)}
+                disabled={!isEditable || !info.recordInferenceMode}
+              />
+              <span className={clsx('ml-2', 'text-sm', 'text-gray-500')}>
+                {info.pushToHub ? 'Enabled' : 'Disabled'}
+              </span>
+            </div>
+          </div>
 
-      <div className={clsx('flex', 'items-center', 'mb-2.5')}>
-        <span className={classLabel}>Reset Time (s)</span>
-        <input
-          className={classTextInput}
-          type="number"
-          step="5"
-          min={0}
-          max={65535}
-          value={info.resetTime || ''}
-          onChange={(e) => handleChange('resetTime', Number(e.target.value) || 0)}
-          disabled={!isEditable || !info.recordInferenceMode}
-        />
-      </div>
+          {info.pushToHub && (
+            <div className={clsx('flex', 'items-center', 'mb-2')}>
+              <span className={classLabel}>Private Mode</span>
+              <div className={clsx('flex', 'items-center')}>
+                <input
+                  className={classCheckbox}
+                  type="checkbox"
+                  checked={!!info.privateMode}
+                  onChange={(e) => handleChange('privateMode', e.target.checked)}
+                  disabled={!isEditable || !info.recordInferenceMode}
+                />
+                <span className={clsx('ml-2', 'text-sm', 'text-gray-500')}>
+                  {info.privateMode ? 'Enabled' : 'Disabled'}
+                </span>
+              </div>
+            </div>
+          )}
 
-      <div className={clsx('flex', 'items-center', 'mb-2.5')}>
-        <span className={classLabel}>Num Episodes</span>
-        <input
-          className={classTextInput}
-          type="number"
-          step="1"
-          min={0}
-          max={65535}
-          value={info.numEpisodes || ''}
-          onChange={(e) => handleChange('numEpisodes', Number(e.target.value) || 0)}
-          disabled={!isEditable || !info.recordInferenceMode}
-        />
-      </div>
+          <div className={clsx('flex', 'items-start', 'mb-2.5')}>
+            <span
+              className={clsx(
+                'text-sm',
+                'text-gray-600',
+                'w-28',
+                'flex-shrink-0',
+                'font-medium',
+                'pt-2'
+              )}
+            >
+              User ID
+            </span>
 
-      <div className={clsx('flex', 'items-center', 'mb-2')}>
-        <span className={classLabel}>Optimized Save</span>
-        <div className={clsx('flex', 'items-center')}>
-          <input
-            className={classCheckbox}
-            type="checkbox"
-            checked={!!info.useOptimizedSave}
-            onChange={(e) => handleChange('useOptimizedSave', e.target.checked)}
-            disabled={!isEditable || !info.recordInferenceMode}
-          />
-          <span className={clsx('ml-2', 'text-sm', 'text-gray-500')}>
-            {info.useOptimizedSave ? 'Enabled' : 'Disabled'}
-          </span>
-        </div>
-      </div>
+            <div className="flex-1 min-w-0">
+              {/* Common Load button for both modes */}
+              <div className="flex gap-2 mb-2">
+                <button
+                  className={clsx(
+                    classButtonBase,
+                    getButtonVariant('blue', isEditable && info.recordInferenceMode, isLoading)
+                  )}
+                  onClick={() => {
+                    if (isEditable && !isLoading && info.recordInferenceMode) {
+                      handleLoadUserId();
+                    }
+                  }}
+                  disabled={!isEditable || isLoading || !info.recordInferenceMode}
+                >
+                  {isLoading ? 'Loading...' : 'Load'}
+                </button>
+                {!info.pushToHub && showUserIdDropdown && (
+                  <button
+                    className={clsx(
+                      classButtonBase,
+                      getButtonVariant('red', isEditable && info.recordInferenceMode)
+                    )}
+                    onClick={() => setShowUserIdDropdown(false)}
+                    disabled={!isEditable || !info.recordInferenceMode}
+                  >
+                    Manual Input
+                  </button>
+                )}
+                {info.pushToHub && (
+                  <button
+                    className={clsx(
+                      classButtonBase,
+                      getButtonVariant('green', isEditable && info.recordInferenceMode, isLoading)
+                    )}
+                    onClick={() => {
+                      if (isEditable && !isLoading && info.recordInferenceMode) {
+                        setShowTokenPopup(true);
+                      }
+                    }}
+                    disabled={!isEditable || isLoading || !info.recordInferenceMode}
+                  >
+                    Change
+                  </button>
+                )}
+              </div>
+
+              {info.pushToHub ? (
+                /* Dropdown selection only when Push to Hub is enabled */
+                <>
+                  <select
+                    className={classSelect}
+                    value={info.userId || ''}
+                    onChange={(e) => handleChange('userId', e.target.value)}
+                    disabled={!isEditable || !info.recordInferenceMode}
+                  >
+                    <option value="">Select User ID</option>
+                    {userIdList.map((userId) => (
+                      <option key={userId} value={userId}>
+                        {userId}
+                      </option>
+                    ))}
+                  </select>
+                  <div className="text-xs text-gray-500 mt-1 leading-relaxed">
+                    Select from registered User IDs (required for Hub upload)
+                  </div>
+                </>
+              ) : (
+                /* Text input with optional registered ID selection when Push to Hub is disabled */
+                <>
+                  {!showUserIdDropdown ? (
+                    <>
+                      <textarea
+                        className={classRepoIdTextarea}
+                        value={info.userId || ''}
+                        onChange={(e) => handleChange('userId', e.target.value)}
+                        disabled={!isEditable || !info.recordInferenceMode}
+                        placeholder="Enter User ID or load from registered ID"
+                      />
+                      <div className="text-xs text-gray-500 mt-1 leading-relaxed">
+                        Enter any User ID manually or load from registered IDs
+                      </div>
+                    </>
+                  ) : (
+                    <>
+                      <select
+                        className={classSelect}
+                        value=""
+                        onChange={(e) => {
+                          if (e.target.value) {
+                            handleUserIdSelect(e.target.value);
+                          }
+                        }}
+                        disabled={!isEditable || !info.recordInferenceMode}
+                      >
+                        <option value="">Select from registered User IDs</option>
+                        {userIdList.map((userId) => (
+                          <option key={userId} value={userId}>
+                            {userId}
+                          </option>
+                        ))}
+                      </select>
+                      <div className="text-xs text-gray-500 mt-1 leading-relaxed">
+                        Select a registered User ID or use Cancel button above
+                      </div>
+                    </>
+                  )}
+                </>
+              )}
+            </div>
+          </div>
+
+          <div className={clsx('flex', 'items-start', 'mb-2.5')}>
+            <span className={clsx(classLabel, 'pt-2')}>Tags</span>
+            <div className="flex-1 min-w-0">
+              <TagInput
+                tags={info.tags || []}
+                onChange={(newTags) => handleChange('tags', newTags)}
+                disabled={!isEditable || !info.recordInferenceMode}
+              />
+              <div className="text-xs text-gray-500 mt-1 leading-relaxed">
+                Press Enter or use comma to add tags
+              </div>
+            </div>
+          </div>
+
+          <div className={clsx('flex', 'items-center', 'mb-2.5')}>
+            <span className={classLabel}>Warmup Time (s)</span>
+            <input
+              className={classTextInput}
+              type="number"
+              step="5"
+              min={0}
+              max={65535}
+              value={info.warmupTime || ''}
+              onChange={(e) => handleChange('warmupTime', Number(e.target.value) || 0)}
+              disabled={!isEditable || !info.recordInferenceMode}
+            />
+          </div>
+
+          <div className={clsx('flex', 'items-center', 'mb-2.5')}>
+            <span className={classLabel}>Episode Time (s)</span>
+            <input
+              className={classTextInput}
+              type="number"
+              step="5"
+              min={0}
+              max={65535}
+              value={info.episodeTime || ''}
+              onChange={(e) => handleChange('episodeTime', Number(e.target.value) || 0)}
+              disabled={!isEditable || !info.recordInferenceMode}
+            />
+          </div>
+
+          <div className={clsx('flex', 'items-center', 'mb-2.5')}>
+            <span className={classLabel}>Reset Time (s)</span>
+            <input
+              className={classTextInput}
+              type="number"
+              step="5"
+              min={0}
+              max={65535}
+              value={info.resetTime || ''}
+              onChange={(e) => handleChange('resetTime', Number(e.target.value) || 0)}
+              disabled={!isEditable || !info.recordInferenceMode}
+            />
+          </div>
+
+          <div className={clsx('flex', 'items-center', 'mb-2.5')}>
+            <span className={classLabel}>Num Episodes</span>
+            <input
+              className={classTextInput}
+              type="number"
+              step="1"
+              min={0}
+              max={65535}
+              value={info.numEpisodes || ''}
+              onChange={(e) => handleChange('numEpisodes', Number(e.target.value) || 0)}
+              disabled={!isEditable || !info.recordInferenceMode}
+            />
+          </div>
+
+          <div className={clsx('flex', 'items-center', 'mb-2')}>
+            <span className={classLabel}>Optimized Save</span>
+            <div className={clsx('flex', 'items-center')}>
+              <input
+                className={classCheckbox}
+                type="checkbox"
+                checked={!!info.useOptimizedSave}
+                onChange={(e) => handleChange('useOptimizedSave', e.target.checked)}
+                disabled={!isEditable || !info.recordInferenceMode}
+              />
+              <span className={clsx('ml-2', 'text-sm', 'text-gray-500')}>
+                {info.useOptimizedSave ? 'Enabled' : 'Disabled'}
+              </span>
+            </div>
+          </div>
+        </>
+      )}
 
       {/* Input Hugging Face Token Popup */}
       {showTokenPopup && (
@@ -815,12 +858,18 @@ const InferencePanel = () => {
         onFileSelect={handlePolicyPathSelect}
         title="Select Policy Path"
         selectButtonText="Select"
-        allowDirectorySelect={false}
+        allowDirectorySelect={true}
         targetFileName={[TARGET_FILES.POLICY_MODEL]}
         targetFileLabel="Policy file found! 🎯"
         initialPath={DEFAULT_PATHS.POLICY_MODEL_PATH}
         defaultPath={DEFAULT_PATHS.POLICY_MODEL_PATH}
         homePath=""
+      />
+
+      <PolicyDownloadModal
+        isOpen={showPolicyDownloadModal}
+        onClose={() => setShowPolicyDownloadModal(false)}
+        onDownloadComplete={handleDownloadPolicyComplete}
       />
     </div>
   );

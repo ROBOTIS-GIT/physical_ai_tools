@@ -1,0 +1,31 @@
+// Copyright 2025 ROBOTIS CO., LTD.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+//
+// Author: Kiwoong Park
+
+// HFStatus enum-like object for HF status
+// Use this for better code readability and maintainability
+
+const HFStatus = {
+  IDLE: 'Idle',
+  UPLOADING: 'Uploading',
+  DOWNLOADING: 'Downloading',
+  DELETING: 'Deleting',
+  FETCHING: 'Fetching',
+  PROCESSING: 'Processing',
+  SUCCESS: 'Success',
+  FAILED: 'Failed',
+};
+
+export default HFStatus;
