@@ -2,6 +2,11 @@
 Changelog for package physical_ai_server
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
+0.6.11 (2025-09-30)
+------------------
+* Added Hugging Face upload & download functionality.
+* Contributors: Dongyun Kim, Kiwoong Park
+
 0.6.10 (2025-09-19)
 ------------------
 * Prevent duplicate ROS2 services when changing robot type repeatedly.
