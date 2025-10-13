@@ -24,9 +24,12 @@ import time
 from typing import Optional
 
 from ament_index_python.packages import get_package_share_directory
-from physical_ai_interfaces.msg import HFOperationStatus, TaskStatus, TrainingStatus
+from physical_ai_interfaces.msg import BrowserItem, DatasetInfo, HFOperationStatus, TaskStatus, TrainingStatus
 from physical_ai_interfaces.srv import (
+    BrowseFile,
     ControlHfServer,
+    EditDataset,
+    GetDatasetInfo,
     GetDatasetList,
     GetHFUser,
     GetModelWeightList,
@@ -41,11 +44,13 @@ from physical_ai_interfaces.srv import (
 )
 
 from physical_ai_server.communication.communicator import Communicator
+from physical_ai_server.data_processing.data_editor import DataEditor
 from physical_ai_server.data_processing.data_manager import DataManager
 from physical_ai_server.data_processing.hf_api_worker import HfApiWorker
 from physical_ai_server.inference.inference_manager import InferenceManager
 from physical_ai_server.timer.timer_manager import TimerManager
 from physical_ai_server.training.training_manager import TrainingManager
+from physical_ai_server.utils.file_browse_utils import FileBrowseUtils
 from physical_ai_server.utils.parameter_utils import (
     declare_parameters,
     load_parameters,
@@ -81,6 +86,13 @@ class PhysicalAIServer(Node):
         self.training_thread = None
         self.is_training = False
         self.training_status_timer = None
+
+        # Initialize DataEditor for dataset editing
+        self.data_editor = DataEditor()
+
+        self.file_browse_utils = FileBrowseUtils(
+            max_workers=8,
+            logger=self.get_logger())
 
         self._init_core_components()
 
@@ -132,6 +144,9 @@ class PhysicalAIServer(Node):
                 self.get_model_weight_list_callback
             ),
             ('/huggingface/control', ControlHfServer, self.control_hf_server_callback),
+            ('/browse_file', BrowseFile, self.browse_file_callback),
+            ('/dataset/edit', EditDataset, self.dataset_edit_callback),
+            ('/dataset/get_info', GetDatasetInfo, self.get_dataset_info_callback),
         ]
 
         for service_name, service_type, callback in service_definitions:
@@ -967,6 +982,156 @@ class PhysicalAIServer(Node):
         else:
             self.get_logger().info(
                 f'Received joystick trigger: {joystick_mode}')
+
+    def browse_file_callback(self, request, response):
+        try:
+            if request.action == 'get_path':
+                result = self.file_browse_utils.handle_get_path_action(
+                    request.current_path)
+            elif request.action == 'go_parent':
+                # Check if target_files or target_folders are provided
+                target_files = None
+                target_folders = None
+
+                if hasattr(request, 'target_files') and request.target_files:
+                    target_files = set(request.target_files)
+                if hasattr(request, 'target_folders') and request.target_folders:
+                    target_folders = set(request.target_folders)
+
+                if target_files or target_folders:
+                    # Use parallel target checking for go_parent
+                    result = self.file_browse_utils.handle_go_parent_with_target_check(
+                        request.current_path,
+                        target_files,
+                        target_folders)
+                else:
+                    # Use standard go_parent (no targets specified)
+                    result = self.file_browse_utils.handle_go_parent_action(
+                        request.current_path)
+            elif request.action == 'browse':
+                # Check if target_files or target_folders are provided
+                target_files = None
+                target_folders = None
+
+                if hasattr(request, 'target_files') and request.target_files:
+                    target_files = set(request.target_files)
+                if hasattr(request, 'target_folders') and request.target_folders:
+                    target_folders = set(request.target_folders)
+
+                if target_files or target_folders:
+                    # Use parallel target checking
+                    result = self.file_browse_utils.handle_browse_with_target_check(
+                        request.current_path,
+                        request.target_name,
+                        target_files,
+                        target_folders)
+                else:
+                    # Use standard browsing (no targets specified)
+                    result = self.file_browse_utils.handle_browse_action(
+                        request.current_path, request.target_name)
+            else:
+                result = {
+                    'success': False,
+                    'message': f'Unknown action: {request.action}',
+                    'current_path': '',
+                    'parent_path': '',
+                    'selected_path': '',
+                    'items': []
+                }
+
+            # Convert result dict to response object
+            response.success = result['success']
+            response.message = result['message']
+            response.current_path = result['current_path']
+            response.parent_path = result['parent_path']
+            response.selected_path = result['selected_path']
+
+            # Convert item dicts to BrowserItem objects
+            response.items = []
+            for item_dict in result['items']:
+                item = BrowserItem()
+                item.name = item_dict['name']
+                item.full_path = item_dict['full_path']
+                item.is_directory = item_dict['is_directory']
+                item.size = item_dict['size']
+                item.modified_time = item_dict['modified_time']
+                # Set has_target_file field (default False for files)
+                item.has_target_file = item_dict.get('has_target_file', False)
+                response.items.append(item)
+
+        except Exception as e:
+            self.get_logger().error(f'Error in browse file handler: {str(e)}')
+            response.success = False
+            response.message = f'Error: {str(e)}'
+            response.current_path = ''
+            response.parent_path = ''
+            response.selected_path = ''
+            response.items = []
+
+        return response
+
+    def dataset_edit_callback(self, request, response):
+        try:
+            if request.mode == EditDataset.Request.MERGE:
+                merge_dataset_list = request.merge_dataset_list
+                output_path = request.output_path
+                # TODO: Implement HuggingFace upload functionality if needed
+                # upload_huggingface = request.upload_huggingface
+                self.data_editor.merge_datasets(
+                    merge_dataset_list, output_path)
+
+            elif request.mode == EditDataset.Request.DELETE:
+                delete_dataset_path = request.delete_dataset_path
+                delete_episode_num = sorted(request.delete_episode_num, reverse=True)
+                # TODO: Implement HuggingFace upload functionality if needed
+                # upload_huggingface = request.upload_huggingface
+                for episode_num in delete_episode_num:
+                    self.data_editor.delete_episode(
+                        delete_dataset_path, episode_num)
+            else:
+                response.success = False
+                response.message = f'Unknown edit mode: {request.mode}'
+                return response
+
+            response.success = True
+            response.message = f'Successfully processed edit mode: {request.mode}'
+            return response
+
+        except Exception as e:
+            self.get_logger().error(f'Error in dataset_edit_callback: {str(e)}')
+            response.success = False
+            response.message = f'Error: {str(e)}'
+
+        return response
+
+    def get_dataset_info_callback(self, request, response):
+        try:
+            dataset_path = request.dataset_path
+            dataset_info = self.data_editor.get_dataset_info(dataset_path)
+
+            info = DatasetInfo()
+            info.codebase_version = dataset_info.get('codebase_version', 'unknown') if isinstance(
+                dataset_info.get('codebase_version'), str) else 'unknown'
+            info.robot_type = dataset_info.get('robot_type', 'unknown') if isinstance(
+                dataset_info.get('robot_type'), str) else 'unknown'
+            info.total_episodes = dataset_info.get('total_episodes', 0) if isinstance(
+                dataset_info.get('total_episodes'), int) else 0
+            info.total_tasks = dataset_info.get('total_tasks', 0) if isinstance(
+                dataset_info.get('total_tasks'), int) else 0
+            info.fps = dataset_info.get('fps', 0) if isinstance(
+                dataset_info.get('fps'), int) else 0
+
+            response.dataset_info = info
+            response.success = True
+            response.message = 'Dataset info retrieved successfully'
+            return response
+
+        except Exception as e:
+            self.get_logger().error(f'Error in get_dataset_info_callback: {str(e)}')
+            response.success = False
+            response.message = f'Error: {str(e)}'
+            response.dataset_info = DatasetInfo()
+            return response
 
     def _cleanup_hf_api_worker_with_threading(self):
         """
