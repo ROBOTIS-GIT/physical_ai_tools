@@ -2,6 +2,22 @@
 Changelog for package physical_ai_manager
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
+0.6.11 (2025-09-30)
+------------------
+* Added Hugging Face upload & download functionality to the Data Tools page.
+* Added model download capability from Hugging Face in the inference page.
+* Contributors: Kiwoong Park
+
+0.6.10 (2025-09-19)
+------------------
+* Added auto-reconnect subscriptions when setting robot type after physical_ai_server restart.
+* Fixed a bug in the file browser component that caused multiple calls to the browseFile service.
+* Contributors: Kiwoong Park
+
+0.6.9 (2025-09-18)
+------------------
+* None
+
 0.6.8 (2025-08-21)
 ------------------
 * Added UI features for editing datasets, including merge and delete functionality.

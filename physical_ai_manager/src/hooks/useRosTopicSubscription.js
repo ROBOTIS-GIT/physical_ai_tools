@@ -37,6 +37,16 @@ import {
   setSelectedDataset,
   setCurrentLoss,
 } from '../features/training/trainingSlice';
+import {
+  setHFStatus,
+  setDownloadStatus,
+  setHFUserId,
+  setHFRepoIdUpload,
+  setHFRepoIdDownload,
+  setUploadStatus,
+} from '../features/editDataset/editDatasetSlice';
+import HFStatus from '../constants/HFStatus';
+import store from '../store/store';
 import rosConnectionManager from '../utils/rosConnectionManager';
 
 export function useRosTopicSubscription() {
@@ -45,6 +55,7 @@ export function useRosTopicSubscription() {
   const trainingStatusTopicRef = useRef(null);
   const previousPhaseRef = useRef(null);
   const audioContextRef = useRef(null);
+  const hfStatusTopicRef = useRef(null);
 
   const dispatch = useDispatch();
   const rosbridgeUrl = useSelector((state) => state.ros.rosbridgeUrl);
@@ -57,98 +68,106 @@ export function useRosTopicSubscription() {
     return audioContextRef.current;
   }, []);
 
-  const playBeep = useCallback(async (frequency = 1000, duration = 400) => {
-    const INITIAL_GAIN = 1.0;
-    const FINAL_GAIN = 0.01;
-    const FALLBACK_VIBRATION_PATTERN = [200, 100, 200];
+  const playBeep = useCallback(
+    async (frequency = 1000, duration = 400) => {
+      const INITIAL_GAIN = 1.0;
+      const FINAL_GAIN = 0.01;
+      const FALLBACK_VIBRATION_PATTERN = [200, 100, 200];
 
-    try {
-      const audioContext = initializeAudioContext();
-
-      if (audioContext.state === 'suspended') {
-        await audioContext.resume();
-      }
-      
-      const oscillator = audioContext.createOscillator();
-      const gainNode = audioContext.createGain();
-      
-      oscillator.connect(gainNode);
-      gainNode.connect(audioContext.destination);
-      
-      oscillator.frequency.value = frequency;
-      oscillator.type = 'sine';
-
-      gainNode.gain.setValueAtTime(INITIAL_GAIN, audioContext.currentTime);
-      gainNode.gain.exponentialRampToValueAtTime(FINAL_GAIN, audioContext.currentTime + duration / 1000);
-
-      oscillator.start(audioContext.currentTime);
-      oscillator.stop(audioContext.currentTime + duration / 1000);
-      
-      console.log('🔊 Beep played successfully');
-    } catch (error) {
-      console.warn('Audio playback failed:', error);
       try {
-        if (window.navigator && window.navigator.vibrate) {
-          window.navigator.vibrate(FALLBACK_VIBRATION_PATTERN);
-          console.log('📳 Fallback to vibration');
+        const audioContext = initializeAudioContext();
+
+        if (audioContext.state === 'suspended') {
+          await audioContext.resume();
         }
-      } catch (vibrationError) {
-        console.warn('Vibration fallback also failed:', vibrationError);
+
+        const oscillator = audioContext.createOscillator();
+        const gainNode = audioContext.createGain();
+
+        oscillator.connect(gainNode);
+        gainNode.connect(audioContext.destination);
+
+        oscillator.frequency.value = frequency;
+        oscillator.type = 'sine';
+
+        gainNode.gain.setValueAtTime(INITIAL_GAIN, audioContext.currentTime);
+        gainNode.gain.exponentialRampToValueAtTime(
+          FINAL_GAIN,
+          audioContext.currentTime + duration / 1000
+        );
+
+        oscillator.start(audioContext.currentTime);
+        oscillator.stop(audioContext.currentTime + duration / 1000);
+
+        console.log('🔊 Beep played successfully');
+      } catch (error) {
+        console.warn('Audio playback failed:', error);
+        try {
+          if (window.navigator && window.navigator.vibrate) {
+            window.navigator.vibrate(FALLBACK_VIBRATION_PATTERN);
+            console.log('📳 Fallback to vibration');
+          }
+        } catch (vibrationError) {
+          console.warn('Vibration fallback also failed:', vibrationError);
+        }
       }
+    },
+    [initializeAudioContext]
+  );
+
+  // Helper function to unsubscribe from a topic
+  const unsubscribeFromTopic = useCallback((topicRef, topicName) => {
+    if (topicRef.current) {
+      topicRef.current.unsubscribe();
+      topicRef.current = null;
+      console.log(`${topicName} topic unsubscribed`);
     }
-  }, [initializeAudioContext]);
+  }, []);
 
   const cleanup = useCallback(() => {
-    console.log('Starting ROS task status cleanup...');
+    console.log('Starting ROS subscriptions cleanup...');
 
-    if (taskStatusTopicRef.current) {
-      taskStatusTopicRef.current.unsubscribe();
-      taskStatusTopicRef.current = null;
-      console.log('Task status topic unsubscribed');
-    }
-    if (heartbeatTopicRef.current) {
-      heartbeatTopicRef.current.unsubscribe();
-      heartbeatTopicRef.current = null;
-      console.log('Heartbeat topic unsubscribed');
-    }
-    if (trainingStatusTopicRef.current) {
-      trainingStatusTopicRef.current.unsubscribe();
-      trainingStatusTopicRef.current = null;
-      console.log('Training status topic unsubscribed');
-    }
-    
+    // Unsubscribe from all topics
+    unsubscribeFromTopic(taskStatusTopicRef, 'Task status');
+    unsubscribeFromTopic(heartbeatTopicRef, 'Heartbeat');
+    unsubscribeFromTopic(trainingStatusTopicRef, 'Training status');
+    unsubscribeFromTopic(hfStatusTopicRef, 'HF status');
+
     // Reset previous phase tracking
     previousPhaseRef.current = null;
-    
+
     if (audioContextRef.current && audioContextRef.current.state !== 'closed') {
       audioContextRef.current.close();
       audioContextRef.current = null;
     }
-    
+
     setConnected(false);
     dispatch(setHeartbeatStatus('disconnected'));
     console.log('ROS task status cleanup completed');
-  }, [dispatch]);
+  }, [dispatch, unsubscribeFromTopic]);
 
   useEffect(() => {
     const enableAudioOnUserGesture = () => {
       const audioContext = initializeAudioContext();
       if (audioContext.state === 'suspended') {
-        audioContext.resume().then(() => {
-          console.log('🎵 Audio enabled by user gesture');
-        }).catch(error => {
-          console.warn('Failed to resume AudioContext on user gesture:', error);
-        });
+        audioContext
+          .resume()
+          .then(() => {
+            console.log('🎵 Audio enabled by user gesture');
+          })
+          .catch((error) => {
+            console.warn('Failed to resume AudioContext on user gesture:', error);
+          });
       }
     };
 
     const events = ['touchstart', 'touchend', 'mousedown', 'keydown', 'click'];
-    events.forEach(event => {
+    events.forEach((event) => {
       document.addEventListener(event, enableAudioOnUserGesture, { once: true, passive: true });
     });
 
     return () => {
-      events.forEach(event => {
+      events.forEach((event) => {
         document.removeEventListener(event, enableAudioOnUserGesture);
       });
     };
@@ -189,17 +208,17 @@ export function useRosTopicSubscription() {
 
         const currentPhase = msg.phase;
         const previousPhase = previousPhaseRef.current;
-        
+
         if (currentPhase === TaskPhase.RECORDING && previousPhase !== TaskPhase.RECORDING) {
           console.log('🔊 Recording started - playing beep sound');
-          
+
           setTimeout(() => {
             playBeep(RECORDING_BEEP_FREQUENCY, RECORDING_BEEP_DURATION);
           }, BEEP_DELAY);
-          
+
           toast.success('Recording started! 🎬');
         }
-        
+
         previousPhaseRef.current = currentPhase;
 
         // Calculate progress percentage
@@ -285,7 +304,7 @@ export function useRosTopicSubscription() {
     } catch (error) {
       console.error('Failed to subscribe to task status topic:', error);
     }
-  }, [dispatch, rosbridgeUrl]);
+  }, [dispatch, rosbridgeUrl, playBeep]);
 
   const subscribeToHeartbeat = useCallback(async () => {
     try {
@@ -327,6 +346,7 @@ export function useRosTopicSubscription() {
         await subscribeToTaskStatus();
         await subscribeToHeartbeat();
         await subscribeToTrainingStatus();
+        await subscribeHFStatus();
       } catch (error) {
         console.error('Failed to initialize ROS subscriptions:', error);
       }
@@ -420,6 +440,134 @@ export function useRosTopicSubscription() {
     }
   }, [dispatch, rosbridgeUrl]);
 
+  const subscribeHFStatus = useCallback(async () => {
+    try {
+      const ros = await rosConnectionManager.getConnection(rosbridgeUrl);
+      if (!ros) return;
+
+      // Skip if already subscribed
+      if (hfStatusTopicRef.current) {
+        console.log('HF status already subscribed, skipping...');
+        return;
+      }
+
+      hfStatusTopicRef.current = new ROSLIB.Topic({
+        ros,
+        name: '/huggingface/status',
+        messageType: 'physical_ai_interfaces/msg/HFOperationStatus',
+      });
+
+      hfStatusTopicRef.current.subscribe((msg) => {
+        console.log('Received HF status:', msg);
+
+        const status = msg.status;
+        const operation = msg.operation;
+        const repoId = msg.repo_id;
+        // const localPath = msg.local_path;
+        const message = msg.message;
+        const progressCurrent = msg.progress_current;
+        const progressTotal = msg.progress_total;
+        const progressPercentage = msg.progress_percentage;
+
+        if (status === 'Failed') {
+          toast.error(message);
+        } else if (status === 'Success') {
+          toast.success(message);
+        }
+
+        console.log('status:', status);
+
+        // Check the current status from the store
+        const currentStatus = store.getState().editDataset.hfStatus;
+
+        if (
+          (currentStatus === HFStatus.SUCCESS || currentStatus === HFStatus.FAILED) &&
+          status === HFStatus.IDLE
+        ) {
+          console.log('Maintaining SUCCESS status, skipping IDLE update');
+          // Skip updating the status
+        } else {
+          console.log('Updating HF status to:', status);
+          dispatch(setHFStatus(status));
+        }
+
+        if (operation === 'upload') {
+          dispatch(
+            setUploadStatus({
+              current: progressCurrent,
+              total: progressTotal,
+              percentage: progressPercentage.toFixed(2),
+            })
+          );
+        } else if (operation === 'download') {
+          dispatch(
+            setDownloadStatus({
+              current: progressCurrent,
+              total: progressTotal,
+              percentage: progressPercentage.toFixed(2),
+            })
+          );
+        }
+        const userId = repoId.split('/')[0];
+        const repoName = repoId.split('/')[1];
+
+        if (userId?.trim() && repoName?.trim()) {
+          dispatch(setHFUserId(userId));
+
+          if (operation === 'upload') {
+            dispatch(setHFRepoIdUpload(repoName));
+          } else if (operation === 'download') {
+            dispatch(setHFRepoIdDownload(repoName));
+          }
+        }
+      });
+
+      console.log('HF status subscription established');
+    } catch (error) {
+      console.error('Failed to subscribe to HF status topic:', error);
+    }
+  }, [dispatch, rosbridgeUrl]);
+
+  // Manual initialization function
+  const initializeSubscriptions = useCallback(async () => {
+    if (!rosbridgeUrl) {
+      console.warn('Cannot initialize subscriptions: rosbridgeUrl is not set');
+      return;
+    }
+
+    console.log('Manually initializing ROS subscriptions...');
+
+    // Cleanup previous subscriptions before creating new ones
+    cleanup();
+
+    try {
+      await subscribeToTaskStatus();
+      await subscribeToHeartbeat();
+      await subscribeToTrainingStatus();
+      await subscribeHFStatus();
+      console.log('ROS subscriptions initialized successfully');
+    } catch (error) {
+      console.error('Failed to initialize ROS subscriptions:', error);
+    }
+  }, [
+    rosbridgeUrl,
+    cleanup,
+    subscribeToTaskStatus,
+    subscribeToHeartbeat,
+    subscribeToTrainingStatus,
+    subscribeHFStatus,
+  ]);
+
+  // Auto-start connection and subscription (can be disabled by not calling useRosTopicSubscription)
+  useEffect(() => {
+    if (!rosbridgeUrl) return;
+
+    initializeSubscriptions();
+
+    return cleanup;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [rosbridgeUrl]); // Only rosbridgeUrl as dependency to prevent unnecessary re-subscriptions
+
   return {
     connected,
     subscribeToTaskStatus,
@@ -427,5 +575,7 @@ export function useRosTopicSubscription() {
     getPhaseName,
     resetTaskToIdle,
     subscribeToTrainingStatus,
+    subscribeHFStatus,
+    initializeSubscriptions, // Manual initialization function
   };
 }

@@ -25,6 +25,20 @@ class RosConnectionManager {
     this.connecting = false;
     this.url = '';
     this.connectionPromise = null;
+    this.onConnected = null;
+  }
+
+  /**
+   * Set the callback function to be called when the ROS connection is established.
+   * @param {function} onConnected - Callback function to execute on successful connection.
+   */
+  setOnConnected(onConnected) {
+    if (typeof onConnected === 'function') {
+      this.onConnected = onConnected;
+    } else {
+      console.warn('setOnConnected: provided callback is not a function');
+      this.onConnected = null;
+    }
   }
 
   /**
@@ -41,7 +55,6 @@ class RosConnectionManager {
 
     // If already connected, return existing connection
     if (this.ros && this.ros.isConnected) {
-      console.log('Using existing ROS connection');
       return this.ros;
     }
 
@@ -62,7 +75,7 @@ class RosConnectionManager {
         this.connecting = false;
         this.connectionPromise = null;
         reject(new Error('ROS connection timeout - rosbridge server is not running'));
-      }, 5000);
+      }, 10000);
 
       ros.on('connection', () => {
         clearTimeout(connectionTimeout);
@@ -71,6 +84,14 @@ class RosConnectionManager {
         this.connecting = false;
         this.connectionPromise = null;
         resolve(ros);
+
+        if (this.onConnected && typeof this.onConnected === 'function') {
+          try {
+            this.onConnected();
+          } catch (error) {
+            console.error('Error calling onConnected callback:', error);
+          }
+        }
       });
 
       ros.on('error', (error) => {
@@ -87,6 +108,8 @@ class RosConnectionManager {
         this.ros = null;
         this.connecting = false;
         this.connectionPromise = null;
+        // Reset connection attempts on close to allow reconnection
+        this.connectionAttempts = 0;
       });
     });
 

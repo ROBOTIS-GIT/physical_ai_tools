@@ -2,6 +2,23 @@
 Changelog for package physical_ai_tools
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
+0.6.11 (2025-09-30)
+------------------
+* Added Hugging Face upload & download functionality.
+* Contributors: Dongyun Kim, Kiwoong Park
+
+0.6.10 (2025-09-19)
+------------------
+* Prevent duplicate ROS2 services when changing robot type repeatedly.
+* Added auto-reconnect subscriptions when setting robot type after physical_ai_server restart.
+* Fixed a bug in the file browser component that caused multiple calls to the browseFile service.
+* Contributors: Kiwoong Park
+
+0.6.9 (2025-09-18)
+------------------
+* Changed omx_config.yaml file.
+* Contributors: Junha Cha
+
 0.6.8 (2025-08-21)
 ------------------
 * Added DatasetInfo.msg, EditDataset.srv, and GetDatasetInfo.srv interfaces for Data Edit communication.

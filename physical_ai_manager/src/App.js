@@ -16,7 +16,7 @@
 
 import React, { useEffect, useRef } from 'react';
 import clsx from 'clsx';
-import { MdHome, MdVideocam, MdMemory, MdDataset } from 'react-icons/md';
+import { MdHome, MdVideocam, MdMemory, MdWidgets } from 'react-icons/md';
 import { GoGraph } from 'react-icons/go';
 import { Toaster } from 'react-hot-toast';
 import toast from 'react-hot-toast';
@@ -48,7 +48,8 @@ function App() {
   const isFirstLoad = useRef(true);
 
   // Subscribe to task status from ROS topic (always active)
-  useRosTopicSubscription();
+  const rosSubscriptionControls = useRosTopicSubscription();
+  rosConnectionManager.setOnConnected(rosSubscriptionControls.initializeSubscriptions);
 
   // Disconnect ROS connection when app unmounts
   useEffect(() => {
@@ -216,140 +217,87 @@ function App() {
     };
   }, [page]);
 
+  const classPageButton = clsx(
+    'flex',
+    'flex-col',
+    'items-center',
+    'rounded-2xl',
+    'border-none',
+    'py-5',
+    'px-4',
+    'text-base',
+    'text-gray-800',
+    'cursor-pointer',
+    'transition-colors',
+    'duration-150',
+    'outline-none',
+    'w-24'
+  );
+
   return (
     <div className="flex min-h-screen w-screen">
-      <aside className="w-30 bg-gray-100 min-h-screen flex flex-col items-center gap-4 shadow-[inset_0_0_2px_rgba(0,0,0,0.1)]">
+      <aside className="w-30 min-w-28 bg-gray-100 min-h-screen flex flex-col items-center gap-4 shadow-[inset_0_0_2px_rgba(0,0,0,0.1)]">
         <div className="w-full h-screen flex flex-col gap-2 items-center overflow-y-auto scrollbar-thin">
           <div className="w-full h-8"></div>
+          {/* Home page button */}
           <button
-            className={clsx(
-              'flex',
-              'flex-col',
-              'items-center',
-              'rounded-2xl',
-              'border-none',
-              'py-5',
-              'px-4',
-              'text-base',
-              'text-gray-800',
-              'cursor-pointer',
-              'transition-colors',
-              'duration-150',
-              'outline-none',
-              'min-w-24',
-              {
-                'hover:bg-gray-200 active:bg-gray-400': page !== PageType.HOME,
-                'bg-gray-300': page === PageType.HOME,
-              }
-            )}
+            className={clsx(classPageButton, {
+              'hover:bg-gray-200 active:bg-gray-400': page !== PageType.HOME,
+              'bg-gray-300': page === PageType.HOME,
+            })}
             onClick={handleHomePageNavigation}
           >
             <MdHome size={32} className="mb-1.5" />
             <span className="mt-1 text-sm">Home</span>
           </button>
+
+          {/* Record page button */}
           <button
-            className={clsx(
-              'flex',
-              'flex-col',
-              'items-center',
-              'rounded-2xl',
-              'border-none',
-              'py-5',
-              'px-4',
-              'text-base',
-              'text-gray-800',
-              'cursor-pointer',
-              'transition-colors',
-              'duration-150',
-              'outline-none',
-              'min-w-24',
-              {
-                'hover:bg-gray-200 active:bg-gray-400': page !== PageType.RECORD,
-                'bg-gray-300': page === PageType.RECORD,
-              }
-            )}
+            className={clsx(classPageButton, {
+              'hover:bg-gray-200 active:bg-gray-400': page !== PageType.RECORD,
+              'bg-gray-300': page === PageType.RECORD,
+            })}
             onClick={handleRecordPageNavigation}
           >
             <MdVideocam size={32} className="mb-1.5" />
             <span className="mt-1 text-sm">Record</span>
           </button>
+          {/* Training page button */}
           <button
-            className={clsx(
-              'flex',
-              'flex-col',
-              'items-center',
-              'rounded-2xl',
-              'border-none',
-              'py-5',
-              'px-4',
-              'text-base',
-              'text-gray-800',
-              'cursor-pointer',
-              'transition-colors',
-              'duration-150',
-              'outline-none',
-              'w-24',
-              {
-                'hover:bg-gray-200 active:bg-gray-400': page !== PageType.INFERENCE,
-                'bg-gray-300': page === PageType.INFERENCE,
-              }
-            )}
-            onClick={handleInferencePageNavigation}
-          >
-            <MdMemory size={32} className="mb-1.5" />
-            <span className="mt-1 text-sm">Inference</span>
-          </button>
-          <button
-            className={clsx(
-              'flex',
-              'flex-col',
-              'items-center',
-              'rounded-2xl',
-              'border-none',
-              'py-5',
-              'px-4',
-              'text-base',
-              'text-gray-800',
-              'cursor-pointer',
-              'transition-colors',
-              'duration-150',
-              'outline-none',
-              'w-24',
-              {
-                'hover:bg-gray-200 active:bg-gray-400': page !== PageType.TRAINING,
-                'bg-gray-300': page === PageType.TRAINING,
-              }
-            )}
+            className={clsx(classPageButton, {
+              'hover:bg-gray-200 active:bg-gray-400': page !== PageType.TRAINING,
+              'bg-gray-300': page === PageType.TRAINING,
+            })}
             onClick={handleTrainingPageNavigation}
           >
             <GoGraph size={28} className="mb-1.5" />
             <span className="mt-1 text-sm">Training</span>
           </button>
+          {/* Inference page button */}
           <button
-            className={clsx(
-              'flex',
-              'flex-col',
-              'items-center',
-              'rounded-2xl',
-              'border-none',
-              'py-5',
-              'px-4',
-              'text-base',
-              'text-gray-800',
-              'cursor-pointer',
-              'transition-colors',
-              'duration-150',
-              'outline-none',
-              'w-24',
-              {
-                'hover:bg-gray-200 active:bg-gray-400': page !== PageType.EDIT_DATASET,
-                'bg-gray-300': page === PageType.EDIT_DATASET,
-              }
-            )}
+            className={clsx(classPageButton, {
+              'hover:bg-gray-200 active:bg-gray-400': page !== PageType.INFERENCE,
+              'bg-gray-300': page === PageType.INFERENCE,
+            })}
+            onClick={handleInferencePageNavigation}
+          >
+            <MdMemory size={32} className="mb-1.5" />
+            <span className="mt-1 text-sm">Inference</span>
+          </button>
+
+          {/* Divider line */}
+          <div className="w-24 h-1 border-t-2 rounded-full border-gray-200 mt-3"></div>
+
+          {/* Edit dataset page button */}
+          <button
+            className={clsx(classPageButton, {
+              'hover:bg-gray-200 active:bg-gray-400': page !== PageType.EDIT_DATASET,
+              'bg-gray-300': page === PageType.EDIT_DATASET,
+            })}
             onClick={handleEditDatasetPageNavigation}
           >
-            <MdDataset size={28} className="mb-1.5" />
-            <span className="mt-1 text-sm">Edit Dataset</span>
+            <MdWidgets size={28} className="mb-2" />
+            <span className="mt-1 text-sm whitespace-nowrap">Data Tools</span>
           </button>
         </div>
       </aside>
@@ -376,17 +324,29 @@ function App() {
           style: {
             background: '#363636',
             color: '#fff',
+            maxWidth: '500px',
+            wordWrap: 'break-word',
+            whiteSpace: 'pre-wrap',
+            lineHeight: '1.4',
           },
           success: {
             duration: 3000,
             style: {
               background: '#10b981',
+              maxWidth: '500px',
+              wordWrap: 'break-word',
+              whiteSpace: 'pre-wrap',
+              lineHeight: '1.4',
             },
           },
           error: {
             duration: 6000,
             style: {
               background: '#ef4444',
+              maxWidth: '500px',
+              wordWrap: 'break-word',
+              whiteSpace: 'pre-wrap',
+              lineHeight: '1.4',
             },
           },
         }}
