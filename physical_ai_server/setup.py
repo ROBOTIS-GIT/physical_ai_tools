@@ -22,7 +22,12 @@ setup(
         ('share/' + package_name + '/launch', glob('launch/*.launch.py')),
         ('share/' + package_name + '/config', glob('config/*.yaml')),
     ],
-    install_requires=['setuptools', 'physical_ai_interfaces'],
+    install_requires=[
+        'setuptools',
+        'physical_ai_interfaces',
+        'docker>=7.0.0',  # Python Docker SDK for container management
+        'pyzmq>=25.0.0',  # ZeroMQ for inter-container communication
+    ],
     zip_safe=True,
     author=authors,
     author_email=author_emails,
