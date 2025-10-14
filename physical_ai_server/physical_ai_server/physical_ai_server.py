@@ -47,6 +47,7 @@ from physical_ai_server.communication.communicator import Communicator
 from physical_ai_server.data_processing.data_manager import DataManager
 from physical_ai_server.inference.inference_manager import InferenceManager
 from physical_ai_server.inference.client_inference import ZmqInferenceClient
+from physical_ai_server.inference.visualize_inference_result import InferenceResultVisualizer
 from physical_ai_server.timer.timer_manager import TimerManager
 from physical_ai_server.training.training_manager import TrainingManager
 from physical_ai_server.utils.parameter_utils import (
@@ -93,7 +94,6 @@ class PhysicalAIServer(Node):
 
         self.goal_repo_id = None
         
-        self.inference_mode = 'zmq'  # 'local' or 'zmq'
         self.zmq_client: Optional[ZmqInferenceClient] = None
         self.remain_action = []
         self.wait_inference = False
@@ -104,6 +104,7 @@ class PhysicalAIServer(Node):
             enabled=False
         )
         self._used_action_count = 0
+        self._last_executed_action = []
 
     def _init_core_components(self):
         self.communicator: Optional[Communicator] = None
@@ -252,7 +253,7 @@ class PhysicalAIServer(Node):
         self.timer_manager = TimerManager(node=self)
         self.timer_manager.set_timer(
             timer_name=self.operation_mode,
-            timer_frequency=task_info.fps,
+            timer_frequency=15,
             callback_function=self.timer_callback_dict[self.operation_mode]
         )
         self.timer_manager.start(timer_name=self.operation_mode)
@@ -538,6 +539,22 @@ class PhysicalAIServer(Node):
             self.inference_manager.clear_policy()
             self.timer_manager.stop(timer_name=self.operation_mode)
             return
+    
+    def find_best_chunk_start_index(
+        self,
+        new_action_chunk: np.ndarray, 
+        last_executed_action: np.ndarray,
+        search_range: int = 5,
+        distance_metric: str = 'l2'
+    ) -> int:
+        search_actions = new_action_chunk[:search_range]
+        distances = []
+        
+        for i, action in enumerate(search_actions):
+            distance = np.linalg.norm(action - last_executed_action)
+            distances.append(distance)
+        best_index = np.argmin(distances)
+        return best_index
         
     def _zmq_inference_timer_callback(self):
         error_msg = ''
@@ -581,7 +598,7 @@ class PhysicalAIServer(Node):
             self.get_logger().info('ZMQ client connected to server')
             policy_info = {
                 'policy_type': 'GR00T_N1_5',
-                'policy_path': '/workspace/checkpoints/ROBOTIS/ROBOTIS/ffw_bg2_rev4_pick_coffee_bottle_env5_1to12/checkpoint-10000',
+                'policy_path': '/workspace/checkpoints/ROBOTIS/ffw_bg2_rev4_pick_coffee_bottle_env5_1_to_31_joint_fix_20k', 
                 'robot_type': 'ffw_bg2'
             }
             response = self.zmq_client.execute_command('load_policy', policy_info)
@@ -633,8 +650,12 @@ class PhysicalAIServer(Node):
                             new_action = np.hstack((left_action, right_action)).tolist()
                             skip_action = 0
                             if len(self.remain_action) > 0:
-                                skip_action = re_inference_threshold - len(self.remain_action)
-                                self.get_logger().info(f'Skipping first {skip_action} actions for smoothing')
+                                skip_action = self.find_best_chunk_start_index(
+                                    new_action_chunk=new_action,
+                                    last_executed_action=np.array(self._last_executed_action),
+                                    search_range=10
+                                ) + 1
+                                self.get_logger().info(f'Skipping {skip_action} actions to align with previous execution')
                                 self.remain_action = new_action[skip_action:]
                             else:
                                 self.remain_action = new_action
@@ -642,8 +663,8 @@ class PhysicalAIServer(Node):
                             self.wait_inference = False
                             if self.visualizer.is_enabled():
                                 self.visualizer.process_complete_inference_visualization(
-                                    self.remain_action, 0.1, self.used_action_count - skip_action,
-                                    new_chunk, self._used_action_count,
+                                    self.remain_action, 0.1, self._used_action_count - skip_action,
+                                    new_action, self._used_action_count,
                                     skip_action,
                                     self.get_logger()
                                 )
@@ -654,12 +675,13 @@ class PhysicalAIServer(Node):
                 # Use action if available
                 if self.remain_action:
                     action = self.remain_action.pop(0)
+                    self._last_executed_action = action.copy()
                     if self.visualizer.is_enabled():
                             self.visualizer.add_action_data(
                                 action_number=self._used_action_count,
                                 timestamp=time.time(),
                                 action_values=action,
-                                remaining_in_buffer=remaining_count
+                                remaining_in_buffer=self.remain_action
                             )
                     self._used_action_count += 1
                 else:
@@ -824,15 +846,14 @@ class PhysicalAIServer(Node):
                 task_info = request.task_info
                 self.task_instruction = task_info.task_instruction
 
-                if self.inference_mode == 'local':
-                    valid_result, result_message = self.inference_manager.validate_policy(
-                        policy_path=task_info.policy_path)
+                valid_result, result_message = self.inference_manager.validate_policy(
+                    policy_path=task_info.policy_path)
 
-                    if not valid_result:
-                        response.success = False
-                        response.message = result_message
-                        self.get_logger().error(response.message)
-                        return response
+                if not valid_result:
+                    response.success = False
+                    response.message = result_message
+                    self.get_logger().error(response.message)
+                    return response
 
                 self.init_robot_control_parameters_from_user_task(
                     task_info
