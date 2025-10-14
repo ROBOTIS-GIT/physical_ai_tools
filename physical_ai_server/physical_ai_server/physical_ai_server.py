@@ -16,15 +16,10 @@
 #
 # Author: Dongyun Kim, Seongwoo Kim
 
-import glob
-import os
 from pathlib import Path
-import threading
-import time
 from typing import Optional
 
-from ament_index_python.packages import get_package_share_directory
-from physical_ai_interfaces.msg import BrowserItem, DatasetInfo, HFOperationStatus, TaskStatus, TrainingStatus
+from physical_ai_interfaces.msg import HFOperationStatus, TrainingStatus
 from physical_ai_interfaces.srv import (
     BrowseFile,
     ControlHfServer,
@@ -43,13 +38,23 @@ from physical_ai_interfaces.srv import (
     SetRobotType,
 )
 
+from physical_ai_server.callbacks.timer_callbacks import TimerCallbacks
 from physical_ai_server.communication.communicator import Communicator
 from physical_ai_server.data_processing.data_editor import DataEditor
 from physical_ai_server.data_processing.data_manager import DataManager
-from physical_ai_server.data_processing.hf_api_worker import HfApiWorker
 from physical_ai_server.inference.inference_manager import InferenceManager
+from physical_ai_server.service_handlers.dataset_handler import (
+    DatasetServiceHandler
+)
+from physical_ai_server.service_handlers.hf_handler import HFServiceHandler
+from physical_ai_server.service_handlers.robot_handler import (
+    RobotServiceHandler
+)
+from physical_ai_server.service_handlers.task_handler import TaskServiceHandler
+from physical_ai_server.service_handlers.training_handler import (
+    TrainingServiceHandler
+)
 from physical_ai_server.timer.timer_manager import TimerManager
-from physical_ai_server.training.training_manager import TrainingManager
 from physical_ai_server.utils.file_browse_utils import FileBrowseUtils
 from physical_ai_server.utils.parameter_utils import (
     declare_parameters,
@@ -62,91 +67,192 @@ from rclpy.node import Node
 
 
 class PhysicalAIServer(Node):
-    # Define operation modes (constants taken from Communicator)
+    """
+    Main ROS2 node for Physical AI Server.
+
+    Manages robot control, data collection, training, and inference operations
+    through modular service handlers and timer callbacks.
+    """
 
     DEFAULT_SAVE_ROOT_PATH = Path.home() / '.cache/huggingface/lerobot'
-    DEFAULT_TOPIC_TIMEOUT = 5.0  # seconds
     PUB_QOS_SIZE = 10
-    TRAINING_STATUS_TIMER_FREQUENCY = 0.5  # seconds
 
     def __init__(self):
+        """Initialize Physical AI Server node."""
         super().__init__('physical_ai_server')
         self.get_logger().info('Start Physical AI Server')
 
-        self.params = None
-        self.total_joint_order = None
-        self.on_recording = False
-        self.on_inference = False
+        # Initialize state variables
+        self._init_state_variables()
 
-        self.hf_cancel_on_progress = False
-
-        self.robot_type_list = self.get_robot_type_list()
-        self.start_recording_time: float = 0.0
-
-        self.training_thread = None
-        self.is_training = False
-        self.training_status_timer = None
-
-        # Initialize DataEditor for dataset editing
-        self.data_editor = DataEditor()
-
-        self.file_browse_utils = FileBrowseUtils(
-            max_workers=8,
-            logger=self.get_logger())
-
+        # Initialize core components
         self._init_core_components()
 
+        # Initialize ROS publishers
         self._init_ros_publisher()
+
+        # Initialize service handlers
+        self._init_service_handlers()
+
+        # Initialize timer callbacks
+        self._init_timer_callbacks()
+
+        # Initialize ROS services
         self._init_ros_service()
 
-        self._setup_timer_callbacks()
+    def _init_state_variables(self):
+        """Initialize server state variables."""
+        self.params = None
+        self.total_joint_order = None
+        self.joint_order = None
+        self.on_recording = False
+        self.on_inference = False
+        self.robot_type = None
+        self.operation_mode = None
+        self.start_recording_time: float = 0.0
+        self.task_instruction = None
+        self.joint_topic_types = None
 
     def _init_core_components(self):
+        """Initialize core components."""
         self.communicator: Optional[Communicator] = None
         self.data_manager: Optional[DataManager] = None
         self.timer_manager: Optional[TimerManager] = None
         self.heartbeat_timer: Optional[TimerManager] = None
-        self.training_timer: Optional[TimerManager] = None
         self.inference_manager: Optional[InferenceManager] = None
-        self.training_manager: Optional[TrainingManager] = None
 
-        # Initialize HF API Worker
-        self.hf_api_worker: Optional[HfApiWorker] = None
-        self.hf_status_timer: Optional[TimerManager] = None
-        self._init_hf_api_worker()
+        # Initialize data editor
+        self.data_editor = DataEditor()
+
+        # Initialize file browse utils
+        self.file_browse_utils = FileBrowseUtils(
+            max_workers=8,
+            logger=self.get_logger()
+        )
+
+        # Initialize inference manager
+        self.inference_manager = InferenceManager()
 
     def _init_ros_publisher(self):
+        """Initialize ROS publishers."""
         self.get_logger().info('Initializing ROS publishers...')
-        pub_qos_size = 100
+
         self.training_status_publisher = self.create_publisher(
             TrainingStatus,
             '/training/status',
-            pub_qos_size
+            100
+        )
+
+        self.hf_status_publisher = self.create_publisher(
+            HFOperationStatus,
+            '/huggingface/status',
+            self.PUB_QOS_SIZE
+        )
+
+    def _init_service_handlers(self):
+        """Initialize service handlers."""
+        self.get_logger().info('Initializing service handlers...')
+
+        # Initialize HF handler with worker
+        from physical_ai_server.data_processing.hf_api_worker import (
+            HfApiWorker
+        )
+        hf_api_worker = HfApiWorker()
+        self.hf_handler = HFServiceHandler(
+            self,
+            hf_api_worker,
+            self.hf_status_publisher
+        )
+        self.hf_handler._init_hf_api_worker()
+
+        # Initialize robot handler
+        self.robot_handler = RobotServiceHandler(
+            self,
+            self.inference_manager
+        )
+
+        # Initialize training handler
+        self.training_handler = TrainingServiceHandler(
+            self,
+            self.training_status_publisher
+        )
+
+        # Initialize dataset handler
+        self.dataset_handler = DatasetServiceHandler(
+            self,
+            self.data_editor,
+            self.file_browse_utils
+        )
+
+        # Initialize task handler
+        self.task_handler = TaskServiceHandler(self)
+
+        # Set callbacks for task handler
+        self.task_handler.init_robot_control_callback = (
+            self.init_robot_control_parameters_from_user_task
+        )
+        self.task_handler.clear_parameters_callback = (
+            self.clear_parameters
+        )
+        self.task_handler.init_ros_params_callback = (
+            self.init_ros_params
+        )
+
+    def _init_timer_callbacks(self):
+        """Initialize timer callbacks."""
+        self.timer_callbacks = TimerCallbacks(
+            self,
+            self.params,
+            self.total_joint_order,
+            self.joint_order
         )
 
     def _init_ros_service(self):
+        """Initialize ROS services."""
         self.get_logger().info('Initializing ROS services...')
+
         service_definitions = [
-            ('/task/command', SendCommand, self.user_interaction_callback),
-            ('/get_robot_types', GetRobotTypeList, self.get_robot_types_callback),
-            ('/set_robot_type', SetRobotType, self.set_robot_type_callback),
-            ('/register_hf_user', SetHFUser, self.set_hf_user_callback),
-            ('/get_registered_hf_user', GetHFUser, self.get_hf_user_callback),
-            ('/get_policy_list', GetPolicyList, self.get_policy_list_callback),
-            ('/get_saved_policies', GetSavedPolicyList, self.get_saved_policies_callback),
-            ('/training/command', SendTrainingCommand, self.user_training_interaction_callback),
-            ('/training/get_available_policy', GetPolicyList, self.get_available_list_callback),
-            ('/training/get_user_list', GetUserList, self.get_user_list_callback),
-            ('/training/get_dataset_list', GetDatasetList, self.get_dataset_list_callback),
-            (
-                '/training/get_model_weight_list',
-                GetModelWeightList,
-                self.get_model_weight_list_callback
-            ),
-            ('/huggingface/control', ControlHfServer, self.control_hf_server_callback),
-            ('/browse_file', BrowseFile, self.browse_file_callback),
-            ('/dataset/edit', EditDataset, self.dataset_edit_callback),
-            ('/dataset/get_info', GetDatasetInfo, self.get_dataset_info_callback),
+            # Task control services
+            ('/task/command', SendCommand,
+             self.task_handler.user_interaction_callback),
+
+            # Robot configuration services
+            ('/get_robot_types', GetRobotTypeList,
+             self.robot_handler.get_robot_types_callback),
+            ('/set_robot_type', SetRobotType,
+             self.task_handler.set_robot_type_callback),
+            ('/get_policy_list', GetPolicyList,
+             self.robot_handler.get_policy_list_callback),
+            ('/get_saved_policies', GetSavedPolicyList,
+             self.robot_handler.get_saved_policies_callback),
+
+            # HuggingFace services
+            ('/register_hf_user', SetHFUser,
+             self.hf_handler.set_hf_user_callback),
+            ('/get_registered_hf_user', GetHFUser,
+             self.hf_handler.get_hf_user_callback),
+            ('/huggingface/control', ControlHfServer,
+             self.hf_handler.control_hf_server_callback),
+
+            # Training services
+            ('/training/command', SendTrainingCommand,
+             self.training_handler.user_training_interaction_callback),
+            ('/training/get_available_policy', GetPolicyList,
+             self.training_handler.get_available_list_callback),
+            ('/training/get_user_list', GetUserList,
+             self.training_handler.get_user_list_callback),
+            ('/training/get_dataset_list', GetDatasetList,
+             self.training_handler.get_dataset_list_callback),
+            ('/training/get_model_weight_list', GetModelWeightList,
+             self.training_handler.get_model_weight_list_callback),
+
+            # Dataset services
+            ('/browse_file', BrowseFile,
+             self.dataset_handler.browse_file_callback),
+            ('/dataset/edit', EditDataset,
+             self.dataset_handler.dataset_edit_callback),
+            ('/dataset/get_info', GetDatasetInfo,
+             self.dataset_handler.get_dataset_info_callback),
         ]
 
         for service_name, service_type, callback in service_definitions:
@@ -154,14 +260,17 @@ class PhysicalAIServer(Node):
 
         self.get_logger().info('ROS services initialized successfully')
 
-    def _setup_timer_callbacks(self):
-        self.timer_callback_dict = {
-            'collection': self._data_collection_timer_callback,
-            'inference': self._inference_timer_callback
-        }
-
     def init_ros_params(self, robot_type):
-        self.get_logger().info(f'Initializing ROS parameters for robot type: {robot_type}')
+        """
+        Initialize ROS parameters for specified robot type.
+
+        Args:
+            robot_type: Robot type identifier
+        """
+        self.get_logger().info(
+            f'Initializing ROS parameters for robot type: {robot_type}'
+        )
+
         param_names = [
             'camera_topic_list',
             'joint_topic_list',
@@ -185,7 +294,8 @@ class PhysicalAIServer(Node):
         )
 
         self.joint_order_list = [
-            f'joint_order.{joint_name}' for joint_name in self.params['joint_list']
+            f'joint_order.{joint_name}'
+            for joint_name in self.params['joint_list']
         ]
 
         declare_parameters(
@@ -209,71 +319,87 @@ class PhysicalAIServer(Node):
         log_parameters(self, self.params)
         log_parameters(self, self.joint_order)
 
-        # Initialize observation manager
+        # Initialize communicator
         self.communicator = Communicator(
             node=self,
             operation_mode=self.operation_mode,
             params=self.params
         )
 
+        # Initialize heartbeat timer
         if self.heartbeat_timer is None:
             self.heartbeat_timer = TimerManager(node=self)
             self.heartbeat_timer.set_timer(
                 timer_name='heartbeat',
                 timer_frequency=1.0,
-                callback_function=self.communicator.heartbeat_timer_callback
+                callback_function=(
+                    self.communicator.heartbeat_timer_callback
+                )
             )
             self.heartbeat_timer.start(timer_name='heartbeat')
 
-        self.inference_manager = InferenceManager()
         self.get_logger().info(
-            f'ROS parameters initialized successfully for robot type: {robot_type}')
+            f'ROS parameters initialized successfully for '
+            f'robot type: {robot_type}'
+        )
 
-    def get_training_status(self):
-        msg = TrainingStatus()
-        if self.training_manager is None:
-            return
-        try:
-            current_status = self.training_manager.get_current_training_status()
-            training_info = current_status.training_info
-            current_step = current_status.current_step
-            current_loss = current_status.current_loss
-            msg.training_info = training_info
-            msg.current_step = current_step
-            msg.current_loss = current_loss
-            msg.is_training = self.is_training
-            msg.error = ''
-        except Exception as e:
-            msg.current_step = 0
-            msg.current_loss = float('nan')
-            msg.error = str(e)
-            self.get_logger().error(f'Error publishing training status: {msg.error}')
-            return msg
-        return msg
+    def init_robot_control_parameters_from_user_task(self, task_info):
+        """
+        Initialize robot control parameters from user task.
 
-    def init_robot_control_parameters_from_user_task(
-            self,
-            task_info):
+        Args:
+            task_info: Task information message
+        """
         self.get_logger().info(
-            'Initializing robot control parameters from user task...')
+            'Initializing robot control parameters from user task...'
+        )
+
         self.data_manager = DataManager(
             save_root_path=self.DEFAULT_SAVE_ROOT_PATH,
             robot_type=self.robot_type,
             task_info=task_info
         )
+
         self.communicator.clear_latest_data()
+
+        # Setup timer callback
+        timer_callback_dict = {
+            'collection': (
+                self.timer_callbacks.data_collection_timer_callback
+            ),
+            'inference': (
+                self.timer_callbacks.inference_timer_callback
+            )
+        }
 
         self.timer_manager = TimerManager(node=self)
         self.timer_manager.set_timer(
             timer_name=self.operation_mode,
             timer_frequency=task_info.fps,
-            callback_function=self.timer_callback_dict[self.operation_mode]
+            callback_function=timer_callback_dict[self.operation_mode]
         )
         self.timer_manager.start(timer_name=self.operation_mode)
+
+        # Set managers for handlers and callbacks
+        self.task_handler.set_managers(
+            self.data_manager,
+            self.inference_manager,
+            self.communicator,
+            self.timer_manager
+        )
+        self.timer_callbacks.set_managers(
+            self.data_manager,
+            self.communicator,
+            self.inference_manager,
+            self.timer_manager
+        )
+
         self.get_logger().info(
-            'Robot control parameters initialized successfully')
+            'Robot control parameters initialized successfully'
+        )
 
     def clear_parameters(self):
+        """Clear robot parameters and cleanup resources."""
         if self.communicator is not None:
             self.communicator.cleanup()
             self.communicator = None
@@ -285,941 +411,47 @@ class PhysicalAIServer(Node):
             self.heartbeat_timer.stop(timer_name='heartbeat')
             self.heartbeat_timer = None
 
-        if self.training_timer is not None:
-            self.training_timer.stop(timer_name='training_status')
-            self.training_timer = None
-
         self.params = None
         self.total_joint_order = None
         self.joint_order = None
 
-    def set_hf_user_callback(self, request, response):
-        request_hf_token = request.token
-        if DataManager.register_huggingface_token(request_hf_token):
-            self.get_logger().info('Hugging Face user token registered successfully')
-            response.user_id_list = DataManager.get_huggingface_user_id()
-            response.success = True
-            response.message = 'Hugging Face user token registered successfully'
-        else:
-            self.get_logger().error('Failed to register Hugging Face user token')
-            response.user_id_list = []
-            response.success = False
-            response.message = 'Failed to register token, Please check your token'
-        return response
+    def shutdown(self):
+        """Cleanup resources on shutdown."""
+        self.get_logger().info('Shutting down Physical AI Server...')
 
-    def get_hf_user_callback(self, request, response):
-        user_ids = DataManager.get_huggingface_user_id()
-        if user_ids is not None:
-            response.user_id_list = user_ids
-            self.get_logger().info(f'Hugging Face user IDs: {user_ids}')
-            response.success = True
-            response.message = 'Hugging Face user IDs retrieved successfully'
+        # Cleanup handlers
+        if hasattr(self, 'hf_handler'):
+            self.hf_handler.cleanup()
 
-        else:
-            self.get_logger().error('Failed to retrieve Hugging Face user ID')
-            response.user_id_list = []
-            response.success = False
-            response.message = 'Failed to retrieve Hugging Face user ID'
+        if hasattr(self, 'training_handler'):
+            self.training_handler.cleanup()
 
-        return response
+        # Cleanup timers
+        if self.heartbeat_timer is not None:
+            self.heartbeat_timer.stop(timer_name='heartbeat')
 
-    def get_robot_type_list(self):
-        pkg_dir = get_package_share_directory('physical_ai_server')
-        config_dir = os.path.join(pkg_dir, 'config')
-        config_files = glob.glob(os.path.join(config_dir, '*.yaml'))
-        config_files.sort()
-
-        robot_type_list = []
-        for config_file in config_files:
-            robot_type = os.path.splitext(os.path.basename(config_file))[0]
-            if robot_type.endswith('_config'):
-                robot_type = robot_type[:-7]
-            robot_type_list.append(robot_type)
-
-        self.get_logger().info(f'Available robot types: {robot_type_list}')
-        return robot_type_list
-
-    def _data_collection_timer_callback(self):
-        error_msg = ''
-        current_status = TaskStatus()
-        camera_msgs, follower_msgs, leader_msgs = self.communicator.get_latest_data()
-        if camera_msgs is None:
-            if time.perf_counter() - self.start_recording_time > self.DEFAULT_TOPIC_TIMEOUT:
-                error_msg = 'Camera data not received within timeout period'
-                self.get_logger().error(error_msg)
-            else:
-                self.get_logger().info('Waiting for camera data...')
-                return
-
-        elif follower_msgs is None:
-            if time.perf_counter() - self.start_recording_time > self.DEFAULT_TOPIC_TIMEOUT:
-                error_msg = 'Follower data not received within timeout period'
-                self.get_logger().error(error_msg)
-            else:
-                self.get_logger().info('Waiting for follower data...')
-                return
-
-        elif leader_msgs is None:
-            if time.perf_counter() - self.start_recording_time > self.DEFAULT_TOPIC_TIMEOUT:
-                error_msg = 'Leader data not received within timeout period'
-                self.get_logger().error(error_msg)
-            else:
-                self.get_logger().info('Waiting for leader data...')
-                return
-
-        try:
-            camera_data, follower_data, leader_data = self.data_manager.convert_msgs_to_raw_datas(
-                camera_msgs,
-                follower_msgs,
-                self.total_joint_order,
-                leader_msgs,
-                self.joint_order)
-
-        except Exception as e:
-            error_msg = f'Failed to convert messages: {str(e)}, please check the robot type again!'
-            self.on_recording = False
-            current_status.phase = TaskStatus.READY
-            current_status.error = error_msg
-            self.communicator.publish_status(status=current_status)
-            self.timer_manager.stop(timer_name=self.operation_mode)
-            return
-
-        if not self.data_manager.check_lerobot_dataset(
-                camera_data,
-                self.total_joint_order):
-            error_msg = 'Invalid repository name, Please change the repository name'
-            self.get_logger().info(error_msg)
-
-        if error_msg:
-            self.on_recording = False
-            current_status.phase = TaskStatus.READY
-            current_status.error = error_msg
-            self.communicator.publish_status(status=current_status)
-            self.timer_manager.stop(timer_name=self.operation_mode)
-            return
-
-        if self.communicator.joystick_state['updated']:
-            self.handle_joystick_trigger(
-                joystick_mode=self.communicator.joystick_state['mode'])
-            self.communicator.joystick_state['updated'] = False
-
-        record_completed = self.data_manager.record(
-            images=camera_data,
-            state=follower_data,
-            action=leader_data)
-
-        current_status = self.data_manager.get_current_record_status()
-        self.communicator.publish_status(status=current_status)
-
-        if record_completed:
-            self.get_logger().info('Recording completed')
-            current_status.phase = TaskStatus.READY
-            current_status.proceed_time = int(0)
-            current_status.total_time = int(0)
-            self.communicator.publish_status(status=current_status)
-            self.on_recording = False
-            self.timer_manager.stop(timer_name=self.operation_mode)
-            return
-
-    def _inference_timer_callback(self):
-        error_msg = ''
-        current_status = TaskStatus()
-        camera_msgs, follower_msgs, _ = self.communicator.get_latest_data()
-        if (camera_msgs is None or
-                len(camera_msgs) != len(self.params['camera_topic_list'])):
-            self.get_logger().info('Waiting for camera data...')
-            return
-        elif follower_msgs is None:
-            self.get_logger().info('Waiting for follower data...')
-            return
-
-        try:
-            camera_data, follower_data, _ = self.data_manager.convert_msgs_to_raw_datas(
-                camera_msgs,
-                follower_msgs,
-                self.total_joint_order)
-        except Exception as e:
-            error_msg = f'Failed to convert messages: {str(e)}, please check the robot type again!'
-            self.on_inference = False
-            current_status.phase = TaskStatus.READY
-            current_status.error = error_msg
-            self.communicator.publish_status(status=current_status)
-            self.inference_manager.clear_policy()
-            self.timer_manager.stop(timer_name=self.operation_mode)
-            return
-
-        if self.inference_manager.policy is None:
-            if not self.inference_manager.load_policy():
-                self.get_logger().error('Failed to load policy')
-                return
-
-        try:
-            if not self.on_inference:
-                self.get_logger().info('Inference mode is not active')
-                current_status = self.data_manager.get_current_record_status()
-                current_status.phase = TaskStatus.READY
-                self.communicator.publish_status(status=current_status)
-                self.inference_manager.clear_policy()
+        if self.timer_manager is not None:
+            if self.operation_mode:
                 self.timer_manager.stop(timer_name=self.operation_mode)
-                return
 
-            action = self.inference_manager.predict(
-                images=camera_data,
-                state=follower_data,
-                task_instruction=self.task_instruction[0]
-            )
+        # Cleanup communicator
+        if self.communicator is not None:
+            self.communicator.cleanup()
 
-            self.get_logger().info(
-                f'Action data: {action}')
-            action_pub_msgs = self.data_manager.data_converter.tensor_array2joint_msgs(
-                action,
-                self.joint_topic_types,
-                self.joint_order
-            )
-
-            self.communicator.publish_action(
-                joint_msg_datas=action_pub_msgs
-            )
-            current_status = self.data_manager.get_current_record_status()
-            current_status.phase = TaskStatus.INFERENCING
-            self.communicator.publish_status(status=current_status)
-
-        except Exception as e:
-            self.get_logger().error(f'Inference failed, please check : {str(e)}')
-            error_msg = f'Inference failed, please check : {str(e)}'
-            self.on_recording = False
-            self.on_inference = False
-            current_status = self.data_manager.get_current_record_status()
-            current_status.phase = TaskStatus.READY
-            current_status.error = error_msg
-            self.communicator.publish_status(status=current_status)
-            self.inference_manager.clear_policy()
-            self.timer_manager.stop(timer_name=self.operation_mode)
-            return
-
-    def user_training_interaction_callback(self, request, response):
-        try:
-            if request.command == SendTrainingCommand.Request.START:
-                self.training_manager = TrainingManager()
-                self.training_timer = TimerManager(node=self)
-                self.training_timer.set_timer(
-                    timer_name='training_status',
-                    timer_frequency=self.TRAINING_STATUS_TIMER_FREQUENCY,
-                    callback_function=lambda: self.training_status_publisher.publish(
-                        self.get_training_status()
-                    )
-                )
-                self.training_timer.start(timer_name='training_status')
-
-                if self.training_thread and self.training_thread.is_alive():
-                    response.success = False
-                    response.message = 'Training is already in progress'
-                    return response
-
-                output_folder_name = request.training_info.output_folder_name
-                weight_save_root_path = TrainingManager.get_weight_save_root_path()
-                self.get_logger().info(
-                    f'Weight save root path: {weight_save_root_path}, '
-                    f'Output folder name: {output_folder_name}'
-                )
-                output_path = weight_save_root_path / output_folder_name
-                if output_path.exists():
-                    response.success = False
-                    response.message = f'Output folder already exists: {output_path}'
-                    self.is_training = False
-                    training_status = self.get_training_status()
-                    self.training_status_publisher.publish(training_status)
-
-                    self.training_manager.stop_event.set()
-                    self.training_timer.stop('training_status')
-                    return response
-
-                self.training_manager.training_info = request.training_info
-
-                def run_training():
-                    try:
-                        self.training_manager.train()
-                    finally:
-                        self.is_training = False
-                        self.get_logger().info('Training completed.')
-                        training_status = self.get_training_status()
-                        self.training_status_publisher.publish(training_status)
-                        self.training_manager.stop_event.set()
-                        self.training_timer.stop('training_status')
-
-                self.training_thread = threading.Thread(target=run_training, daemon=True)
-                self.training_thread.start()
-                self.is_training = True
-
-                response.success = True
-                response.message = 'Training started successfully'
-
-            else:
-                if request.command == SendTrainingCommand.Request.FINISH:
-                    self.is_training = False
-                    training_status = self.get_training_status()
-                    self.training_status_publisher.publish(training_status)
-                    self.training_timer.stop('training_status')
-                    if self.training_thread and self.training_thread.is_alive():
-                        self.training_manager.stop_event.set()
-                        self.training_thread.join()
-                        response.success = True
-                        response.message = 'Training stopped successfully'
-                    else:
-                        response.success = False
-                        response.message = 'No training in progress to stop'
-                # TODO: Uncomment when resume is implemented
-                # elif request.command == SendTrainingCommand.Request.RESUME:
-                #     pass
-
-        except Exception as e:
-            self.get_logger().error(f'Error in user_training_interaction: {str(e)}')
-            response.success = False
-            response.message = f'Error in user_training_interaction: {str(e)}'
-            return response
-        return response
-
-    def user_interaction_callback(self, request, response):
-        try:
-            if request.command == SendCommand.Request.START_RECORD:
-                if self.on_recording:
-                    self.get_logger().info('Restarting the recording.')
-                    self.data_manager.re_record()
-                    response.success = True
-                    response.message = 'Restarting the recording.'
-                    return response
-
-                self.get_logger().info('Start recording')
-                self.operation_mode = 'collection'
-                task_info = request.task_info
-                self.init_robot_control_parameters_from_user_task(
-                    task_info
-                )
-
-                self.start_recording_time = time.perf_counter()
-                self.on_recording = True
-                response.success = True
-                response.message = 'Recording started'
-
-            elif request.command == SendCommand.Request.START_INFERENCE:
-                self.joint_topic_types = self.communicator.get_publisher_msg_types()
-                self.operation_mode = 'inference'
-                task_info = request.task_info
-                self.task_instruction = task_info.task_instruction
-
-                valid_result, result_message = self.inference_manager.validate_policy(
-                    policy_path=task_info.policy_path)
-
-                if not valid_result:
-                    response.success = False
-                    response.message = result_message
-                    self.get_logger().error(response.message)
-                    return response
-
-                self.init_robot_control_parameters_from_user_task(
-                    task_info
-                )
-                if task_info.record_inference_mode:
-                    self.on_recording = True
-                self.on_inference = True
-                self.start_recording_time = time.perf_counter()
-                response.success = True
-                response.message = 'Inference started'
-
-            else:
-                if not self.on_recording and not self.on_inference:
-                    response.success = False
-                    response.message = 'Not currently recording'
-                else:
-                    if request.command == SendCommand.Request.STOP:
-                        self.get_logger().info('Stopping recording')
-                        self.data_manager.record_stop()
-                        response.success = True
-                        response.message = 'Recording stopped'
-
-                    elif request.command == SendCommand.Request.MOVE_TO_NEXT:
-                        self.get_logger().info('Moving to next episode')
-                        if len(request.task_info.task_instruction) > 1:
-                            self.data_manager.record_next_episode()
-                        else:
-                            self.data_manager.record_early_save()
-                        response.success = True
-                        response.message = 'Moved to next episode'
-
-                    elif request.command == SendCommand.Request.RERECORD:
-                        self.get_logger().info('Re-recording current episode')
-                        self.data_manager.re_record()
-                        response.success = True
-                        response.message = 'Re-recording current episode'
-
-                    elif request.command == SendCommand.Request.FINISH:
-                        self.get_logger().info('Terminating all operations')
-                        self.data_manager.record_finish()
-                        self.on_inference = False
-                        response.success = True
-                        response.message = 'All operations terminated'
-
-                    elif request.command == SendCommand.Request.SKIP_TASK:
-                        self.get_logger().info('Skipping task')
-                        self.data_manager.record_skip_task()
-                        response.success = True
-                        response.message = 'Task skipped successfully'
-
-        except Exception as e:
-            self.get_logger().error(f'Error in user interaction: {str(e)}')
-            response.success = False
-            response.message = f'Error in user interaction: {str(e)}'
-            return response
-        return response
-
-    def get_robot_types_callback(self, request, response):
-        if self.robot_type_list is None:
-            self.get_logger().error('Robot type list is not set')
-            response.robot_types = []
-            response.success = False
-            response.message = 'Robot type list is not set'
-            return response
-
-        self.get_logger().info(f'Available robot types: {self.robot_type_list}')
-        response.robot_types = self.robot_type_list
-        response.success = True
-        response.message = 'Robot type list retrieved successfully'
-        return response
-
-    def get_policy_list_callback(self, request, response):
-        policy_list = InferenceManager.get_available_policies()
-        if not policy_list:
-            self.get_logger().warning('No policies available')
-            response.success = False
-            response.message = 'No policies available'
-        else:
-            self.get_logger().info(f'Available policies: {policy_list}')
-            response.success = True
-            response.message = 'Policy list retrieved successfully'
-        response.policy_list = policy_list
-        return response
-
-    def get_available_list_callback(self, request, response):
-        response.success = True
-        response.message = 'Policy and device lists retrieved successfully'
-        response.policy_list, response.device_list = TrainingManager.get_available_list()
-        return response
-
-    def get_user_list_callback(self, request, response):
-        try:
-            if not self.DEFAULT_SAVE_ROOT_PATH.exists():
-                response.user_list = []
-                response.success = False
-                response.message = f'Path {self.DEFAULT_SAVE_ROOT_PATH} does not exist.'
-                return response
-
-            folder_names = [
-                name for name in os.listdir(self.DEFAULT_SAVE_ROOT_PATH)
-                if (self.DEFAULT_SAVE_ROOT_PATH / name).is_dir()
-            ]
-
-            response.user_list = folder_names
-            response.success = True
-            response.message = f'Found {len(folder_names)} user(s).'
-
-        except Exception as e:
-            response.user_list = []
-            response.success = False
-            response.message = f'Error: {str(e)}'
-
-        return response
-
-    def get_dataset_list_callback(self, request, response):
-        user_id = request.user_id
-        user_path = self.DEFAULT_SAVE_ROOT_PATH / user_id
-
-        try:
-            if not user_path.exists() or not user_path.is_dir():
-                response.dataset_list = []
-                response.success = False
-                response.message = f"User ID '{user_id}' does not exist at path: {user_path}"
-                return response
-
-            dataset_names = [
-                name for name in os.listdir(user_path)
-                if (user_path / name).is_dir()
-            ]
-
-            response.dataset_list = dataset_names
-            response.success = True
-            response.message = f"Found {len(dataset_names)} dataset(s) for user '{user_id}'."
-
-        except Exception as e:
-            response.dataset_list = []
-            response.success = False
-            response.message = f'Error: {str(e)}'
-
-        return response
-
-    def get_model_weight_list_callback(self, request, response):
-        save_root_path = TrainingManager.get_weight_save_root_path()
-        try:
-            if not save_root_path.exists():
-                response.success = False
-                response.message = f'Path does not exist: {save_root_path}'
-                response.model_weight_list = []
-                return response
-
-            model_folders = [
-                f.name for f in save_root_path.iterdir()
-                if f.is_dir()
-            ]
-
-            response.success = True
-            response.message = f'Found {len(model_folders)} model weights'
-            response.model_weight_list = model_folders
-
-        except Exception as e:
-            response.success = False
-            response.message = f'Error: {str(e)}'
-            response.model_weight_list = []
-
-        return response
-
-    def get_saved_policies_callback(self, request, response):
-        saved_policy_path, saved_policy_type = InferenceManager.get_saved_policies()
-        if not saved_policy_path and not saved_policy_type:
-            self.get_logger().warning('No saved policies found')
-            response.saved_policy_path = []
-            response.saved_policy_type = []
-            response.success = False
-            response.message = 'No saved policies found'
-        else:
-            self.get_logger().info(f'Saved policies path: {saved_policy_path}')
-            response.saved_policy_path = saved_policy_path
-            response.saved_policy_type = saved_policy_type
-            response.success = True
-            response.message = 'Saved policies retrieved successfully'
-        return response
-
-    def set_robot_type_callback(self, request, response):
-        try:
-            self.get_logger().info(f'Setting robot type to: {request.robot_type}')
-            self.operation_mode = 'collection'
-            self.robot_type = request.robot_type
-            self.clear_parameters()
-            self.init_ros_params(self.robot_type)
-            response.success = True
-            response.message = f'Robot type set to {self.robot_type}'
-            return response
-
-        except Exception as e:
-            self.get_logger().error(f'Failed to set robot type: {str(e)}')
-            response.success = False
-            response.message = f'Failed to set robot type: {str(e)}'
-            return response
-
-    def _init_hf_api_worker(self):
-        """Initialize HF API Worker and status monitoring timer."""
-        try:
-            self.hf_api_worker = HfApiWorker()
-            if self.hf_api_worker.start():
-                self.get_logger().info('HF API Worker started successfully')
-                # Initialize idle count
-                self._hf_idle_count = 0
-                # Initialize status monitoring timer
-                self.hf_status_timer = TimerManager(node=self)
-                self.hf_status_timer.set_timer(
-                    timer_name='hf_status',
-                    timer_frequency=2.0,
-                    callback_function=self._hf_status_timer_callback
-                )
-                self.hf_status_timer.start(timer_name='hf_status')
-                # Create publisher for HF status
-                self.hf_status_publisher = self.create_publisher(
-                    HFOperationStatus,
-                    '/huggingface/status',
-                    self.PUB_QOS_SIZE
-                )
-            else:
-                self.get_logger().error('Failed to start HF API Worker')
-        except Exception as e:
-            self.get_logger().error(f'Error initializing HF API Worker: {str(e)}')
-
-    def _hf_status_timer_callback(self):
-        """Timer callback to check HF API Worker status and publish updates."""
-        if self.hf_api_worker is None:
-            return
-        try:
-            status = self.hf_api_worker.check_task_status()
-            self._publish_hf_operation_status_msg(status)
-
-            # Log status changes (avoid spamming logs)
-            last_status = self._last_hf_status.get('status', 'Unknown') \
-                if hasattr(self, '_last_hf_status') else 'Unknown'
-            current_status = status.get('status', 'Unknown')
-
-            if hasattr(self, '_last_hf_status') and last_status != current_status:
-                self.get_logger().info(f'HF API Status changed: {last_status} -> {current_status}')
-
-            self._last_hf_status = status
-            # Idle status count and automatic shutdown
-            if status.get('status', 'Unknown') == 'Idle':
-                self._hf_idle_count = getattr(self, '_hf_idle_count', 0) + 1
-                if self._hf_idle_count >= 5:
-                    self.get_logger().info(
-                        'HF API Worker idle for 5 cycles, shutting down worker and timer.')
-                    self._cleanup_hf_api_worker()
-            else:
-                self._hf_idle_count = 0
-        except Exception as e:
-            self.get_logger().error(f'Error in HF status timer callback: {str(e)}')
-
-    def _publish_hf_operation_status_msg(self, status):
-        status_msg = HFOperationStatus()
-        status_msg.operation = status.get('operation', 'Unknown')
-        status_msg.status = status.get('status', 'Unknown')
-        status_msg.repo_id = status.get('repo_id', '')
-        status_msg.local_path = status.get('local_path', '')
-        status_msg.message = status.get('message', '')
-
-        progress_progress = status.get('progress', {})
-
-        status_msg.progress_current = progress_progress.get('current', 0)
-        status_msg.progress_total = progress_progress.get('total', 0)
-        status_msg.progress_percentage = progress_progress.get('percentage', 0.0)
-
-        # self.get_logger().info(f'HF API Status: {status_msg}')
-        self.hf_status_publisher.publish(status_msg)
-
-    def control_hf_server_callback(self, request, response):
-        try:
-            mode = request.mode
-            repo_id = request.repo_id
-            local_dir = request.local_dir
-            repo_type = request.repo_type
-            author = request.author
-
-            if self.hf_cancel_on_progress:
-                response.success = False
-                response.message = 'HF API Worker is currently canceling'
-                return response
-
-            if mode == 'cancel':
-                # Immediate cleanup - force stop the worker
-                try:
-                    self.hf_cancel_on_progress = True
-                    self._cleanup_hf_api_worker_with_threading()
-                    response.success = True
-                    response.message = 'Cancellation started.'
-                except Exception as e:
-                    self.get_logger().error(f'Error during cancel: {e}')
-                finally:
-                    self.hf_cancel_on_progress = False
-                    return response
-
-            # Restart HF API Worker if it does not exist or is not running
-            if self.hf_api_worker is None or not self.hf_api_worker.is_alive():
-                self.get_logger().info('HF API Worker not running, restarting...')
-                self._init_hf_api_worker()
-            # Return error if the worker is busy
-            if self.hf_api_worker.is_busy():
-                self.get_logger().warning('HF API Worker is currently busy with another task')
-                response.success = False
-                response.message = 'HF API Worker is currently busy with another task'
-                return response
-            # Prepare request data for the worker
-            request_data = {
-                'mode': mode,
-                'repo_id': repo_id,
-                'local_dir': local_dir,
-                'repo_type': repo_type,
-                'author': author
-            }
-            # Send request to HF API Worker
-            if self.hf_api_worker.send_request(request_data):
-                self.get_logger().info(f'HF API request sent successfully: {mode} for {repo_id}')
-                response.success = True
-                response.message = f'HF API request started: {mode} for {repo_id}'
-            else:
-                self.get_logger().error('Failed to send request to HF API Worker')
-                response.success = False
-                response.message = 'Failed to send request to HF API Worker'
-            return response
-        except Exception as e:
-            self.get_logger().error(f'Error in HF server callback: {str(e)}')
-            response.success = False
-            response.message = f'Error in HF server callback: {str(e)}'
-            return response
-
-    def handle_joystick_trigger(self, joystick_mode: str):
-        self.get_logger().info(
-            f'Joystick mode updated: {joystick_mode}')
-        if self.data_manager is None:
-            self.get_logger().warning(
-                'Data manager is not initialized')
-            return
-
-        if not self.on_recording:
-            self.get_logger().warning(
-                'Not currently recording')
-            return
-
-        if joystick_mode == 'right':
-            self.get_logger().info(
-                'Right tact triggered - Moving to next episode')
-            if len(self.data_manager.get_task_info().task_instruction) > 1:
-                self.data_manager.record_next_episode()
-            else:
-                self.data_manager.record_early_save()
-        elif joystick_mode == 'left':
-            self.get_logger().info(
-                'Left tact triggered - Re-record current episode')
-            self.data_manager.re_record()
-        elif joystick_mode == 'right_long_time':
-            self.get_logger().info(
-                'Right long tact triggered - Custom')
-            # If you want, you can add custom functionality.
-        elif joystick_mode == 'left_long_time':
-            self.get_logger().info(
-                'Left long tact triggered - Custom')
-            # If you want, you can add custom functionality.
-        else:
-            self.get_logger().info(
-                f'Received joystick trigger: {joystick_mode}')
-
-    def browse_file_callback(self, request, response):
-        try:
-            if request.action == 'get_path':
-                result = self.file_browse_utils.handle_get_path_action(
-                    request.current_path)
-            elif request.action == 'go_parent':
-                # Check if target_files or target_folders are provided
-                target_files = None
-                target_folders = None
-
-                if hasattr(request, 'target_files') and request.target_files:
-                    target_files = set(request.target_files)
-                if hasattr(request, 'target_folders') and request.target_folders:
-                    target_folders = set(request.target_folders)
-
-                if target_files or target_folders:
-                    # Use parallel target checking for go_parent
-                    result = self.file_browse_utils.handle_go_parent_with_target_check(
-                        request.current_path,
-                        target_files,
-                        target_folders)
-                else:
-                    # Use standard go_parent (no targets specified)
-                    result = self.file_browse_utils.handle_go_parent_action(
-                        request.current_path)
-            elif request.action == 'browse':
-                # Check if target_files or target_folders are provided
-                target_files = None
-                target_folders = None
-
-                if hasattr(request, 'target_files') and request.target_files:
-                    target_files = set(request.target_files)
-                if hasattr(request, 'target_folders') and request.target_folders:
-                    target_folders = set(request.target_folders)
-
-                if target_files or target_folders:
-                    # Use parallel target checking
-                    result = self.file_browse_utils.handle_browse_with_target_check(
-                        request.current_path,
-                        request.target_name,
-                        target_files,
-                        target_folders)
-                else:
-                    # Use standard browsing (no targets specified)
-                    result = self.file_browse_utils.handle_browse_action(
-                        request.current_path, request.target_name)
-            else:
-                result = {
-                    'success': False,
-                    'message': f'Unknown action: {request.action}',
-                    'current_path': '',
-                    'parent_path': '',
-                    'selected_path': '',
-                    'items': []
-                }
-
-            # Convert result dict to response object
-            response.success = result['success']
-            response.message = result['message']
-            response.current_path = result['current_path']
-            response.parent_path = result['parent_path']
-            response.selected_path = result['selected_path']
-
-            # Convert item dicts to BrowserItem objects
-            response.items = []
-            for item_dict in result['items']:
-                item = BrowserItem()
-                item.name = item_dict['name']
-                item.full_path = item_dict['full_path']
-                item.is_directory = item_dict['is_directory']
-                item.size = item_dict['size']
-                item.modified_time = item_dict['modified_time']
-                # Set has_target_file field (default False for files)
-                item.has_target_file = item_dict.get('has_target_file', False)
-                response.items.append(item)
-
-        except Exception as e:
-            self.get_logger().error(f'Error in browse file handler: {str(e)}')
-            response.success = False
-            response.message = f'Error: {str(e)}'
-            response.current_path = ''
-            response.parent_path = ''
-            response.selected_path = ''
-            response.items = []
-
-        return response
-
-    def dataset_edit_callback(self, request, response):
-        try:
-            if request.mode == EditDataset.Request.MERGE:
-                merge_dataset_list = request.merge_dataset_list
-                output_path = request.output_path
-                # TODO: Implement HuggingFace upload functionality if needed
-                # upload_huggingface = request.upload_huggingface
-                self.data_editor.merge_datasets(
-                    merge_dataset_list, output_path)
-
-            elif request.mode == EditDataset.Request.DELETE:
-                delete_dataset_path = request.delete_dataset_path
-                delete_episode_num = sorted(request.delete_episode_num, reverse=True)
-                # TODO: Implement HuggingFace upload functionality if needed
-                # upload_huggingface = request.upload_huggingface
-                for episode_num in delete_episode_num:
-                    self.data_editor.delete_episode(
-                        delete_dataset_path, episode_num)
-            else:
-                response.success = False
-                response.message = f'Unknown edit mode: {request.mode}'
-                return response
-
-            response.success = True
-            response.message = f'Successfully processed edit mode: {request.mode}'
-            return response
-
-        except Exception as e:
-            self.get_logger().error(f'Error in dataset_edit_callback: {str(e)}')
-            response.success = False
-            response.message = f'Error: {str(e)}'
-
-        return response
-
-    def get_dataset_info_callback(self, request, response):
-        try:
-            dataset_path = request.dataset_path
-            dataset_info = self.data_editor.get_dataset_info(dataset_path)
-
-            info = DatasetInfo()
-            info.codebase_version = dataset_info.get('codebase_version', 'unknown') if isinstance(
-                dataset_info.get('codebase_version'), str) else 'unknown'
-            info.robot_type = dataset_info.get('robot_type', 'unknown') if isinstance(
-                dataset_info.get('robot_type'), str) else 'unknown'
-            info.total_episodes = dataset_info.get('total_episodes', 0) if isinstance(
-                dataset_info.get('total_episodes'), int) else 0
-            info.total_tasks = dataset_info.get('total_tasks', 0) if isinstance(
-                dataset_info.get('total_tasks'), int) else 0
-            info.fps = dataset_info.get('fps', 0) if isinstance(
-                dataset_info.get('fps'), int) else 0
-
-            response.dataset_info = info
-            response.success = True
-            response.message = 'Dataset info retrieved successfully'
-            return response
-
-        except Exception as e:
-            self.get_logger().error(f'Error in get_dataset_info_callback: {str(e)}')
-            response.success = False
-            response.message = f'Error: {str(e)}'
-            response.dataset_info = DatasetInfo()
-            return response
-
-    def _cleanup_hf_api_worker_with_threading(self):
-        """
-        Non-blocking cleanup of HF API Worker using threading.
-
-        This method starts a separate thread to run the existing
-        _cleanup_hf_api_worker method, preventing the main process.
-        from blocking during shutdown.
-        """
-        import threading
-        import time
-
-        def cleanup_worker_thread():
-            """Worker thread to run _cleanup_hf_api_worker."""
-            try:
-                # Call the existing cleanup method
-                self._cleanup_hf_api_worker()
-            except Exception as e:
-                self.get_logger().error(f'Error in cleanup worker thread: {e}')
-
-        try:
-            if self.hf_status_timer is None and self.hf_api_worker is None:
-                self.get_logger().info('No HF API components to cleanup')
-                return
-
-            self.get_logger().info('Starting non-blocking HF API Worker cleanup...')
-
-            # Start cleanup thread
-            cleanup_thread = threading.Thread(target=cleanup_worker_thread, daemon=True)
-            cleanup_thread.start()
-
-            # Reset references immediately (don't wait for cleanup to complete)
-            self.hf_status_timer = None
-            self.hf_api_worker = None
-
-            self.get_logger().info('HF API Worker cleanup thread started')
-
-            # Publish cancel status messages
-            for i in range(3):
-                self._publish_hf_operation_status_msg({
-                    'status': 'Idle',
-                    'operation': 'stop',
-                    'repo_id': '',
-                    'local_path': '',
-                    'message': 'Canceled by stop command',
-                    'progress': {
-                        'current': 0,
-                        'total': 0,
-                        'percentage': 0.0,
-                    }
-                })
-                time.sleep(0.5)
-
-        except Exception as e:
-            self.get_logger().error(
-                f'Error starting non-blocking HF API Worker cleanup: {str(e)}'
-            )
-            # Fallback to blocking cleanup if threading fails
-            self._cleanup_hf_api_worker()
-        finally:
-            self.hf_cancel_on_progress = False
-
-    def _cleanup_hf_api_worker(self):
-        """Cleanup HF API Worker and related timers."""
-        try:
-            if self.hf_status_timer is not None:
-                self.hf_status_timer.stop(timer_name='hf_status')
-                self.hf_status_timer = None
-
-            if self.hf_api_worker is not None:
-                self.hf_api_worker.stop()
-                self.hf_api_worker = None
-
-            self.get_logger().info('HF API Worker cleaned up successfully')
-        except Exception as e:
-            self.get_logger().error(f'Error cleaning up HF API Worker: {str(e)}')
+        self.get_logger().info('Physical AI Server shutdown complete')
 
 
 def main(args=None):
+    """Main entry point for Physical AI Server."""
     rclpy.init(args=args)
     node = PhysicalAIServer()
+
     try:
         rclpy.spin(node)
     except KeyboardInterrupt:
         pass
     finally:
-        # Cleanup HF API Worker before destroying node
-        node._cleanup_hf_api_worker()
+        node.shutdown()
         node.destroy_node()
         rclpy.shutdown()
 
