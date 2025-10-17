@@ -42,6 +42,7 @@ from physical_ai_server.callbacks.timer_callbacks import TimerCallbacks
 from physical_ai_server.communication.communicator import Communicator
 from physical_ai_server.data_processing.data_editor import DataEditor
 from physical_ai_server.data_processing.data_manager import DataManager
+from physical_ai_server.data_processing.hf_api_worker import HfApiWorker
 from physical_ai_server.inference.inference_manager import InferenceManager
 from physical_ai_server.service_handlers.dataset_handler import (
     DatasetServiceHandler
@@ -55,6 +56,7 @@ from physical_ai_server.service_handlers.training_handler import (
     TrainingServiceHandler
 )
 from physical_ai_server.timer.timer_manager import TimerManager
+from physical_ai_server.training.training_manager import TrainingManager
 from physical_ai_server.utils.file_browse_utils import FileBrowseUtils
 from physical_ai_server.utils.parameter_utils import (
     declare_parameters,
@@ -120,6 +122,8 @@ class PhysicalAIServer(Node):
         self.timer_manager: Optional[TimerManager] = None
         self.heartbeat_timer: Optional[TimerManager] = None
         self.inference_manager: Optional[InferenceManager] = None
+        self.training_manager: Optional[TrainingManager] = None
+        self.training_timer: Optional[TimerManager] = None
 
         # Initialize data editor
         self.data_editor = DataEditor()
@@ -132,6 +136,10 @@ class PhysicalAIServer(Node):
 
         # Initialize inference manager
         self.inference_manager = InferenceManager()
+
+        # Initialize training manager and timer
+        self.training_manager = TrainingManager()
+        self.training_timer = TimerManager(node=self)
 
     def _init_ros_publisher(self):
         """Initialize ROS publishers."""
@@ -154,9 +162,6 @@ class PhysicalAIServer(Node):
         self.get_logger().info('Initializing service handlers...')
 
         # Initialize HF handler with worker
-        from physical_ai_server.data_processing.hf_api_worker import (
-            HfApiWorker
-        )
         hf_api_worker = HfApiWorker()
         self.hf_handler = HFServiceHandler(
             self,
@@ -171,10 +176,12 @@ class PhysicalAIServer(Node):
             self.inference_manager
         )
 
-        # Initialize training handler
+        # Initialize training handler with dependencies
         self.training_handler = TrainingServiceHandler(
             self,
-            self.training_status_publisher
+            self.training_status_publisher,
+            self.training_manager,
+            self.training_timer
         )
 
         # Initialize dataset handler
@@ -411,6 +418,10 @@ class PhysicalAIServer(Node):
             self.heartbeat_timer.stop(timer_name='heartbeat')
             self.heartbeat_timer = None
 
+        if self.training_timer is not None:
+            self.training_timer.stop(timer_name='training_status')
+            self.training_timer = None
+
         self.params = None
         self.total_joint_order = None
         self.joint_order = None
@@ -433,6 +444,9 @@ class PhysicalAIServer(Node):
         if self.timer_manager is not None:
             if self.operation_mode:
                 self.timer_manager.stop(timer_name=self.operation_mode)
+
+        if self.training_timer is not None:
+            self.training_timer.stop(timer_name='training_status')
 
         # Cleanup communicator
         if self.communicator is not None:

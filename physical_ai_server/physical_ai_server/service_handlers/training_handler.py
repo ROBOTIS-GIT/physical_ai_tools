@@ -19,10 +19,16 @@
 import os
 import threading
 from pathlib import Path
+from typing import TYPE_CHECKING
 
+if TYPE_CHECKING:
+    from rclpy.node import Node
+    from rclpy.publisher import Publisher
+    from physical_ai_server.timer.timer_manager import TimerManager
+    from physical_ai_server.training.training_manager import TrainingManager
+
+from physical_ai_interfaces.msg import TrainingStatus
 from physical_ai_interfaces.srv import SendTrainingCommand
-from physical_ai_server.timer.timer_manager import TimerManager
-from physical_ai_server.training.training_manager import TrainingManager
 
 from .base_handler import BaseServiceHandler
 
@@ -37,18 +43,24 @@ class TrainingServiceHandler(BaseServiceHandler):
     TRAINING_STATUS_TIMER_FREQUENCY = 0.5  # seconds
     DEFAULT_SAVE_ROOT_PATH = Path.home() / '.cache/huggingface/lerobot'
 
-    def __init__(self, node, training_status_publisher):
+    def __init__(self,
+                 node: 'Node',
+                 training_status_publisher: 'Publisher',
+                 training_manager: 'TrainingManager',
+                 training_timer: 'TimerManager'):
         """
         Initialize training service handler.
 
         Args:
             node: ROS2 node instance
             training_status_publisher: Publisher for training status updates
+            training_manager: TrainingManager instance
+            training_timer: TimerManager instance for training status updates
         """
         super().__init__(node)
         self.training_status_publisher = training_status_publisher
-        self.training_manager = None
-        self.training_timer = None
+        self.training_manager = training_manager
+        self.training_timer = training_timer
         self.training_thread = None
         self.is_training = False
 
@@ -92,8 +104,13 @@ class TrainingServiceHandler(BaseServiceHandler):
         Returns:
             response: Modified response with start status
         """
-        self.training_manager = TrainingManager()
-        self.training_timer = TimerManager(node=self.node)
+        if self.training_thread and self.training_thread.is_alive():
+            return self._create_error_response(
+                response,
+                'Training is already in progress'
+            )
+
+        # Setup training status timer
         self.training_timer.set_timer(
             timer_name='training_status',
             timer_frequency=self.TRAINING_STATUS_TIMER_FREQUENCY,
@@ -102,12 +119,6 @@ class TrainingServiceHandler(BaseServiceHandler):
             )
         )
         self.training_timer.start(timer_name='training_status')
-
-        if self.training_thread and self.training_thread.is_alive():
-            return self._create_error_response(
-                response,
-                'Training is already in progress'
-            )
 
         output_folder_name = request.training_info.output_folder_name
         weight_save_root_path = TrainingManager.get_weight_save_root_path()
@@ -189,8 +200,6 @@ class TrainingServiceHandler(BaseServiceHandler):
         Returns:
             TrainingStatus: Current training status message
         """
-        from physical_ai_interfaces.msg import TrainingStatus
-
         msg = TrainingStatus()
         if self.training_manager is None:
             return msg
