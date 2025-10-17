@@ -504,25 +504,60 @@ class PhysicalAIServer(Node):
                     response.message = 'Training is already in progress'
                     return response
 
+                # Handle resume functionality
+                resume = getattr(request, 'resume', False)
+                resume_model_path = getattr(request, 'resume_model_path', '')
+
                 output_folder_name = request.training_info.output_folder_name
                 weight_save_root_path = TrainingManager.get_weight_save_root_path()
                 self.get_logger().info(
                     f'Weight save root path: {weight_save_root_path}, '
-                    f'Output folder name: {output_folder_name}'
+                    f'Output folder name: {output_folder_name}, '
+                    f'Resume: {resume}, Resume model path: {resume_model_path}'
                 )
-                output_path = weight_save_root_path / output_folder_name
-                if output_path.exists():
-                    response.success = False
-                    response.message = f'Output folder already exists: {output_path}'
-                    self.is_training = False
-                    training_status = self.get_training_status()
-                    self.training_status_publisher.publish(training_status)
 
-                    self.training_manager.stop_event.set()
-                    self.training_timer.stop('training_status')
-                    return response
+                # Check if output folder exists only for new training (not resume)
+                if not resume:
+                    output_path = weight_save_root_path / output_folder_name
+                    if output_path.exists():
+                        response.success = False
+                        response.message = f'Output folder already exists: {output_path}'
+                        self.is_training = False
+                        training_status = self.get_training_status()
+                        self.training_status_publisher.publish(training_status)
 
+                        self.training_manager.stop_event.set()
+                        self.training_timer.stop('training_status')
+                        return response
+
+                # Validate resume configuration
+                if resume:
+                    if not resume_model_path:
+                        response.success = False
+                        response.message = 'Resume model path is required when resume=True'
+                        self.is_training = False
+                        training_status = self.get_training_status()
+                        self.training_status_publisher.publish(training_status)
+                        self.training_manager.stop_event.set()
+                        self.training_timer.stop('training_status')
+                        return response
+
+                    # Check if resume config file exists
+                    full_config_path = weight_save_root_path / resume_model_path / "train_config.json"
+                    if not full_config_path.exists():
+                        response.success = False
+                        response.message = f'Resume config file not found: {full_config_path}'
+                        self.is_training = False
+                        training_status = self.get_training_status()
+                        self.training_status_publisher.publish(training_status)
+                        self.training_manager.stop_event.set()
+                        self.training_timer.stop('training_status')
+                        return response
+
+                # Set training configuration
                 self.training_manager.training_info = request.training_info
+                self.training_manager.resume = resume
+                self.training_manager.resume_model_path = resume_model_path
 
                 def run_training():
                     try:
@@ -556,9 +591,6 @@ class PhysicalAIServer(Node):
                     else:
                         response.success = False
                         response.message = 'No training in progress to stop'
-                # TODO: Uncomment when resume is implemented
-                # elif request.command == SendTrainingCommand.Request.RESUME:
-                #     pass
 
         except Exception as e:
             self.get_logger().error(f'Error in user_training_interaction: {str(e)}')

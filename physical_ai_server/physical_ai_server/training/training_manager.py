@@ -51,26 +51,39 @@ class TrainingManager:
         self.cfg = None
         self.stop_event = threading.Event()
         self.parser = None
+        self.resume = False
+        self.resume_model_path = None
 
     def _get_training_config(self):
         if isinstance(self.trainer, LerobotTrainer):
-            args = [
-                f'--policy.type={self.training_info.policy_type}',
-                f'--policy.device={self.training_info.policy_device}',
-                f'--dataset.repo_id={self.training_info.dataset}',
-                f"--output_dir={
-                    str(TrainingManager.get_weight_save_root_path()) + '/'
-                    + self.training_info.output_folder_name
-                }",
-                f'--seed={self.training_info.seed or 1000}',
-                f'--num_workers={self.training_info.num_workers or 4}',
-                f'--batch_size={self.training_info.batch_size or 8}',
-                f'--steps={self.training_info.steps or 100000}',
-                f'--eval_freq={self.training_info.eval_freq or 20000}',
-                f'--log_freq={self.training_info.log_freq or 200}',
-                f'--save_freq={self.training_info.save_freq or 1000}',
-                f'--policy.push_to_hub={False}'
-            ]
+            # Use resume configuration if enabled
+            if self.resume and self.resume_model_path:
+                weight_save_root_path = TrainingManager.get_weight_save_root_path()
+                full_config_path = weight_save_root_path / self.resume_model_path / "train_config.json"
+                args = [
+                    f'--config_path={full_config_path}',
+                    '--resume=true'
+                ]
+            else:
+                # Use new training configuration
+                args = [
+                    f'--policy.type={self.training_info.policy_type}',
+                    f'--policy.device={self.training_info.policy_device}',
+                    f'--dataset.repo_id={self.training_info.dataset}',
+                    f"--output_dir={
+                        str(TrainingManager.get_weight_save_root_path()) + '/'
+                        + self.training_info.output_folder_name
+                    }",
+                    f'--seed={self.training_info.seed or 1000}',
+                    f'--num_workers={self.training_info.num_workers or 4}',
+                    f'--batch_size={self.training_info.batch_size or 8}',
+                    f'--steps={self.training_info.steps or 100000}',
+                    f'--eval_freq={self.training_info.eval_freq or 20000}',
+                    f'--log_freq={self.training_info.log_freq or 200}',
+                    f'--save_freq={self.training_info.save_freq or 1000}',
+                    f'--policy.push_to_hub={False}'
+                ]
+
             self.cfg = draccus.parse(TrainPipelineConfig, None, args=args)
 
     def _get_trainer(self):
