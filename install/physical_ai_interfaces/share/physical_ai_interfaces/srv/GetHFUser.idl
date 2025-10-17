@@ -1,0 +1,19 @@
+// generated from rosidl_adapter/resource/srv.idl.em
+// with input from physical_ai_interfaces/srv/GetHFUser.srv
+// generated code does not contain a copyright notice
+
+
+module physical_ai_interfaces {
+  module srv {
+    struct GetHFUser_Request {
+      uint8 structure_needs_at_least_one_member;
+    };
+    struct GetHFUser_Response {
+      sequence<string> user_id_list;
+
+      boolean success;
+
+      string message;
+    };
+  };
+};

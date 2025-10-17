@@ -1,0 +1,17 @@
+// generated from rosidl_adapter/resource/srv.idl.em
+// with input from physical_ai_interfaces/srv/SetRobotType.srv
+// generated code does not contain a copyright notice
+
+
+module physical_ai_interfaces {
+  module srv {
+    struct SetRobotType_Request {
+      string robot_type;
+    };
+    struct SetRobotType_Response {
+      boolean success;
+
+      string message;
+    };
+  };
+};

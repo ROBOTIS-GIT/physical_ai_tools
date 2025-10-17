@@ -1,0 +1,34 @@
+// generated from rosidl_adapter/resource/msg.idl.em
+// with input from physical_ai_interfaces/msg/BrowserItem.msg
+// generated code does not contain a copyright notice
+
+
+module physical_ai_interfaces {
+  module msg {
+    struct BrowserItem {
+      @verbatim (language="comment", text=
+        "File or folder name")
+      string name;
+
+      @verbatim (language="comment", text=
+        "Full path")
+      string full_path;
+
+      @verbatim (language="comment", text=
+        "Whether it is a directory")
+      boolean is_directory;
+
+      @verbatim (language="comment", text=
+        "File size (bytes, -1 for directories)")
+      int64 size;
+
+      @verbatim (language="comment", text=
+        "Last modified time (as string)")
+      string modified_time;
+
+      @verbatim (language="comment", text=
+        "Whether directory contains any target files (only for directories)")
+      boolean has_target_file;
+    };
+  };
+};

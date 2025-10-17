@@ -808,7 +808,6 @@ class PhysicalAIServer(Node):
 
                 training_info = response.training_info
 
-                training_info.resume = True
                 training_info.dataset = config_data.get('dataset', {}).get('repo_id', '')
                 training_info.policy_type = config_data.get('policy', {}).get('type', '')
                 training_info.policy_device = config_data.get('policy', {}).get('device', 'cuda')

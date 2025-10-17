@@ -1,0 +1,33 @@
+// generated from rosidl_adapter/resource/srv.idl.em
+// with input from physical_ai_interfaces/srv/ControlHfServer.srv
+// generated code does not contain a copyright notice
+
+
+module physical_ai_interfaces {
+  module srv {
+    struct ControlHfServer_Request {
+      @verbatim (language="comment", text=
+        "upload, download, cancel")
+      string mode;
+
+      @verbatim (language="comment", text=
+        "user_id/repo_name")
+      string repo_id;
+
+      @verbatim (language="comment", text=
+        "local path of the dataset or model")
+      string local_dir;
+
+      @verbatim (language="comment", text=
+        "dataset, model")
+      string repo_type;
+
+      string author;
+    };
+    struct ControlHfServer_Response {
+      boolean success;
+
+      string message;
+    };
+  };
+};

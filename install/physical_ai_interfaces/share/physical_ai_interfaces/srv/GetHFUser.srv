@@ -1,0 +1,4 @@
+---
+string[] user_id_list
+bool success
+string message

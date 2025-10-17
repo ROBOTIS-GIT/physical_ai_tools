@@ -1,0 +1,5 @@
+---
+string[] policy_list
+string[] device_list
+bool success
+string message

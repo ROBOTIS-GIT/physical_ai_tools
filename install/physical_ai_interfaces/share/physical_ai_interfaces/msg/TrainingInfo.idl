@@ -1,0 +1,38 @@
+// generated from rosidl_adapter/resource/msg.idl.em
+// with input from physical_ai_interfaces/msg/TrainingInfo.msg
+// generated code does not contain a copyright notice
+
+
+module physical_ai_interfaces {
+  module msg {
+    @verbatim (language="comment", text=
+      "Must be given")
+    struct TrainingInfo {
+      @verbatim (language="comment", text=
+        "ROBOTIS/ffw_bg2_example")
+      string dataset;
+
+      string policy_type;
+
+      string output_folder_name;
+
+      string policy_device;
+
+      @verbatim (language="comment", text=
+        "Options")
+      uint32 seed;
+
+      uint8 num_workers;
+
+      uint16 batch_size;
+
+      uint32 steps;
+
+      uint32 eval_freq;
+
+      uint32 log_freq;
+
+      uint32 save_freq;
+    };
+  };
+};
