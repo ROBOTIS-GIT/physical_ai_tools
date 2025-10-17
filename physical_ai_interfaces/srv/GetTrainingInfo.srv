@@ -1,5 +1,4 @@
-bool resume
-string resume_model_path
+string model_path
 ---
 TrainingInfo training_info
 bool success

@@ -1,10 +1,8 @@
 # Must be given
-string dataset
+string dataset  # ROBOTIS/ffw_bg2_example
 string policy_type
 string output_folder_name
 string policy_device
-bool resume
-string resume_model_path
 
 # Options
 uint32 seed

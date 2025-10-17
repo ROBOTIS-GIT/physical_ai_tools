@@ -17,6 +17,7 @@
 # Author: Dongyun Kim, Seongwoo Kim
 
 import glob
+import json
 import os
 from pathlib import Path
 import threading
@@ -24,7 +25,7 @@ import time
 from typing import Optional
 
 from ament_index_python.packages import get_package_share_directory
-from physical_ai_interfaces.msg import HFOperationStatus, TaskStatus, TrainingStatus
+from physical_ai_interfaces.msg import HFOperationStatus, TaskStatus, TrainingInfo, TrainingStatus
 from physical_ai_interfaces.srv import (
     ControlHfServer,
     GetDatasetList,
@@ -133,6 +134,7 @@ class PhysicalAIServer(Node):
                 self.get_model_weight_list_callback
             ),
             ('/huggingface/control', ControlHfServer, self.control_hf_server_callback),
+            ('/training/get_training_info', GetTrainingInfo, self.get_training_info_callback),
         ]
 
         for service_name, service_type, callback in service_definitions:
@@ -781,6 +783,64 @@ class PhysicalAIServer(Node):
             response.saved_policy_type = saved_policy_type
             response.success = True
             response.message = 'Saved policies retrieved successfully'
+        return response
+
+    def get_training_info_callback(self, request, response):
+        try:
+            if not request.model_path:
+                response.success = False
+                response.message = 'model_path is required'
+                return response
+
+            weight_save_root_path = TrainingManager.get_weight_save_root_path()
+            config_path = weight_save_root_path / request.model_path
+
+            if not config_path.exists():
+                response.success = False
+                response.message = f'Model path does not exist: {config_path}'
+                return response
+
+            try:
+                with open(config_path, 'r', encoding='utf-8') as f:
+                    config_data = json.load(f)
+
+                self.get_logger().info(f'Loaded config from: {config_path}')
+
+                training_info = response.training_info
+
+                training_info.resume = True
+                training_info.dataset = config_data.get('dataset', {}).get('repo_id', '')
+                training_info.policy_type = config_data.get('policy', {}).get('type', '')
+                training_info.policy_device = config_data.get('policy', {}).get('device', 'cuda')
+
+                output_dir = config_data.get('output_dir', '')
+                training_info.output_folder_name = Path(output_dir).name
+
+                training_info.seed = config_data.get('seed', 1000)
+                training_info.num_workers = config_data.get('num_workers', 4)
+                training_info.batch_size = config_data.get('batch_size', 8)
+                training_info.steps = config_data.get('steps', 100000)
+                training_info.eval_freq = config_data.get('eval_freq', 20000)
+                training_info.log_freq = config_data.get('log_freq', 200)
+                training_info.save_freq = config_data.get('save_freq', 1000)
+
+                response.success = True
+                response.message = f'Training info loaded successfully from {config_path}'
+
+            except json.JSONDecodeError as e:
+                response.success = False
+                response.message = f'Failed to parse config.json: {str(e)}'
+                return response
+            except Exception as e:
+                response.success = False
+                response.message = f'Error reading config file: {str(e)}'
+                return response
+
+        except Exception as e:
+            self.get_logger().error(f'Error in get_training_info_callback: {str(e)}')
+            response.success = False
+            response.message = f'Error retrieving training info: {str(e)}'
+
         return response
 
     def set_robot_type_callback(self, request, response):
