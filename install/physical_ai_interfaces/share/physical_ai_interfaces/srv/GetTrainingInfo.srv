@@ -1,5 +1,0 @@
-string model_path
----
-TrainingInfo training_info
-bool success
-string message
