@@ -33,6 +33,7 @@ from physical_ai_interfaces.srv import (
     GetPolicyList,
     GetRobotTypeList,
     GetSavedPolicyList,
+    GetTrainingInfo,
     GetUserList,
     SendCommand,
     SendTrainingCommand,
