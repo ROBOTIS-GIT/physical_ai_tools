@@ -1,0 +1,4 @@
+---
+TrainingInfo training_info
+bool success
+string message

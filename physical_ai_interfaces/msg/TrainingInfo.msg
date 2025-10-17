@@ -3,6 +3,8 @@ string dataset
 string policy_type
 string output_folder_name
 string policy_device
+bool resume
+string resume_model_path
 
 # Options
 uint32 seed
