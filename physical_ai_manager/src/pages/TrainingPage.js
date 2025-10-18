@@ -22,11 +22,11 @@ import HeartbeatStatus from '../components/HeartbeatStatus';
 import DatasetSelector from '../components/DatasetSelector';
 import PolicySelector from '../components/PolicySelector';
 import TrainingOutputFolderInput from '../components/TrainingOutputFolderInput';
-import ModelWeightSelector from '../components/ModelWeightSelector';
 import TrainingControlPanel from '../components/TrainingControlPanel';
 import TrainingOptionInput from '../components/TrainingOptionInput';
 import TrainingProgressBar from '../components/TrainingProgressBar';
 import TrainingLossDisplay from '../components/TrainingLossDisplay';
+import ResumePolicySelector from '../components/ResumePolicySelector';
 
 export default function TrainingPage() {
   const trainingMode = useSelector((state) => state.training.trainingMode);
@@ -52,15 +52,6 @@ export default function TrainingPage() {
     'justify-center'
   );
 
-  const classComponentsContainerLeft = clsx(
-    'w-full',
-    'flex',
-    'p-10',
-    'gap-8',
-    'items-start',
-    'justify-start'
-  );
-
   // Toast limit implementation using useToasterStore
   const { toasts } = useToasterStore();
   const TOAST_LIMIT = 3;
@@ -75,8 +66,16 @@ export default function TrainingPage() {
   const renderTrainingComponents = () => {
     if (trainingMode === 'resume') {
       return (
-        <div className={classComponentsContainerLeft}>
-          <ModelWeightSelector />
+        <div className="flex flex-col items-start justify-center">
+          <div className="pt-10 pl-10">
+            <ResumePolicySelector />
+          </div>
+          <div className={classComponentsContainerCenter}>
+            <DatasetSelector />
+            <PolicySelector disabled={true} />
+            <TrainingOutputFolderInput disabled={true} />
+            <TrainingOptionInput />
+          </div>
         </div>
       );
     } else {

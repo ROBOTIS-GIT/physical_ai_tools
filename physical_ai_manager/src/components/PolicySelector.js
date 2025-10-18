@@ -27,7 +27,7 @@ import {
 import { useRosServiceCaller } from '../hooks/useRosServiceCaller';
 import toast from 'react-hot-toast';
 
-export default function PolicySelector() {
+export default function PolicySelector({ disabled = false }) {
   const dispatch = useDispatch();
 
   const selectedPolicy = useSelector((state) => state.training.trainingInfo.policyType);
@@ -84,7 +84,11 @@ export default function PolicySelector() {
     'focus:ring-2',
     'focus:ring-blue-500',
     'focus:border-transparent',
-    'mb-4'
+    'mb-4',
+    'disabled:bg-gray-100',
+    'disabled:cursor-not-allowed',
+    'disabled:text-gray-500',
+    'disabled:border-gray-300'
   );
 
   const classRefreshButton = clsx(
@@ -101,7 +105,10 @@ export default function PolicySelector() {
     'disabled:cursor-not-allowed'
   );
 
-  const classTitle = clsx('text-xl', 'font-bold', 'text-gray-800', 'mb-6', 'text-left');
+  const classTitle = clsx('text-xl', 'font-bold', 'mb-6', 'text-left', {
+    'text-gray-500': disabled,
+    'text-gray-800': !disabled,
+  });
   const classLabel = clsx('text-sm', 'font-medium', 'text-gray-700', 'mb-2', 'block');
 
   useEffect(() => {
@@ -117,9 +124,9 @@ export default function PolicySelector() {
         className={classSelect}
         value={selectedPolicy || ''}
         onChange={(e) => dispatch(selectPolicyType(e.target.value))}
-        disabled={fetching || loading}
+        disabled={fetching || loading || disabled}
       >
-        <option value="" disabled>
+        <option value="" disabled={disabled}>
           Choose policy...
         </option>
         {policyList.map((item) => (
@@ -134,9 +141,9 @@ export default function PolicySelector() {
         className={classSelect}
         value={selectedDevice || ''}
         onChange={(e) => dispatch(selectPolicyDevice(e.target.value))}
-        disabled={fetching || loading}
+        disabled={fetching || loading || disabled}
       >
-        <option value="" disabled>
+        <option value="" disabled={disabled}>
           Choose device...
         </option>
         {deviceList.map((item) => (
@@ -148,7 +155,7 @@ export default function PolicySelector() {
       <button
         className={classRefreshButton}
         onClick={fetchItemList}
-        disabled={fetching || loading || isTraining}
+        disabled={fetching || loading || isTraining || disabled}
       >
         <div className="flex items-center justify-center gap-2">
           <MdRefresh size={16} className={fetching ? 'animate-spin' : ''} />

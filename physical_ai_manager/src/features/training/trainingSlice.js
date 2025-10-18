@@ -27,6 +27,8 @@ const initialState = {
   deviceList: [],
   modelWeightList: [],
   selectedModelWeight: undefined,
+  resumePolicyPath: undefined,
+  hasTrainConfig: null,
   trainingMode: 'new', // 'new' or 'resume'
   isTraining: false,
   topicReceived: false,
@@ -100,6 +102,12 @@ const trainingSlice = createSlice({
     },
     setSelectedModelWeight: (state, action) => {
       state.selectedModelWeight = action.payload;
+    },
+    setResumePolicyPath: (state, action) => {
+      state.resumePolicyPath = action.payload;
+    },
+    setHasTrainConfig: (state, action) => {
+      state.hasTrainConfig = action.payload;
     },
     setTrainingMode: (state, action) => {
       state.trainingMode = action.payload;
@@ -179,6 +187,8 @@ export const {
   setOutputFolderName,
   setModelWeightList,
   setSelectedModelWeight,
+  setResumePolicyPath,
+  setHasTrainConfig,
   setTrainingMode,
   setIsTraining,
   setSeed,

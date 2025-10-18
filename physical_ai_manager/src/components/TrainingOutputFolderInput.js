@@ -21,7 +21,7 @@ import toast from 'react-hot-toast';
 import { setOutputFolderName, setModelWeightList } from '../features/training/trainingSlice';
 import { useRosServiceCaller } from '../hooks/useRosServiceCaller';
 
-export default function TrainingOutputFolderInput() {
+export default function TrainingOutputFolderInput({ disabled = false }) {
   const dispatch = useDispatch();
 
   const { getModelWeightList } = useRosServiceCaller();
@@ -72,7 +72,10 @@ export default function TrainingOutputFolderInput() {
     'disabled:cursor-not-allowed'
   );
 
-  const classTitle = clsx('text-xl', 'font-bold', 'text-gray-800', 'mb-6', 'text-left');
+  const classTitle = clsx('text-xl', 'font-bold', 'mb-6', 'text-left', {
+    'text-gray-500': disabled,
+    'text-gray-800': !disabled,
+  });
 
   const handleCheckDuplicate = async () => {
     setCheckingDuplicate(true);
@@ -127,7 +130,7 @@ export default function TrainingOutputFolderInput() {
       <input
         type="text"
         className={classInput}
-        disabled={checkingDuplicate}
+        disabled={checkingDuplicate || disabled}
         placeholder="Enter your text here..."
         value={tempOutputFolderName}
         onChange={(e) => {
@@ -139,7 +142,7 @@ export default function TrainingOutputFolderInput() {
       <button
         className={classButton}
         onClick={handleCheckDuplicate}
-        disabled={checkingDuplicate || duplicateChecked || tempOutputFolderName === ''}
+        disabled={checkingDuplicate || duplicateChecked || tempOutputFolderName === '' || disabled}
       >
         Check duplicate
       </button>

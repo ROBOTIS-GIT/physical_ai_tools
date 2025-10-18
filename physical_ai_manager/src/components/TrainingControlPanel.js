@@ -20,6 +20,7 @@ import clsx from 'clsx';
 import toast from 'react-hot-toast';
 import { setIsTraining, setTrainingMode, setLastUpdate } from '../features/training/trainingSlice';
 import { useRosServiceCaller } from '../hooks/useRosServiceCaller';
+import { DEFAULT_PATHS } from '../constants/paths';
 
 export default function TrainingControlPanel() {
   const dispatch = useDispatch();
@@ -29,7 +30,8 @@ export default function TrainingControlPanel() {
   const selectedPolicy = useSelector((state) => state.training.trainingInfo.policyType);
   const selectedDevice = useSelector((state) => state.training.trainingInfo.policyDevice);
   const outputFolderName = useSelector((state) => state.training.trainingInfo.outputFolderName);
-  const selectedModelWeight = useSelector((state) => state.training.selectedModelWeight);
+  const resumePolicyPath = useSelector((state) => state.training.resumePolicyPath);
+  const hasTrainConfig = useSelector((state) => state.training.hasTrainConfig);
   const lastUpdate = useSelector((state) => state.training.lastUpdate);
 
   const { sendTrainingCommand } = useRosServiceCaller();
@@ -114,8 +116,8 @@ export default function TrainingControlPanel() {
 
       if (trainingMode === 'resume') {
         // Resume training
-        if (!selectedModelWeight) {
-          toast.error('Please select a model weight to resume training');
+        if (!resumePolicyPath) {
+          toast.error('Please select a policy checkpoint path to resume training');
           return;
         }
         command = 'resume'; // RESUME
@@ -178,8 +180,20 @@ export default function TrainingControlPanel() {
 
   const checkRequiredFields = () => {
     if (trainingMode === 'resume') {
-      if (!selectedModelWeight) {
-        toast.error('Please select a model weight to resume training');
+      if (!resumePolicyPath) {
+        toast.error('Please select a policy checkpoint path to resume training');
+        return false;
+      }
+      if (!resumePolicyPath.startsWith(DEFAULT_PATHS.POLICY_MODEL_PATH)) {
+        toast.error(`Policy path must be under: ${DEFAULT_PATHS.POLICY_MODEL_PATH}`);
+        return false;
+      }
+      if (hasTrainConfig === false) {
+        toast.error('train_config.json file not found in selected path');
+        return false;
+      }
+      if (hasTrainConfig === null) {
+        toast.error('Please wait for path validation to complete');
         return false;
       }
       return true;
@@ -238,12 +252,12 @@ export default function TrainingControlPanel() {
               name="trainingMode"
               value="resume"
               checked={trainingMode === 'resume'}
-              onChange={() => false && handleModeChange('resume')}
+              onChange={() => handleModeChange('resume')}
               className={classRadioInput}
               disabled={false}
             />
             <label htmlFor="resume-training" className={clsx(classRadioLabel, 'text-gray-500')}>
-              Resume Training (Coming soon)
+              Resume Training
             </label>
           </div>
         </div>
