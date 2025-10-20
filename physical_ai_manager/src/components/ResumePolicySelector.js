@@ -124,11 +124,12 @@ export default function ResumePolicySelector() {
 
   const classLoadButton = clsx(
     classButton,
-    'bg-blue-50',
-    'text-blue-700',
+    'bg-green-100',
+    'text-green-700',
     'border',
-    'border-blue-200',
-    'hover:bg-blue-100'
+    'font-medium',
+    'border-green-300',
+    'hover:bg-green-200'
   );
 
   const classConfirmButton = clsx(
@@ -426,7 +427,7 @@ export default function ResumePolicySelector() {
               </button>
               <button
                 onClick={handleLoadTrainingInfo}
-                className={classLoadButton}
+                className={`${classLoadButton} ml-auto`}
                 title="Load training info"
               >
                 <MdDownload size={18} />
