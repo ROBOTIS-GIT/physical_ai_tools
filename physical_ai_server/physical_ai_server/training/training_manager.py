@@ -91,7 +91,7 @@ class TrainingManager:
         # Use resume configuration if enabled
         if self.resume and self.resume_model_path:
             weight_save_root_path = TrainingManager.get_weight_save_root_path()
-            full_config_path = weight_save_root_path / self.resume_model_path
+            full_config_path = weight_save_root_path / self.resume_model_path / 'train_config.json'
 
             # Update config file with current training_info values
             if not self._update_config_with_training_info(full_config_path):
@@ -99,12 +99,6 @@ class TrainingManager:
 
             # Provide minimal required args for resume mode (will be overridden by config file)
             args = [
-                f'--policy.type={self.training_info.policy_type or "act"}',
-                f'--dataset.repo_id={self.training_info.dataset or "dummy"}',
-                f"--output_dir={
-                    str(TrainingManager.get_weight_save_root_path()) + '/'
-                    + (self.training_info.output_folder_name or 'dummy')
-                }",
                 f'--config_path={full_config_path}',
                 '--resume=true'
             ]
