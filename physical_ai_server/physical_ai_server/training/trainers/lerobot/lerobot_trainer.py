@@ -73,7 +73,6 @@ class LerobotTrainer(Trainer):
         lerobot_dir = '/root/ros2_ws/src/physical_ai_tools/lerobot'
         if os.path.exists(lerobot_dir):
             os.chdir(lerobot_dir)
-            self.logger.info(f"[DEBUG] Changed working directory to: {os.getcwd()}")
 
         # Convert absolute config_path to relative if needed
         if hasattr(cfg, 'config_path') and cfg.config_path:
@@ -82,10 +81,6 @@ class LerobotTrainer(Trainer):
                 outputs_index = config_path.parts.index('outputs')
                 relative_parts = config_path.parts[outputs_index:]
                 cfg.config_path = str(Path(*relative_parts))
-                self.logger.info(f"[DEBUG] Converted config_path to relative: {cfg.config_path}")
-
-        self.logger.info(f"[DEBUG] cfg.config_path: {getattr(cfg, 'config_path', 'None')}")
-        self.logger.info(f"[DEBUG] cfg.resume: {getattr(cfg, 'resume', 'None')}")
 
         # For resume mode, manually set up the required attributes and skip validation
         if getattr(cfg, 'resume', False) and hasattr(cfg, 'config_path') and cfg.config_path:
@@ -95,11 +90,8 @@ class LerobotTrainer(Trainer):
                 policy_path = config_path.parent
                 cfg.policy.pretrained_path = policy_path
                 cfg.checkpoint_path = policy_path.parent
-                self.logger.info(f"[DEBUG] Set policy.pretrained_path: {cfg.policy.pretrained_path}")
-                self.logger.info(f"[DEBUG] Set checkpoint_path: {cfg.checkpoint_path}")
-                self.logger.info("[DEBUG] Skipping validation for resume mode")
             else:
-                self.logger.error(f"[DEBUG] Config file not found: {config_path}")
+                self.logger.error(f"Config file not found: {config_path}")
                 cfg.validate()
         else:
             # For non-resume mode, use normal validation

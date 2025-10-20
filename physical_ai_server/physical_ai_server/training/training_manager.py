@@ -82,7 +82,6 @@ class TrainingManager:
             with open(config_path, 'w', encoding='utf-8') as f:
                 json.dump(config_data, f, indent=2)
 
-            print(f"[DEBUG] Updated config file: {config_path}")
             return True
         except Exception as e:
             print(f"Error updating config file: {e}")
@@ -110,14 +109,11 @@ class TrainingManager:
                 '--resume=true'
             ]
 
-            print(f"[DEBUG] Resume args: {args}")
             self.cfg = draccus.parse(TrainPipelineConfig, None, args=args)
-            print(f"[DEBUG] Parsed cfg.config_path: {getattr(self.cfg, 'config_path', 'NOT_FOUND')}")
 
             # Manually set config_path if it wasn't parsed
             if not hasattr(self.cfg, 'config_path') or not self.cfg.config_path:
                 self.cfg.config_path = str(full_config_path)
-                print(f"[DEBUG] Manually set cfg.config_path: {self.cfg.config_path}")
         else:
             # Build args for new training
             args = [
