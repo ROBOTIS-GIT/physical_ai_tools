@@ -543,7 +543,7 @@ class PhysicalAIServer(Node):
                         return response
 
                     # Check if resume config file exists
-                    full_config_path = weight_save_root_path / resume_model_path / "train_config.json"
+                    full_config_path = weight_save_root_path / resume_model_path
                     if not full_config_path.exists():
                         response.success = False
                         response.message = f'Resume config file not found: {full_config_path}'
