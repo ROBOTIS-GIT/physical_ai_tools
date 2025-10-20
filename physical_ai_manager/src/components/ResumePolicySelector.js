@@ -18,9 +18,12 @@ import React, { useState, useEffect } from 'react';
 import { useDispatch, useSelector } from 'react-redux';
 import clsx from 'clsx';
 import toast from 'react-hot-toast';
-import { MdFolderOpen, MdEdit, MdCheck, MdClose, MdWarning } from 'react-icons/md';
+import { MdFolderOpen, MdEdit, MdCheck, MdClose, MdWarning, MdDownload } from 'react-icons/md';
 import {
   setResumePolicyPath,
+  setTrainingInfo,
+  setSelectedUser,
+  setSelectedDataset,
   setHasTrainConfig as setHasTrainConfigRedux,
 } from '../features/training/trainingSlice';
 import FileBrowserModal from './FileBrowserModal';
@@ -35,7 +38,7 @@ export default function ResumePolicySelector() {
   const [isValidatingConfig, setIsValidatingConfig] = useState(false);
   const [hasTrainConfig, setHasTrainConfig] = useState(null);
 
-  const { browseFile } = useRosServiceCaller();
+  const { browseFile, getTrainingInfo } = useRosServiceCaller();
   const REQUIRED_BASE_PATH = DEFAULT_PATHS.POLICY_MODEL_PATH;
 
   // Get relative path after base path
@@ -117,6 +120,15 @@ export default function ResumePolicySelector() {
     'border',
     'border-gray-200',
     'hover:bg-gray-100'
+  );
+
+  const classLoadButton = clsx(
+    classButton,
+    'bg-blue-50',
+    'text-blue-700',
+    'border',
+    'border-blue-200',
+    'hover:bg-blue-100'
   );
 
   const classConfirmButton = clsx(
@@ -258,6 +270,49 @@ export default function ResumePolicySelector() {
     }
   };
 
+  const handleLoadTrainingInfo = async () => {
+    try {
+      const result = await getTrainingInfo(
+        getRelativePath(resumePolicyPath) + '/' + TARGET_FILES.TRAIN_CONFIG
+      );
+      console.log('Training info received:', result);
+      if (result) {
+        if (result.success) {
+          dispatch(
+            setTrainingInfo({
+              datasetRepoId: result.training_info.dataset,
+              policyType: result.training_info.policy_type,
+              policyDevice: result.training_info.policy_device,
+              outputFolderName: result.training_info.output_folder_name,
+              resume: result.training_info.resume,
+              seed: result.training_info.seed,
+              numWorkers: result.training_info.num_workers,
+              batchSize: result.training_info.batch_size,
+              steps: result.training_info.steps,
+              evalFreq: result.training_info.eval_freq,
+              logFreq: result.training_info.log_freq,
+              saveFreq: result.training_info.save_freq,
+            })
+          );
+          const selectedUser = result.training_info.dataset.split('/')[0];
+          const selectedDataset = result.training_info.dataset.split('/')[1];
+          console.log('selectedUser:', selectedUser);
+          console.log('selectedDataset:', selectedDataset);
+          dispatch(setSelectedUser(selectedUser));
+          dispatch(setSelectedDataset(selectedDataset));
+          toast.success('Training info loaded successfully');
+        } else {
+          toast.error('Failed to get training info: ' + result.message);
+        }
+      } else {
+        toast.error('Failed to get training info: Invalid response');
+      }
+    } catch (error) {
+      console.error('Error fetching training info:', error);
+      toast.error('Failed to get training info');
+    }
+  };
+
   return (
     <>
       <div className={classContainer}>
@@ -269,7 +324,7 @@ export default function ResumePolicySelector() {
         {isEditing ? (
           <>
             {/* Base Path (Fixed) and Relative Path (Editable) - Responsive Layout */}
-            <div className="flex flex-col lg:flex-row lg:items-center gap-2">
+            <div className="flex flex-col gap-2">
               {/* Base Path (Fixed) */}
               <div className="flex-shrink-0">
                 <span className="text-sm text-gray-600 font-mono">{REQUIRED_BASE_PATH}</span>
@@ -368,6 +423,14 @@ export default function ResumePolicySelector() {
               >
                 <MdEdit size={18} />
                 <span>Edit</span>
+              </button>
+              <button
+                onClick={handleLoadTrainingInfo}
+                className={classLoadButton}
+                title="Load training info"
+              >
+                <MdDownload size={18} />
+                <span>Load</span>
               </button>
             </div>
           </>

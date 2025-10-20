@@ -22,10 +22,12 @@ import TaskCommand from '../constants/taskCommand';
 import TrainingCommand from '../constants/trainingCommand';
 import EditDatasetCommand from '../constants/commands';
 import rosConnectionManager from '../utils/rosConnectionManager';
+import { DEFAULT_PATHS } from '../constants/paths';
 
 export function useRosServiceCaller() {
   const taskInfo = useSelector((state) => state.tasks.taskInfo);
   const trainingInfo = useSelector((state) => state.training.trainingInfo);
+  const trainingResumePolicyPath = useSelector((state) => state.training.resumePolicyPath);
   const editDatasetInfo = useSelector((state) => state.editDataset);
   const page = useSelector((state) => state.ui.currentPage);
   const rosbridgeUrl = useSelector((state) => state.ros.rosbridgeUrl);
@@ -336,14 +338,12 @@ export function useRosServiceCaller() {
   const sendTrainingCommand = useCallback(
     async (command) => {
       try {
-        console.log('Calling service /training/send_training_command with request:', {
-          command: command,
-          training_info: trainingInfo,
-        });
-
         let command_enum;
         switch (command) {
           case 'start':
+            command_enum = TrainingCommand.START;
+            break;
+          case 'resume':
             command_enum = TrainingCommand.START;
             break;
           case 'finish':
@@ -353,26 +353,46 @@ export function useRosServiceCaller() {
             throw new Error(`Unknown command: ${command}`);
         }
 
+        // Get relative path after base path
+        const getRelativePath = (fullPath) => {
+          const REQUIRED_BASE_PATH = DEFAULT_PATHS.POLICY_MODEL_PATH;
+
+          if (!fullPath) return '';
+          if (fullPath.startsWith(REQUIRED_BASE_PATH)) {
+            return fullPath.substring(REQUIRED_BASE_PATH.length);
+          }
+          return fullPath;
+        };
+
+        const request = {
+          command: command_enum,
+          training_info: {
+            dataset: trainingInfo.datasetRepoId,
+            policy_type: trainingInfo.policyType,
+            policy_device: trainingInfo.policyDevice,
+            output_folder_name: trainingInfo.outputFolderName,
+            seed: trainingInfo.seed,
+            num_workers: trainingInfo.numWorkers,
+            batch_size: trainingInfo.batchSize,
+            steps: trainingInfo.steps,
+            eval_freq: trainingInfo.evalFreq,
+            log_freq: trainingInfo.logFreq,
+            save_freq: trainingInfo.saveFreq,
+          },
+          resume: command === 'resume',
+          resume_model_path: command === 'resume' ? getRelativePath(trainingResumePolicyPath) : '',
+        };
+
+        console.log('Calling service /training/send_training_command with request:', request);
+        console.log('trainingResumePolicyPath:', trainingResumePolicyPath);
+
         const result = await callService(
           '/training/command',
           'physical_ai_interfaces/srv/SendTrainingCommand',
-          {
-            command: command_enum,
-            training_info: {
-              dataset: trainingInfo.datasetRepoId,
-              policy_type: trainingInfo.policyType,
-              policy_device: trainingInfo.policyDevice,
-              output_folder_name: trainingInfo.outputFolderName,
-              seed: trainingInfo.seed,
-              num_workers: trainingInfo.numWorkers,
-              batch_size: trainingInfo.batchSize,
-              steps: trainingInfo.steps,
-              eval_freq: trainingInfo.evalFreq,
-              log_freq: trainingInfo.logFreq,
-              save_freq: trainingInfo.saveFreq,
-            },
-          }
+          request
         );
+
+        console.log('trainingResumePolicyPath:', getRelativePath(trainingResumePolicyPath));
 
         console.log('sendTrainingCommand service response:', result);
         return result;
@@ -381,7 +401,7 @@ export function useRosServiceCaller() {
         throw new Error(`${error.message || error}`);
       }
     },
-    [callService, trainingInfo]
+    [callService, trainingInfo, trainingResumePolicyPath]
   );
 
   const browseFile = useCallback(
@@ -531,6 +551,28 @@ export function useRosServiceCaller() {
     [callService]
   );
 
+  const getTrainingInfo = useCallback(
+    async (modelPath) => {
+      try {
+        console.log('Calling service /training/get_training_info with request:', {
+          model_path: modelPath,
+        });
+
+        const result = await callService(
+          '/training/get_training_info',
+          'physical_ai_interfaces/srv/GetTrainingInfo',
+          { model_path: modelPath }
+        );
+        console.log('getTrainingInfo service response:', result);
+        return result;
+      } catch (error) {
+        console.error('Failed to get training info:', error);
+        throw new Error(`${error.message || error}`);
+      }
+    },
+    [callService]
+  );
+
   return {
     callService,
     sendRecordCommand,
@@ -548,5 +590,6 @@ export function useRosServiceCaller() {
     sendEditDatasetCommand,
     getDatasetInfo,
     controlHfServer,
+    getTrainingInfo,
   };
 }
