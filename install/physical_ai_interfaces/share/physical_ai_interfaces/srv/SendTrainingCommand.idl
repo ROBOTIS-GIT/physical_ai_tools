@@ -1,0 +1,33 @@
+// generated from rosidl_adapter/resource/srv.idl.em
+// with input from physical_ai_interfaces/srv/SendTrainingCommand.srv
+// generated code does not contain a copyright notice
+
+#include "physical_ai_interfaces/msg/TrainingInfo.idl"
+
+module physical_ai_interfaces {
+  module srv {
+    module SendTrainingCommand_Request_Constants {
+      const uint8 NONE = 0;
+      const uint8 START = 1;
+      const uint8 FINISH = 2;
+    };
+    @verbatim (language="comment", text=
+      "Constants" "\n"
+      "" "\n"
+      "command")
+    struct SendTrainingCommand_Request {
+      uint8 command;
+
+      physical_ai_interfaces::msg::TrainingInfo training_info;
+
+      boolean resume;
+
+      string resume_model_path;
+    };
+    struct SendTrainingCommand_Response {
+      boolean success;
+
+      string message;
+    };
+  };
+};

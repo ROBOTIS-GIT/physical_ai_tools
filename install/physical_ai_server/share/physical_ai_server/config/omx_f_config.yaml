@@ -1,0 +1,27 @@
+physical_ai_server:
+  ros__parameters:
+    omx_f:
+      observation_list:
+        - camera1
+        # - camera2 #check your camera topic from 'ros2 topic list' command
+        - state
+
+      camera_topic_list:
+        - camera1:/camera1/image_raw/compressed
+        # - camera2:/camera2/image_raw/compressed #check your camera topic from 'ros2 topic list' command
+
+      joint_topic_list:
+        - follower:/joint_states
+        - leader:/leader/joint_trajectory
+
+      joint_list:
+        - leader
+
+      joint_order:
+        leader:
+          - joint1
+          - joint2
+          - joint3
+          - joint4
+          - joint5
+          - gripper_joint_1

@@ -1,0 +1,35 @@
+// generated from rosidl_adapter/resource/srv.idl.em
+// with input from physical_ai_interfaces/srv/EditDataset.srv
+// generated code does not contain a copyright notice
+
+
+module physical_ai_interfaces {
+  module srv {
+    module EditDataset_Request_Constants {
+      const uint8 MERGE = 0;
+      const uint8 DELETE = 1;
+    };
+    @verbatim (language="comment", text=
+      "Constants" "\n"
+      "" "\n"
+      "command")
+    struct EditDataset_Request {
+      uint8 mode;
+
+      sequence<string> merge_dataset_list;
+
+      string delete_dataset_path;
+
+      string output_path;
+
+      sequence<uint16> delete_episode_num;
+
+      boolean upload_huggingface;
+    };
+    struct EditDataset_Response {
+      boolean success;
+
+      string message;
+    };
+  };
+};

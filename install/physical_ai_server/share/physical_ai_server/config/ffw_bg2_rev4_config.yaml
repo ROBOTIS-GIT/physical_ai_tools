@@ -1,0 +1,51 @@
+physical_ai_server:
+  ros__parameters:
+    ffw_bg2_rev4:
+      observation_list:
+        - cam_head
+        - cam_wrist_left
+        - cam_wrist_right
+        - state
+
+      camera_topic_list: 
+        - cam_head:/zed/zed_node/left/image_rect_color/compressed
+        - cam_wrist_left:/camera_left/camera_left/color/image_rect_raw/compressed
+        - cam_wrist_right:/camera_right/camera_right/color/image_rect_raw/compressed
+
+      joint_topic_list:
+        - follower:/joint_states
+        - leader_left:/leader/joint_trajectory_command_broadcaster_left/joint_trajectory
+        - leader_right:/leader/joint_trajectory_command_broadcaster_right/joint_trajectory
+        - leader_head:/leader/joystick_controller_left/joint_trajectory
+        - leader_lift:/leader/joystick_controller_right/joint_trajectory
+
+      joint_list:
+        - leader_left
+        - leader_right
+        - leader_head
+        - leader_lift
+
+      joint_order:
+        leader_left:
+          - arm_l_joint1
+          - arm_l_joint2
+          - arm_l_joint3
+          - arm_l_joint4
+          - arm_l_joint5
+          - arm_l_joint6
+          - arm_l_joint7
+          - gripper_l_joint1
+        leader_right:
+          - arm_r_joint1
+          - arm_r_joint2
+          - arm_r_joint3
+          - arm_r_joint4
+          - arm_r_joint5
+          - arm_r_joint6
+          - arm_r_joint7
+          - gripper_r_joint1
+        leader_head:
+          - head_joint1
+          - head_joint2
+        leader_lift:
+          - lift_joint

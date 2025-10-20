@@ -1,0 +1,19 @@
+# File browser navigation service
+
+# Request
+string action           # Action to perform: "browse", "get_path", "go_parent"
+string current_path     # Current path (used depending on action)
+string target_name      # Name of file/folder to select (for "browse" action)
+string[] target_files   # Optional: Files to check for in subdirectories (parallel search)
+string[] target_folders # Optional: Folders to check for in subdirectories (parallel search)
+
+---
+# Response
+bool success           # Whether the operation was successful
+string message         # Status or error message
+string current_path    # Current path
+string parent_path     # Parent directory path
+string selected_path   # Full path of the selected item
+
+# Contents of the current directory
+BrowserItem[] items

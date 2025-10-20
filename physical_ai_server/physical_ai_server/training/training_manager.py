@@ -18,6 +18,7 @@
 
 from pathlib import Path
 import threading
+import json
 
 import draccus
 import lerobot
@@ -54,35 +55,88 @@ class TrainingManager:
         self.resume = False
         self.resume_model_path = None
 
+    def _update_config_with_training_info(self, config_path):
+        """Update train_config.json with current training_info values."""
+        try:
+            # Read existing config
+            with open(config_path, 'r', encoding='utf-8') as f:
+                config_data = json.load(f)
+
+            # Update config with training_info values if provided (non-zero/non-empty)
+            if self.training_info.seed != 0:
+                config_data['seed'] = self.training_info.seed
+            if self.training_info.num_workers != 0:
+                config_data['num_workers'] = self.training_info.num_workers
+            if self.training_info.batch_size != 0:
+                config_data['batch_size'] = self.training_info.batch_size
+            if self.training_info.steps != 0:
+                config_data['steps'] = self.training_info.steps
+            if self.training_info.eval_freq != 0:
+                config_data['eval_freq'] = self.training_info.eval_freq
+            if self.training_info.log_freq != 0:
+                config_data['log_freq'] = self.training_info.log_freq
+            if self.training_info.save_freq != 0:
+                config_data['save_freq'] = self.training_info.save_freq
+
+            # Write back updated config
+            with open(config_path, 'w', encoding='utf-8') as f:
+                json.dump(config_data, f, indent=2)
+
+            print(f"[DEBUG] Updated config file: {config_path}")
+            return True
+        except Exception as e:
+            print(f"Error updating config file: {e}")
+            return False
+
     def _get_training_config(self):
-        if isinstance(self.trainer, LerobotTrainer):
-            # Use resume configuration if enabled
-            if self.resume and self.resume_model_path:
-                weight_save_root_path = TrainingManager.get_weight_save_root_path()
-                full_config_path = weight_save_root_path / self.resume_model_path / "train_config.json"
-                args = [
-                    f'--config_path={full_config_path}',
-                    '--resume=true'
-                ]
-            else:
-                # Use new training configuration
-                args = [
-                    f'--policy.type={self.training_info.policy_type}',
-                    f'--policy.device={self.training_info.policy_device}',
-                    f'--dataset.repo_id={self.training_info.dataset}',
-                    f"--output_dir={
-                        str(TrainingManager.get_weight_save_root_path()) + '/'
-                        + self.training_info.output_folder_name
-                    }",
-                    f'--seed={self.training_info.seed or 1000}',
-                    f'--num_workers={self.training_info.num_workers or 4}',
-                    f'--batch_size={self.training_info.batch_size or 8}',
-                    f'--steps={self.training_info.steps or 100000}',
-                    f'--eval_freq={self.training_info.eval_freq or 20000}',
-                    f'--log_freq={self.training_info.log_freq or 200}',
-                    f'--save_freq={self.training_info.save_freq or 1000}',
-                    f'--policy.push_to_hub={False}'
-                ]
+        # Use resume configuration if enabled
+        if self.resume and self.resume_model_path:
+            weight_save_root_path = TrainingManager.get_weight_save_root_path()
+            full_config_path = weight_save_root_path / self.resume_model_path
+
+            # Update config file with current training_info values
+            if not self._update_config_with_training_info(full_config_path):
+                raise RuntimeError(f"Failed to update config file: {full_config_path}")
+
+            # Provide minimal required args for resume mode (will be overridden by config file)
+            args = [
+                f'--policy.type={self.training_info.policy_type or "act"}',
+                f'--dataset.repo_id={self.training_info.dataset or "dummy"}',
+                f"--output_dir={
+                    str(TrainingManager.get_weight_save_root_path()) + '/'
+                    + (self.training_info.output_folder_name or 'dummy')
+                }",
+                f'--config_path={full_config_path}',
+                '--resume=true'
+            ]
+
+            print(f"[DEBUG] Resume args: {args}")
+            self.cfg = draccus.parse(TrainPipelineConfig, None, args=args)
+            print(f"[DEBUG] Parsed cfg.config_path: {getattr(self.cfg, 'config_path', 'NOT_FOUND')}")
+
+            # Manually set config_path if it wasn't parsed
+            if not hasattr(self.cfg, 'config_path') or not self.cfg.config_path:
+                self.cfg.config_path = str(full_config_path)
+                print(f"[DEBUG] Manually set cfg.config_path: {self.cfg.config_path}")
+        else:
+            # Build args for new training
+            args = [
+                f'--policy.type={self.training_info.policy_type}',
+                f'--policy.device={self.training_info.policy_device}',
+                f'--dataset.repo_id={self.training_info.dataset}',
+                f"--output_dir={
+                    str(TrainingManager.get_weight_save_root_path()) + '/'
+                    + self.training_info.output_folder_name
+                }",
+                f'--seed={self.training_info.seed or 1000}',
+                f'--num_workers={self.training_info.num_workers or 4}',
+                f'--batch_size={self.training_info.batch_size or 8}',
+                f'--steps={self.training_info.steps or 100000}',
+                f'--eval_freq={self.training_info.eval_freq or 20000}',
+                f'--log_freq={self.training_info.log_freq or 200}',
+                f'--save_freq={self.training_info.save_freq or 1000}',
+                f'--policy.push_to_hub={False}'
+            ]
 
             self.cfg = draccus.parse(TrainPipelineConfig, None, args=args)
 
@@ -142,6 +196,6 @@ class TrainingManager:
         return current_training_status
 
     def train(self):
-        self._get_trainer()
         self._get_training_config()
+        self._get_trainer()
         self.trainer.train(self.cfg, stop_event=self.stop_event)

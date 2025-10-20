@@ -1,0 +1,18 @@
+########################################
+# Constants
+########################################
+# command
+uint8 IDLE = 0
+uint8 START_RECORD = 1
+uint8 START_INFERENCE = 2
+uint8 STOP = 3
+uint8 MOVE_TO_NEXT = 4
+uint8 RERECORD = 5
+uint8 FINISH = 6
+uint8 SKIP_TASK = 7
+
+uint8 command
+TaskInfo task_info
+---
+bool success
+string message

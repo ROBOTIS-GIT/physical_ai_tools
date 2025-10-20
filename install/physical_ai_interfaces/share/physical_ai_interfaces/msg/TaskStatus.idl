@@ -1,0 +1,64 @@
+// generated from rosidl_adapter/resource/msg.idl.em
+// with input from physical_ai_interfaces/msg/TaskStatus.msg
+// generated code does not contain a copyright notice
+
+#include "physical_ai_interfaces/msg/TaskInfo.idl"
+
+module physical_ai_interfaces {
+  module msg {
+    module TaskStatus_Constants {
+      const uint8 READY = 0;
+      const uint8 WARMING_UP = 1;
+      const uint8 RESETTING = 2;
+      const uint8 RECORDING = 3;
+      const uint8 SAVING = 4;
+      const uint8 STOPPED = 5;
+      const uint8 INFERENCING = 6;
+    };
+    @verbatim (language="comment", text=
+      "Constants" "\n"
+      "" "\n"
+      "phase")
+    struct TaskStatus {
+      physical_ai_interfaces::msg::TaskInfo task_info;
+
+      string robot_type;
+
+      @verbatim (language="comment", text=
+        "(0: READY, 1: WARMING_UP, 2: RESETTING 3: RECORDING, 4: SAVING, 5: STOPPED, 6: INFERENCING)")
+      uint8 phase;
+
+      @unit (value="s")
+      uint16 total_time;
+
+      @unit (value="s")
+      uint16 proceed_time;
+
+      uint16 current_episode_number;
+
+      uint16 current_scenario_number;
+
+      string current_task_instruction;
+
+      @unit (value="%")
+      float encoding_progress;
+
+      @unit (value="GB")
+      float used_storage_size;
+
+      @unit (value="GB")
+      float total_storage_size;
+
+      @unit (value="%")
+      float used_cpu;
+
+      @unit (value="GB")
+      float used_ram_size;
+
+      @unit (value="GB")
+      float total_ram_size;
+
+      string error;
+    };
+  };
+};
