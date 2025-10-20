@@ -27,7 +27,7 @@ import {
 import { useRosServiceCaller } from '../hooks/useRosServiceCaller';
 import toast from 'react-hot-toast';
 
-export default function PolicySelector({ disabled = false }) {
+export default function PolicySelector({ readonly = false }) {
   const dispatch = useDispatch();
 
   const selectedPolicy = useSelector((state) => state.training.trainingInfo.policyType);
@@ -70,7 +70,8 @@ export default function PolicySelector({ disabled = false }) {
     'shadow-lg',
     'p-6',
     'w-full',
-    'max-w-md'
+    'max-w-md',
+    'min-w-[200px]'
   );
 
   const classSelect = clsx(
@@ -84,7 +85,6 @@ export default function PolicySelector({ disabled = false }) {
     'focus:ring-2',
     'focus:ring-blue-500',
     'focus:border-transparent',
-    'mb-4',
     'disabled:bg-gray-100',
     'disabled:cursor-not-allowed',
     'disabled:text-gray-500',
@@ -106,8 +106,8 @@ export default function PolicySelector({ disabled = false }) {
   );
 
   const classTitle = clsx('text-xl', 'font-bold', 'mb-6', 'text-left', {
-    'text-gray-500': disabled,
-    'text-gray-800': !disabled,
+    'text-gray-500': readonly,
+    'text-gray-800': !readonly,
   });
   const classLabel = clsx('text-sm', 'font-medium', 'text-gray-700', 'mb-2', 'block');
 
@@ -118,15 +118,15 @@ export default function PolicySelector({ disabled = false }) {
   return (
     <div className={classCard}>
       <h1 className={classTitle}>{title}</h1>
-      <label className={classLabel}>Select Policy:</label>
+      <label className={classLabel}>{!readonly ? 'Select Policy:' : 'Selected Policy:'}</label>
 
       <select
         className={classSelect}
         value={selectedPolicy || ''}
         onChange={(e) => dispatch(selectPolicyType(e.target.value))}
-        disabled={fetching || loading || disabled}
+        disabled={fetching || loading || readonly}
       >
-        <option value="" disabled={disabled}>
+        <option value="" disabled={readonly}>
           Choose policy...
         </option>
         {policyList.map((item) => (
@@ -136,14 +136,16 @@ export default function PolicySelector({ disabled = false }) {
         ))}
       </select>
 
-      <label className={classLabel}>Select Device:</label>
+      <div className="mb-4" />
+
+      <label className={classLabel}>{!readonly ? 'Select Device:' : 'Selected Device:'}</label>
       <select
         className={classSelect}
         value={selectedDevice || ''}
         onChange={(e) => dispatch(selectPolicyDevice(e.target.value))}
-        disabled={fetching || loading || disabled}
+        disabled={fetching || loading || readonly}
       >
-        <option value="" disabled={disabled}>
+        <option value="" disabled={readonly}>
           Choose device...
         </option>
         {deviceList.map((item) => (
@@ -152,16 +154,21 @@ export default function PolicySelector({ disabled = false }) {
           </option>
         ))}
       </select>
-      <button
-        className={classRefreshButton}
-        onClick={fetchItemList}
-        disabled={fetching || loading || isTraining || disabled}
-      >
-        <div className="flex items-center justify-center gap-2">
-          <MdRefresh size={16} className={fetching ? 'animate-spin' : ''} />
-          {fetching ? 'Loading...' : `Refresh`}
-        </div>
-      </button>
+      {!readonly && (
+        <>
+          <div className="mb-4" />
+          <button
+            className={classRefreshButton}
+            onClick={fetchItemList}
+            disabled={fetching || loading || isTraining || readonly}
+          >
+            <div className="flex items-center justify-center gap-2">
+              <MdRefresh size={16} className={fetching ? 'animate-spin' : ''} />
+              {fetching ? 'Loading...' : `Refresh`}
+            </div>
+          </button>
+        </>
+      )}
     </div>
   );
 }

@@ -59,7 +59,7 @@ export default function ResumePolicySelector() {
     'flex',
     'flex-col',
     'gap-3',
-    'p-5',
+    'p-6',
     'bg-white',
     'rounded-2xl',
     'shadow-md',
@@ -70,7 +70,7 @@ export default function ResumePolicySelector() {
 
   const classHeader = clsx('flex', 'items-center', 'gap-2', 'mb-1');
 
-  const classLabel = clsx('text-lg', 'font-bold', 'text-gray-700');
+  const classTitle = clsx('text-xl', 'font-bold', 'text-gray-700');
 
   const classPathDisplay = clsx(
     'flex',
@@ -262,7 +262,7 @@ export default function ResumePolicySelector() {
     <>
       <div className={classContainer}>
         <div className={classHeader}>
-          <h3 className={classLabel}>Resume Policy Path</h3>
+          <h3 className={classTitle}>Resume Policy Path</h3>
           <span className="text-xs text-red-500">*</span>
         </div>
 
@@ -307,7 +307,7 @@ export default function ResumePolicySelector() {
         ) : (
           <>
             {/* Base Path (Fixed) and Relative Path (Display) - Responsive Layout */}
-            <div className="flex flex-col lg:flex-row lg:items-center gap-2">
+            <div className="flex flex-col gap-2">
               {/* Base Path (Fixed) */}
               <div className="flex-shrink-0">
                 <span className="text-sm text-gray-600 font-mono">{REQUIRED_BASE_PATH}</span>

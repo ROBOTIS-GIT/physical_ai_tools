@@ -21,7 +21,7 @@ import toast from 'react-hot-toast';
 import { setOutputFolderName, setModelWeightList } from '../features/training/trainingSlice';
 import { useRosServiceCaller } from '../hooks/useRosServiceCaller';
 
-export default function TrainingOutputFolderInput({ disabled = false }) {
+export default function TrainingOutputFolderInput({ readonly = false }) {
   const dispatch = useDispatch();
 
   const { getModelWeightList } = useRosServiceCaller();
@@ -41,7 +41,8 @@ export default function TrainingOutputFolderInput({ disabled = false }) {
     'shadow-lg',
     'p-6',
     'w-full',
-    'max-w-md'
+    'max-w-md',
+    'min-w-[250px]'
   );
 
   const classInput = clsx(
@@ -54,8 +55,7 @@ export default function TrainingOutputFolderInput({ disabled = false }) {
     'focus:outline-none',
     'focus:ring-2',
     'focus:ring-blue-500',
-    'focus:border-transparent',
-    'mb-4'
+    'focus:border-transparent'
   );
 
   const classButton = clsx(
@@ -73,8 +73,8 @@ export default function TrainingOutputFolderInput({ disabled = false }) {
   );
 
   const classTitle = clsx('text-xl', 'font-bold', 'mb-6', 'text-left', {
-    'text-gray-500': disabled,
-    'text-gray-800': !disabled,
+    'text-gray-500': readonly,
+    'text-gray-800': !readonly,
   });
 
   const handleCheckDuplicate = async () => {
@@ -119,7 +119,7 @@ export default function TrainingOutputFolderInput({ disabled = false }) {
     <div className={classCard}>
       <h1 className={classTitle}>Output folder name</h1>
       <div className="flex flex-row gap-2 items-center justify-center">
-        {!duplicateChecked && <p className="text-gray-500">Please check duplicate</p>}
+        {!duplicateChecked && !readonly && <p className="text-gray-500">Please check duplicate</p>}
         {duplicateChecked &&
           (isOutputFolderAvailable ? (
             <p className="text-blue-500 break-all">{tempOutputFolderName} is available</p>
@@ -130,7 +130,7 @@ export default function TrainingOutputFolderInput({ disabled = false }) {
       <input
         type="text"
         className={classInput}
-        disabled={checkingDuplicate || disabled}
+        disabled={checkingDuplicate || readonly}
         placeholder="Enter your text here..."
         value={tempOutputFolderName}
         onChange={(e) => {
@@ -139,13 +139,20 @@ export default function TrainingOutputFolderInput({ disabled = false }) {
           setDuplicateChecked(false);
         }}
       />
-      <button
-        className={classButton}
-        onClick={handleCheckDuplicate}
-        disabled={checkingDuplicate || duplicateChecked || tempOutputFolderName === '' || disabled}
-      >
-        Check duplicate
-      </button>
+      {!readonly && (
+        <>
+          <div className="mb-4" />
+          <button
+            className={classButton}
+            onClick={handleCheckDuplicate}
+            disabled={
+              checkingDuplicate || duplicateChecked || tempOutputFolderName === '' || readonly
+            }
+          >
+            Check duplicate
+          </button>
+        </>
+      )}
     </div>
   );
 }

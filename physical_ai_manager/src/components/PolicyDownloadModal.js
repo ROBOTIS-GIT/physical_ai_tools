@@ -105,7 +105,7 @@ const STYLES = {
 
 const PolicyDownloadModal = ({ isOpen, onClose, onDownloadComplete }) => {
   const hfStatus = useSelector((state) => state.editDataset.hfStatus);
-  const downloadStatus = useSelector((state) => state.editDataset.downloadStatus);
+  // const downloadStatus = useSelector((state) => state.editDataset.downloadStatus);
 
   const { controlHfServer, registerHFUser, getRegisteredHFUser } = useRosServiceCaller();
 

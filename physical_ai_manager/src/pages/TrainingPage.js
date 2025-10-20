@@ -43,7 +43,7 @@ export default function TrainingPage() {
 
   const classHeartbeatStatus = clsx('absolute', 'top-5', 'left-35', 'z-10');
 
-  const classComponentsContainerCenter = clsx(
+  const classComponentsContainer = clsx(
     'w-full',
     'flex',
     'p-10',
@@ -66,21 +66,19 @@ export default function TrainingPage() {
   const renderTrainingComponents = () => {
     if (trainingMode === 'resume') {
       return (
-        <div className="flex flex-col items-start justify-center">
-          <div className="pt-10 pl-10">
-            <ResumePolicySelector />
+        <div className={classComponentsContainer}>
+          <ResumePolicySelector />
+          <DatasetSelector />
+          <div className="flex flex-col items-start justify-center gap-5">
+            <PolicySelector readonly={true} />
+            <TrainingOutputFolderInput readonly={true} />
           </div>
-          <div className={classComponentsContainerCenter}>
-            <DatasetSelector />
-            <PolicySelector disabled={true} />
-            <TrainingOutputFolderInput disabled={true} />
-            <TrainingOptionInput />
-          </div>
+          <TrainingOptionInput />
         </div>
       );
     } else {
       return (
-        <div className={classComponentsContainerCenter}>
+        <div className={classComponentsContainer}>
           <DatasetSelector />
           <PolicySelector />
           <TrainingOutputFolderInput />
