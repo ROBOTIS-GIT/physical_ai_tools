@@ -23,7 +23,7 @@ import logging
 from pathlib import Path
 import re
 import shutil
-from typing import Any, Callable, Iterable, List, Optional
+from typing import Any, Callable, Iterable, List, Optional, Set
 
 import pandas as pd
 from physical_ai_server.utils.file_utils import FileIO
@@ -43,6 +43,15 @@ class DeleteResult:
     deleted_episode: int
     frames_removed: int
     videos_removed: int
+    success: bool
+
+
+@dataclass
+class BatchDeleteResult:
+    dataset_dir: Path
+    deleted_episodes: List[int]
+    total_frames_removed: int
+    total_videos_removed: int
     success: bool
 
 
@@ -476,6 +485,345 @@ class DataEditor:
                 self._log(
                     f'Failed renaming {p} -> {new_path}: {e}', logging.WARNING)
 
+    def delete_episodes_batch(
+        self,
+        dataset_dir: str,
+        episode_indices_to_delete: List[int],
+        chunk_name: str = DEFAULT_CHUNK_NAME,
+        verbose: bool | None = None
+    ) -> BatchDeleteResult:
+        """
+        Delete multiple episodes in a single batch operation.
+        Much faster than deleting one by one.
+        """
+        if verbose is not None:
+            self.verbose = verbose
+
+        dataset_dir = Path(dataset_dir).resolve()
+        if not dataset_dir.is_dir():
+            self._log(
+                f'Dataset directory not found: {dataset_dir}', logging.ERROR
+            )
+            raise FileNotFoundError(f'Dataset directory not found: {dataset_dir}')
+
+        # Sort and convert to set for fast lookup
+        episodes_to_delete = set(episode_indices_to_delete)
+        self._log(
+            f'Batch deleting {len(episodes_to_delete)} episodes in {dataset_dir}'
+        )
+
+        total_frames_removed = 0
+        total_videos_removed = 0
+
+        data_chunk_dir = dataset_dir / 'data' / chunk_name
+        video_chunk_dir = dataset_dir / 'videos' / chunk_name
+        images_root_dir = dataset_dir / 'images'
+        meta_dir = dataset_dir / 'meta'
+
+        # Build episode index mapping (old_idx -> new_idx)
+        # Count how many episodes before each index are being deleted
+        all_parquet_files = sorted(
+            data_chunk_dir.glob('episode_*.parquet'),
+            key=lambda p: self._extract_idx_from_name(p.name)
+        )
+
+        episode_mapping = {}  # old_idx -> new_idx
+        deleted_count = 0
+
+        for parquet_file in all_parquet_files:
+            old_idx = self._extract_idx_from_name(parquet_file.name)
+            if old_idx in episodes_to_delete:
+                deleted_count += 1
+                episode_mapping[old_idx] = None  # Mark for deletion
+            else:
+                episode_mapping[old_idx] = old_idx - deleted_count
+
+        # 1. Delete parquet files and count frames
+        self._log('Deleting parquet files...')
+        for old_idx in episodes_to_delete:
+            parquet_file = data_chunk_dir / (
+                f'episode_{old_idx:0{self.EPISODE_INDEX_WIDTH}d}.parquet'
+            )
+            if parquet_file.exists():
+                with suppress(Exception):
+                    df = pd.read_parquet(parquet_file)
+                    total_frames_removed += len(df)
+                parquet_file.unlink()
+
+        # 2. Delete video files
+        self._log('Deleting video files...')
+        camera_subdirs = [
+            d for d in video_chunk_dir.iterdir() if d.is_dir()
+        ] if video_chunk_dir.exists() else []
+
+        for old_idx in episodes_to_delete:
+            video_name = f'episode_{old_idx:0{self.EPISODE_INDEX_WIDTH}d}.mp4'
+            if camera_subdirs:
+                for cam_subdir in camera_subdirs:
+                    video_file = cam_subdir / video_name
+                    if video_file.exists():
+                        video_file.unlink()
+                        total_videos_removed += 1
+            else:
+                video_file = video_chunk_dir / video_name
+                if video_file.exists():
+                    video_file.unlink()
+                    total_videos_removed += 1
+
+        # 3. Delete image folders
+        self._log('Deleting image folders...')
+        if images_root_dir.exists():
+            for old_idx in episodes_to_delete:
+                folder_name = f'episode_{old_idx:0{self.EPISODE_INDEX_WIDTH}d}'
+                for cam_obs_dir in images_root_dir.iterdir():
+                    if cam_obs_dir.is_dir():
+                        image_folder = cam_obs_dir / folder_name
+                        if image_folder.exists():
+                            shutil.rmtree(image_folder)
+
+        # 4. Rename remaining files in batch
+        self._log('Renaming remaining files...')
+        self._batch_rename_and_update_parquets(
+            data_chunk_dir, episode_mapping
+        )
+
+        # 5. Rename video files
+        if camera_subdirs:
+            for cam_subdir in camera_subdirs:
+                self._batch_rename_files(
+                    cam_subdir, episode_mapping, '.mp4'
+                )
+        else:
+            self._batch_rename_files(
+                video_chunk_dir, episode_mapping, '.mp4'
+            )
+
+        # 6. Rename image folders
+        if images_root_dir.exists():
+            for cam_obs_dir in images_root_dir.iterdir():
+                if cam_obs_dir.is_dir():
+                    self._batch_rename_folders(
+                        cam_obs_dir, episode_mapping
+                    )
+
+        # 7. Update metadata files
+        self._log('Updating metadata files...')
+        self._batch_update_meta_files(
+            meta_dir, episodes_to_delete, episode_mapping
+        )
+
+        # 8. Update info.json
+        info_path = meta_dir / 'info.json'
+        if info_path.exists():
+            meta_info = FileIO.read_json(info_path, default={}) or {}
+            if isinstance(meta_info.get('total_episodes'), int):
+                meta_info['total_episodes'] = max(
+                    0, meta_info['total_episodes'] - len(episodes_to_delete)
+                )
+            if isinstance(meta_info.get('total_frames'), int):
+                meta_info['total_frames'] = max(
+                    0, meta_info['total_frames'] - total_frames_removed
+                )
+            if total_videos_removed > 0 and isinstance(
+                    meta_info.get('total_videos'), int):
+                meta_info['total_videos'] = max(
+                    0, meta_info['total_videos'] - total_videos_removed
+                )
+
+            # Update splits
+            if (
+                isinstance(meta_info.get('splits'), dict) and
+                isinstance(meta_info['splits'].get('train'), str)
+            ):
+                new_total = meta_info['total_episodes']
+                if new_total == 0:
+                    meta_info['splits']['train'] = '0:0'
+                else:
+                    meta_info['splits']['train'] = f'0:{new_total - 1}'
+
+            FileIO.write_json(info_path, meta_info)
+
+        self._log(
+            f'Batch deletion complete: {len(episodes_to_delete)} '
+            f'episodes, {total_frames_removed} frames, '
+            f'{total_videos_removed} videos removed'
+        )
+
+        return BatchDeleteResult(
+            dataset_dir=dataset_dir,
+            deleted_episodes=sorted(episodes_to_delete),
+            total_frames_removed=total_frames_removed,
+            total_videos_removed=total_videos_removed,
+            success=True
+        )
+
+    def _batch_rename_and_update_parquets(
+        self,
+        data_dir: Path,
+        episode_mapping: dict
+    ):
+        """Rename and update episode indices in parquet files."""
+        # Sort by old_idx ascending (small to large)
+        # This works because deleted episodes are already gone
+        sorted_items = sorted(
+            [(k, v) for k, v in episode_mapping.items() if v is not None],
+            key=lambda x: x[0]
+        )
+
+        for old_idx, new_idx in sorted_items:
+            if old_idx == new_idx:  # No change
+                continue
+
+            old_file = data_dir / (
+                f'episode_{old_idx:0{self.EPISODE_INDEX_WIDTH}d}.parquet'
+            )
+            new_file = data_dir / (
+                f'episode_{new_idx:0{self.EPISODE_INDEX_WIDTH}d}.parquet'
+            )
+
+            if old_file.exists():
+                # Read, update episode_index, and save with new name
+                df = pd.read_parquet(old_file)
+                if 'episode_index' in df.columns:
+                    df['episode_index'] = new_idx
+                df.to_parquet(new_file, index=False)
+                old_file.unlink()
+
+    def _batch_rename_files(
+        self,
+        directory: Path,
+        episode_mapping: dict,
+        extension: str
+    ):
+        """Rename files based on episode mapping."""
+        # Sort by old_idx ascending (small to large)
+        # This works because deleted episodes are already gone
+        sorted_items = sorted(
+            [(k, v) for k, v in episode_mapping.items() if v is not None],
+            key=lambda x: x[0]
+        )
+
+        for old_idx, new_idx in sorted_items:
+            if old_idx == new_idx:
+                continue
+
+            old_file = directory / (
+                f'episode_{old_idx:0{self.EPISODE_INDEX_WIDTH}d}{extension}'
+            )
+            new_file = directory / (
+                f'episode_{new_idx:0{self.EPISODE_INDEX_WIDTH}d}{extension}'
+            )
+
+            if old_file.exists():
+                old_file.rename(new_file)
+
+    def _batch_rename_folders(
+        self,
+        directory: Path,
+        episode_mapping: dict
+    ):
+        """Rename folders based on episode mapping."""
+        # Sort by old_idx ascending (small to large)
+        # This works because deleted episodes are already gone
+        sorted_items = sorted(
+            [(k, v) for k, v in episode_mapping.items() if v is not None],
+            key=lambda x: x[0]
+        )
+
+        for old_idx, new_idx in sorted_items:
+            if old_idx == new_idx:
+                continue
+
+            old_folder = directory / (
+                f'episode_{old_idx:0{self.EPISODE_INDEX_WIDTH}d}'
+            )
+            new_folder = directory / (
+                f'episode_{new_idx:0{self.EPISODE_INDEX_WIDTH}d}'
+            )
+
+            if old_folder.exists():
+                old_folder.rename(new_folder)
+
+    def _batch_update_meta_files(
+        self,
+        meta_dir: Path,
+        episodes_to_delete: Set[int],
+        episode_mapping: dict
+    ):
+        """Update metadata files by removing deleted episodes and remapping."""
+        for meta_file_name in [
+            'episodes_stats.jsonl', 'episodes.jsonl', 'episodes.json'
+        ]:
+            meta_file = meta_dir / meta_file_name
+            if not meta_file.exists():
+                continue
+
+            try:
+                content = meta_file.read_text().strip()
+                if not content:
+                    continue
+
+                is_json_list = content.startswith('[') and content.endswith(']')
+
+                if is_json_list:
+                    data = json.loads(content)
+                    new_data = []
+                    for item in data:
+                        ep_idx = item.get('episode_index')
+                        if ep_idx in episodes_to_delete:
+                            continue
+                        if ep_idx in episode_mapping:
+                            new_idx = episode_mapping[ep_idx]
+                            if new_idx is not None:
+                                item = self._remap_episode_indices(
+                                    item, new_idx
+                                )
+                                new_data.append(item)
+                    meta_file.write_text(
+                        json.dumps(new_data, indent=2) + '\n'
+                    )
+                else:
+                    # JSONL format
+                    lines = content.splitlines()
+                    new_lines = []
+                    for line in lines:
+                        if not line.strip():
+                            continue
+                        try:
+                            item = json.loads(line)
+                            ep_idx = item.get('episode_index')
+                            if ep_idx in episodes_to_delete:
+                                continue
+                            if ep_idx in episode_mapping:
+                                new_idx = episode_mapping[ep_idx]
+                                if new_idx is not None:
+                                    item = self._remap_episode_indices(
+                                        item, new_idx
+                                    )
+                                    new_lines.append(
+                                        json.dumps(item, separators=(',', ':'))
+                                    )
+                        except json.JSONDecodeError:
+                            new_lines.append(line)
+
+                    meta_file.write_text('\n'.join(new_lines) + '\n')
+            except Exception as e:
+                self._log(
+                    f'Error updating {meta_file_name}: {e}', logging.WARNING
+                )
+
+    def _remap_episode_indices(self, item: dict, new_idx: int) -> dict:
+        """Remap episode_index and related index fields."""
+        item['episode_index'] = new_idx
+
+        # Update 'index' field if it exists
+        if 'index' in item:
+            # For now, we don't remap frame indices as it's complex
+            # and may not be necessary for all use cases
+            pass
+
+        return item
+
     def delete_episode(
         self,
         dataset_dir: str,
@@ -483,6 +831,10 @@ class DataEditor:
         chunk_name: str = DEFAULT_CHUNK_NAME,
         verbose: bool | None = None
     ) -> DeleteResult:
+        """
+        Delete a single episode. For deleting multiple episodes,
+        use delete_episodes_batch for better performance.
+        """
         if verbose is not None:
             self.verbose = verbose
         dataset_dir = Path(dataset_dir).resolve()
