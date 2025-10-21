@@ -31,8 +31,16 @@ from physical_ai_server.training.trainers.lerobot.lerobot_trainer import Lerobot
 
 
 class TrainingManager:
+    """
+    Manages training pipeline configuration and execution for various AI models.
 
+    Supports both new training and resume functionality through configuration management.
+    """
+
+    # Path constants
     DEFAULT_TRAINING_DIR = 'src/physical_ai_tools/lerobot/outputs/train/'
+
+    # Supported trainer mapping
     TRAINER_MAPPING = {
         'pi0fast': LerobotTrainer,
         'pi0': LerobotTrainer,
@@ -41,28 +49,37 @@ class TrainingManager:
         'tdmpc': LerobotTrainer,
         'vqbet': LerobotTrainer,
         'smolvla': LerobotTrainer
-        # TODO: Uncomment when Gr00t and OpenVLA are implemented
+        # TODO: Add support for additional trainers when implemented
         # 'gr00tn1': Gr00tN1Trainer,
         # 'openvla': OpenVLATrainer,
     }
 
     def __init__(self):
+        """Initialize training manager with default configuration."""
         self.training_info = TrainingInfo()
         self.trainer = None
         self.cfg = None
         self.stop_event = threading.Event()
-        self.parser = None
+
+        # Resume-specific configuration
         self.resume = False
         self.resume_model_path = None
 
     def _update_config_with_training_info(self, config_path):
-        """Update train_config.json with current training_info values."""
+        """
+        Update saved train_config.json with current training_info values.
+        Only updates non-zero/non-empty values to preserve existing configuration.
+        Args:
+            config_path (Path): Path to the train_config.json file
+        Returns:
+            bool: True if update successful, False otherwise
+        """
         try:
-            # Read existing config
+            # Read existing configuration
             with open(config_path, 'r', encoding='utf-8') as f:
                 config_data = json.load(f)
 
-            # Update config with training_info values if provided (non-zero/non-empty)
+            # Update configuration with provided values (skip zero/empty values)
             if self.training_info.seed != 0:
                 config_data['seed'] = self.training_info.seed
             if self.training_info.num_workers != 0:
@@ -78,7 +95,7 @@ class TrainingManager:
             if self.training_info.save_freq != 0:
                 config_data['save_freq'] = self.training_info.save_freq
 
-            # Write back updated config
+            # Write back updated configuration
             with open(config_path, 'w', encoding='utf-8') as f:
                 json.dump(config_data, f, indent=2)
 
@@ -88,16 +105,21 @@ class TrainingManager:
             return False
 
     def _get_training_config(self):
-        # Use resume configuration if enabled
+        """
+        Configure training pipeline based on resume mode or new training setup.
+        For resume mode: Loads existing config and applies user overrides
+        For new training: Creates config from scratch with user parameters
+        """
         if self.resume and self.resume_model_path:
+            # Resume mode: Load existing configuration and apply overrides
             weight_save_root_path = TrainingManager.get_weight_save_root_path()
             full_config_path = weight_save_root_path / self.resume_model_path / 'train_config.json'
 
-            # Update config file with current training_info values
+            # Update existing config with current training_info values
             if not self._update_config_with_training_info(full_config_path):
                 raise RuntimeError(f"Failed to update config file: {full_config_path}")
 
-            # Provide minimal required args for resume mode (will be overridden by config file)
+            # Create minimal args for resume (config file will override most settings)
             args = [
                 f'--config_path={full_config_path}',
                 '--resume=true'
@@ -105,11 +127,11 @@ class TrainingManager:
 
             self.cfg = draccus.parse(TrainPipelineConfig, None, args=args)
 
-            # Manually set config_path if it wasn't parsed
+            # Ensure config_path is properly set for resume operations
             if not hasattr(self.cfg, 'config_path') or not self.cfg.config_path:
                 self.cfg.config_path = str(full_config_path)
         else:
-            # Build args for new training
+            # New training mode: Build configuration from training_info
             args = [
                 f'--policy.type={self.training_info.policy_type}',
                 f'--policy.device={self.training_info.policy_device}',
@@ -131,20 +153,26 @@ class TrainingManager:
             self.cfg = draccus.parse(TrainPipelineConfig, None, args=args)
 
     def _get_trainer(self):
+        """
+        Initialize appropriate trainer based on policy type.
+        Raises:
+            ValueError: If policy type is not supported
+        """
         policy_type = self.training_info.policy_type.lower()
         trainer_class = self.TRAINER_MAPPING.get(policy_type)
         if not trainer_class:
-            raise ValueError(
-                f"Unknown policy type: '{policy_type}'."
-            )
+            raise ValueError(f"Unsupported policy type: '{policy_type}'. "
+                           f"Supported types: {list(self.TRAINER_MAPPING.keys())}")
         self.trainer = trainer_class()
 
-    # TODO: Uncomment when training metrics is implemented
-    # def get_training_metrics(self):
-    #     metrics = self.trainer.send_training_metrics()
-    #     return metrics
-
+    @staticmethod
     def get_available_list() -> tuple[list[str], list[str]]:
+        """
+        Get lists of available policy types and devices.
+        
+        Returns:
+            tuple: (policy_list, device_list)
+        """
         policy_list = [
             'tdmpc',
             'diffusion',
@@ -161,31 +189,50 @@ class TrainingManager:
         ]
         return policy_list, device_list
 
+    @staticmethod
     def get_weight_save_root_path():
+        """
+        Get the root path for saving training weights and checkpoints.
+        Returns:
+            Path: Absolute path to the training outputs directory
+        """
         # Extract the base lerobot directory from lerobot.__file__
         lerobot_file_path = Path(lerobot.__file__).resolve()
-        # Find the outermost 'lerobot' directory in the path and use it as the base
+
+        # Find the outermost 'lerobot' directory in the path
         lerobot_dirs = [parent for parent in lerobot_file_path.parents if parent.name == 'lerobot']
         if lerobot_dirs:
             current_path = lerobot_dirs[-1]  # outermost 'lerobot' directory
         else:
             # Fallback: use the parent of the file
             current_path = lerobot_file_path.parent.parent  # up to 'lerobot'
+
         weight_save_root_path = current_path / 'outputs' / 'train'
         return weight_save_root_path.resolve()
 
     def get_current_training_status(self):
+        """
+        Get current training status including step and loss information.
+        Returns:
+            TrainingStatus: Current training status message
+        """
         current_training_status = TrainingStatus()
         current_training_status.training_info = self.training_info
+
         if self.trainer:
             current_training_status.current_step = self.trainer.get_current_step()
             current_training_status.current_loss = self.trainer.get_current_loss()
         else:
             current_training_status.current_step = 0
             current_training_status.current_loss = float('nan')
+
         return current_training_status
 
     def train(self):
+        """
+        Execute the training pipeline.
+        Sets up configuration, initializes trainer, and starts training process.
+        """
         self._get_training_config()
         self._get_trainer()
         self.trainer.train(self.cfg, stop_event=self.stop_event)

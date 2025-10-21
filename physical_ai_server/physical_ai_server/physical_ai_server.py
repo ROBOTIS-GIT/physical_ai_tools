@@ -486,118 +486,165 @@ class PhysicalAIServer(Node):
             return
 
     def user_training_interaction_callback(self, request, response):
+        """
+        Handle training command requests (START/FINISH).
+        
+        Supports both new training and resume functionality with proper validation.
+        """
         try:
             if request.command == SendTrainingCommand.Request.START:
+                # Initialize training components
                 self.training_manager = TrainingManager()
                 self.training_timer = TimerManager(node=self)
-                self.training_timer.set_timer(
-                    timer_name='training_status',
-                    timer_frequency=self.TRAINING_STATUS_TIMER_FREQUENCY,
-                    callback_function=lambda: self.training_status_publisher.publish(
-                        self.get_training_status()
-                    )
-                )
-                self.training_timer.start(timer_name='training_status')
+                self._setup_training_status_timer()
 
+                # Validate training state
                 if self.training_thread and self.training_thread.is_alive():
                     response.success = False
                     response.message = 'Training is already in progress'
                     return response
 
-                # Handle resume functionality
+                # Extract resume parameters
                 resume = getattr(request, 'resume', False)
-                resume_model_path = getattr(request, 'resume_model_path', '')
+                resume_model_path = getattr(request, 'resume_model_path', '').strip()
 
+                # Log training request details
                 output_folder_name = request.training_info.output_folder_name
                 weight_save_root_path = TrainingManager.get_weight_save_root_path()
                 self.get_logger().info(
-                    f'Weight save root path: {weight_save_root_path}, '
-                    f'Output folder name: {output_folder_name}, '
-                    f'Resume: {resume}, Resume model path: {resume_model_path}'
+                    f'Training request - Output: {output_folder_name}, '
+                    f'Resume: {resume}, Model path: {resume_model_path}'
                 )
 
-                # Check if output folder exists only for new training (not resume)
-                if not resume:
-                    output_path = weight_save_root_path / output_folder_name
-                    if output_path.exists():
-                        response.success = False
-                        response.message = f'Output folder already exists: {output_path}'
-                        self.is_training = False
-                        training_status = self.get_training_status()
-                        self.training_status_publisher.publish(training_status)
+                # Validate training configuration
+                validation_result = self._validate_training_request(
+                    resume, resume_model_path, output_folder_name, weight_save_root_path
+                )
+                if not validation_result['success']:
+                    response.success = False
+                    response.message = validation_result['message']
+                    self._cleanup_training_on_error()
+                    return response
 
-                        self.training_manager.stop_event.set()
-                        self.training_timer.stop('training_status')
-                        return response
-
-                # Validate resume configuration
-                if resume:
-                    if not resume_model_path:
-                        response.success = False
-                        response.message = 'Resume model path is required when resume=True'
-                        self.is_training = False
-                        training_status = self.get_training_status()
-                        self.training_status_publisher.publish(training_status)
-                        self.training_manager.stop_event.set()
-                        self.training_timer.stop('training_status')
-                        return response
-
-                    # Check if resume config file exists
-                    full_config_path = weight_save_root_path / resume_model_path
-                    if not full_config_path.exists():
-                        response.success = False
-                        response.message = f'Resume config file not found: {full_config_path}'
-                        self.is_training = False
-                        training_status = self.get_training_status()
-                        self.training_status_publisher.publish(training_status)
-                        self.training_manager.stop_event.set()
-                        self.training_timer.stop('training_status')
-                        return response
-
-                # Set training configuration
-                self.training_manager.training_info = request.training_info
-                self.training_manager.resume = resume
-                self.training_manager.resume_model_path = resume_model_path
-
-                def run_training():
-                    try:
-                        self.training_manager.train()
-                    finally:
-                        self.is_training = False
-                        self.get_logger().info('Training completed.')
-                        training_status = self.get_training_status()
-                        self.training_status_publisher.publish(training_status)
-                        self.training_manager.stop_event.set()
-                        self.training_timer.stop('training_status')
-
-                self.training_thread = threading.Thread(target=run_training, daemon=True)
-                self.training_thread.start()
-                self.is_training = True
+                # Configure and start training
+                self._configure_training_manager(request, resume, resume_model_path)
+                self._start_training_thread()
 
                 response.success = True
                 response.message = 'Training started successfully'
 
             else:
+                # Handle FINISH command
                 if request.command == SendTrainingCommand.Request.FINISH:
-                    self.is_training = False
-                    training_status = self.get_training_status()
-                    self.training_status_publisher.publish(training_status)
-                    self.training_timer.stop('training_status')
-                    if self.training_thread and self.training_thread.is_alive():
-                        self.training_manager.stop_event.set()
-                        self.training_thread.join()
-                        response.success = True
-                        response.message = 'Training stopped successfully'
-                    else:
-                        response.success = False
-                        response.message = 'No training in progress to stop'
+                    self._stop_training()
+                    response.success = True
+                    response.message = 'Training stopped successfully'
+                else:
+                    response.success = False
+                    response.message = f'Unknown command: {request.command}'
 
         except Exception as e:
-            self.get_logger().error(f'Error in user_training_interaction: {str(e)}')
+            self.get_logger().error(f'Error in training callback: {str(e)}')
             response.success = False
-            response.message = f'Error in user_training_interaction: {str(e)}'
-            return response
+            response.message = f'Training error: {str(e)}'
+            self._cleanup_training_on_error()
+
         return response
+
+    def _setup_training_status_timer(self):
+        """Setup timer for publishing training status updates."""
+        self.training_timer.set_timer(
+            timer_name='training_status',
+            timer_frequency=self.TRAINING_STATUS_TIMER_FREQUENCY,
+            callback_function=lambda: self.training_status_publisher.publish(
+                self.get_training_status()
+            )
+        )
+        self.training_timer.start(timer_name='training_status')
+
+    def _validate_training_request(self, resume, resume_model_path, output_folder_name, weight_save_root_path):
+        """
+        Validate training request parameters.
+        
+        Returns:
+            dict: {'success': bool, 'message': str}
+        """
+        # Check output folder conflicts for new training
+        if not resume:
+            output_path = weight_save_root_path / output_folder_name
+            if output_path.exists():
+                return {
+                    'success': False,
+                    'message': f'Output folder already exists: {output_path}'
+                }
+
+        # Validate resume configuration
+        if resume:
+            if not resume_model_path:
+                return {
+                    'success': False,
+                    'message': 'Resume model path is required when resume=True'
+                }
+
+            # Check if resume config file exists
+            full_config_path = weight_save_root_path / resume_model_path
+            if not full_config_path.exists():
+                return {
+                    'success': False,
+                    'message': f'Resume config file not found: {full_config_path}'
+                }
+
+        return {'success': True, 'message': 'Validation passed'}
+
+    def _configure_training_manager(self, request, resume, resume_model_path):
+        """Configure training manager with request parameters."""
+        self.training_manager.training_info = request.training_info
+        self.training_manager.resume = resume
+        self.training_manager.resume_model_path = resume_model_path
+
+    def _start_training_thread(self):
+        """Start training in a separate thread."""
+        def run_training():
+            try:
+                self.training_manager.train()
+            except Exception as e:
+                self.get_logger().error(f'Training error: {str(e)}')
+            finally:
+                self._cleanup_training_on_completion()
+
+        self.training_thread = threading.Thread(target=run_training, daemon=True)
+        self.training_thread.start()
+        self.is_training = True
+
+    def _stop_training(self):
+        """Stop training gracefully."""
+        self.is_training = False
+        if self.training_manager:
+            self.training_manager.stop_event.set()
+        if self.training_thread and self.training_thread.is_alive():
+            self.training_thread.join(timeout=5.0)  # 5 second timeout
+        self._cleanup_training_on_completion()
+
+    def _cleanup_training_on_completion(self):
+        """Cleanup training resources on normal completion."""
+        self.is_training = False
+        self.get_logger().info('Training completed.')
+        training_status = self.get_training_status()
+        self.training_status_publisher.publish(training_status)
+        if self.training_manager:
+            self.training_manager.stop_event.set()
+        if hasattr(self, 'training_timer'):
+            self.training_timer.stop('training_status')
+
+    def _cleanup_training_on_error(self):
+        """Cleanup training resources on error."""
+        self.is_training = False
+        training_status = self.get_training_status()
+        self.training_status_publisher.publish(training_status)
+        if self.training_manager:
+            self.training_manager.stop_event.set()
+        if hasattr(self, 'training_timer'):
+            self.training_timer.stop('training_status')
 
     def user_interaction_callback(self, request, response):
         try:
@@ -818,35 +865,55 @@ class PhysicalAIServer(Node):
         return response
 
     def get_training_info_callback(self, request, response):
+        """
+        Retrieve training configuration from a saved model.
+        Loads configuration from train_config.json and populates TrainingInfo message.
+        """
         try:
+            # Validate request
             if not request.model_path:
                 response.success = False
                 response.message = 'model_path is required'
                 return response
 
+            # Clean up path (remove leading/trailing whitespace)
+            model_path = request.model_path.strip()
             weight_save_root_path = TrainingManager.get_weight_save_root_path()
-            config_path = weight_save_root_path / request.model_path
+            config_path = weight_save_root_path / model_path
 
+            # Check if config file exists
             if not config_path.exists():
                 response.success = False
-                response.message = f'Model path does not exist: {config_path}'
+                response.message = f'Model config file not found: {config_path}'
                 return response
 
+            # Load and parse configuration
             try:
                 with open(config_path, 'r', encoding='utf-8') as f:
                     config_data = json.load(f)
 
-                self.get_logger().info(f'Loaded config from: {config_path}')
+                self.get_logger().info(f'Successfully loaded config from: {config_path}')
 
+                # Populate TrainingInfo message from config
                 training_info = response.training_info
 
-                training_info.dataset = config_data.get('dataset', {}).get('repo_id', '')
-                training_info.policy_type = config_data.get('policy', {}).get('type', '')
-                training_info.policy_device = config_data.get('policy', {}).get('device', 'cuda')
+                # Dataset configuration
+                dataset_config = config_data.get('dataset', {})
+                training_info.dataset = dataset_config.get('repo_id', '')
 
+                # Policy configuration
+                policy_config = config_data.get('policy', {})
+                training_info.policy_type = policy_config.get('type', '')
+                training_info.policy_device = policy_config.get('device', 'cuda')
+
+                # Output directory (extract folder name)
                 output_dir = config_data.get('output_dir', '')
-                training_info.output_folder_name = Path(output_dir).name
+                if output_dir:
+                    training_info.output_folder_name = Path(output_dir).name
+                else:
+                    training_info.output_folder_name = ''
 
+                # Training parameters with defaults
                 training_info.seed = config_data.get('seed', 1000)
                 training_info.num_workers = config_data.get('num_workers', 4)
                 training_info.batch_size = config_data.get('batch_size', 8)
@@ -856,21 +923,21 @@ class PhysicalAIServer(Node):
                 training_info.save_freq = config_data.get('save_freq', 1000)
 
                 response.success = True
-                response.message = f'Training info loaded successfully from {config_path}'
+                response.message = f'Training configuration loaded successfully from {model_path}'
 
             except json.JSONDecodeError as e:
                 response.success = False
-                response.message = f'Failed to parse config.json: {str(e)}'
+                response.message = f'Invalid JSON in config file: {str(e)}'
                 return response
-            except Exception as e:
+            except KeyError as e:
                 response.success = False
-                response.message = f'Error reading config file: {str(e)}'
+                response.message = f'Missing required field in config: {str(e)}'
                 return response
 
         except Exception as e:
             self.get_logger().error(f'Error in get_training_info_callback: {str(e)}')
             response.success = False
-            response.message = f'Error retrieving training info: {str(e)}'
+            response.message = f'Failed to retrieve training info: {str(e)}'
 
         return response
 
