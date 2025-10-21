@@ -2,6 +2,13 @@
 Changelog for package physical_ai_tools
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
+0.6.12 (2025-10-21)
+------------------
+* Enhanced SendTrainingCommand.srv with resume functionality.
+* Added GetTrainingInfo.srv for retrieving training configuration from saved model checkpoints.
+* Added training resume functionality.
+* Contributors: Seongwoo Kim, Kiwoong Park
+
 0.6.11 (2025-09-30)
 ------------------
 * Added Hugging Face upload & download functionality.

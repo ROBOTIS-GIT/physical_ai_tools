@@ -2,6 +2,11 @@
 Changelog for package physical_ai_server
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
+0.6.12 (2025-10-21)
+------------------
+* Added training resume functionality.
+* Contributors: Seongwoo Kim
+
 0.6.11 (2025-09-30)
 ------------------
 * Added Hugging Face upload & download functionality.
