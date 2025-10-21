@@ -549,16 +549,16 @@ export function useRosServiceCaller() {
   );
 
   const getTrainingInfo = useCallback(
-    async (modelPath) => {
+    async (trainConfigPath) => {
       try {
         console.log('Calling service /training/get_training_info with request:', {
-          model_path: modelPath,
+          train_config_path: trainConfigPath,
         });
 
         const result = await callService(
           '/training/get_training_info',
           'physical_ai_interfaces/srv/GetTrainingInfo',
-          { model_path: modelPath }
+          { train_config_path: trainConfigPath }
         );
         console.log('getTrainingInfo service response:', result);
         return result;

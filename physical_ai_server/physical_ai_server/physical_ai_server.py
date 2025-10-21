@@ -885,15 +885,15 @@ class PhysicalAIServer(Node):
         """
         try:
             # Validate request
-            if not request.model_path:
+            if not request.train_config_path:
                 response.success = False
-                response.message = 'model_path is required'
+                response.message = 'train_config_path is required'
                 return response
 
             # Clean up path (remove leading/trailing whitespace)
-            model_path = request.model_path.strip()
+            train_config_path = request.train_config_path.strip()
             weight_save_root_path = TrainingManager.get_weight_save_root_path()
-            config_path = weight_save_root_path / model_path
+            config_path = weight_save_root_path / train_config_path
 
             # Check if config file exists
             if not config_path.exists():
@@ -937,7 +937,8 @@ class PhysicalAIServer(Node):
                 training_info.save_freq = config_data.get('save_freq', 1000)
 
                 response.success = True
-                response.message = f'Training configuration loaded successfully from {model_path}'
+                response.message = \
+                    f'Training configuration loaded successfully from {train_config_path}'
 
             except json.JSONDecodeError as e:
                 response.success = False
