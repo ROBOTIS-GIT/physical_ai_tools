@@ -29,6 +29,7 @@ const initialState = {
   selectedModelWeight: undefined,
   resumePolicyPath: undefined,
   hasTrainConfig: null,
+  isTrainingInfoLoaded: false, // Track if Load button was pressed
   trainingMode: 'new', // 'new' or 'resume'
   isTraining: false,
   topicReceived: false,
@@ -105,6 +106,11 @@ const trainingSlice = createSlice({
     },
     setResumePolicyPath: (state, action) => {
       state.resumePolicyPath = action.payload;
+      // When policy path changes, mark training info as not loaded
+      state.isTrainingInfoLoaded = false;
+    },
+    setIsTrainingInfoLoaded: (state, action) => {
+      state.isTrainingInfoLoaded = action.payload;
     },
     setHasTrainConfig: (state, action) => {
       state.hasTrainConfig = action.payload;
@@ -189,6 +195,7 @@ export const {
   setSelectedModelWeight,
   setResumePolicyPath,
   setHasTrainConfig,
+  setIsTrainingInfoLoaded,
   setTrainingMode,
   setIsTraining,
   setSeed,

@@ -32,6 +32,7 @@ export default function TrainingControlPanel() {
   const outputFolderName = useSelector((state) => state.training.trainingInfo.outputFolderName);
   const resumePolicyPath = useSelector((state) => state.training.resumePolicyPath);
   const hasTrainConfig = useSelector((state) => state.training.hasTrainConfig);
+  const isTrainingInfoLoaded = useSelector((state) => state.training.isTrainingInfoLoaded);
   const lastUpdate = useSelector((state) => state.training.lastUpdate);
 
   const { sendTrainingCommand } = useRosServiceCaller();
@@ -194,6 +195,12 @@ export default function TrainingControlPanel() {
       }
       if (hasTrainConfig === null) {
         toast.error('Please wait for path validation to complete');
+        return false;
+      }
+      if (!isTrainingInfoLoaded) {
+        toast.error('Please press the Load button to load training info first', {
+          duration: 4000,
+        });
         return false;
       }
       return true;

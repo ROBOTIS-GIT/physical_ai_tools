@@ -25,6 +25,7 @@ import {
   setSelectedUser,
   setSelectedDataset,
   setHasTrainConfig as setHasTrainConfigRedux,
+  setIsTrainingInfoLoaded,
 } from '../features/training/trainingSlice';
 import FileBrowserModal from './FileBrowserModal';
 import { DEFAULT_PATHS, TARGET_FILES } from '../constants/paths';
@@ -33,6 +34,7 @@ import { useRosServiceCaller } from '../hooks/useRosServiceCaller';
 export default function ResumePolicySelector() {
   const dispatch = useDispatch();
   const resumePolicyPath = useSelector((state) => state.training.resumePolicyPath);
+  const isTrainingInfoLoaded = useSelector((state) => state.training.isTrainingInfoLoaded);
   const [showBrowserModal, setShowBrowserModal] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
   const [isValidatingConfig, setIsValidatingConfig] = useState(false);
@@ -301,15 +303,19 @@ export default function ResumePolicySelector() {
           console.log('selectedDataset:', selectedDataset);
           dispatch(setSelectedUser(selectedUser));
           dispatch(setSelectedDataset(selectedDataset));
+          dispatch(setIsTrainingInfoLoaded(true));
           toast.success('Training info loaded successfully');
         } else {
+          dispatch(setIsTrainingInfoLoaded(false));
           toast.error('Failed to get training info: ' + result.message);
         }
       } else {
+        dispatch(setIsTrainingInfoLoaded(false));
         toast.error('Failed to get training info: Invalid response');
       }
     } catch (error) {
       console.error('Error fetching training info:', error);
+      dispatch(setIsTrainingInfoLoaded(false));
       toast.error('Failed to get training info');
     }
   };
@@ -425,14 +431,23 @@ export default function ResumePolicySelector() {
                 <MdEdit size={18} />
                 <span>Edit</span>
               </button>
-              <button
-                onClick={handleLoadTrainingInfo}
-                className={`${classLoadButton} ml-auto`}
-                title="Load training info"
-              >
-                <MdDownload size={18} />
-                <span>Load</span>
-              </button>
+              <div className="flex items-center gap-2 ml-auto">
+                <button
+                  onClick={handleLoadTrainingInfo}
+                  className={classLoadButton}
+                  title="Load training info"
+                >
+                  <MdDownload size={18} />
+                  <span>Load</span>
+                </button>
+                {isTrainingInfoLoaded && (
+                  <MdCheck
+                    className="text-green-600 flex-shrink-0"
+                    size={20}
+                    title="Training info loaded successfully"
+                  />
+                )}
+              </div>
             </div>
           </>
         )}
