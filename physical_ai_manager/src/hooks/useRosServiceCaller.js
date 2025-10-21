@@ -384,15 +384,12 @@ export function useRosServiceCaller() {
         };
 
         console.log('Calling service /training/send_training_command with request:', request);
-        console.log('trainingResumePolicyPath:', trainingResumePolicyPath);
 
         const result = await callService(
           '/training/command',
           'physical_ai_interfaces/srv/SendTrainingCommand',
           request
         );
-
-        console.log('trainingResumePolicyPath:', getRelativePath(trainingResumePolicyPath));
 
         console.log('sendTrainingCommand service response:', result);
         return result;
