@@ -25,7 +25,11 @@ import time
 from typing import Optional
 
 from ament_index_python.packages import get_package_share_directory
-from physical_ai_interfaces.msg import HFOperationStatus, TaskStatus, TrainingStatus
+from physical_ai_interfaces.msg import (
+    HFOperationStatus,
+    TaskStatus,
+    TrainingStatus,
+)
 from physical_ai_interfaces.srv import (
     ControlHfServer,
     GetDatasetList,
@@ -283,44 +287,31 @@ class PhysicalAIServer(Node):
 
     def set_hf_user_callback(self, request, response):
         request_hf_token = request.token
-        try:
-            if DataManager.register_huggingface_token(request_hf_token):
-                self.get_logger().info('Hugging Face user token registered successfully')
-                response.user_id_list = DataManager.get_huggingface_user_id()
-                response.success = True
-                response.message = 'Hugging Face user token registered successfully'
-            else:
-                self.get_logger().error('Failed to register Hugging Face user token')
-                response.user_id_list = []
-                response.success = False
-                response.message = 'Failed to register token, Please check your token'
-            return response
-        except Exception as e:
-            self.get_logger().error(f'Error in set_hf_user_callback: {str(e)}')
+        if DataManager.register_huggingface_token(request_hf_token):
+            self.get_logger().info('Hugging Face user token registered successfully')
+            response.user_id_list = DataManager.get_huggingface_user_id()
+            response.success = True
+            response.message = 'Hugging Face user token registered successfully'
+        else:
+            self.get_logger().error('Failed to register Hugging Face user token')
             response.user_id_list = []
             response.success = False
-            response.message = f'Error in set_hf_user_callback: {str(e)}'
-            return response
+            response.message = 'Failed to register token, Please check your token'
+        return response
 
     def get_hf_user_callback(self, request, response):
-        try:
-            user_ids = DataManager.get_huggingface_user_id()
-            if user_ids is not None:
-                response.user_id_list = user_ids
-                self.get_logger().info(f'Hugging Face user IDs: {user_ids}')
-                response.success = True
-                response.message = 'Hugging Face user IDs retrieved successfully'
-            else:
-                self.get_logger().error('Failed to retrieve Hugging Face user ID')
-                response.user_id_list = []
-                response.success = False
-                response.message = 'Failed to retrieve Hugging Face user ID'
-        except Exception as e:
-            self.get_logger().error(f'Error in get_hf_user_callback: {str(e)}')
+        user_ids = DataManager.get_huggingface_user_id()
+        if user_ids is not None:
+            response.user_id_list = user_ids
+            self.get_logger().info(f'Hugging Face user IDs: {user_ids}')
+            response.success = True
+            response.message = 'Hugging Face user IDs retrieved successfully'
+
+        else:
+            self.get_logger().error('Failed to retrieve Hugging Face user ID')
             response.user_id_list = []
             response.success = False
-            response.message = f'Failed to retrieve Hugging Face user ID: {str(e)}'
-            return response
+            response.message = 'Failed to retrieve Hugging Face user ID'
 
         return response
 
@@ -501,11 +492,10 @@ class PhysicalAIServer(Node):
     def user_training_interaction_callback(self, request, response):
         """
         Handle training command requests (START/FINISH).
-        
+
         Supports both new training and resume functionality with proper validation.
         """
         try:
-            self.get_logger().info(f'user_training_interaction_callback request: {request}')
             if request.command == SendTrainingCommand.Request.START:
                 # Initialize training components
                 self.training_manager = TrainingManager()
@@ -566,7 +556,7 @@ class PhysicalAIServer(Node):
         return response
 
     def _setup_training_status_timer(self):
-        """Setup timer for publishing training status updates."""
+        """Set up timer for publishing training status updates."""
         self.training_timer.set_timer(
             timer_name='training_status',
             timer_frequency=self.TRAINING_STATUS_TIMER_FREQUENCY,
@@ -576,12 +566,21 @@ class PhysicalAIServer(Node):
         )
         self.training_timer.start(timer_name='training_status')
 
-    def _validate_training_request(self, resume, resume_model_path, output_folder_name, weight_save_root_path):
+    def _validate_training_request(
+            self,
+            resume,
+            resume_model_path,
+            output_folder_name,
+            weight_save_root_path
+    ):
         """
         Validate training request parameters.
-        
-        Returns:
-            dict: {'success': bool, 'message': str}
+
+        Returns
+        -------
+        dict
+            {'success': bool, 'message': str}
+
         """
         # Check output folder conflicts for new training
         if not resume:
@@ -881,6 +880,7 @@ class PhysicalAIServer(Node):
     def get_training_info_callback(self, request, response):
         """
         Retrieve training configuration from a saved model.
+
         Loads configuration from train_config.json and populates TrainingInfo message.
         """
         try:

@@ -16,9 +16,9 @@
 #
 # Author: Seongwoo Kim, Woojin Wie
 
+import json
 from pathlib import Path
 import threading
-import json
 
 import draccus
 import lerobot
@@ -68,11 +68,19 @@ class TrainingManager:
     def _update_config_with_training_info(self, config_path):
         """
         Update saved train_config.json with current training_info values.
+
         Only updates non-zero/non-empty values to preserve existing configuration.
-        Args:
-            config_path (Path): Path to the train_config.json file
-        Returns:
-            bool: True if update successful, False otherwise
+
+        Parameters
+        ----------
+        config_path : Path
+            Path to the train_config.json file
+
+        Returns
+        -------
+        bool
+            True if update successful, False otherwise
+
         """
         try:
             # Read existing configuration
@@ -101,12 +109,13 @@ class TrainingManager:
 
             return True
         except Exception as e:
-            print(f"Error updating config file: {e}")
+            print(f'Error updating config file: {e}')
             return False
 
     def _get_training_config(self):
         """
         Configure training pipeline based on resume mode or new training setup.
+
         For resume mode: Loads existing config and applies user overrides
         For new training: Creates config from scratch with user parameters
         """
@@ -117,7 +126,7 @@ class TrainingManager:
 
             # Update existing config with current training_info values
             if not self._update_config_with_training_info(full_config_path):
-                raise RuntimeError(f"Failed to update config file: {full_config_path}")
+                raise RuntimeError(f'Failed to update config file: {full_config_path}')
 
             # Create minimal args for resume (config file will override most settings)
             args = [
@@ -155,23 +164,31 @@ class TrainingManager:
     def _get_trainer(self):
         """
         Initialize appropriate trainer based on policy type.
-        Raises:
-            ValueError: If policy type is not supported
+
+        Raises
+        ------
+        ValueError
+            If policy type is not supported
+
         """
         policy_type = self.training_info.policy_type.lower()
         trainer_class = self.TRAINER_MAPPING.get(policy_type)
         if not trainer_class:
-            raise ValueError(f"Unsupported policy type: '{policy_type}'. "
-                           f"Supported types: {list(self.TRAINER_MAPPING.keys())}")
+            raise ValueError(
+                f'Supported types: {list(self.TRAINER_MAPPING.keys())}'
+            )
         self.trainer = trainer_class()
 
     @staticmethod
     def get_available_list() -> tuple[list[str], list[str]]:
         """
         Get lists of available policy types and devices.
-        
-        Returns:
-            tuple: (policy_list, device_list)
+
+        Returns
+        -------
+        tuple
+            (policy_list, device_list)
+
         """
         policy_list = [
             'tdmpc',
@@ -193,8 +210,12 @@ class TrainingManager:
     def get_weight_save_root_path():
         """
         Get the root path for saving training weights and checkpoints.
-        Returns:
-            Path: Absolute path to the training outputs directory
+
+        Returns
+        -------
+        Path
+            Absolute path to the training outputs directory
+
         """
         # Extract the base lerobot directory from lerobot.__file__
         lerobot_file_path = Path(lerobot.__file__).resolve()
@@ -213,8 +234,12 @@ class TrainingManager:
     def get_current_training_status(self):
         """
         Get current training status including step and loss information.
-        Returns:
-            TrainingStatus: Current training status message
+
+        Returns
+        -------
+        TrainingStatus
+            Current training status message
+
         """
         current_training_status = TrainingStatus()
         current_training_status.training_info = self.training_info
@@ -231,6 +256,7 @@ class TrainingManager:
     def train(self):
         """
         Execute the training pipeline.
+
         Sets up configuration, initializes trainer, and starts training process.
         """
         self._get_training_config()

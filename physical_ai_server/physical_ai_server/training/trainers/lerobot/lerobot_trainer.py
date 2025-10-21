@@ -57,6 +57,7 @@ from torch.optim import Optimizer
 class LerobotTrainer(Trainer):
     """
     LeRobot-based trainer implementation for imitation learning policies.
+
     Supports various policy types (ACT, Diffusion, VQ-BeT, etc.) with resume functionality.
     """
 
@@ -70,9 +71,14 @@ class LerobotTrainer(Trainer):
     def train(self, cfg: TrainPipelineConfig, stop_event=None):
         """
         Execute training pipeline with support for resume functionality.
-        Args:
-            cfg: Training pipeline configuration
-            stop_event: Threading event to stop training gracefully
+
+        Parameters
+        ----------
+        cfg : TrainPipelineConfig
+            Training pipeline configuration
+        stop_event : threading.Event, optional
+            Threading event to stop training gracefully
+
         """
         # Setup working directory for LeRobot relative paths
         self._setup_working_directory()
@@ -84,7 +90,7 @@ class LerobotTrainer(Trainer):
         self._validate_config(cfg)
 
         # Log training configuration
-        self.logger.info("Training Configuration:")
+        self.logger.info('Training Configuration:')
         self.logger.info(pformat(cfg.to_dict()))
 
         # Initialize training components
@@ -93,7 +99,11 @@ class LerobotTrainer(Trainer):
         dataset = self._create_dataset(cfg)
         eval_env = self._create_evaluation_environment(cfg)
         policy = self._create_policy(cfg, dataset)
-        optimizer, lr_scheduler, grad_scaler = self._create_optimization_components(cfg, policy, device)
+        optimizer, lr_scheduler, grad_scaler = self._create_optimization_components(
+            cfg,
+            policy,
+            device
+        )
 
         # Handle training state resume
         step = self._load_training_state_if_resume(cfg, optimizer, lr_scheduler)
@@ -102,8 +112,19 @@ class LerobotTrainer(Trainer):
         self._log_training_info(cfg, dataset, policy, step)
 
         # Execute training loop
-        self._run_training_loop(cfg, dataset, policy, optimizer, lr_scheduler, grad_scaler, 
-                               device, wandb_logger, eval_env, step, stop_event)
+        self._run_training_loop(
+            cfg,
+            dataset,
+            policy,
+            optimizer,
+            lr_scheduler,
+            grad_scaler,
+            device,
+            wandb_logger,
+            eval_env,
+            step,
+            stop_event
+        )
 
         # Cleanup
         if eval_env:
@@ -111,7 +132,7 @@ class LerobotTrainer(Trainer):
         self.logger.info('Training completed successfully')
 
     def _setup_working_directory(self):
-        """Setup working directory for LeRobot relative path resolution."""
+        """Set up working directory for LeRobot relative path resolution."""
         import os
         lerobot_dir = '/root/ros2_ws/src/physical_ai_tools/lerobot'
         if os.path.exists(lerobot_dir):
@@ -141,16 +162,16 @@ class LerobotTrainer(Trainer):
                 policy_path = config_path.parent
                 cfg.policy.pretrained_path = policy_path
                 cfg.checkpoint_path = policy_path.parent
-                self.logger.info("Resume mode: Skipping validation, using existing configuration")
+                self.logger.info('Resume mode: Skipping validation, using existing configuration')
             else:
-                self.logger.error(f"Resume config file not found: {config_path}")
+                self.logger.error(f'Resume config file not found: {config_path}')
                 cfg.validate()
         else:
             # New training mode: Use standard validation
             cfg.validate()
 
     def _setup_logging(self, cfg):
-        """Setup logging configuration (WandB or local)."""
+        """Set up logging configuration (WandB or local)."""
         if cfg.wandb.enable and cfg.wandb.project:
             wandb_logger = WandBLogger(cfg)
         else:
@@ -159,7 +180,7 @@ class LerobotTrainer(Trainer):
         return wandb_logger
 
     def _setup_device_and_optimization(self, cfg):
-        """Setup compute device and optimization settings."""
+        """Set up compute device and optimization settings."""
         if cfg.seed is not None:
             set_seed(cfg.seed)
 
@@ -220,19 +241,38 @@ class LerobotTrainer(Trainer):
         self.logger.info(colored('Output dir:', 'yellow', attrs=['bold']) + f' {cfg.output_dir}')
         if cfg.env is not None:
             self.logger.info(f'{cfg.env.task=}')
-        self.logger.info(f'Training steps: {cfg.steps} ({format_big_number(cfg.steps)})')
-        self.logger.info(f'Dataset frames: {dataset.num_frames} ({format_big_number(dataset.num_frames)})')
+        self.logger.info(
+            f'Training steps: {cfg.steps} ({format_big_number(cfg.steps)})'
+        )
+        self.logger.info(
+            f'Dataset frames: {dataset.num_frames} ({format_big_number(dataset.num_frames)})'
+        )
         self.logger.info(f'Dataset episodes: {dataset.num_episodes}')
-        self.logger.info(f'Learnable parameters: {num_learnable_params} ({format_big_number(num_learnable_params)})')
-        self.logger.info(f'Total parameters: {num_total_params} ({format_big_number(num_total_params)})')
+        self.logger.info(
+            f'Learnable parameters: {num_learnable_params} '
+            f'({format_big_number(num_learnable_params)})'
+        )
+        self.logger.info(
+            f'Total parameters: {num_total_params} '
+            f'({format_big_number(num_total_params)})'
+        )
         if step > 0:
             self.logger.info(f'Starting from step: {step} (resumed)')
 
-    def _run_training_loop(self, cfg, dataset, policy, optimizer, lr_scheduler, grad_scaler,
-                          device, wandb_logger, eval_env, step, stop_event):
-        """Execute the main training loop."""
-    def _run_training_loop(self, cfg, dataset, policy, optimizer, lr_scheduler, grad_scaler,
-                          device, wandb_logger, eval_env, step, stop_event):
+    def _run_training_loop(
+        self,
+        cfg,
+        dataset,
+        policy,
+        optimizer,
+        lr_scheduler,
+        grad_scaler,
+        device,
+        wandb_logger,
+        eval_env,
+        step,
+        stop_event,
+    ):
         """Execute the main training loop."""
         # Create dataloader for offline training
         if hasattr(cfg.policy, 'drop_n_last_frames'):
@@ -385,19 +425,32 @@ class LerobotTrainer(Trainer):
         """
         Update policy with a single training step.
 
-        Args:
-            train_metrics: Training metrics tracker
-            policy: Policy model to update
-            batch: Training batch
-            optimizer: Optimizer for parameter updates
-            grad_clip_norm: Gradient clipping norm
-            grad_scaler: Gradient scaler for mixed precision
-            lr_scheduler: Learning rate scheduler (optional)
-            use_amp: Whether to use automatic mixed precision
-            lock: Threading lock (optional)
+        Parameters
+        ----------
+        train_metrics : MetricsTracker
+            Training metrics tracker
+        policy : PreTrainedPolicy
+            Policy model to update
+        batch : Any
+            Training batch
+        optimizer : Optimizer
+            Optimizer for parameter updates
+        grad_clip_norm : float
+            Gradient clipping norm
+        grad_scaler : GradScaler
+            Gradient scaler for mixed precision
+        lr_scheduler : optional
+            Learning rate scheduler (optional)
+        use_amp : bool, default=False
+            Whether to use automatic mixed precision
+        lock : optional
+            Threading lock (optional)
 
-        Returns:
-            tuple: Updated metrics tracker and output dictionary
+        Returns
+        -------
+        tuple
+            Updated metrics tracker and output dictionary
+
         """
         start_time = time.perf_counter()
         device = get_device_from_parameters(policy)
