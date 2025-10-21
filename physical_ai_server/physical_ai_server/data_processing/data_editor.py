@@ -494,6 +494,7 @@ class DataEditor:
     ) -> BatchDeleteResult:
         """
         Delete multiple episodes in a single batch operation.
+
         Much faster than deleting one by one.
         """
         if verbose is not None:
@@ -832,8 +833,9 @@ class DataEditor:
         verbose: bool | None = None
     ) -> DeleteResult:
         """
-        Delete a single episode. For deleting multiple episodes,
-        use delete_episodes_batch for better performance.
+        Delete a single episode.
+
+        For deleting multiple episodes, use delete_episodes_batch for better performance.
         """
         if verbose is not None:
             self.verbose = verbose
