@@ -635,7 +635,7 @@ class PhysicalAIServer(Node):
         if self.training_manager:
             self.training_manager.stop_event.set()
         if self.training_thread and self.training_thread.is_alive():
-            self.training_thread.join(timeout=5.0)  # 5 second timeout
+            self.training_thread.join(timeout=self.DEFAULT_TOPIC_TIMEOUT)
         self._cleanup_training_on_completion()
 
     def _cleanup_training_on_completion(self):
