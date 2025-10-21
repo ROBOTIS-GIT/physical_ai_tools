@@ -7,6 +7,7 @@ Changelog for package physical_ai_tools
 * Enhanced SendTrainingCommand.srv with resume functionality.
 * Added GetTrainingInfo.srv for retrieving training configuration from saved model checkpoints.
 * Added training resume functionality.
+* Improved performance of dataset episode deletion by implementing batch deletion.
 * Contributors: Seongwoo Kim, Kiwoong Park
 
 0.6.11 (2025-09-30)
