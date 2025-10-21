@@ -103,6 +103,15 @@ class ZmqInferenceClient:
         else:
             raise RuntimeError(f"Failed to start inference: {response.get('message')}")
 
+    def stop_inference(self):
+        """Stop all inference tasks, clean up thread pool, and unload policy"""
+        response = self.execute_command('stop_inference')
+        if response.get('status') == 'ok':
+            self.current_task_id = None
+            return response
+        else:
+            raise RuntimeError(f"Failed to stop inference: {response.get('message')}")
+
     def check_inference_ready(self, task_id: str = None) -> bool:
         """Check if inference is ready (lightweight check)"""
         if task_id is None:

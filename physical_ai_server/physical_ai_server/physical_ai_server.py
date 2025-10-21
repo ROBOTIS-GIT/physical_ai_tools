@@ -100,6 +100,7 @@ class PhysicalAIServer(Node):
         self.goal_repo_id = None
         
         self.zmq_client: Optional[ZmqInferenceClient] = None
+        self.inference_info = {}
         self.remain_action = []
         self.wait_inference = False
         self.inference_check_time = time.time()
@@ -567,6 +568,14 @@ class PhysicalAIServer(Node):
             self.timer_manager.stop(timer_name=self.operation_mode)
             return
     
+    def _reset_inference_state(self):
+        """Reset all inference-related state variables"""
+        self.remain_action = []
+        self.wait_inference = False
+        self._used_action_count = 0
+        self._last_executed_action = []
+        self.get_logger().info('Inference state variables reset')
+    
     def find_best_chunk_start_index(
         self,
         new_action_chunk: np.ndarray, 
@@ -607,16 +616,25 @@ class PhysicalAIServer(Node):
             current_status.error = error_msg
             self.communicator.publish_status(status=current_status)
             if self.zmq_client is not None:
-                self.zmq_client.kill_server()
+                self.zmq_client.stop_inference()
                 self.zmq_client = None
             self.timer_manager.stop(timer_name=self.operation_mode)
             return
+        
+        self.inference_info = {
+            'server_ip': '0.0.0.0',
+            'server_port': 5555,
+            'timeout_ms': 500000,
+            'policy_type': 'GR00T_N1_5_TRT',
+            'policy_path': '/workspace/checkpoints/ROBOTIS/ffw_bg2_rev4_pick_coffee_bottle_env5_1_to_31_joint_fix_20k',
+            'robot_type': 'ffw_bg2'
+        }
 
         if self.zmq_client is None:
             self.zmq_client = ZmqInferenceClient(
-                host='192.168.6.129',
-                port=5555,
-                timeout_ms=50000
+                host=self.inference_info['server_ip'],
+                port=self.inference_info['server_port'],
+                timeout_ms=self.inference_info['timeout_ms']
             )
             is_alive = self.zmq_client.ping()
             if not is_alive:
@@ -624,12 +642,15 @@ class PhysicalAIServer(Node):
                 return
             self.get_logger().info('ZMQ client connected to server')
             policy_info = {
-                'policy_type': 'GR00T_N1_5',
-                'policy_path': '/workspace/checkpoints/ROBOTIS/ffw_bg2_rev4_pick_coffee_bottle_env5_1_to_31_joint_fix_20k', 
-                'robot_type': 'ffw_bg2'
+                'policy_type': self.inference_info['policy_type'],
+                'policy_path': self.inference_info['policy_path'], 
+                'robot_type': self.inference_info['robot_type']
             }
             response = self.zmq_client.execute_command('load_policy', policy_info)
             self.get_logger().info(f'ZMQ load_policy response: {response}')
+            
+            # Initialize inference state variables
+            self._reset_inference_state()
 
         try:
             if not self.on_inference:
@@ -638,8 +659,10 @@ class PhysicalAIServer(Node):
                 current_status.phase = TaskStatus.READY
                 self.communicator.publish_status(status=current_status)
                 if self.zmq_client is not None:
-                    self.zmq_client.kill_server()
+                    self.zmq_client.stop_inference()
                     self.zmq_client = None
+                    # Reset inference state variables
+                    self._reset_inference_state()
                 self.timer_manager.stop(timer_name=self.operation_mode)
                 return
 
@@ -726,6 +749,8 @@ class PhysicalAIServer(Node):
                 if self.zmq_client is not None:
                     self.zmq_client.kill_server()
                     self.zmq_client = None
+                    # Reset inference state variables
+                    self._reset_inference_state()
                 self.timer_manager.stop(timer_name=self.operation_mode)
                 return
 
@@ -757,6 +782,8 @@ class PhysicalAIServer(Node):
             if self.zmq_client is not None:
                 self.zmq_client.kill_server()
                 self.zmq_client = None
+                # Reset inference state variables
+                self._reset_inference_state()
             self.timer_manager.stop(timer_name=self.operation_mode)
             return
 
@@ -870,14 +897,14 @@ class PhysicalAIServer(Node):
                 task_info = request.task_info
                 self.task_instruction = task_info.task_instruction
 
-                valid_result, result_message = self.inference_manager.validate_policy(
-                    policy_path=task_info.policy_path)
+                # valid_result, result_message = self.inference_manager.validate_policy(
+                #     policy_path=task_info.policy_path)
 
-                if not valid_result:
-                    response.success = False
-                    response.message = result_message
-                    self.get_logger().error(response.message)
-                    return response
+                # if not valid_result:
+                #     response.success = False
+                #     response.message = result_message
+                #     self.get_logger().error(response.message)
+                #     return response
 
                 self.init_robot_control_parameters_from_user_task(
                     task_info
