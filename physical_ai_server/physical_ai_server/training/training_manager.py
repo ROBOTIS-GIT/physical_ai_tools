@@ -88,6 +88,11 @@ class TrainingManager:
                 config_data = json.load(f)
 
             # Update configuration with provided values (skip zero/empty values)
+            if self.training_info.dataset.strip():
+                # Update dataset repo_id if provided
+                if 'dataset' not in config_data:
+                    config_data['dataset'] = {}
+                config_data['dataset']['repo_id'] = self.training_info.dataset
             if self.training_info.seed != 0:
                 config_data['seed'] = self.training_info.seed
             if self.training_info.num_workers != 0:
