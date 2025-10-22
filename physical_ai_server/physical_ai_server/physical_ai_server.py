@@ -97,8 +97,6 @@ class PhysicalAIServer(Node):
 
         self.previous_data_manager_status = None
 
-        self.goal_repo_id = None
-        
         self.zmq_client: Optional[ZmqInferenceClient] = None
         self.inference_info = {}
         self.remain_action = []
