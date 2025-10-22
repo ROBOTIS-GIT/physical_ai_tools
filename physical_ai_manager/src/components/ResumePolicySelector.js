@@ -461,7 +461,7 @@ export default function ResumePolicySelector() {
         isOpen={showBrowserModal}
         onClose={() => setShowBrowserModal(false)}
         onFileSelect={handleBrowserSelect}
-        title="Select Policy Checkpoint Path"
+        title="Select Checkpoint Path"
         selectButtonText="Select"
         allowDirectorySelect={true}
         targetFileName={[TARGET_FILES.TRAIN_CONFIG]}

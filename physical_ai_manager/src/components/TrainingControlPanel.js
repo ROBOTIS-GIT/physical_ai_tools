@@ -118,7 +118,7 @@ export default function TrainingControlPanel() {
       if (trainingMode === 'resume') {
         // Resume training
         if (!resumePolicyPath) {
-          toast.error('Please select a policy checkpoint path to resume training');
+          toast.error('Please select checkpoint path to resume training');
           return;
         }
         command = 'resume'; // RESUME
@@ -182,7 +182,7 @@ export default function TrainingControlPanel() {
   const checkRequiredFields = () => {
     if (trainingMode === 'resume') {
       if (!resumePolicyPath) {
-        toast.error('Please select a policy checkpoint path to resume training');
+        toast.error('Please select checkpoint path to resume training');
         return false;
       }
       if (!resumePolicyPath.startsWith(DEFAULT_PATHS.POLICY_MODEL_PATH)) {
