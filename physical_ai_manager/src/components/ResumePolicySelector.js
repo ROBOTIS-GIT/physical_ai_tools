@@ -324,7 +324,7 @@ export default function ResumePolicySelector() {
     <>
       <div className={classContainer}>
         <div className={classHeader}>
-          <h3 className={classTitle}>Resume Policy Path</h3>
+          <h3 className={classTitle}>Checkpoint Path to Resume</h3>
           <span className="text-xs text-red-500">*</span>
         </div>
 
