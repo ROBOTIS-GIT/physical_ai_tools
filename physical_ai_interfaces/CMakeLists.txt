@@ -23,6 +23,7 @@ rosidl_generate_interfaces(${PROJECT_NAME}
   "srv/GetPolicyList.srv"
   "srv/GetRobotTypeList.srv"
   "srv/GetSavedPolicyList.srv"
+  "srv/GetTrainingInfo.srv"
   "srv/GetUserList.srv"
   "srv/SendCommand.srv"
   "srv/SendTrainingCommand.srv"

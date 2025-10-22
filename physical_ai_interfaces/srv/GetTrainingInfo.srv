@@ -1,0 +1,6 @@
+string train_config_path
+# Path to train_config.json after lerobot/outputs/train/ (e.g., my_model/checkpoints/000001/pretrained_model/train_config.json)
+---
+TrainingInfo training_info
+bool success
+string message

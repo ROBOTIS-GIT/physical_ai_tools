@@ -42,6 +42,7 @@ export const DEFAULT_PATHS = {
  */
 export const TARGET_FILES = {
   POLICY_MODEL: 'model.safetensors',
+  TRAIN_CONFIG: 'train_config.json',
 };
 
 export const TARGET_FOLDERS = {

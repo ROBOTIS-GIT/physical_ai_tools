@@ -524,14 +524,17 @@ class DataManager:
                 return user_ids
             except Exception as e:
                 print(f'Token validation failed: {e}')
-                return None
+                raise
 
         # Use queue to get result from thread
         result_queue = queue.Queue()
 
         def worker():
-            result = api_call()
-            result_queue.put(result)
+            try:
+                result = api_call()
+                result_queue.put(('success', result))
+            except Exception as e:
+                result_queue.put(('error', e))
 
         # Start thread and wait with timeout
         thread = threading.Thread(target=worker, daemon=True)
@@ -539,10 +542,13 @@ class DataManager:
 
         try:
             # Wait for result with 1.5 second timeout
-            result = result_queue.get(timeout=1.5)
-            if result:
-                print(result)
-            return result
+            status, data = result_queue.get(timeout=1.5)
+            if status == 'success':
+                if data:
+                    print(data)
+                return data
+            else:
+                raise data
         except queue.Empty:
             print('Token validation timed out after 1.5 seconds')
             return None

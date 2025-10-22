@@ -1,5 +1,5 @@
 # Must be given
-string dataset
+string dataset          # e.g., ROBOTIS/ffw_bg2_example
 string policy_type
 string output_folder_name
 string policy_device
