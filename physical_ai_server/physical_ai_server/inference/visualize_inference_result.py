@@ -242,7 +242,7 @@ class InferenceResultVisualizer:
             plt.subplots_adjust(left=0.08, right=0.75, top=0.95, bottom=0.08, hspace=0.3)
 
             # Save plot
-            plot_path = f'/root/.cache/huggingface/action_chunk_curves_{len(raw_action_chunks)}.png'
+            plot_path = f'/root/.cache/huggingface/action_chunk_{len(raw_action_chunks)}.png'
             plt.savefig(plot_path, dpi=120, bbox_inches='tight', pad_inches=0.2)
             plt.close()
 

@@ -22,13 +22,13 @@ import os
 from pathlib import Path
 import threading
 import time
-from typing import Optional
 import traceback
-import cv2
-
-import numpy as np
+from typing import Optional
 
 from ament_index_python.packages import get_package_share_directory
+import cv2
+import numpy as np
+
 from physical_ai_interfaces.msg import (
     HFOperationStatus,
     TaskStatus,
@@ -53,8 +53,8 @@ from physical_ai_interfaces.srv import (
 from physical_ai_server.communication.communicator import Communicator
 from physical_ai_server.data_processing.data_manager import DataManager
 from physical_ai_server.data_processing.hf_api_worker import HfApiWorker
-from physical_ai_server.inference.inference_manager import InferenceManager
 from physical_ai_server.inference.client_inference import ZmqInferenceClient
+from physical_ai_server.inference.inference_manager import InferenceManager
 from physical_ai_server.inference.visualize_inference_result import InferenceResultVisualizer
 from physical_ai_server.timer.timer_manager import TimerManager
 from physical_ai_server.training.training_manager import TrainingManager
@@ -360,7 +360,8 @@ class PhysicalAIServer(Node):
 
     def process_rosbag_recording(self):
         if self.data_manager.get_status() == 'run' and self.previous_data_manager_status != 'run':
-            self.get_logger().info(f'Starting rosbag recording, previous status: {self.previous_data_manager_status}')
+            self.get_logger().info(
+                f'Starting rosbag recording, previous status: {self.previous_data_manager_status}')
             rosbag_path = self.data_manager.get_save_rosbag_path()
             if rosbag_path is None:
                 self.get_logger().error('Failed to get rosbag path')
@@ -375,20 +376,29 @@ class PhysicalAIServer(Node):
             else:
                 self.get_logger().error('Failed to start rosbag recording')
 
-        elif self.data_manager.get_status() == 'save' and self.previous_data_manager_status == 'run':
+        elif (
+            self.data_manager.get_status() == 'save' and
+            self.previous_data_manager_status == 'run'
+        ):
             self.get_logger().info('Stopping rosbag recording')
             if self.communicator.stop_rosbag_recording():
                 self.get_logger().info('Stopped rosbag recording')
             else:
                 self.get_logger().error('Failed to stop rosbag recording')
-        elif self.data_manager.get_status() == 'finish' and self.previous_data_manager_status != 'finish':
+        elif (
+            self.data_manager.get_status() == 'finish' and
+            self.previous_data_manager_status != 'finish'
+        ):
             self.get_logger().info('Stopping rosbag recording')
             if self.communicator.stop_rosbag_recording():
                 self.get_logger().info('Stopped rosbag recording')
             else:
                 self.get_logger().error('Failed to stop rosbag recording')
 
-        elif self.data_manager.get_status() == 'reset' and self.previous_data_manager_status == 'run':
+        elif (
+            self.data_manager.get_status() == 'reset' and
+            self.previous_data_manager_status == 'run'
+        ):
             self.get_logger().info('Stopping rosbag recording and delete recorded bag')
             if self.communicator.stop_and_delete_rosbag_recording():
                 self.get_logger().info('Stopped and deleted rosbag recording')
@@ -572,31 +582,30 @@ class PhysicalAIServer(Node):
             self.inference_manager.clear_policy()
             self.timer_manager.stop(timer_name=self.operation_mode)
             return
-    
+
     def _reset_inference_state(self):
-        """Reset all inference-related state variables"""
         self.remain_action = []
         self.wait_inference = False
         self._used_action_count = 0
         self._last_executed_action = []
         self.get_logger().info('Inference state variables reset')
-    
+
     def find_best_chunk_start_index(
         self,
-        new_action_chunk: np.ndarray, 
+        new_action_chunk: np.ndarray,
         last_executed_action: np.ndarray,
         search_range: int = 5,
         distance_metric: str = 'l2'
     ) -> int:
         search_actions = new_action_chunk[:search_range]
         distances = []
-        
+
         for i, action in enumerate(search_actions):
             distance = np.linalg.norm(action - last_executed_action)
             distances.append(distance)
         best_index = np.argmin(distances)
         return best_index
-        
+
     def _zmq_inference_timer_callback(self):
         error_msg = ''
         current_status = TaskStatus()
@@ -625,7 +634,7 @@ class PhysicalAIServer(Node):
                 self.zmq_client = None
             self.timer_manager.stop(timer_name=self.operation_mode)
             return
-        
+
         self.inference_info = {
             'server_ip': '0.0.0.0',
             'server_port': 5555,
@@ -648,12 +657,12 @@ class PhysicalAIServer(Node):
             self.get_logger().info('ZMQ client connected to server')
             policy_info = {
                 'policy_type': self.inference_info['policy_type'],
-                'policy_path': self.inference_info['policy_path'], 
+                'policy_path': self.inference_info['policy_path'],
                 'robot_type': self.inference_info['robot_type']
             }
             response = self.zmq_client.execute_command('load_policy', policy_info)
             self.get_logger().info(f'ZMQ load_policy response: {response}')
-            
+
             # Initialize inference state variables
             self._reset_inference_state()
 
@@ -673,7 +682,6 @@ class PhysicalAIServer(Node):
 
             try:
                 re_inference_threshold = 4
-                
                 # Check if we need to start a new inference
                 if len(self.remain_action) <= re_inference_threshold and not self.wait_inference:
                     resized_cam_head = cv2.resize(camera_data['cam_head'], (224, 224))
@@ -681,13 +689,13 @@ class PhysicalAIServer(Node):
                     left_arm_obs = np.array(follower_data)[np.newaxis, :8]
                     right_arm_obs = np.array(follower_data)[np.newaxis, 8:16]
                     obs = {
-                        "video.cam_head": cam_head_obs,
-                        "state.left_arm": left_arm_obs,
-                        "state.right_arm": right_arm_obs,
-                        "annotation.human.action.task_description": [
-                            "Place bottles in color-matching boxes: red→top left, green→bottom left, white→top right, orange→bottom right"],
+                        'video.cam_head': cam_head_obs,
+                        'state.left_arm': left_arm_obs,
+                        'state.right_arm': right_arm_obs,
+                        'annotation.human.action.task_description': [
+                            'Place bottles in color-matching boxes: red→top left, green→bottom left, white→top right, orange→bottom right'],
                     }
-                    
+
                     # Start async inference
                     try:
                         task_id = self.zmq_client.start_inference(obs)
@@ -710,7 +718,9 @@ class PhysicalAIServer(Node):
                                     last_executed_action=np.array(self._last_executed_action),
                                     search_range=10
                                 ) + 1
-                                self.get_logger().info(f'Skipping {skip_action} actions to align with previous execution')
+                                self.get_logger().info(
+                                    f'Skipping {skip_action} actions '
+                                    f'to align with previous execution')
                                 self.remain_action = new_action[skip_action:]
                             else:
                                 self.remain_action = new_action
@@ -724,7 +734,8 @@ class PhysicalAIServer(Node):
                                     self.get_logger()
                                 )
                         except Exception as e:
-                            self.get_logger().error(f'Failed to get inference result: {str(e)}')
+                            self.get_logger().error(
+                                f'Failed to get inference result: {str(e)}')
                             self.wait_inference = False
 
                 # Use action if available
@@ -732,18 +743,18 @@ class PhysicalAIServer(Node):
                     action = self.remain_action.pop(0)
                     self._last_executed_action = action.copy()
                     if self.visualizer.is_enabled():
-                            self.visualizer.add_action_data(
-                                action_number=self._used_action_count,
-                                timestamp=time.time(),
-                                action_values=action,
-                                remaining_in_buffer=self.remain_action
-                            )
+                        self.visualizer.add_action_data(
+                            action_number=self._used_action_count,
+                            timestamp=time.time(),
+                            action_values=action,
+                            remaining_in_buffer=self.remain_action
+                        )
                     self._used_action_count += 1
                 else:
                     # No action available, skip this cycle
                     self.get_logger().info('No action available, skipping this cycle')
                     return
-                
+
             except Exception as e:
                 self.get_logger().error(f'Inference failed, please check : {str(e)}')
                 # Stop inference on error
@@ -765,7 +776,9 @@ class PhysicalAIServer(Node):
                 self.joint_order
             )
             pub_time = time.time()
-            self.get_logger().info(f'Action Length: {len(self.remain_action)}, time : {pub_time - self.inference_check_time}s')
+            self.get_logger().info(
+                f'Action Length: {len(self.remain_action)}, '
+                f'time : {pub_time - self.inference_check_time}s')
             self.inference_check_time = pub_time
 
             self.communicator.publish_action(

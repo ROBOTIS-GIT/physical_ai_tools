@@ -16,11 +16,9 @@
 #
 # Author: Dongyun Kim
 
-from dataclasses import dataclass
 from io import BytesIO
-from typing import Callable
-import time
 import threading
+from typing import Callable
 import uuid
 
 import torch
@@ -39,7 +37,7 @@ class ZmqInferenceServer:
         self.socket.bind(f'tcp://{server_address}:{port}')
         self._callback_group = {}
         self.policy = None
-        
+
         # Async inference management
         self.inference_tasks = {}  # task_id -> {status, result, thread}
         self.inference_lock = threading.Lock()
@@ -50,7 +48,8 @@ class ZmqInferenceServer:
         self.add_callback(name='unload_policy', callback=self._unload_policy_callback)
         self.add_callback(name='start_inference', callback=self._start_inference_callback)
         self.add_callback(name='check_inference', callback=self._check_inference_callback)
-        self.add_callback(name='get_inference_result', callback=self._get_inference_result_callback)
+        self.add_callback(
+            name='get_inference_result', callback=self._get_inference_result_callback)
 
     def add_callback(
             self,
@@ -114,7 +113,9 @@ class ZmqInferenceServer:
                     embodiment_tag='new_embodiment',
                     denoising_steps=data.get('denoising_steps', 4),
                 )
-                setup_tensorrt_engines(self.policy, '/workspace/checkpoints/ROBOTIS/ffw_bg2_rev4_pick_coffee_bottle_env5_1_to_31_joint_fix_20k_engine')
+                setup_tensorrt_engines(
+                    self.policy,
+                    '/workspace/checkpoints/ROBOTIS/ffw_bg2_rev4_pick_coffee_bottle_env5_1_to_31_joint_fix_20k_engine')
 
                 self.add_callback('get_action', self.policy.get_action)
                 return {
@@ -129,7 +130,7 @@ class ZmqInferenceServer:
         except Exception as e:
             return {
                 'status': 'error',
-                'message': f"Failed to load policy: {e}"
+                'message': f'Failed to load policy: {e}'
             }
 
     def _unload_policy_callback(self, data) -> dict:
@@ -138,24 +139,23 @@ class ZmqInferenceServer:
         self.policy = None
         if 'get_action' in self._callback_group:
             del self._callback_group['get_action']
-        
+
         # Clear all pending inference tasks
         with self.inference_lock:
             self.inference_tasks.clear()
-            
+
         return {'status': 'ok', 'message': 'Policy unloaded successfully'}
 
     def _start_inference_callback(self, data: dict) -> dict:
-        """Start async inference and return task ID immediately"""
         if self.policy is None:
             return {
                 'status': 'error',
                 'message': 'No policy loaded'
             }
-        
+
         # Generate unique task ID
         task_id = str(uuid.uuid4())
-        
+
         # Create task entry
         with self.inference_lock:
             self.inference_tasks[task_id] = {
@@ -163,7 +163,7 @@ class ZmqInferenceServer:
                 'result': None,
                 'thread': None
             }
-        
+
         # Start inference in background thread
         def run_inference():
             try:
@@ -177,15 +177,15 @@ class ZmqInferenceServer:
                     if task_id in self.inference_tasks:
                         self.inference_tasks[task_id]['status'] = 'error'
                         self.inference_tasks[task_id]['result'] = {'error': str(e)}
-        
+
         thread = threading.Thread(target=run_inference)
         thread.daemon = True
-        
+
         with self.inference_lock:
             self.inference_tasks[task_id]['thread'] = thread
-        
+
         thread.start()
-        
+
         return {
             'status': 'ok',
             'task_id': task_id,
@@ -193,23 +193,22 @@ class ZmqInferenceServer:
         }
 
     def _check_inference_callback(self, data: dict) -> dict:
-        """Check if inference task is completed without heavy data transfer"""
         task_id = data.get('task_id')
         if not task_id:
             return {
                 'status': 'error',
                 'message': 'task_id required'
             }
-        
+
         with self.inference_lock:
             if task_id not in self.inference_tasks:
                 return {
                     'status': 'error',
                     'message': 'Task not found'
                 }
-            
+
             task_status = self.inference_tasks[task_id]['status']
-            
+
         return {
             'status': 'ok',
             'task_status': task_status,
@@ -217,38 +216,37 @@ class ZmqInferenceServer:
         }
 
     def _get_inference_result_callback(self, data: dict) -> dict:
-        """Get inference result and clean up task"""
         task_id = data.get('task_id')
         if not task_id:
             return {
                 'status': 'error',
                 'message': 'task_id required'
             }
-        
+
         with self.inference_lock:
             if task_id not in self.inference_tasks:
                 return {
                     'status': 'error',
                     'message': 'Task not found'
                 }
-            
+
             task = self.inference_tasks[task_id]
             if task['status'] == 'processing':
                 return {
                     'status': 'error',
                     'message': 'Inference still processing'
                 }
-            
+
             result = task['result']
             # Clean up completed task
             del self.inference_tasks[task_id]
-            
+
         if task['status'] == 'error':
             return {
                 'status': 'error',
-                'message': f"Inference failed: {result.get('error', 'Unknown error')}"
+                'message': f'Inference failed: {result.get("error", "Unknown error")}'
             }
-        
+
         return result
 
     def run(self):
@@ -263,7 +261,7 @@ class ZmqInferenceServer:
                 if command not in self._callback_group:
                     error_response = {
                         'status': 'error',
-                        'message': f'Unknown command: {command}', 
+                        'message': f'Unknown command: {command}',
                     }
                     self.socket.send(self.convert_dict_to_bytes(error_response))
                     continue
@@ -288,35 +286,33 @@ class ZmqInferenceServer:
                 print(traceback.format_exc())
                 error_response = {'status': 'error', 'message': str(e)}
                 self.socket.send(self.convert_dict_to_bytes(error_response))
-        
-        # Cleanup when server stops
+
         self.socket.close()
         self.context.term()
 
+
 def main():
-    """Main function for testing the server"""
     import argparse
-    import time
-    
+
     parser = argparse.ArgumentParser(description='ZMQ Inference Server')
     parser.add_argument('--host', default='localhost', help='Server host (default: localhost)')
     parser.add_argument('--port', type=int, default=5555, help='Server port (default: 5555)')
 
     args = parser.parse_args()
 
-    print(f"Starting ZMQ Inference Server on {args.host}:{args.port}")
+    print(f'Starting ZMQ Inference Server on {args.host}:{args.port}')
 
     server = ZmqInferenceServer(args.host, args.port)
 
     try:
         server.run()
     except KeyboardInterrupt:
-        print("\nShutting down server...")
+        print('\nShutting down server...')
     except Exception as e:
-        print(f"Server error: {e}")
+        print(f'Server error: {e}')
         import traceback
         traceback.print_exc()
 
 
-if __name__ == "__main__":
+if __name__ == '__main__':
     main()

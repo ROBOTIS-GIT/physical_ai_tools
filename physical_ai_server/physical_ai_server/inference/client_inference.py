@@ -19,10 +19,10 @@
 from io import BytesIO
 from typing import Any, Dict
 
+import numpy as np
 import torch
 import zmq
 
-import numpy as np
 
 class ZmqInferenceClient:
 
@@ -72,13 +72,13 @@ class ZmqInferenceClient:
             response = self.convert_dict_from_bytes(message)
 
             if isinstance(response, dict) and response.get('status') == 'error':
-                raise RuntimeError(f"Server error: {response.get('message', 'Unknown error')}")
+                raise RuntimeError(f'Server error: {response.get("message", "Unknown error")}')
 
             return response
         except zmq.error.Again:
-            raise TimeoutError(f"Request timed out after {self.timeout_ms}ms")
+            raise TimeoutError(f'Request timed out after {self.timeout_ms}ms')
         except zmq.error.ZMQError as e:
-            raise RuntimeError(f"ZMQ error: {e}")
+            raise RuntimeError(f'ZMQ error: {e}')
 
     def ping(self) -> bool:
         try:
@@ -95,30 +95,27 @@ class ZmqInferenceClient:
         return self.execute_command('get_action', observations)
 
     def start_inference(self, observations: Dict[str, Any]) -> str:
-        """Start async inference and return task ID"""
         response = self.execute_command('start_inference', observations)
         if response.get('status') == 'ok':
             self.current_task_id = response.get('task_id')
             return self.current_task_id
         else:
-            raise RuntimeError(f"Failed to start inference: {response.get('message')}")
+            raise RuntimeError(f'Failed to start inference: {response.get("message")}')
 
     def stop_inference(self):
-        """Stop all inference tasks, clean up thread pool, and unload policy"""
         response = self.execute_command('stop_inference')
         if response.get('status') == 'ok':
             self.current_task_id = None
             return response
         else:
-            raise RuntimeError(f"Failed to stop inference: {response.get('message')}")
+            raise RuntimeError(f'Failed to stop inference: {response.get("message")}')
 
     def check_inference_ready(self, task_id: str = None) -> bool:
-        """Check if inference is ready (lightweight check)"""
         if task_id is None:
             task_id = self.current_task_id
         if task_id is None:
             return False
-            
+
         try:
             response = self.execute_command('check_inference', {'task_id': task_id})
             return response.get('is_ready', False)
@@ -126,29 +123,26 @@ class ZmqInferenceClient:
             return False
 
     def get_inference_result(self, task_id: str = None) -> Dict[str, Any]:
-        """Get inference result and clean up task"""
         if task_id is None:
             task_id = self.current_task_id
         if task_id is None:
-            raise RuntimeError("No task ID provided")
-            
+            raise RuntimeError('No task ID provided')
+
         result = self.execute_command('get_inference_result', {'task_id': task_id})
-        
+
         # Clear current task if this was the current one
         if task_id == self.current_task_id:
             self.current_task_id = None
-            
         return result
 
     def has_pending_inference(self) -> bool:
-        """Check if there's a pending inference task"""
         return self.current_task_id is not None
 
     def load_policy(
             self,
             policy_info: Dict[str, Any]) -> Dict[str, Any]:
         return self.execute_command('load_policy', policy_info)
-    
+
     def unload_policy(self) -> Dict[str, Any]:
         return self.execute_command('unload_policy')
 
@@ -158,30 +152,29 @@ class ZmqInferenceClient:
 
 
 def test_basic_communication(host='localhost', port=5555):
-    """Test basic client-server communication"""
     import time
-    
-    print(f"Connecting to server at {host}:{port}...")
-    
+
+    print(f'Connecting to server at {host}:{port}...')
+
     client = ZmqInferenceClient(
         host=host,
         port=port,
         timeout_ms=50000
     )
-    
-    print("\n=== Testing Basic Communication ===")
-    
+
+    print('\n=== Testing Basic Communication ===')
+
     # Test 1: Ping
-    print("1. Testing ping...")
+    print('1. Testing ping...')
     try:
         is_alive = client.ping()
-        print(f"   ✅ Ping successful: {is_alive}")
+        print(f'   ✅ Ping successful: {is_alive}')
     except Exception as e:
-        print(f"   ❌ Ping failed: {e}")
+        print(f'   ❌ Ping failed: {e}')
         return False
 
     # Test 3: Load policy
-    print("\n3. Testing load policy...")
+    print('\n3. Testing load policy...')
     try:
         policy_info = {
             'policy_type': 'GR00T_N1_5',
@@ -189,137 +182,131 @@ def test_basic_communication(host='localhost', port=5555):
             'robot_type': 'ffw_bg2'
         }
         response = client.execute_command('load_policy', policy_info)
-        print(f"   ✅ Load policy result: {response}")
+        print(f'   ✅ Load policy result: {response}')
     except Exception as e:
-        print(f"   ❌ Load policy failed: {e}")
-    
+        print(f'   ❌ Load policy failed: {e}')
+
     # Test 4: Warmup
-    print("\n4. Testing warmup...")
+    print('\n4. Testing warmup...')
     try:
         start_time = time.time()
         obs = {
-            "video.cam_head": np.random.randint(0, 256, (1, 224, 224, 3), dtype=np.uint8),
-            "video.cam_head_right": np.random.randint(0, 256, (1, 224, 224, 3), dtype=np.uint8),
-            "state.left_arm": np.random.rand(1, 8),
-            "state.right_arm": np.random.rand(1, 8),
-            "annotation.human.action.task_description": ["TEST"],
+            'video.cam_head': np.random.randint(0, 256, (1, 224, 224, 3), dtype=np.uint8),
+            'video.cam_head_right': np.random.randint(0, 256, (1, 224, 224, 3), dtype=np.uint8),
+            'state.left_arm': np.random.rand(1, 8),
+            'state.right_arm': np.random.rand(1, 8),
+            'annotation.human.action.task_description': ['TEST'],
         }
 
         for _ in range(10):
             action = client.get_action(obs)
         end_time = time.time()
-        print(f"   ✅ Warmup successful in {end_time - start_time:.2f}s")
+        print(f'   ✅ Warmup successful in {end_time - start_time:.2f}s')
     except Exception as e:
-        print(f"   ❌ Warmup failed: {e}")
+        print(f'   ❌ Warmup failed: {e}')
         return False
 
     # Test 5: Get action (mock inference)
-    print("\n4. Testing get_action...")
+    print('\n4. Testing get_action...')
     try:
         obs = {
-            "video.cam_head": np.random.randint(0, 256, (1, 224, 224, 3), dtype=np.uint8),
-            "video.cam_head_right": np.random.randint(0, 256, (1, 224, 224, 3), dtype=np.uint8),
-            "state.left_arm": np.random.rand(1, 8),
-            "state.right_arm": np.random.rand(1, 8),
-            "annotation.human.action.task_description": ["TEST"],
+            'video.cam_head': np.random.randint(0, 256, (1, 224, 224, 3), dtype=np.uint8),
+            'video.cam_head_right': np.random.randint(0, 256, (1, 224, 224, 3), dtype=np.uint8),
+            'state.left_arm': np.random.rand(1, 8),
+            'state.right_arm': np.random.rand(1, 8),
+            'annotation.human.action.task_description': ['TEST'],
         }
         for _ in range(50):
             start_time = time.time()
             action = client.get_action(obs)
             end_time = time.time()
-            print(f"   ✅ Get action successful in {end_time - start_time:.2f}s")
-            print(f"   ✅ Action response keys: {list(action.keys())}")
-            print(f"   ✅ Sample action data: { {k: v.shape for k, v in action.items()} }")
+            print(f'   ✅ Get action successful in {end_time - start_time:.2f}s')
+            print(f'   ✅ Action response keys: {list(action.keys())}')
     except Exception as e:
-        print(f"   ❌ Get action failed: {e}")
-    
-    print("\n=== All Client Tests Complete ===")
+        print(f'   ❌ Get action failed: {e}')
+
+    print('\n=== All Client Tests Complete ===')
     return True
 
 
 def interactive_mode(host='localhost', port=5555):
-    """Interactive mode for manual testing"""
     import time
 
-    print(f"\n=== Interactive Mode ===")
-    print("Enter commands or 'quit' to exit")
-    print("Available commands: ping, echo, add, get_action, get_config")
-    
     client = ZmqInferenceClient(
-        policy_type="test_policy",
-        host=host, 
+        policy_type='test_policy',
+        host=host,
         port=port,
         timeout_ms=50000
     )
-    
+
     while True:
         try:
-            command = input("\nEnter command: ").strip().lower()
-            
+            command = input('\nEnter command: ').strip().lower()
+
             if command == 'quit':
                 break
             elif command == 'ping':
                 result = client.ping()
-                print(f"Ping result: {result}")
+                print(f'Ping result: {result}')
             elif command == 'echo':
-                message = input("Enter message to echo: ")
+                message = input('Enter message to echo: ')
                 data = {'message': message, 'timestamp': time.time()}
                 response = client.execute_command('echo', data)
-                print(f"Echo response: {response}")
+                print(f'Echo response: {response}')
             elif command == 'add':
                 try:
-                    a = float(input("Enter first number: "))
-                    b = float(input("Enter second number: "))
+                    a = float(input('Enter first number: '))
+                    b = float(input('Enter second number: '))
                     data = {'a': a, 'b': b}
                     response = client.execute_command('add', data)
-                    print(f"Addition result: {response}")
+                    print(f'Addition result: {response}')
                 except ValueError:
-                    print("Please enter valid numbers")
+                    print('Please enter valid numbers')
             elif command == 'get_action':
                 response = client.get_action({'test': 'data'})
-                print(f"Action: {response}")
+                print(f'Action: {response}')
             elif command == 'get_config':
                 response = client.execute_command('get_modality_config', requires_input=False)
-                print(f"Config: {response}")
+                print(f'Config: {response}')
             else:
-                print("Unknown command. Available: ping, echo, add, get_action, get_config, quit")
+                print(
+                    'Unknown command. Available: ping, echo, add, get_action, get_config, quit')
 
         except Exception as e:
-            print(f"Error: {e}")
+            print(f'Error: {e}')
 
 
 def main():
-    """Main function for testing the client"""
     import argparse
-    
+
     parser = argparse.ArgumentParser(description='ZMQ Inference Client')
     parser.add_argument('--host', default='localhost', help='Server host (default: localhost)')
     parser.add_argument('--port', type=int, default=5555, help='Server port (default: 5555)')
     parser.add_argument('--interactive', action='store_true', help='Run in interactive mode')
     parser.add_argument('--test-only', action='store_true', help='Run automated tests only')
-    
+
     args = parser.parse_args()
-    
-    print("ZMQ Inference Client")
-    print("=" * 20)
-    
+
+    print('ZMQ Inference Client')
+    print('=' * 20)
+
     if args.test_only:
         # Run automated tests only
         success = test_basic_communication(args.host, args.port)
         if success:
-            print("\n✅ All tests passed!")
+            print('\n✅ All tests passed!')
         else:
-            print("\n❌ Some tests failed!")
+            print('\n❌ Some tests failed!')
     elif args.interactive:
         # Run interactive mode only
         interactive_mode(args.host, args.port)
     else:
         # Run tests first, then ask for interactive mode
         success = test_basic_communication(args.host, args.port)
-        
+
         if success:
             while True:
-                choice = input("\nRun interactive mode? (y/n): ").strip().lower()
+                choice = input('\nRun interactive mode? (y/n): ').strip().lower()
                 if choice in ['y', 'yes']:
                     interactive_mode(args.host, args.port)
                     break
@@ -329,5 +316,5 @@ def main():
                     print("Please enter 'y' or 'n'")
 
 
-if __name__ == "__main__":
+if __name__ == '__main__':
     main()
