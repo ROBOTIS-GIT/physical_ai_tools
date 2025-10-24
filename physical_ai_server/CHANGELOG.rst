@@ -2,6 +2,12 @@
 Changelog for package physical_ai_server
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
+0.6.12 (2025-10-21)
+------------------
+* Added training resume functionality.
+* Improved performance of dataset episode deletion by implementing batch deletion.
+* Contributors: Seongwoo Kim, Kiwoong Park
+
 0.6.11 (2025-09-30)
 ------------------
 * Added Hugging Face upload & download functionality.
