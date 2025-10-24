@@ -399,12 +399,20 @@ class Communicator:
 
             elif request.mode == EditDataset.Request.DELETE:
                 delete_dataset_path = request.delete_dataset_path
-                delete_episode_num = sorted(request.delete_episode_num, reverse=True)
+                delete_episode_num = list(request.delete_episode_num)
                 # TODO: Implement HuggingFace upload functionality if needed
                 # upload_huggingface = request.upload_huggingface
-                for episode_num in delete_episode_num:
+
+                # Use batch delete for better performance
+                if len(delete_episode_num) > 1:
+                    self.data_editor.delete_episodes_batch(
+                        delete_dataset_path, delete_episode_num
+                    )
+                else:
+                    # Single episode deletion
                     self.data_editor.delete_episode(
-                        delete_dataset_path, episode_num)
+                        delete_dataset_path, delete_episode_num[0]
+                    )
             else:
                 response.success = False
                 response.message = f'Unknown edit mode: {request.mode}'

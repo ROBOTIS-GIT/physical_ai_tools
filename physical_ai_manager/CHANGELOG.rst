@@ -2,6 +2,11 @@
 Changelog for package physical_ai_manager
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
+0.6.12 (2025-10-21)
+------------------
+* Added UI features for training resume functionality.
+* Contributors: Kiwoong Park
+
 0.6.11 (2025-09-30)
 ------------------
 * Added Hugging Face upload & download functionality to the Data Tools page.

@@ -22,11 +22,11 @@ import HeartbeatStatus from '../components/HeartbeatStatus';
 import DatasetSelector from '../components/DatasetSelector';
 import PolicySelector from '../components/PolicySelector';
 import TrainingOutputFolderInput from '../components/TrainingOutputFolderInput';
-import ModelWeightSelector from '../components/ModelWeightSelector';
 import TrainingControlPanel from '../components/TrainingControlPanel';
 import TrainingOptionInput from '../components/TrainingOptionInput';
 import TrainingProgressBar from '../components/TrainingProgressBar';
 import TrainingLossDisplay from '../components/TrainingLossDisplay';
+import ResumePolicySelector from '../components/ResumePolicySelector';
 
 export default function TrainingPage() {
   const trainingMode = useSelector((state) => state.training.trainingMode);
@@ -43,22 +43,13 @@ export default function TrainingPage() {
 
   const classHeartbeatStatus = clsx('absolute', 'top-5', 'left-35', 'z-10');
 
-  const classComponentsContainerCenter = clsx(
+  const classComponentsContainer = clsx(
     'w-full',
     'flex',
     'p-10',
     'gap-8',
     'items-start',
     'justify-center'
-  );
-
-  const classComponentsContainerLeft = clsx(
-    'w-full',
-    'flex',
-    'p-10',
-    'gap-8',
-    'items-start',
-    'justify-start'
   );
 
   // Toast limit implementation using useToasterStore
@@ -75,13 +66,19 @@ export default function TrainingPage() {
   const renderTrainingComponents = () => {
     if (trainingMode === 'resume') {
       return (
-        <div className={classComponentsContainerLeft}>
-          <ModelWeightSelector />
+        <div className={classComponentsContainer}>
+          <ResumePolicySelector />
+          <DatasetSelector />
+          <div className="flex flex-col items-start justify-center gap-5">
+            <PolicySelector readonly={true} />
+            <TrainingOutputFolderInput readonly={true} />
+          </div>
+          <TrainingOptionInput />
         </div>
       );
     } else {
       return (
-        <div className={classComponentsContainerCenter}>
+        <div className={classComponentsContainer}>
           <DatasetSelector />
           <PolicySelector />
           <TrainingOutputFolderInput />
