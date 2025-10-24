@@ -4,4 +4,4 @@
   branch = feature-robotis
 [submodule "Isaac-GR00T"]
 	path = Isaac-GR00T
-	url = https://github.com/NVIDIA/Isaac-GR00T.git
+	url = https://github.com/ROBOTIS-GIT/Isaac-GR00T.git
