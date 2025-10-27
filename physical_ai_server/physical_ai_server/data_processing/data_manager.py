@@ -524,8 +524,8 @@ class DataManager:
                     user_ids.append(org_info['name'])
                 return user_ids
             except LocalTokenNotFoundError as e:
-                print(f'No registered token found: {e}')
-                raise Exception('No registered token found')
+                print(f'No registered HuggingFace token found: {e}')
+                raise Exception('No registered HuggingFace token found')
             except Exception as e:
                 print(f'Token validation failed: {e}')
                 raise

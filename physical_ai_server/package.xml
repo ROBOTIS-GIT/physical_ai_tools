@@ -9,7 +9,7 @@
   <maintainer email="pyo@robotis.com">Pyo</maintainer>
   <license>Apache 2.0</license>
   <author email="kdy@robotis.com">Dongyun Kim</author>
-  <author email="kimsw@robotis.com">Seongwoo Kim</authorㄴ
+  <author email="kimsw@robotis.com">Seongwoo Kim</author>
   <depend>rclpy</depend>
   <depend>std_msgs</depend>
   <depend>sensor_msgs</depend>
