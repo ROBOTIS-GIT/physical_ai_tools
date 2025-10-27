@@ -2,6 +2,12 @@
 Changelog for package physical_ai_tools
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
+0.6.13 (2025-10-27)
+------------------
+* Fixed physical_ai_server crash when querying user ID without locally registered HuggingFace token
+* Changed to skip automatic HF user ID loading on Record page when Push to Hub is disabled
+* Contributors: Kiwoong Park
+
 0.6.12 (2025-10-21)
 ------------------
 * Enhanced SendTrainingCommand.srv with resume functionality.

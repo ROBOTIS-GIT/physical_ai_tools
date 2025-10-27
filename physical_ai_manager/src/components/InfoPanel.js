@@ -177,8 +177,10 @@ const InfoPanel = () => {
   }, [useMultiTaskMode, info.useOptimizedSave, dispatch]);
 
   useEffect(() => {
-    handleLoadUserId();
-  }, [handleLoadUserId]);
+    if (info.pushToHub) {
+      handleLoadUserId();
+    }
+  }, [handleLoadUserId, info.pushToHub]);
 
   useEffect(() => {
     if (userIdList.length > 0 && info.userId === undefined) {

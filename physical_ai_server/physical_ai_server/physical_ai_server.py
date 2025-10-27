@@ -287,31 +287,43 @@ class PhysicalAIServer(Node):
 
     def set_hf_user_callback(self, request, response):
         request_hf_token = request.token
-        if DataManager.register_huggingface_token(request_hf_token):
-            self.get_logger().info('Hugging Face user token registered successfully')
-            response.user_id_list = DataManager.get_huggingface_user_id()
-            response.success = True
-            response.message = 'Hugging Face user token registered successfully'
-        else:
-            self.get_logger().error('Failed to register Hugging Face user token')
+        try:
+            if DataManager.register_huggingface_token(request_hf_token):
+                self.get_logger().info('Hugging Face user token registered successfully')
+                response.user_id_list = DataManager.get_huggingface_user_id()
+                response.success = True
+                response.message = 'Hugging Face user token registered successfully'
+            else:
+                self.get_logger().error('Failed to register Hugging Face user token')
+                response.user_id_list = []
+                response.success = False
+                response.message = 'Failed to register token, Please check your token'
+        except Exception as e:
+            self.get_logger().error(f'Error in set_hf_user_callback: {str(e)}')
             response.user_id_list = []
             response.success = False
-            response.message = 'Failed to register token, Please check your token'
+            response.message = f'Error in set_hf_user_callback:\n{str(e)}'
+
         return response
 
     def get_hf_user_callback(self, request, response):
-        user_ids = DataManager.get_huggingface_user_id()
-        if user_ids is not None:
-            response.user_id_list = user_ids
-            self.get_logger().info(f'Hugging Face user IDs: {user_ids}')
-            response.success = True
-            response.message = 'Hugging Face user IDs retrieved successfully'
-
-        else:
-            self.get_logger().error('Failed to retrieve Hugging Face user ID')
+        try:
+            user_ids = DataManager.get_huggingface_user_id()
+            if user_ids is not None:
+                response.user_id_list = user_ids
+                self.get_logger().info(f'Hugging Face user IDs: {user_ids}')
+                response.success = True
+                response.message = 'Hugging Face user IDs retrieved successfully'
+            else:
+                self.get_logger().error('Failed to retrieve Hugging Face user ID')
+                response.user_id_list = []
+                response.success = False
+                response.message = 'Failed to retrieve Hugging Face user ID'
+        except Exception as e:
+            self.get_logger().error(f'Error in get_hf_user_callback: {str(e)}')
             response.user_id_list = []
             response.success = False
-            response.message = 'Failed to retrieve Hugging Face user ID'
+            response.message = f'Failed to retrieve Hugging Face user ID:\n{str(e)}'
 
         return response
 
