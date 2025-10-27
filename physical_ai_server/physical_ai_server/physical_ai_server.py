@@ -298,13 +298,13 @@ class PhysicalAIServer(Node):
                 response.user_id_list = []
                 response.success = False
                 response.message = 'Failed to register token, Please check your token'
-            return response
         except Exception as e:
             self.get_logger().error(f'Error in set_hf_user_callback: {str(e)}')
             response.user_id_list = []
             response.success = False
             response.message = f'Error in set_hf_user_callback:\n{str(e)}'
-            return response
+
+        return response
 
     def get_hf_user_callback(self, request, response):
         try:
@@ -324,7 +324,6 @@ class PhysicalAIServer(Node):
             response.user_id_list = []
             response.success = False
             response.message = f'Failed to retrieve Hugging Face user ID:\n{str(e)}'
-            return response
 
         return response
 
