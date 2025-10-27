@@ -250,14 +250,14 @@ const HuggingfaceSection = () => {
           setUserIdList(result.user_id_list);
           toast.success('User ID list loaded successfully!');
         } else {
-          toast.warning('Failed to get user ID list:\n' + result.message);
+          toast.error('Failed to get user ID list:\n' + result.message);
         }
       } else {
-        toast.warning('Failed to get user ID list from response');
+        toast.error('Failed to get user ID list from response');
       }
     } catch (error) {
-      console.error('Error loading HF user list:', error);
-      toast.warning(`Failed to load user ID list: ${error.message}`);
+      console.warn('Error loading HF user list:', error);
+      toast.error(`Failed to load user ID list: ${error.message}`);
     } finally {
       setIsLoading(false);
     }
