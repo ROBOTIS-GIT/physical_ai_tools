@@ -32,6 +32,7 @@ from huggingface_hub import (
     snapshot_download,
     upload_large_folder
 )
+from huggingface_hub.errors import LocalTokenNotFoundError
 from lerobot.datasets.utils import DEFAULT_FEATURES
 from nav_msgs.msg import Odometry
 import numpy as np
@@ -522,6 +523,9 @@ class DataManager:
                 for org_info in user_info['orgs']:
                     user_ids.append(org_info['name'])
                 return user_ids
+            except LocalTokenNotFoundError as e:
+                print(f'No registered HuggingFace token found: {e}')
+                raise Exception('No registered HuggingFace token found')
             except Exception as e:
                 print(f'Token validation failed: {e}')
                 raise

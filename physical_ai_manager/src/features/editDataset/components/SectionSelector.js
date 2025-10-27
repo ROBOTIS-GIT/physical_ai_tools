@@ -29,7 +29,7 @@ const SectionSelector = ({
     if (canChangeSection) {
       onSectionChange(section);
     } else if (!canChangeSection && activeSection !== section) {
-      toast.warning('Cannot switch sections while upload/download is in progress');
+      toast.error('Cannot switch sections while upload/download is in progress');
     }
   };
 

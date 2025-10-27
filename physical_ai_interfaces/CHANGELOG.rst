@@ -2,6 +2,10 @@
 Changelog for package physical_ai_interfaces
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
+0.6.13 (2025-10-27)
+------------------
+* None
+
 0.6.12 (2025-10-21)
 ------------------
 * Enhanced SendTrainingCommand.srv with resume functionality.
