@@ -5,6 +5,7 @@
 #include <unordered_map>
 #include <vector>
 #include <sstream>
+#include <filesystem>
 
 #include "rclcpp/rclcpp.hpp"
 #include "rclcpp/generic_subscription.hpp"
@@ -22,6 +23,10 @@ ServiceBagRecorder::ServiceBagRecorder() : rclcpp::Node("service_bag_recorder")
   stop_srv_ = this->create_service<rosbag_recorder_msgs::srv::StopRecording>(
     "stop_recording",
     std::bind(&ServiceBagRecorder::handle_stop, this, std::placeholders::_1, std::placeholders::_2));
+
+  stop_and_delete_srv_ = this->create_service<rosbag_recorder_msgs::srv::StopAndDeleteRecording>(
+    "stop_and_delete_recording",
+    std::bind(&ServiceBagRecorder::handle_stop_and_delete, this, std::placeholders::_1, std::placeholders::_2));
 }
 
 void ServiceBagRecorder::handle_start(const std::shared_ptr<rosbag_recorder_msgs::srv::StartRecording::Request> req,
@@ -43,6 +48,7 @@ void ServiceBagRecorder::handle_start(const std::shared_ptr<rosbag_recorder_msgs
     try {
       writer_ = std::make_unique<rosbag2_cpp::Writer>();
       writer_->open(req->uri);
+      current_bag_uri_ = req->uri;
 
       // Resolve types for requested topics
       std::vector<std::string> missing_topics;
@@ -66,6 +72,17 @@ void ServiceBagRecorder::handle_start(const std::shared_ptr<rosbag_recorder_msgs
       if (!missing_topics.empty()) {
         writer_.reset();
         type_for_topic_.clear();
+
+        // Delete the bag folder since we can't record the requested topics
+        if (!current_bag_uri_.empty()) {
+          std::filesystem::path bag_path(current_bag_uri_);
+          if (std::filesystem::exists(bag_path)) {
+            std::filesystem::remove_all(bag_path);
+            RCLCPP_INFO(this->get_logger(), "Deleted bag directory due to missing topic types: %s", current_bag_uri_.c_str());
+          }
+        }
+        current_bag_uri_.clear();
+
         std::ostringstream oss;
         oss << "Types not found for topics:";
         for (const auto & t : missing_topics) { oss << " " << t; }
@@ -114,6 +131,7 @@ void ServiceBagRecorder::handle_stop(const std::shared_ptr<rosbag_recorder_msgs:
       subscriptions_.clear();
       writer_.reset();
       type_for_topic_.clear();
+      current_bag_uri_.clear();
       is_recording_ = false;
       res->success = true;
       res->message = "Recording stopped";
@@ -123,6 +141,44 @@ void ServiceBagRecorder::handle_stop(const std::shared_ptr<rosbag_recorder_msgs:
       res->message = std::string("Failed to stop recording: ") + e.what();
     }
   }
+
+void ServiceBagRecorder::handle_stop_and_delete(const std::shared_ptr<rosbag_recorder_msgs::srv::StopAndDeleteRecording::Request> /*req*/,
+                                               std::shared_ptr<rosbag_recorder_msgs::srv::StopAndDeleteRecording::Response> res)
+{
+  std::scoped_lock<std::mutex> lock(mutex_);
+  if (!is_recording_) {
+    res->success = false;
+    res->message = "Not recording";
+    return;
+  }
+
+  try {
+    // Stop recording first
+    subscriptions_.clear();
+    writer_.reset();
+    type_for_topic_.clear();
+    is_recording_ = false;
+
+    // Delete the bag file
+    if (!current_bag_uri_.empty()) {
+      std::filesystem::path bag_path(current_bag_uri_);
+      if (std::filesystem::exists(bag_path)) {
+        std::filesystem::remove_all(bag_path);
+        RCLCPP_INFO(this->get_logger(), "Deleted bag directory: %s", current_bag_uri_.c_str());
+      } else {
+        RCLCPP_WARN(this->get_logger(), "Bag directory does not exist: %s", current_bag_uri_.c_str());
+      }
+    }
+
+    current_bag_uri_.clear();
+    res->success = true;
+    res->message = "Recording stopped and bag deleted";
+    RCLCPP_INFO(this->get_logger(), "Recording stopped and bag deleted");
+  } catch (const std::exception & e) {
+    res->success = false;
+    res->message = std::string("Failed to stop recording and delete bag: ") + e.what();
+  }
+}
 
 void ServiceBagRecorder::handle_serialized_message(const std::string & topic,
                                const std::shared_ptr<rclcpp::SerializedMessage> & serialized_msg)

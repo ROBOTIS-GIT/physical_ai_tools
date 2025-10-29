@@ -6,7 +6,7 @@ import json
 import rclpy
 from rclpy.node import Node
 
-from rosbag_recorder_msgs.srv import StartRecording, StopRecording
+from rosbag_recorder_msgs.srv import StartRecording, StopRecording, StopAndDeleteRecording
 
 
 class WebServiceNode(Node):
@@ -14,6 +14,7 @@ class WebServiceNode(Node):
         super().__init__('rosbag_recorder_web')
         self._start_cli = self.create_client(StartRecording, 'start_recording')
         self._stop_cli = self.create_client(StopRecording, 'stop_recording')
+        self._stop_and_delete_cli = self.create_client(StopAndDeleteRecording, 'stop_and_delete_recording')
 
         self._server_thread = None
         self._server = None
@@ -77,6 +78,14 @@ class WebServiceNode(Node):
         setStatus(JSON.stringify(json, null, 2));
       }catch(err){ setStatus(String(err)); }
     }
+    async function stopAndDeleteRecording(){
+      setStatus('Stopping and deleting...');
+      try{
+        const res = await fetch('/stop_and_delete', {method:'POST'});
+        const json = await res.json();
+        setStatus(JSON.stringify(json, null, 2));
+      }catch(err){ setStatus(String(err)); }
+    }
     function setStatus(text){ document.getElementById('status').textContent = text; }
   </script>
   </head>
@@ -91,11 +100,12 @@ class WebServiceNode(Node):
         <div>
           <button onclick=\"startRecording()\">Start Recording</button>
           <button class=\"secondary\" onclick=\"stopRecording()\">Stop Recording</button>
+          <button class=\"secondary\" onclick=\"stopAndDeleteRecording()\">Stop & Delete</button>
         </div>
         <pre id=\"status\"></pre>
       </div>
     </div>
-    <footer>Point this UI at a running node providing services <code>/start_recording</code> and <code>/stop_recording</code>.</footer>
+    <footer>Point this UI at a running node providing services <code>/start_recording</code>, <code>/stop_recording</code>, and <code>/stop_and_delete_recording</code>.</footer>
   </body>
   </html>
                     """
@@ -140,6 +150,17 @@ class WebServiceNode(Node):
                     rclpy.spin_until_future_complete(node, future, timeout_sec=10.0)
                     if not future.done():
                         return self._send_json(504, {'error': 'stop timeout'})
+                    resp = future.result()
+                    return self._send_json(200, {'success': resp.success, 'message': resp.message})
+
+                if self.path == '/stop_and_delete':
+                    if not node._stop_and_delete_cli.wait_for_service(timeout_sec=2.0):
+                        return self._send_json(503, {'error': 'stop_and_delete_recording service unavailable'})
+                    req = StopAndDeleteRecording.Request()
+                    future = node._stop_and_delete_cli.call_async(req)
+                    rclpy.spin_until_future_complete(node, future, timeout_sec=10.0)
+                    if not future.done():
+                        return self._send_json(504, {'error': 'stop_and_delete timeout'})
                     resp = future.result()
                     return self._send_json(200, {'success': resp.success, 'message': resp.message})
 
