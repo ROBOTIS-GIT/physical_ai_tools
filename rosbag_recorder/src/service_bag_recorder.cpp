@@ -46,6 +46,13 @@ void ServiceBagRecorder::handle_start(const std::shared_ptr<rosbag_recorder_msgs
     }
 
     try {
+      // Check if a bag already exists at the specified path and delete it
+      std::filesystem::path bag_path(req->uri);
+      if (std::filesystem::exists(bag_path)) {
+        std::filesystem::remove_all(bag_path);
+        RCLCPP_INFO(this->get_logger(), "Deleted existing bag directory: %s", req->uri.c_str());
+      }
+
       writer_ = std::make_unique<rosbag2_cpp::Writer>();
       writer_->open(req->uri);
       current_bag_uri_ = req->uri;
@@ -88,6 +95,7 @@ void ServiceBagRecorder::handle_start(const std::shared_ptr<rosbag_recorder_msgs
         for (const auto & t : missing_topics) { oss << " " << t; }
         res->success = false;
         res->message = oss.str();
+        RCLCPP_INFO(this->get_logger(), "Failed to start recording: %s", oss.str().c_str());
         return;
       }
 
