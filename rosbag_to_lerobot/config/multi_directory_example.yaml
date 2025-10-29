@@ -1,22 +1,28 @@
 rosbag_to_lerobot_converter:
   ros__parameters:
     # Basic conversion parameters
-    # Support both single directory (string) and multiple directories (list)
-    rosbag_dir: '/workspace/physical_ai_server/test/ffw_sg2_rev1_pickcoffeepat9'
-    # rosbag_dir: ['/path/to/dir1', '/path/to/dir2']  # Example for multiple directories
-    output_repo_id: 'test/ffw_sg2_rev1_pickcoffeepat9_converted'
-    task_name: 'pick_coffee_pat9'
-    fps: 30
+    # Example configuration for multiple rosbag directories
+    rosbag_dir: 
+      - '/workspace/physical_ai_server/ROBOTIS/ffw_bg2_rev4_PickMultiCoffee_Env3_Task1'
+      - '/workspace/physical_ai_server/ROBOTIS/ffw_bg2_rev4_PickMultiCoffee_Env3_Task2'
+      - '/workspace/physical_ai_server/ROBOTIS/ffw_bg2_rev4_PickMultiCoffee_Env3_Task3'
+    output_repo_id: 'ROBOTIS/ffw_bg2_rev4_PickMultiCoffee_Env3_combined'
+    task_name: 'ffw_bg2_rev4_PickMultiCoffee_Env3_combined'
+    fps: 10
     use_videos: true
-    robot_type: 'ffw_sg2_rev1'
+    robot_type: 'ffw_arm_only'
     use_optimized_save_mode: true
+    
     # Map from rosbag directory path to list of episode indices to skip
     skip_episodes:
-      '/workspace/physical_ai_server/test/ffw_sg2_rev1_pickcoffeepat9': []
+      '/workspace/physical_ai_server/ROBOTIS/ffw_bg2_rev4_PickMultiCoffee_Env3_Task1': [0, 1, 2]  # Skip first 3 episodes from Task1
+      '/workspace/physical_ai_server/ROBOTIS/ffw_bg2_rev4_PickMultiCoffee_Env3_Task2': [5, 6]      # Skip episodes 5 and 6 from Task2
+      '/workspace/physical_ai_server/ROBOTIS/ffw_bg2_rev4_PickMultiCoffee_Env3_Task3': []          # Don't skip any episodes from Task3
 
     # Camera configuration
     camera_topics:
       cam_head: '/zed/zed_node/left/image_rect_color/compressed'
+      cam_head_right: '/zed/zed_node/right/image_rect_color/compressed'
       cam_wrist_left: '/camera_left/camera_left/color/image_rect_raw/compressed'
       cam_wrist_right: '/camera_right/camera_right/color/image_rect_raw/compressed'
 
@@ -28,15 +34,11 @@ rosbag_to_lerobot_converter:
     # Joint state topics
     joint_state_topics:
       joints: '/joint_states'
-      odometry: '/odom'
 
     # Action topics
     action_topics:
       leader_joints_left: '/leader/joint_trajectory_command_broadcaster_left/joint_trajectory'
       leader_joints_right: '/leader/joint_trajectory_command_broadcaster_right/joint_trajectory'
-      leader_head: '/leader/joystick_controller_left/joint_trajectory'
-      leader_lift: '/leader/joystick_controller_right/joint_trajectory'
-      leader_mobile: '/cmd_vel'
 
     # Joint names in order
     joint_names:
@@ -56,9 +58,3 @@ rosbag_to_lerobot_converter:
       - 'arm_r_joint6'
       - 'arm_r_joint7'
       - 'gripper_r_joint1'
-      - 'head_joint1'
-      - 'head_joint2'
-      - 'lift_joint'
-      - 'linear_x'
-      - 'linear_y'
-      - 'angular_z'
