@@ -78,7 +78,12 @@ class RosbagReader:
             msg = msg_tuple[1]    # Second element is message data
             timestamp_ns = msg_tuple[2]  # Third element is timestamp in nanoseconds
             msg_type = get_message(topic_type_map[topic_name])
-            msg_data = deserialize_message(msg, msg_type)
+            try:
+                msg_data = deserialize_message(msg, msg_type)
+            except Exception as e:
+                # print(f"Error deserializing message: {e}")
+                # traceback.print_exc()
+                continue
 
             # Convert timestamp from nanoseconds to seconds
             current_timestamp = timestamp_ns / 1e9
@@ -278,6 +283,7 @@ class RosbagReader:
             if state_data:
                 all_timestamps.extend([ts for ts, _ in state_data])
         if not all_timestamps:
+            print(f"joint_states: {joint_states}")
             raise ValueError(f"No timestamps found for synchronization")
 
         start_time = min(all_timestamps)
@@ -455,57 +461,57 @@ def read_episode_from_bag(episode_dir: Path,
     all_actions = ({k: [] for k in action_topics.keys()} if action_topics else None)
 
     for bag_file in bag_files:
-        try:
-            messages = reader.read_bag_file(bag_file)
+        # try:
+        messages = reader.read_bag_file(bag_file)
 
-            # Process joint states from different topics
-            for state_name, topic_name in joint_state_topics.items():
-                if topic_name in messages.get('joint_states', {}):
-                    for timestamp, msg in messages['joint_states'][topic_name]:
-                        if isinstance(msg, JointState):
-                            joint_state_names = [name for name in joint_names if name not in ['linear_x', 'linear_y', 'angular_z']]
-                            joint_state = reader.extract_joint_state(msg, joint_state_names)
-                            all_joint_states[state_name].append((timestamp, joint_state))
-                        elif isinstance(msg, Odometry):
-                            velocity_names = ['linear_x', 'linear_y', 'angular_z']
-                            velocity_state = reader.extract_odometry_velocity(msg, velocity_names)
-                            all_joint_states[state_name].append((timestamp, velocity_state))
-                else:
-                    error_msg = f"Topic {topic_name} not found in bag file"
-                    print(error_msg)
-                    raise ValueError(error_msg)
+        # Process joint states from different topics
+        for state_name, topic_name in joint_state_topics.items():
+            if topic_name in messages.get('joint_states', {}):
+                for timestamp, msg in messages['joint_states'][topic_name]:
+                    if isinstance(msg, JointState):
+                        joint_state_names = [name for name in joint_names if name not in ['linear_x', 'linear_y', 'angular_z']]
+                        joint_state = reader.extract_joint_state(msg, joint_state_names)
+                        all_joint_states[state_name].append((timestamp, joint_state))
+                    elif isinstance(msg, Odometry):
+                        velocity_names = ['linear_x', 'linear_y', 'angular_z']
+                        velocity_state = reader.extract_odometry_velocity(msg, velocity_names)
+                        all_joint_states[state_name].append((timestamp, velocity_state))
+            else:
+                error_msg = f"Topic {topic_name} not found in bag file"
+                print(error_msg)
+                raise ValueError(error_msg)
 
-            # Process images
-            for cam_name, topic_name in camera_topics.items():
-                if topic_name in messages.get('images', {}):
-                    for timestamp, msg in messages['images'][topic_name]:
-                        if hasattr(msg, 'format'):
-                            image = reader.extract_compressed_image(msg)
-                        else:
-                            image = reader.extract_image(msg)
+        # Process images
+        for cam_name, topic_name in camera_topics.items():
+            if topic_name in messages.get('images', {}):
+                for timestamp, msg in messages['images'][topic_name]:
+                    if hasattr(msg, 'format'):
+                        image = reader.extract_compressed_image(msg)
+                    else:
+                        image = reader.extract_image(msg)
 
-                        if image is not None:
-                            all_images[cam_name].append((timestamp, image))
+                    if image is not None:
+                        all_images[cam_name].append((timestamp, image))
 
-            # Process actions
-            if action_topics:
-                for name, topic in action_topics.items():
-                    if topic in messages.get('actions', {}):
-                        # Ensure the list exists
-                        all_actions.setdefault(name, [])
-                        for timestamp, msg in messages['actions'][topic]:
-                            if isinstance(msg, JointTrajectory):
-                                joint_state_names = [n for n in joint_names if n not in ['linear_x', 'linear_y', 'angular_z']]
-                                act_map = reader.extract_joint_trajectory(msg, joint_state_names)
-                                all_actions[name].append((timestamp, act_map))
-                            elif isinstance(msg, Twist):
-                                vel_names = ['linear_x', 'linear_y', 'angular_z']
-                                act_map = reader.extract_twist(msg, vel_names)
-                                all_actions[name].append((timestamp, act_map))
-        except Exception as e:
-            print(f"Error reading bag file {bag_file}")
-            traceback.print_exc()
-            continue
+        # Process actions
+        if action_topics:
+            for name, topic in action_topics.items():
+                if topic in messages.get('actions', {}):
+                    # Ensure the list exists
+                    all_actions.setdefault(name, [])
+                    for timestamp, msg in messages['actions'][topic]:
+                        if isinstance(msg, JointTrajectory):
+                            joint_state_names = [n for n in joint_names if n not in ['linear_x', 'linear_y', 'angular_z']]
+                            act_map = reader.extract_joint_trajectory(msg, joint_state_names)
+                            all_actions[name].append((timestamp, act_map))
+                        elif isinstance(msg, Twist):
+                            vel_names = ['linear_x', 'linear_y', 'angular_z']
+                            act_map = reader.extract_twist(msg, vel_names)
+                            all_actions[name].append((timestamp, act_map))
+        # except Exception as e:
+        #     print(f"Error reading bag file {bag_file}")
+        #     traceback.print_exc()
+        #     continue
 
     # Synchronize data at target frequency
     synchronized_data = reader.synchronize_data(all_joint_states, all_images, joint_names, all_actions, target_fps=fps)
