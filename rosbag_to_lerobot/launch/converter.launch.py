@@ -34,7 +34,7 @@ def generate_launch_description():
 
     fps_arg = DeclareLaunchArgument(
         'fps',
-        default_value='30',
+        default_value='10',
         description='Frames per second for the dataset'
     )
 
@@ -50,6 +50,25 @@ def generate_launch_description():
         description='Robot type for the dataset'
     )
 
+    # Camera rotation arguments
+    cam_head_rotation_arg = DeclareLaunchArgument(
+        'cam_head_rotation',
+        default_value='0',
+        description='Rotation angle for head camera (0, 90, 180, 270 degrees)'
+    )
+
+    cam_wrist_left_rotation_arg = DeclareLaunchArgument(
+        'cam_wrist_left_rotation',
+        default_value='270',
+        description='Rotation angle for left wrist camera (0, 90, 180, 270 degrees)'
+    )
+
+    cam_wrist_right_rotation_arg = DeclareLaunchArgument(
+        'cam_wrist_right_rotation',
+        default_value='270',
+        description='Rotation angle for right wrist camera (0, 90, 180, 270 degrees)'
+    )
+
     # Create the node
     converter_node = Node(
         package='rosbag_to_lerobot',
@@ -62,6 +81,9 @@ def generate_launch_description():
             'fps': LaunchConfiguration('fps'),
             'use_videos': LaunchConfiguration('use_videos'),
             'robot_type': LaunchConfiguration('robot_type'),
+            'cam_head_rotation': LaunchConfiguration('cam_head_rotation'),
+            'cam_wrist_left_rotation': LaunchConfiguration('cam_wrist_left_rotation'),
+            'cam_wrist_right_rotation': LaunchConfiguration('cam_wrist_right_rotation'),
         }],
         output='screen'
     )
@@ -73,5 +95,8 @@ def generate_launch_description():
         fps_arg,
         use_videos_arg,
         robot_type_arg,
+        cam_head_rotation_arg,
+        cam_wrist_left_rotation_arg,
+        cam_wrist_right_rotation_arg,
         converter_node,
     ])
