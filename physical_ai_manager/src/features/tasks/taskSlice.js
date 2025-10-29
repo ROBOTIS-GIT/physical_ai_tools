@@ -37,6 +37,8 @@ const initialState = {
     pushToHub: true,
     privateMode: false,
     useOptimizedSave: true,
+    useLeRobotFormat: true,
+    useRosBag2Format: false,
   },
   taskStatus: {
     robotType: '',

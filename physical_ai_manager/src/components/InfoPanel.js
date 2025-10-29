@@ -749,6 +749,46 @@ const InfoPanel = () => {
         </div>
       </div>
 
+      <div className={clsx('flex', 'items-start', 'mb-2')}>
+        <span className={classLabel}>Dataset Format</span>
+        <div className="flex flex-col gap-2">
+          <div className={clsx('flex', 'items-center')}>
+            <input
+              className={classCheckbox}
+              type="checkbox"
+              checked={!!info.useLeRobotFormat}
+              onChange={(e) => {
+                const newValue = e.target.checked;
+                if (!newValue && !info.useRosBag2Format) {
+                  toast.error('At least one format must be selected');
+                  return;
+                }
+                handleChange('useLeRobotFormat', newValue);
+              }}
+              disabled={!isEditable}
+            />
+            <span className={clsx('ml-2', 'text-sm', 'text-gray-700')}>LeRobot v2.1</span>
+          </div>
+          <div className={clsx('flex', 'items-center')}>
+            <input
+              className={classCheckbox}
+              type="checkbox"
+              checked={!!info.useRosBag2Format}
+              onChange={(e) => {
+                const newValue = e.target.checked;
+                if (!newValue && !info.useLeRobotFormat) {
+                  toast.error('At least one format must be selected');
+                  return;
+                }
+                handleChange('useRosBag2Format', newValue);
+              }}
+              disabled={!isEditable}
+            />
+            <span className={clsx('ml-2', 'text-sm', 'text-gray-700')}>RosBag2</span>
+          </div>
+        </div>
+      </div>
+
       <div className="mt-4 space-y-2">
         <button
           className={clsx(
