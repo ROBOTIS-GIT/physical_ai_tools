@@ -11,7 +11,14 @@ find_package(rclcpp REQUIRED)
 find_package(rosbag2_cpp REQUIRED)
 find_package(sensor_msgs REQUIRED)
 find_package(rosbag2_transport REQUIRED)
-find_package(rosbag_recorder_msgs REQUIRED)
+find_package(rosidl_default_generators REQUIRED)
+
+# Generate service interfaces
+rosidl_generate_interfaces(${PROJECT_NAME}
+  "srv/StartRecording.srv"
+  "srv/StopRecording.srv"
+  "srv/StopAndDeleteRecording.srv"
+)
 
 add_executable(service_bag_recorder src/service_bag_recorder.cpp)
 
@@ -24,8 +31,13 @@ ament_target_dependencies(
   "rclcpp"
   "rosbag2_cpp"
   "sensor_msgs"
-  "rosbag_recorder_msgs"
 )
+
+# Link against the generated interfaces using the modern approach
+rosidl_get_typesupport_target(cpp_typesupport_target
+  ${PROJECT_NAME} "rosidl_typesupport_cpp"
+)
+target_link_libraries(service_bag_recorder "${cpp_typesupport_target}")
 
 install(TARGETS service_bag_recorder
   DESTINATION lib/${PROJECT_NAME})
@@ -45,5 +57,7 @@ if(BUILD_TESTING)
   set(ament_cmake_cpplint_FOUND TRUE)
   ament_lint_auto_find_test_dependencies()
 endif()
+
+ament_export_dependencies(rosidl_default_runtime)
 
 ament_package()

@@ -47,7 +47,7 @@ from sensor_msgs.msg import CompressedImage, JointState
 from std_msgs.msg import Empty, String
 from trajectory_msgs.msg import JointTrajectory
 
-from rosbag_recorder_msgs.srv import StartRecording, StopRecording, StopAndDeleteRecording
+from rosbag_recorder.srv import StartRecording, StopRecording, StopAndDeleteRecording
 
 
 class Communicator:

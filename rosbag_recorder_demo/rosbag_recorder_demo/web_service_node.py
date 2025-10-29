@@ -6,7 +6,7 @@ import json
 import rclpy
 from rclpy.node import Node
 
-from rosbag_recorder_msgs.srv import StartRecording, StopRecording, StopAndDeleteRecording
+from rosbag_recorder.srv import StartRecording, StopRecording, StopAndDeleteRecording
 
 
 class WebServiceNode(Node):
