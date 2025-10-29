@@ -418,7 +418,7 @@ class RosbagToLeRobotConverter(Node):
         # Save the episode using optimized or standard mode
         if self.use_optimized_save_mode:
             dataset.save_episode_without_write_image()
-            if not dataset.check_video_encoding_completed():
+            while not dataset.check_video_encoding_completed():
                 self.get_logger().info("Waiting for video encoding to complete")
                 time.sleep(0.1)
         else:
