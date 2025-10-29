@@ -19,7 +19,7 @@ def generate_launch_description():
     config_file_arg = DeclareLaunchArgument(
         'config_file',
         default_value=PathJoinSubstitution([
-            FindPackageShare('rosbag_to_lerobot'), 'config', 'ffw_bg2_rev4_config.yaml'
+            FindPackageShare('rosbag_to_lerobot'), 'config', 'ffw_arm_only_config.yaml'
         ]),
         description='Path to YAML config file (required)'
     )

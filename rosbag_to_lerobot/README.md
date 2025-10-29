@@ -57,6 +57,7 @@ ros2 run rosbag_to_lerobot rosbag_to_lerobot_converter
 - `fps` (int): Frames per second for the dataset
 - `use_videos` (bool): Whether to use video format for images
 - `robot_type` (string): Robot type for the dataset
+- `use_optimized_save_mode` (bool): Whether to use optimized save mode (keeps images in RAM and encodes at the end, default: false)
 
 ## Data Structure
 
@@ -95,6 +96,28 @@ The converter extracts the following joint positions:
 - `head_joint1`, `head_joint2`
 - `lift_joint`
 - `linear_x`, `linear_y`, `angular_z`
+
+## Optimized Save Mode
+
+The converter supports an optimized save mode that can significantly improve performance for large datasets:
+
+- **Standard Mode** (default): Images are written to disk immediately as they are processed
+- **Optimized Mode**: Images are kept in RAM during processing and encoded to video files at the end
+
+### Benefits of Optimized Mode:
+- **Faster Processing**: No disk I/O during frame processing
+- **Better for Large Datasets**: Reduces wear on storage devices
+- **Memory Efficient**: Uses the same approach as `physical_ai_server`
+
+### When to Use Optimized Mode:
+- Large datasets with many episodes
+- Systems with sufficient RAM
+- When processing speed is important
+
+### Memory Considerations:
+- Ensure sufficient RAM is available for all images in an episode
+- Monitor memory usage during conversion
+- Consider episode length and image resolution
 
 ## Output
 
