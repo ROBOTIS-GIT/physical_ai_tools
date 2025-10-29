@@ -13,30 +13,6 @@ find_package(sensor_msgs REQUIRED)
 find_package(rosbag2_transport REQUIRED)
 find_package(rosbag_recorder_msgs REQUIRED)
 
-add_executable(joint_states_recorder src/joint_states_recorder.cpp)
-target_include_directories(joint_states_recorder PUBLIC
-  $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
-  $<INSTALL_INTERFACE:include/${PROJECT_NAME}>)
-target_compile_features(joint_states_recorder PUBLIC c_std_99 cxx_std_17)  # Require C99 and C++17
-ament_target_dependencies(
-  joint_states_recorder
-  "rclcpp"
-  "rosbag2_cpp"
-  "sensor_msgs"
-)
-
-add_executable(joint_states_bag_reader src/joint_states_bag_reader.cpp)
-target_include_directories(joint_states_bag_reader PUBLIC
-  $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
-  $<INSTALL_INTERFACE:include/${PROJECT_NAME}>)
-target_compile_features(joint_states_bag_reader PUBLIC c_std_99 cxx_std_17)
-ament_target_dependencies(
-  joint_states_bag_reader
-  "rclcpp"
-  "rosbag2_transport"
-  "sensor_msgs"
-)
-
 add_executable(service_bag_recorder src/service_bag_recorder.cpp)
 
 target_include_directories(service_bag_recorder PUBLIC
@@ -50,12 +26,6 @@ ament_target_dependencies(
   "sensor_msgs"
   "rosbag_recorder_msgs"
 )
-
-install(TARGETS joint_states_recorder
-  DESTINATION lib/${PROJECT_NAME})
-
-install(TARGETS joint_states_bag_reader
-  DESTINATION lib/${PROJECT_NAME})
 
 install(TARGETS service_bag_recorder
   DESTINATION lib/${PROJECT_NAME})
