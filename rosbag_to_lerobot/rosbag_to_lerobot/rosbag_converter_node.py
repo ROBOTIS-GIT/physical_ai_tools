@@ -11,7 +11,7 @@ import os
 import sys
 import argparse
 from pathlib import Path
-from typing import Dict, List, Optional, Tuple
+from typing import Dict, List, Optional, Tuple, Any
 import numpy as np
 import cv2
 import torch
@@ -21,6 +21,8 @@ import rclpy
 from rclpy.node import Node
 from rclpy.parameter import Parameter
 from rclpy.qos import QoSProfile, ReliabilityPolicy, HistoryPolicy
+from rcl_interfaces.msg import ParameterDescriptor
+import yaml
 
 from sensor_msgs.msg import JointState, CompressedImage
 from std_msgs.msg import String
@@ -39,19 +41,67 @@ class RosbagToLeRobotConverter(Node):
     def __init__(self):
         super().__init__('rosbag_to_lerobot_converter')
 
-        # Declare parameters
-        self.declare_parameter('rosbag_dir', '/workspace/physical_ai_server/test/ffw_sg2_rev1_pickcoffeepat9')
-        self.declare_parameter('output_repo_id', 'test/ffw_sg2_rev1_pickcoffeepat9_converted')
-        self.declare_parameter('task_name', 'pick_coffee_pat9')
-        self.declare_parameter('fps', 30)
-        self.declare_parameter('use_videos', True)
-        self.declare_parameter('robot_type', 'mobile_robot')
-        # Individual camera rotation parameters
-        self.declare_parameter('cam_head_rotation', 0)  # 0, 90, 180, 270 degrees
-        self.declare_parameter('cam_wrist_left_rotation', 0)  # 0, 90, 180, 270 degrees
-        self.declare_parameter('cam_wrist_right_rotation', 0)  # 0, 90, 180, 270 degrees
+        # Declare parameters without defaults, using dynamic typing to avoid warnings
+        dyn = ParameterDescriptor(dynamic_typing=True)
+        self.declare_parameter('rosbag_dir', descriptor=dyn)
+        self.declare_parameter('output_repo_id', descriptor=dyn)
+        self.declare_parameter('task_name', descriptor=dyn)
+        self.declare_parameter('fps', descriptor=dyn)
+        self.declare_parameter('use_videos', descriptor=dyn)
+        self.declare_parameter('robot_type', descriptor=dyn)
+        self.declare_parameter('camera_topics', descriptor=dyn)
+        self.declare_parameter('camera_rotations', descriptor=dyn)
+        self.declare_parameter('joint_state_topics', descriptor=dyn)
+        self.declare_parameter('action_topics', descriptor=dyn)
+        self.declare_parameter('joint_names', descriptor=dyn)
+        self.declare_parameter('joint_order', descriptor=dyn)
+        self.declare_parameter('config_yaml_path', descriptor=dyn)
 
-        # Get parameters
+        # Helper parsers to support both YAML dict/list and JSON strings
+        def parse_dict_param(param_name: str, required: bool = True) -> Dict[str, Any]:
+            value = self.get_parameter(param_name).value
+            if value is None:
+                # Try to fallback to reading from YAML file if provided
+                config_yaml_path = self.get_parameter('config_yaml_path').value
+                if config_yaml_path and os.path.isfile(config_yaml_path):
+                    try:
+                        with open(config_yaml_path, 'r') as f:
+                            data = yaml.safe_load(f) or {}
+                        # ROS2 YAML structure: <node_name>: ros__parameters: {...}
+                        node_name = self.get_name()
+                        node_section = data.get(node_name, {})
+                        ros_params = node_section.get('ros__parameters', {})
+                        fallback = ros_params.get(param_name)
+                        if isinstance(fallback, dict):
+                            return fallback
+                    except Exception as e:
+                        pass
+                if required:
+                    raise ValueError(f"Missing required parameter: {param_name}")
+                return {}
+
+        def parse_list_param(param_name: str, required: bool = True) -> List[Any]:
+            value = self.get_parameter(param_name).value
+            if value is None:
+                # Try to fallback to reading from YAML file if provided
+                config_yaml_path = self.get_parameter('config_yaml_path').value
+                if config_yaml_path and os.path.isfile(config_yaml_path):
+                    try:
+                        with open(config_yaml_path, 'r') as f:
+                            data = yaml.safe_load(f) or {}
+                        node_name = self.get_name()
+                        node_section = data.get(node_name, {})
+                        ros_params = node_section.get('ros__parameters', {})
+                        fallback = ros_params.get(param_name)
+                        if isinstance(fallback, list):
+                            return fallback
+                    except Exception:
+                        pass
+                if required:
+                    raise ValueError(f"Missing required parameter: {param_name}")
+                return []
+
+        # Get parameters and validate them
         self.rosbag_dir = Path(self.get_parameter('rosbag_dir').value)
         self.output_repo_id = self.get_parameter('output_repo_id').value
         self.task_name = self.get_parameter('task_name').value
@@ -59,58 +109,110 @@ class RosbagToLeRobotConverter(Node):
         self.use_videos = self.get_parameter('use_videos').value
         self.robot_type = self.get_parameter('robot_type').value
 
-        # Get individual camera rotation parameters
-        self.camera_rotations = {
-            'cam_head': self.get_parameter('cam_head_rotation').value,
-            'cam_wrist_left': self.get_parameter('cam_wrist_left_rotation').value,
-            'cam_wrist_right': self.get_parameter('cam_wrist_right_rotation').value,
-        }
+        # Validate basic parameters
+        if not self.rosbag_dir.exists():
+            raise ValueError(f"Rosbag directory does not exist: {self.rosbag_dir}")
+        if not self.output_repo_id:
+            raise ValueError("output_repo_id parameter is required")
+        if not self.task_name:
+            raise ValueError("task_name parameter is required")
+        if self.fps <= 0:
+            raise ValueError(f"fps must be positive, got: {self.fps}")
+        if not isinstance(self.use_videos, bool):
+            raise ValueError(f"use_videos must be boolean, got: {self.use_videos}")
+        if not self.robot_type:
+            raise ValueError("robot_type parameter is required")
+
+        # Parse and validate camera rotation parameters (dict)
+        self.camera_rotations = parse_dict_param('camera_rotations', required=False)
+
+        # Parse and validate camera topics parameters (dict)
+        self.camera_topics = parse_dict_param('camera_topics', required=True)
+        if not self.camera_topics:
+            raise ValueError("camera_topics cannot be empty")
+
+        # Parse and validate joint state topics parameters (dict)
+        self.joint_state_topics = parse_dict_param('joint_state_topics', required=True)
+        if not self.joint_state_topics:
+            raise ValueError("joint_state_topics cannot be empty")
+
+        # Parse and validate action topics parameters (dict)
+        self.action_topics = parse_dict_param('action_topics', required=True)
+        if not self.action_topics:
+            raise ValueError("action_topics cannot be empty")
+
+        # Prefer joint_names (list). If absent, derive from joint_order (nested dict of lists)
+        joint_names_param = self.get_parameter('joint_names').value
+        if joint_names_param is not None:
+            # Allow list or JSON string
+            if isinstance(joint_names_param, list):
+                self.joint_names = joint_names_param
+            elif isinstance(joint_names_param, str):
+                import json
+                try:
+                    self.joint_names = json.loads(joint_names_param)
+                except json.JSONDecodeError as e:
+                    raise ValueError(f"Invalid JSON for joint_names: {e}")
+            else:
+                raise ValueError(f"joint_names must be a list or JSON string, got: {type(joint_names_param)}")
+            if not self.joint_names:
+                raise ValueError("joint_names cannot be empty")
+        else:
+            # Fallback to nested joint_order mapping
+            joint_order = parse_dict_param('joint_order', required=True)
+            ordered_names: List[str] = []
+            for group_name, names in joint_order.items():
+                if not isinstance(names, list) or not all(isinstance(n, str) and n.strip() for n in names):
+                    raise ValueError(f"joint_order['{group_name}'] must be a non-empty list of strings")
+                ordered_names.extend(names)
+            if not ordered_names:
+                raise ValueError("Derived joint_names from joint_order is empty")
+            self.joint_names = ordered_names
 
         # Validate rotation parameters
         for camera_name, rotation in self.camera_rotations.items():
+            if camera_name not in self.camera_topics:
+                raise ValueError(f"Camera '{camera_name}' in camera_rotations not found in camera_topics")
             if rotation not in [0, 90, 180, 270]:
                 raise ValueError(f"Invalid rotation for {camera_name}: {rotation}. Must be 0, 90, 180, or 270 degrees")
+
+        # Validate that all camera topics are valid ROS topic names
+        for camera_name, topic in self.camera_topics.items():
+            if not topic.startswith('/'):
+                raise ValueError(f"Invalid ROS topic for camera '{camera_name}': {topic}. Must start with '/'")
+
+        # Validate that all joint state topics are valid ROS topic names
+        for topic_name, topic in self.joint_state_topics.items():
+            if not topic.startswith('/'):
+                raise ValueError(f"Invalid ROS topic for joint state '{topic_name}': {topic}. Must start with '/'")
+
+        # Validate that all action topics are valid ROS topic names
+        for action_name, topic in self.action_topics.items():
+            if not topic.startswith('/'):
+                raise ValueError(f"Invalid ROS topic for action '{action_name}': {topic}. Must start with '/'")
 
         # Initialize CV bridge
         self.bridge = CvBridge()
 
-        # Joint names for the robot
-        self.joint_names = [
-            'arm_l_joint1', 'arm_l_joint2', 'arm_l_joint3', 'arm_l_joint4',
-            'arm_l_joint5', 'arm_l_joint6', 'arm_l_joint7', 'gripper_l_joint1',
-            'arm_r_joint1', 'arm_r_joint2', 'arm_r_joint3', 'arm_r_joint4',
-            'arm_r_joint5', 'arm_r_joint6', 'arm_r_joint7', 'gripper_r_joint1',
-            'head_joint1', 'head_joint2', 'lift_joint', 'linear_x', 'linear_y', 'angular_z'
-        ]
-
-        # Camera topics
-        self.camera_topics = {
-            'cam_head': '/zed/zed_node/left/image_rect_color/compressed',
-            'cam_wrist_left': '/camera_left/camera_left/color/image_rect_raw/compressed',
-            'cam_wrist_right': '/camera_right/camera_right/color/image_rect_raw/compressed'
-        }
-
-        # Joint state topics
-        self.joint_state_topics = {
-            'joints': '/joint_states',
-            'odometry': '/odom'
-        }
-
-        # Leader action topics (example mapping; adjust as needed)
-        self.action_topics = {
-            'leader_joints_left': '/leader/joint_trajectory_command_broadcaster_left/joint_trajectory',
-            'leader_joints_right': '/leader/joint_trajectory_command_broadcaster_right/joint_trajectory',
-            'leader_head': '/leader/joystick_controller_left/joint_trajectory',
-            'leader_lift': '/leader/joystick_controller_right/joint_trajectory',
-            'leader_mobile': '/cmd_vel',
-        }
+        # Validate that all joint names are non-empty strings
+        for joint_name in self.joint_names:
+            if not isinstance(joint_name, str) or not joint_name.strip():
+                raise ValueError(f"Invalid joint name: {joint_name}. Must be a non-empty string")
 
         self.get_logger().info(f'RosbagToLeRobotConverter initialized')
         self.get_logger().info(f'Rosbag directory: {self.rosbag_dir}')
         self.get_logger().info(f'Output repo ID: {self.output_repo_id}')
+        self.get_logger().info(f'Task name: {self.task_name}')
         self.get_logger().info(f'Target frequency: {self.fps} Hz')
-        for camera_name, rotation in self.camera_rotations.items():
-            self.get_logger().info(f'{camera_name} rotation: {rotation} degrees')
+        self.get_logger().info(f'Use videos: {self.use_videos}')
+        self.get_logger().info(f'Robot type: {self.robot_type}')
+        self.get_logger().info(f'Configured cameras: {list(self.camera_topics.keys())}')
+        for camera_name, topic in self.camera_topics.items():
+            rotation = self.camera_rotations.get(camera_name, 0)
+            self.get_logger().info(f'  {camera_name}: {topic} (rotation: {rotation}°)')
+        self.get_logger().info(f'Joint state topics: {list(self.joint_state_topics.keys())}')
+        self.get_logger().info(f'Action topics: {list(self.action_topics.keys())}')
+        self.get_logger().info(f'Joint names ({len(self.joint_names)}): {self.joint_names}')
 
     def rotate_image(self, image: np.ndarray, camera_name: str) -> np.ndarray:
         """Rotate image by the specified angle for the given camera."""
