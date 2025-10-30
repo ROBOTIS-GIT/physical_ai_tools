@@ -11,8 +11,8 @@
 #include <rclcpp/generic_subscription.hpp>
 #include <rosbag2_cpp/writer.hpp>
 
-#include "rosbag_recorder/srv/set_record_config.hpp"
-#include "std_srvs/srv/trigger.hpp"
+#include "rosbag_recorder/srv/send_command.hpp"
+
 
 class ServiceBagRecorder : public rclcpp::Node
 {
@@ -20,25 +20,15 @@ public:
   ServiceBagRecorder();
 
 private:
-  void handle_set_record_config(
-    const std::shared_ptr<rosbag_recorder::srv::SetRecordConfig::Request> req,
-    std::shared_ptr<rosbag_recorder::srv::SetRecordConfig::Response> res);
+  void handle_send_command(
+    const std::shared_ptr<rosbag_recorder::srv::SendCommand::Request> req,
+    std::shared_ptr<rosbag_recorder::srv::SendCommand::Response> res);
 
-  void handle_prepare(
-    const std::shared_ptr<std_srvs::srv::Trigger::Request> req,
-    std::shared_ptr<std_srvs::srv::Trigger::Response> res);
-
-  void handle_start(
-    const std::shared_ptr<std_srvs::srv::Trigger::Request> req,
-    std::shared_ptr<std_srvs::srv::Trigger::Response> res);
-
-  void handle_stop(
-    const std::shared_ptr<std_srvs::srv::Trigger::Request> req,
-    std::shared_ptr<std_srvs::srv::Trigger::Response> res);
-
-  void handle_stop_and_delete(
-    const std::shared_ptr<std_srvs::srv::Trigger::Request> req,
-    std::shared_ptr<std_srvs::srv::Trigger::Response> res);
+  void handle_prepare(const std::vector<std::string> & topics);
+  void handle_start(const std::string & uri);
+  void handle_stop();
+  void handle_stop_and_delete();
+  void handle_finish();
 
   void handle_serialized_message(
     const std::string & topic,
@@ -51,11 +41,7 @@ private:
   void delete_bag_directory(const std::string & bag_uri);
   void create_subscriptions();
 
-  rclcpp::Service<rosbag_recorder::srv::SetRecordConfig>::SharedPtr set_record_config_srv_;
-  rclcpp::Service<std_srvs::srv::Trigger>::SharedPtr prepare_srv_;
-  rclcpp::Service<std_srvs::srv::Trigger>::SharedPtr start_srv_;
-  rclcpp::Service<std_srvs::srv::Trigger>::SharedPtr stop_srv_;
-  rclcpp::Service<std_srvs::srv::Trigger>::SharedPtr stop_and_delete_srv_;
+  rclcpp::Service<rosbag_recorder::srv::SendCommand>::SharedPtr send_command_srv_;
 
   std::vector<rclcpp::GenericSubscription::SharedPtr> subscriptions_;
   std::unique_ptr<rosbag2_cpp::Writer> writer_;

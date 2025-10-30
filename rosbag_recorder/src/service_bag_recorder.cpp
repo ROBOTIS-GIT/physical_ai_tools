@@ -20,81 +20,113 @@ ServiceBagRecorder::ServiceBagRecorder()
 {
   RCLCPP_INFO(this->get_logger(), "Starting rosbag recorder node");
 
-  set_record_config_srv_ = this->create_service<rosbag_recorder::srv::SetRecordConfig>(
-    "rosbag_recorder/set_record_config",
+  send_command_srv_ = this->create_service<rosbag_recorder::srv::SendCommand>(
+    "rosbag_recorder/send_command",
     std::bind(
-      &ServiceBagRecorder::handle_set_record_config, this, std::placeholders::_1,
-      std::placeholders::_2));
-
-  prepare_srv_ = this->create_service<std_srvs::srv::Trigger>(
-    "rosbag_recorder/command/prepare",
-    std::bind(
-      &ServiceBagRecorder::handle_prepare, this, std::placeholders::_1,
-      std::placeholders::_2));
-
-  start_srv_ = this->create_service<std_srvs::srv::Trigger>(
-    "rosbag_recorder/command/start",
-    std::bind(
-      &ServiceBagRecorder::handle_start, this, std::placeholders::_1,
-      std::placeholders::_2));
-
-  stop_srv_ = this->create_service<std_srvs::srv::Trigger>(
-    "rosbag_recorder/command/stop",
-    std::bind(
-      &ServiceBagRecorder::handle_stop, this, std::placeholders::_1,
-      std::placeholders::_2));
-
-  stop_and_delete_srv_ = this->create_service<std_srvs::srv::Trigger>(
-    "rosbag_recorder/command/stop_and_delete",
-    std::bind(
-      &ServiceBagRecorder::handle_stop_and_delete, this, std::placeholders::_1,
+      &ServiceBagRecorder::handle_send_command, this, std::placeholders::_1,
       std::placeholders::_2));
 }
 
-void ServiceBagRecorder::handle_set_record_config(
-  const std::shared_ptr<rosbag_recorder::srv::SetRecordConfig::Request> req,
-  std::shared_ptr<rosbag_recorder::srv::SetRecordConfig::Response> res)
+void ServiceBagRecorder::handle_send_command(
+  const std::shared_ptr<rosbag_recorder::srv::SendCommand::Request> req,
+  std::shared_ptr<rosbag_recorder::srv::SendCommand::Response> res)
 {
   std::scoped_lock<std::mutex> lock(mutex_);
 
-  if (is_recording_) {
+  RCLCPP_INFO(this->get_logger(), "Received command: %d", req->command);
+
+  try {
+    switch (req->command) {
+      case rosbag_recorder::srv::SendCommand::Request::PREPARE:
+        handle_prepare(req->topics);
+        res->success = true;
+        res->message = "Recording prepared";
+        break;
+      case rosbag_recorder::srv::SendCommand::Request::START:
+        handle_start(req->uri);
+        res->success = true;
+        res->message = "Recording started";
+        break;
+      case rosbag_recorder::srv::SendCommand::Request::STOP:
+        handle_stop();
+        res->success = true;
+        res->message = "Recording stopped";
+        break;
+      case rosbag_recorder::srv::SendCommand::Request::STOP_AND_DELETE:
+        handle_stop_and_delete();
+        res->success = true;
+        res->message = "Recording stopped and bag deleted";
+        break;
+      case rosbag_recorder::srv::SendCommand::Request::FINISH:
+        handle_finish();
+        res->success = true;
+        res->message = "Recording finished";
+        break;
+      default:
+        res->success = false;
+        res->message = "Invalid command";
+        RCLCPP_ERROR(this->get_logger(), "Invalid command: %d", req->command);
+        break;
+    }
+  } catch (const std::exception & e) {
     res->success = false;
-    res->message = "Already recording";
-    return;
+    res->message = e.what();
+
+    RCLCPP_ERROR(this->get_logger(), "Failed to execute command: %s", e.what());
   }
-
-  if (req->uri.empty() || req->topics.empty()) {
-    res->success = false;
-    res->message = "uri and topics must be provided";
-    return;
-  }
-
-  current_bag_uri_ = req->uri;
-  topics_to_record_ = req->topics;
-
-  res->success = true;
-  res->message = "Record config set successfully";
 }
 
-void ServiceBagRecorder::handle_prepare(
-  const std::shared_ptr<std_srvs::srv::Trigger::Request>/*req*/,
-  std::shared_ptr<std_srvs::srv::Trigger::Response> res)
+void ServiceBagRecorder::handle_prepare(const std::vector<std::string> & topics)
 {
-  std::scoped_lock<std::mutex> lock(mutex_);
+  RCLCPP_INFO(this->get_logger(), "Prepare recording()");
 
   if (is_recording_) {
-    res->success = false;
-    res->message = "Already recording";
-    return;
+    throw std::runtime_error("Already recording");
   }
 
-  if (current_bag_uri_.empty() || topics_to_record_.empty()) {
-    res->success = false;
-    res->message = "Record config not set";
-    return;
+  if (topics.empty()) {
+    throw std::runtime_error("Topics are required");
   }
 
   try {
+    topics_to_record_ = topics;
+
+    auto names_and_types = this->get_topic_names_and_types();
+
+    for (const auto & topic : topics_to_record_) {
+      auto it = names_and_types.find(topic);
+      const std::string & type = it->second.front();
+
+      type_for_topic_[topic] = type;
+    }
+
+    create_subscriptions();
+
+    RCLCPP_INFO(
+      this->get_logger(),
+      "Recording prepared: topics=%zu",
+      topics_to_record_.size());
+  } catch (const std::exception & e) {
+    writer_.reset();
+    throw std::runtime_error(std::string("Failed to prepare recording: ") + e.what());
+  }
+}
+
+void ServiceBagRecorder::handle_start(const std::string & uri)
+{
+  RCLCPP_INFO(this->get_logger(), "Start recording()");
+
+  if (is_recording_) {
+    throw std::runtime_error("Already recording");
+  }
+
+  if (uri.empty()) {
+    throw std::runtime_error("Bag URI is required");
+  }
+
+  try {
+    current_bag_uri_ = uri;
+
     // Check if a bag already exists at the specified path and delete it
     delete_bag_directory(current_bag_uri_);
 
@@ -124,85 +156,46 @@ void ServiceBagRecorder::handle_prepare(
 
       RCLCPP_INFO(this->get_logger(), "Failed to start recording: %s", oss.str().c_str());
 
-      res->success = false;
-      res->message = oss.str();
-      return;
+      throw std::runtime_error(oss.str());
     }
 
-    create_subscriptions();
-
-    RCLCPP_INFO(
-      this->get_logger(),
-      "Recording prepared: uri=%s topics=%zu",
-      current_bag_uri_.c_str(),
-      topics_to_record_.size());
-
-    res->success = true;
-    res->message = "Recording prepared";
+    create_topics_in_bag(names_and_types);
   } catch (const std::exception & e) {
-    writer_.reset();
-    res->success = false;
-    res->message = std::string("Failed to prepare recording: ") + e.what();
-  }
-}
-
-void ServiceBagRecorder::handle_start(
-  const std::shared_ptr<std_srvs::srv::Trigger::Request>/*req*/,
-  std::shared_ptr<std_srvs::srv::Trigger::Response> res)
-{
-  std::scoped_lock<std::mutex> lock(mutex_);
-  if (is_recording_) {
-    res->success = false;
-    res->message = "Already recording";
-    return;
+    throw std::runtime_error(std::string("Failed to start recording: ") + e.what());
   }
 
   is_recording_ = true;
-
-  res->success = true;
-  res->message = "Recording started";
 
   RCLCPP_INFO(
     this->get_logger(), "Recording started: uri=%s topics=%zu",
     current_bag_uri_.c_str(), topics_to_record_.size());
 }
 
-void ServiceBagRecorder::handle_stop(
-  const std::shared_ptr<std_srvs::srv::Trigger::Request>/*req*/,
-  std::shared_ptr<std_srvs::srv::Trigger::Response> res)
+void ServiceBagRecorder::handle_stop()
 {
-  std::scoped_lock<std::mutex> lock(mutex_);
+  RCLCPP_INFO(this->get_logger(), "Stopping recording");
+
   if (!is_recording_) {
-    res->success = false;
-    res->message = "Not recording";
-    return;
+    throw std::runtime_error("Not recording");
   }
 
   try {
-    subscriptions_.clear();
     writer_.reset();
     type_for_topic_.clear();
     current_bag_uri_.clear();
     is_recording_ = false;
-    res->success = true;
-    res->message = "Recording stopped";
     RCLCPP_INFO(this->get_logger(), "Recording stopped");
   } catch (const std::exception & e) {
-    res->success = false;
-    res->message = std::string("Failed to stop recording: ") + e.what();
+    throw std::runtime_error(std::string("Failed to stop recording: ") + e.what());
   }
 }
 
-void ServiceBagRecorder::handle_stop_and_delete(
-  const std::shared_ptr<std_srvs::srv::Trigger::Request>/*req*/,
-  std::shared_ptr<std_srvs::srv::Trigger::Response> res)
+void ServiceBagRecorder::handle_stop_and_delete()
 {
-  std::scoped_lock<std::mutex> lock(mutex_);
+  RCLCPP_INFO(this->get_logger(), "Stopping and deleting recording");
 
   if (!is_recording_) {
-    res->success = false;
-    res->message = "Not recording";
-    return;
+    throw std::runtime_error("Not recording");
   }
 
   try {
@@ -216,14 +209,18 @@ void ServiceBagRecorder::handle_stop_and_delete(
 
     current_bag_uri_.clear();
 
-    res->success = true;
-    res->message = "Recording stopped and bag deleted";
-
     RCLCPP_INFO(this->get_logger(), "Recording stopped and bag deleted");
   } catch (const std::exception & e) {
-    res->success = false;
-    res->message = std::string("Failed to stop recording and delete bag: ") + e.what();
+    throw std::runtime_error(std::string("Failed to stop recording and delete bag: ") + e.what());
   }
+}
+
+void ServiceBagRecorder::handle_finish()
+{
+  RCLCPP_INFO(this->get_logger(), "Finishing recording");
+
+  subscriptions_.clear();
+  handle_stop();
 }
 
 std::vector<std::string> ServiceBagRecorder::get_missing_topics(
@@ -288,6 +285,10 @@ void ServiceBagRecorder::delete_bag_directory(const std::string & bag_uri)
 
 void ServiceBagRecorder::create_subscriptions()
 {
+  RCLCPP_INFO(this->get_logger(), "Creating subscriptions");
+
+  subscriptions_.clear();
+
   // Create generic subscriptions for all topics
   for (const auto & [topic, type] : type_for_topic_) {
     auto options = rclcpp::SubscriptionOptions();
@@ -308,9 +309,11 @@ void ServiceBagRecorder::handle_serialized_message(
   const std::shared_ptr<rclcpp::SerializedMessage> & serialized_msg)
 {
   std::scoped_lock<std::mutex> lock(mutex_);
+
   if (!is_recording_ || !writer_) {
     return;
   }
+
 
   const auto it = type_for_topic_.find(topic);
   if (it == type_for_topic_.end()) {

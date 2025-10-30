@@ -1,6 +1,0 @@
-# Request to set the recording configuration
-string uri
-string[] topics
----
-bool success
-string message

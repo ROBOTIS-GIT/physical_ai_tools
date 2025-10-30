@@ -16,7 +16,7 @@ find_package(rosidl_default_generators REQUIRED)
 
 # Generate service interfaces
 rosidl_generate_interfaces(${PROJECT_NAME}
-  "srv/SetRecordConfig.srv"
+  "srv/SendCommand.srv"
 )
 
 add_executable(service_bag_recorder src/service_bag_recorder.cpp)
@@ -29,7 +29,6 @@ ament_target_dependencies(
   service_bag_recorder
   "rclcpp"
   "rosbag2_cpp"
-  "std_srvs"
   "sensor_msgs"
 )
 

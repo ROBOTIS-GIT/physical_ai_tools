@@ -354,52 +354,43 @@ class PhysicalAIServer(Node):
 
         if (current_status == 'warmup' and previous_status != 'warmup'):
             self.get_logger().info(
-                'Starting rosbag recording, previous status: '
+                'Preparing rosbag recording, previous status: '
                 f'{previous_status}')
-
-            rosbag_path = self.data_manager.get_save_rosbag_path()
-
-            if rosbag_path is None:
-                self.get_logger().error('Failed to get rosbag path')
-                raise RuntimeError('Failed to get rosbag path')
 
             rosbag_topics = self.communicator.get_all_topics()
 
-            self.communicator.set_record_config(uri=rosbag_path, topics=rosbag_topics)
-            self.communicator.prepare_rosbag_recording()
+            self.communicator.prepare_rosbag_recording(topics=rosbag_topics)
 
         elif current_status == 'run' and previous_status != 'run':
             self.get_logger().info(
                 'Starting rosbag recording, previous status: '
                 f'{previous_status}')
 
-            if self.communicator.start_rosbag_recording():
-                self.get_logger().info('Started rosbag recording')
-            else:
-                self.get_logger().error('Failed to start rosbag recording')
+            rosbag_path = None
+
+            for i in range(3):
+                rosbag_path = self.data_manager.get_save_rosbag_path()
+                if rosbag_path is not None:
+                    break
+
+            if rosbag_path is None:
+                self.get_logger().error('Failed to get rosbag path')
+                raise RuntimeError('Failed to get rosbag path')
+
+            self.communicator.start_rosbag_recording(rosbag_uri=rosbag_path)
 
         elif current_status == 'save' and previous_status == 'run':
             self.get_logger().info('Stopping rosbag recording')
-            if self.communicator.stop_rosbag_recording():
-                self.get_logger().info('Stopped rosbag recording')
-            else:
-                self.get_logger().error('Failed to stop rosbag recording')
+            self.communicator.stop_rosbag_recording()
 
         elif current_status == 'finish' and previous_status != 'finish':
-            self.get_logger().info('Stopping rosbag recording')
-            if self.communicator.stop_rosbag_recording():
-                self.get_logger().info('Stopped rosbag recording')
-            else:
-                self.get_logger().error('Failed to stop rosbag recording')
+            self.get_logger().info('Finishing rosbag recording')
+            self.communicator.finish_rosbag_recording()
 
         elif current_status == 'reset' and previous_status == 'run':
             self.get_logger().info(
                 'Stopping rosbag recording and delete recorded bag')
-            if self.communicator.stop_and_delete_rosbag_recording():
-                self.get_logger().info('Stopped and deleted rosbag recording')
-            else:
-                self.get_logger().error(
-                    'Failed to stop and delete rosbag recording')
+            self.communicator.stop_and_delete_rosbag_recording()
 
         self.previous_data_manager_status = current_status
 
