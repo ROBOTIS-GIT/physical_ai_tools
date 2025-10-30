@@ -9,15 +9,14 @@ endif()
 find_package(ament_cmake REQUIRED)
 find_package(rclcpp REQUIRED)
 find_package(rosbag2_cpp REQUIRED)
+find_package(std_srvs REQUIRED)
 find_package(sensor_msgs REQUIRED)
 find_package(rosbag2_transport REQUIRED)
 find_package(rosidl_default_generators REQUIRED)
 
 # Generate service interfaces
 rosidl_generate_interfaces(${PROJECT_NAME}
-  "srv/StartRecording.srv"
-  "srv/StopRecording.srv"
-  "srv/StopAndDeleteRecording.srv"
+  "srv/SetRecordConfig.srv"
 )
 
 add_executable(service_bag_recorder src/service_bag_recorder.cpp)
@@ -30,6 +29,7 @@ ament_target_dependencies(
   service_bag_recorder
   "rclcpp"
   "rosbag2_cpp"
+  "std_srvs"
   "sensor_msgs"
 )
 

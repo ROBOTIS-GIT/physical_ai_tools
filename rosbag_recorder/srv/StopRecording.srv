@@ -1,4 +1,0 @@
-# Request to stop the active recording
----
-bool success
-string message
