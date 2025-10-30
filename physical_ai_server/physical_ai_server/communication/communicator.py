@@ -45,9 +45,10 @@ from rclpy.qos import (
 )
 from sensor_msgs.msg import CompressedImage, JointState
 from std_msgs.msg import Empty, String
+from std_srvs.srv import Trigger
 from trajectory_msgs.msg import JointTrajectory
 
-from rosbag_recorder.srv import StartRecording, StopRecording, StopAndDeleteRecording
+from rosbag_recorder.srv import SetRecordConfig
 
 
 class Communicator:
@@ -251,29 +252,65 @@ class Communicator:
             self.get_dataset_info_callback
         )
 
-        self._rosbag_start_client = self.node.create_client(StartRecording, 'start_recording')
-        self._rosbag_stop_client = self.node.create_client(StopRecording, 'stop_recording')
-        self._rosbag_stop_and_delete_client = self.node.create_client(StopAndDeleteRecording, 'stop_and_delete_recording')
+        self._rosbag_set_record_config_client = self.node.create_client(
+            SetRecordConfig,
+            'rosbag_recorder/set_record_config')
+        self._rosbag_prepare_client = self.node.create_client(
+            Trigger,
+            'rosbag_recorder/command/prepare')
+        self._rosbag_start_client = self.node.create_client(
+            Trigger,
+            'rosbag_recorder/command/start')
+        self._rosbag_stop_client = self.node.create_client(
+            Trigger,
+            'rosbag_recorder/command/stop')
+        self._rosbag_stop_and_delete_client = self.node.create_client(
+            Trigger,
+            'rosbag_recorder/command/stop_and_delete')
 
-        if self._rosbag_start_client.wait_for_service(timeout_sec=5.0) and \
-            self._rosbag_stop_client.wait_for_service(timeout_sec=5.0) and \
-            self._rosbag_stop_and_delete_client.wait_for_service(timeout_sec=5.0):
+        if self._check_rosbag_services_available():
             self.rosbag_service_available = True
             self.node.get_logger().info('Rosbag service is available')
         else:
             self.node.get_logger().error('Failed to connect to rosbag service')
             self.rosbag_service_available = False
 
-    def start_rosbag_recording(self, uri: str, topics: List[str]):
-        self.node.get_logger().info(f'Starting rosbag recording: {uri} with topics: {topics}')
-        self.node.get_logger().info(f'Rosbag service available: {self.rosbag_service_available}')
+    def _check_rosbag_services_available(self):
+        return (self._rosbag_set_record_config_client.wait_for_service(timeout_sec=3.0) and
+                self._rosbag_prepare_client.wait_for_service(timeout_sec=3.0) and
+                self._rosbag_start_client.wait_for_service(timeout_sec=3.0) and
+                self._rosbag_stop_client.wait_for_service(timeout_sec=3.0) and
+                self._rosbag_stop_and_delete_client.wait_for_service(timeout_sec=3.0))
+
+    def set_record_config(self, uri: str, topics: List[str]):
         if not self.rosbag_service_available:
             self.node.get_logger().error('Rosbag service is not available')
             raise RuntimeError('Rosbag service is not available')
 
-        req = StartRecording.Request()
+        req = SetRecordConfig.Request()
         req.uri = uri
         req.topics = topics
+        future = self._rosbag_set_record_config_client.call_async(req)
+        future.add_done_callback(self.set_record_config_callback)
+
+    def prepare_rosbag_recording(self):
+        if not self.rosbag_service_available:
+            self.node.get_logger().error('Rosbag service is not available')
+            raise RuntimeError('Rosbag service is not available')
+
+        req = Trigger.Request()
+        future = self._rosbag_prepare_client.call_async(req)
+        future.add_done_callback(self.prepare_rosbag_recording_callback)
+
+    def start_rosbag_recording(self):
+        self.node.get_logger().info('Starting rosbag recording')
+        self.node.get_logger().info(
+            f'Rosbag service available: {self.rosbag_service_available}')
+        if not self.rosbag_service_available:
+            self.node.get_logger().error('Rosbag service is not available')
+            raise RuntimeError('Rosbag service is not available')
+
+        req = Trigger.Request()
         future = self._rosbag_start_client.call_async(req)
         future.add_done_callback(self.start_rosbag_recording_callback)
 
@@ -296,6 +333,28 @@ class Communicator:
 
         future = self._rosbag_stop_and_delete_client.call_async(req)
         future.add_done_callback(self.stop_and_delete_rosbag_recording_callback)
+
+    def set_record_config_callback(self, future):
+        if not future.done():
+            self.node.get_logger().error('Failed to set record config')
+            return
+        resp = future.result()
+        if not resp.success:
+            self.node.get_logger().error(f'Failed to set record config: {resp.message}')
+            return
+        self.node.get_logger().info(f'Set record config: {resp.message}')
+        return resp.success
+
+    def prepare_rosbag_recording_callback(self, future):
+        if not future.done():
+            self.node.get_logger().error('Failed to prepare rosbag recording')
+            return
+        resp = future.result()
+        if not resp.success:
+            self.node.get_logger().error(f'Failed to prepare rosbag recording: {resp.message}')
+            return
+        self.node.get_logger().info(f'Prepared rosbag recording: {resp.message}')
+        return resp.success
 
     def start_rosbag_recording_callback(self, future):
         if not future.done():
@@ -567,6 +626,13 @@ class Communicator:
                 self.node.destroy_service(service)
                 setattr(self, service_attr_name, None)
 
+    def _destroy_client_if_exists(self, client_attr_name: str):
+        if hasattr(self, client_attr_name):
+            client = getattr(self, client_attr_name)
+            if client is not None:
+                self.node.destroy_client(client)
+                setattr(self, client_attr_name, None)
+
     def _destroy_publisher_if_exists(self, publisher_attr_name: str):
         if hasattr(self, publisher_attr_name):
             publisher = getattr(self, publisher_attr_name)
@@ -622,6 +688,17 @@ class Communicator:
         ]
         for service_name in service_names:
             self._destroy_service_if_exists(service_name)
+
+    def _cleanup_clients(self):
+        client_names = [
+            '_rosbag_set_record_config_client',
+            '_rosbag_prepare_client',
+            '_rosbag_start_client',
+            '_rosbag_stop_client',
+            '_rosbag_stop_and_delete_client'
+        ]
+        for client_name in client_names:
+            self._destroy_client_if_exists(client_name)
 
     def heartbeat_timer_callback(self):
         heartbeat_msg = Empty()

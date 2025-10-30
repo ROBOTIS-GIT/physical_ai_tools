@@ -18,32 +18,34 @@
 ServiceBagRecorder::ServiceBagRecorder()
 : rclcpp::Node("service_bag_recorder")
 {
+  RCLCPP_INFO(this->get_logger(), "Starting rosbag recorder node");
+
   set_record_config_srv_ = this->create_service<rosbag_recorder::srv::SetRecordConfig>(
-    "record/command/set_record_config",
+    "rosbag_recorder/set_record_config",
     std::bind(
       &ServiceBagRecorder::handle_set_record_config, this, std::placeholders::_1,
       std::placeholders::_2));
 
   prepare_srv_ = this->create_service<std_srvs::srv::Trigger>(
-    "record/command/prepare",
+    "rosbag_recorder/command/prepare",
     std::bind(
       &ServiceBagRecorder::handle_prepare, this, std::placeholders::_1,
       std::placeholders::_2));
 
   start_srv_ = this->create_service<std_srvs::srv::Trigger>(
-    "record/command/start",
+    "rosbag_recorder/command/start",
     std::bind(
       &ServiceBagRecorder::handle_start, this, std::placeholders::_1,
       std::placeholders::_2));
 
   stop_srv_ = this->create_service<std_srvs::srv::Trigger>(
-    "record/command/stop",
+    "rosbag_recorder/command/stop",
     std::bind(
       &ServiceBagRecorder::handle_stop, this, std::placeholders::_1,
       std::placeholders::_2));
 
   stop_and_delete_srv_ = this->create_service<std_srvs::srv::Trigger>(
-    "record/command/stop_and_delete",
+    "rosbag_recorder/command/stop_and_delete",
     std::bind(
       &ServiceBagRecorder::handle_stop_and_delete, this, std::placeholders::_1,
       std::placeholders::_2));

@@ -349,43 +349,59 @@ class PhysicalAIServer(Node):
         return robot_type_list
 
     def process_rosbag_recording(self):
-        if self.data_manager.get_status() == 'run' and self.previous_data_manager_status != 'run':
-            self.get_logger().info(f'Starting rosbag recording, previous status: {self.previous_data_manager_status}')
+        current_status = self.data_manager.get_status()
+        previous_status = self.previous_data_manager_status
+
+        if (current_status == 'warmup' and previous_status != 'warmup'):
+            self.get_logger().info(
+                'Starting rosbag recording, previous status: '
+                f'{previous_status}')
+
             rosbag_path = self.data_manager.get_save_rosbag_path()
+
             if rosbag_path is None:
                 self.get_logger().error('Failed to get rosbag path')
                 raise RuntimeError('Failed to get rosbag path')
+
             rosbag_topics = self.communicator.get_all_topics()
 
-            if self.communicator.start_rosbag_recording(
-                uri=rosbag_path,
-                topics=rosbag_topics
-            ):
+            self.communicator.set_record_config(uri=rosbag_path, topics=rosbag_topics)
+            self.communicator.prepare_rosbag_recording()
+
+        elif current_status == 'run' and previous_status != 'run':
+            self.get_logger().info(
+                'Starting rosbag recording, previous status: '
+                f'{previous_status}')
+
+            if self.communicator.start_rosbag_recording():
                 self.get_logger().info('Started rosbag recording')
             else:
                 self.get_logger().error('Failed to start rosbag recording')
 
-        elif self.data_manager.get_status() == 'save' and self.previous_data_manager_status == 'run':
-            self.get_logger().info('Stopping rosbag recording')
-            if self.communicator.stop_rosbag_recording():
-                self.get_logger().info('Stopped rosbag recording')
-            else:
-                self.get_logger().error('Failed to stop rosbag recording')
-        elif self.data_manager.get_status() == 'finish' and self.previous_data_manager_status != 'finish':
+        elif current_status == 'save' and previous_status == 'run':
             self.get_logger().info('Stopping rosbag recording')
             if self.communicator.stop_rosbag_recording():
                 self.get_logger().info('Stopped rosbag recording')
             else:
                 self.get_logger().error('Failed to stop rosbag recording')
 
-        elif self.data_manager.get_status() == 'reset' and self.previous_data_manager_status == 'run':
-            self.get_logger().info('Stopping rosbag recording and delete recorded bag')
+        elif current_status == 'finish' and previous_status != 'finish':
+            self.get_logger().info('Stopping rosbag recording')
+            if self.communicator.stop_rosbag_recording():
+                self.get_logger().info('Stopped rosbag recording')
+            else:
+                self.get_logger().error('Failed to stop rosbag recording')
+
+        elif current_status == 'reset' and previous_status == 'run':
+            self.get_logger().info(
+                'Stopping rosbag recording and delete recorded bag')
             if self.communicator.stop_and_delete_rosbag_recording():
                 self.get_logger().info('Stopped and deleted rosbag recording')
             else:
-                self.get_logger().error('Failed to stop and delete rosbag recording')
+                self.get_logger().error(
+                    'Failed to stop and delete rosbag recording')
 
-        self.previous_data_manager_status = self.data_manager.get_status()
+        self.previous_data_manager_status = current_status
 
     def _data_collection_timer_callback(self):
         error_msg = ''
