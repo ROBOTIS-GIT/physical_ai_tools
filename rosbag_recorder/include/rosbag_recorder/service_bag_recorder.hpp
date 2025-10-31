@@ -68,6 +68,12 @@ private:
   std::string current_bag_uri_;
   std::vector<std::string> topics_to_record_ {};
   std::mutex mutex_;
+
+  // Recording settings (for testing)
+  std::string storage_id_ {"mcap"};         // "sqlite3" or "mcap"
+  bool enable_compression_ {true};
+  std::string compression_mode_ {"file"};   // "message" or "file" - file level is more effective
+  std::string compression_format_ {"zstd"};
 };
 
 #endif  // ROSBAG_RECORDER__SERVICE_BAG_RECORDER_HPP_

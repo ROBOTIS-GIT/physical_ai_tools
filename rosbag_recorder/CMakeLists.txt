@@ -8,6 +8,8 @@ endif()
 find_package(ament_cmake REQUIRED)
 find_package(rclcpp REQUIRED)
 find_package(rosbag2_cpp REQUIRED)
+find_package(rosbag2_storage REQUIRED)
+find_package(rosbag2_compression REQUIRED)
 find_package(rosidl_default_generators REQUIRED)
 
 rosidl_generate_interfaces(${PROJECT_NAME}
@@ -24,6 +26,8 @@ ament_target_dependencies(
   service_bag_recorder
   "rclcpp"
   "rosbag2_cpp"
+  "rosbag2_storage"
+  "rosbag2_compression"
 )
 
 # Link against the generated interfaces using the modern approach

@@ -22,11 +22,18 @@
 #include <vector>
 #include <sstream>
 #include <filesystem>
+#include <fstream>
+#include <iostream>
 
 #include "rclcpp/rclcpp.hpp"
 #include "rclcpp/generic_subscription.hpp"
 #include "rosbag2_cpp/writer.hpp"
+#include "rosbag2_cpp/writers/sequential_writer.hpp"
 #include "rosbag2_storage/topic_metadata.hpp"
+#include "rosbag2_storage/storage_options.hpp"
+#include "rosbag2_cpp/converter_options.hpp"
+#include "rosbag2_compression/compression_options.hpp"
+#include "rosbag2_compression/sequential_compression_writer.hpp"
 
 #include "rosbag_recorder/service_bag_recorder.hpp"
 
@@ -146,8 +153,117 @@ void ServiceBagRecorder::handle_start(const std::string & uri)
     // Check if a bag already exists at the specified path and delete it
     delete_bag_directory(current_bag_uri_);
 
-    writer_ = std::make_unique<rosbag2_cpp::Writer>();
-    writer_->open(current_bag_uri_);
+    // Configure storage options
+    rosbag2_storage::StorageOptions storage_options;
+    storage_options.uri = current_bag_uri_;
+    storage_options.storage_id = storage_id_;
+
+    RCLCPP_INFO(
+      this->get_logger(),
+      "Using storage format: %s",
+      storage_id_.c_str());
+
+    // Configure compression via storage_config_uri
+    // For SQLite3: use key=value format
+    // For MCAP: create YAML config file
+    if (enable_compression_) {
+      if (storage_id_ == "sqlite3") {
+        // SQLite3 uses key=value format in storage_config_uri
+        storage_options.storage_config_uri =
+          "compression_mode=" + compression_mode_ +
+          ";compression_format=" + compression_format_;
+
+        RCLCPP_INFO(
+          this->get_logger(),
+          "SQLite3 compression enabled: mode=%s, format=%s",
+          compression_mode_.c_str(),
+          compression_format_.c_str());
+      } else if (storage_id_ == "mcap") {
+        // MCAP: SequentialCompressionWriter handles compression, no need for storage_config_uri
+        // Leave storage_config_uri empty - compression is handled by SequentialCompressionWriter
+        storage_options.storage_config_uri = "";
+      }
+    } else {
+      RCLCPP_INFO(this->get_logger(), "Compression disabled");
+    }
+
+    // Configure converter options (serialization)
+    rosbag2_cpp::ConverterOptions converter_options;
+    converter_options.input_serialization_format = "cdr";
+    converter_options.output_serialization_format = "cdr";
+
+    // Configure compression options for SequentialCompressionWriter
+    rosbag2_compression::CompressionOptions compression_options;
+
+    if (enable_compression_) {
+      // CompressionMode is an enum
+      if (compression_mode_ == "message") {
+        compression_options.compression_mode =
+          rosbag2_compression::CompressionMode::MESSAGE;
+      } else if (compression_mode_ == "file") {
+        compression_options.compression_mode =
+          rosbag2_compression::CompressionMode::FILE;
+      } else {
+        compression_options.compression_mode =
+          rosbag2_compression::CompressionMode::NONE;
+      }
+
+      compression_options.compression_format = compression_format_;
+
+      RCLCPP_INFO(
+        this->get_logger(),
+        "Using SequentialCompressionWriter with compression: mode=%s, format=%s",
+        compression_mode_.c_str(),
+        compression_format_.c_str());
+    } else {
+      compression_options.compression_mode =
+        rosbag2_compression::CompressionMode::NONE;
+    }
+
+    // Create SequentialCompressionWriter if compression is enabled
+    // Otherwise use regular Writer
+    if (enable_compression_) {
+      // SequentialCompressionWriter handles compression automatically
+      auto compression_writer = std::make_unique<rosbag2_compression::SequentialCompressionWriter>(
+        compression_options
+      );
+
+      // SequentialCompressionWriter implements BaseWriterInterface
+      // We need to wrap it in a Writer
+      writer_ = std::make_unique<rosbag2_cpp::Writer>(
+        std::move(compression_writer)
+      );
+    } else {
+      writer_ = std::make_unique<rosbag2_cpp::Writer>();
+    }
+
+    // Log storage options before opening
+    RCLCPP_INFO(
+      this->get_logger(),
+      "Opening writer with storage_id=%s",
+      storage_options.storage_id.c_str());
+
+    // Open writer with storage and converter options
+    writer_->open(storage_options, converter_options);
+
+    // Log compression status for verification
+    if (enable_compression_) {
+      RCLCPP_INFO(
+        this->get_logger(),
+        "Compression ENABLED using SequentialCompressionWriter: "
+        "storage=%s, mode=%s, format=%s",
+        storage_id_.c_str(),
+        compression_mode_.c_str(),
+        compression_format_.c_str());
+      RCLCPP_INFO(
+        this->get_logger(),
+        "Compression will be applied at %s level. "
+        "Check metadata.yaml after recording to verify (compression_format should be '%s').",
+        compression_mode_.c_str(),
+        compression_format_.c_str());
+    } else {
+      RCLCPP_INFO(this->get_logger(), "Compression disabled");
+    }
 
     auto names_and_types = this->get_topic_names_and_types();
     auto missing_topics = get_missing_topics(names_and_types);
@@ -185,6 +301,14 @@ void ServiceBagRecorder::handle_start(const std::string & uri)
   RCLCPP_INFO(
     this->get_logger(), "Recording started: uri=%s topics=%zu",
     current_bag_uri_.c_str(), topics_to_record_.size());
+
+  if (enable_compression_) {
+    RCLCPP_INFO(
+      this->get_logger(),
+      "Recording with compression enabled. After recording, verify compression in metadata.yaml: "
+      "ros2 bag info %s",
+      current_bag_uri_.c_str());
+  }
 }
 
 void ServiceBagRecorder::handle_stop()
