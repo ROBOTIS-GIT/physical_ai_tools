@@ -749,43 +749,26 @@ const InfoPanel = () => {
         </div>
       </div>
 
-      <div className={clsx('flex', 'items-start', 'mb-2')}>
-        <span className={classLabel}>Dataset Format</span>
-        <div className="flex flex-col gap-2">
+      <div className={clsx('flex', 'items-center', 'mb-2')}>
+        <span className={classLabel}>Record RosBag2</span>
+        <div className="flex flex-col">
           <div className={clsx('flex', 'items-center')}>
             <input
-              className={classCheckbox}
+              className={clsx(classCheckbox, {
+                'cursor-not-allowed opacity-50': useMultiTaskMode,
+              })}
               type="checkbox"
-              checked={!!info.useLeRobotFormat}
-              onChange={(e) => {
-                const newValue = e.target.checked;
-                if (!newValue && !info.useRosBag2Format) {
-                  toast.error('At least one format must be selected');
-                  return;
-                }
-                handleChange('useLeRobotFormat', newValue);
-              }}
-              disabled={!isEditable}
+              checked={!!info.recordRosBag2}
+              onChange={(e) => handleChange('recordRosBag2', e.target.checked)}
+              disabled={!isEditable || useMultiTaskMode}
             />
-            <span className={clsx('ml-2', 'text-sm', 'text-gray-700')}>LeRobot v2.1</span>
+            <span className={clsx('ml-2', 'text-sm', 'text-gray-500')}>
+              {info.recordRosBag2 ? 'Enabled' : 'Disabled'}
+            </span>
           </div>
-          <div className={clsx('flex', 'items-center')}>
-            <input
-              className={classCheckbox}
-              type="checkbox"
-              checked={!!info.useRosBag2Format}
-              onChange={(e) => {
-                const newValue = e.target.checked;
-                if (!newValue && !info.useLeRobotFormat) {
-                  toast.error('At least one format must be selected');
-                  return;
-                }
-                handleChange('useRosBag2Format', newValue);
-              }}
-              disabled={!isEditable}
-            />
-            <span className={clsx('ml-2', 'text-sm', 'text-gray-700')}>RosBag2</span>
-          </div>
+          {useMultiTaskMode && (
+            <span className="text-xs text-blue-600 ml-1">(Auto-enabled in Multi-Task mode)</span>
+          )}
         </div>
       </div>
 

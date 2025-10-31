@@ -353,8 +353,6 @@ class PhysicalAIServer(Node):
             current = self.data_manager.get_status()
             previous = self.previous_data_manager_status
 
-            self.get_logger().info(f'Current status: {current}, Previous status: {previous}')
-
             # Early return if no status change
             if current == previous:
                 return
@@ -493,7 +491,7 @@ class PhysicalAIServer(Node):
         current_status = self.data_manager.get_current_record_status()
         self.communicator.publish_status(status=current_status)
 
-        if True:
+        if self.data_manager.should_record_rosbag2():
             self.handle_rosbag_recording()
 
         if record_completed:

@@ -281,6 +281,7 @@ export function useRosTopicSubscription() {
               pushToHub: msg.task_info.push_to_hub || false,
               privateMode: msg.task_info.private_mode || false,
               useOptimizedSave: msg.task_info.use_optimized_save_mode || false,
+              recordRosBag2: msg.task_info.record_rosbag2 || false,
             })
           );
         }

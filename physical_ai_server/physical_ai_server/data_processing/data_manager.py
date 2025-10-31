@@ -95,6 +95,9 @@ class DataManager:
             return None
         return self._save_rosbag_path + f'/{episode_index}'
 
+    def should_record_rosbag2(self):
+        return self._task_info.record_rosbag2
+
     def record(
             self,
             images,
