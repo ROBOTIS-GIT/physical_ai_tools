@@ -141,9 +141,17 @@ class DataManager:
                     self._record_episode_count += 1
                     self._get_current_scenario_number()
                     self._current_task += 1
-                    self._status = 'reset'
-                    self._start_time_s = 0
                     self._on_saving = False
+
+                    # Check if we've reached the target episode count
+                    if (self._record_episode_count <
+                            self._task_info.num_episodes):
+                        # Not finished yet, go to reset for next episode
+                        self._status = 'reset'
+                        self._start_time_s = 0
+                    else:
+                        # Finished! Set status to 'finish' to skip reset
+                        self._status = 'finish'
             else:
                 self.save()
                 self._on_saving = True
@@ -274,11 +282,13 @@ class DataManager:
             current_status.total_time = int(self._task_info.reset_time_s)
         elif self._status == 'save' or self._status == 'finish':
             is_saving, encoding_progress = self._get_encoding_progress()
+            current_status.phase = TaskStatus.SAVING
+            current_status.total_time = int(0)
+            self._proceed_time = int(0)
             if is_saving:
-                current_status.phase = TaskStatus.SAVING
-                current_status.total_time = int(0)
-                self._proceed_time = int(0)
                 current_status.encoding_progress = encoding_progress
+            else:
+                current_status.encoding_progress = 0.0
         elif self._status == 'stop':
             is_saving, encoding_progress = self._get_encoding_progress()
             current_status.total_time = int(0)

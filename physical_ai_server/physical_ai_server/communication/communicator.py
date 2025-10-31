@@ -265,98 +265,55 @@ class Communicator:
     def _check_rosbag_services_available(self):
         return self._rosbag_send_command_client.wait_for_service(timeout_sec=3.0)
 
-    def prepare_rosbag_recording(self, topics: List[str]):
-        if not self.rosbag_service_available:
-            self.node.get_logger().error('Rosbag service is not available')
-            return
-
-        req = SendCommand.Request()
-        req.topics = topics
-        req.command = SendCommand.Request.PREPARE
-
-        # Asynchronous service call - fire and forget
-        future = self._rosbag_send_command_client.call_async(req)
-        future.add_done_callback(
-            lambda f: self.node.get_logger().info(
-                f'Prepared rosbag recording: {f.result().message}' 
-                if f.done() and f.result().success 
-                else f'Failed to prepare: {f.result().message if f.done() else "timeout"}'
-            )
+    def prepare_rosbag(self, topics: List[str]):
+        self._send_rosbag_command(
+            command=SendCommand.Request.PREPARE,
+            topics=topics
         )
 
-    def start_rosbag_recording(self, rosbag_uri: str):
-        self.node.get_logger().info('Starting rosbag recording')
-        self.node.get_logger().info(
-            f'Rosbag service available: {self.rosbag_service_available}')
-        if not self.rosbag_service_available:
-            self.node.get_logger().error('Rosbag service is not available')
-            return
-
-        req = SendCommand.Request()
-        req.uri = rosbag_uri
-        req.command = SendCommand.Request.START
-
-        # Asynchronous service call - fire and forget
-        future = self._rosbag_send_command_client.call_async(req)
-        future.add_done_callback(
-            lambda f: self.node.get_logger().info(
-                f'Started rosbag recording: {f.result().message}' 
-                if f.done() and f.result().success 
-                else f'Failed to start: {f.result().message if f.done() else "timeout"}'
-            )
+    def start_rosbag(self, rosbag_uri: str):
+        self._send_rosbag_command(
+            command=SendCommand.Request.START,
+            uri=rosbag_uri
         )
 
-    def stop_rosbag_recording(self):
-        if not self.rosbag_service_available:
-            self.node.get_logger().error('Rosbag service is not available')
-            return
-
-        req = SendCommand.Request()
-        req.command = SendCommand.Request.STOP
-
-        # Asynchronous service call - fire and forget
-        future = self._rosbag_send_command_client.call_async(req)
-        future.add_done_callback(
-            lambda f: self.node.get_logger().info(
-                f'Stopped rosbag recording: {f.result().message}' 
-                if f.done() and f.result().success 
-                else f'Failed to stop: {f.result().message if f.done() else "timeout"}'
-            )
+    def stop_rosbag(self):
+        self._send_rosbag_command(
+            command=SendCommand.Request.STOP
         )
 
-    def stop_and_delete_rosbag_recording(self):
-        if not self.rosbag_service_available:
-            self.node.get_logger().error('Rosbag service is not available')
-            return
-
-        req = SendCommand.Request()
-        req.command = SendCommand.Request.STOP_AND_DELETE
-
-        # Asynchronous service call - fire and forget
-        future = self._rosbag_send_command_client.call_async(req)
-        future.add_done_callback(
-            lambda f: self.node.get_logger().info(
-                f'Stopped and deleted rosbag: {f.result().message}' 
-                if f.done() and f.result().success 
-                else f'Failed to stop and delete: {f.result().message if f.done() else "timeout"}'
-            )
+    def stop_and_delete_rosbag(self):
+        self._send_rosbag_command(
+            command=SendCommand.Request.STOP_AND_DELETE
         )
 
-    def finish_rosbag_recording(self):
+    def finish_rosbag(self):
+        self._send_rosbag_command(
+            command=SendCommand.Request.FINISH
+        )
+
+    def _send_rosbag_command(self,
+                             command: int,
+                             topics: List[str] = None,
+                             uri: str = None):
+
         if not self.rosbag_service_available:
             self.node.get_logger().error('Rosbag service is not available')
-            return
+            raise RuntimeError('Rosbag service is not available')
 
         req = SendCommand.Request()
-        req.command = SendCommand.Request.FINISH
+        req.command = command
+        req.topics = topics if topics is not None else []
+        req.uri = uri if uri is not None else ''
 
         # Asynchronous service call - fire and forget
         future = self._rosbag_send_command_client.call_async(req)
         future.add_done_callback(
             lambda f: self.node.get_logger().info(
-                f'Finished rosbag recording: {f.result().message}' 
-                if f.done() and f.result().success 
-                else f'Failed to finish: {f.result().message if f.done() else "timeout"}'
+                f'Sent rosbag record command: {command} {f.result().message}' 
+                if f.done() and f.result().success
+                else 'Failed to send command: '
+                     f'{command} {f.result().message if f.done() else "timeout"}'
             )
         )
 

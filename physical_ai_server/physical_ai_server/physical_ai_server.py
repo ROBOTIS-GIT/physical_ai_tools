@@ -348,51 +348,78 @@ class PhysicalAIServer(Node):
         self.get_logger().info(f'Available robot types: {robot_type_list}')
         return robot_type_list
 
-    def process_rosbag_recording(self):
-        current_status = self.data_manager.get_status()
-        previous_status = self.previous_data_manager_status
+    def handle_rosbag_recording(self):
+        try:
+            current = self.data_manager.get_status()
+            previous = self.previous_data_manager_status
 
-        if (current_status == 'warmup' and previous_status != 'warmup'):
-            self.get_logger().info(
-                'Preparing rosbag recording, previous status: '
-                f'{previous_status}')
+            self.get_logger().info(f'Current status: {current}, Previous status: {previous}')
 
-            rosbag_topics = self.communicator.get_all_topics()
+            # Early return if no status change
+            if current == previous:
+                return
 
-            self.communicator.prepare_rosbag_recording(topics=rosbag_topics)
+            handlers = {
+                ('*', 'warmup'): self._handle_warmup_transition,
+                ('*', 'run'): self._handle_run_transition,
+                ('run', 'save'): self._handle_save_transition,
+                ('run', 'stop'): self._handle_stop_transition,
+                ('*', 'finish'): self._handle_finish_transition,
+                ('run', 'reset'): self._handle_reset_transition,
+            }
 
-        elif current_status == 'run' and previous_status != 'run':
-            self.get_logger().info(
-                'Starting rosbag recording, previous status: '
-                f'{previous_status}')
+            # Try exact match first, then wildcard match
+            handler = handlers.get((previous, current)) or handlers.get(('*', current))
 
-            rosbag_path = None
+            if handler:
+                handler(previous)
 
-            for i in range(3):
-                rosbag_path = self.data_manager.get_save_rosbag_path()
-                if rosbag_path is not None:
-                    break
+            self.previous_data_manager_status = current
 
-            if rosbag_path is None:
-                self.get_logger().error('Failed to get rosbag path')
-                raise RuntimeError('Failed to get rosbag path')
+        except Exception as e:
+            error_msg = f'Error in rosbag recording: {str(e)}'
+            self.get_logger().error(traceback.format_exc())
+            self.get_logger().error(error_msg)
 
-            self.communicator.start_rosbag_recording(rosbag_uri=rosbag_path)
+    def _handle_warmup_transition(self, previous_status: str):
+        self.get_logger().info('Preparing rosbag recording, '
+                               f'previous status: {previous_status}')
 
-        elif current_status == 'save' and previous_status == 'run':
-            self.get_logger().info('Stopping rosbag recording')
-            self.communicator.stop_rosbag_recording()
+        rosbag_topics = self.communicator.get_all_topics()
+        self.communicator.prepare_rosbag(topics=rosbag_topics)
 
-        elif current_status == 'finish' and previous_status != 'finish':
-            self.get_logger().info('Finishing rosbag recording')
-            self.communicator.finish_rosbag_recording()
+    def _handle_run_transition(self, previous_status: str):
+        self.get_logger().info('Starting rosbag recording, '
+                               f'previous status: {previous_status}')
 
-        elif current_status == 'reset' and previous_status == 'run':
-            self.get_logger().info(
-                'Stopping rosbag recording and delete recorded bag')
-            self.communicator.stop_and_delete_rosbag_recording()
+        rosbag_path = self.data_manager.get_save_rosbag_path()
 
-        self.previous_data_manager_status = current_status
+        if rosbag_path is None:
+            self.get_logger().error('Failed to get rosbag path')
+            raise RuntimeError('Failed to get rosbag path')
+
+        self.communicator.start_rosbag(rosbag_uri=rosbag_path)
+
+    def _handle_save_transition(self, previous_status: str):
+        self.get_logger().info('Stopping rosbag recording(save), '
+                               f'previous status: {previous_status}')
+        self.communicator.stop_rosbag()
+
+    def _handle_stop_transition(self, previous_status: str):
+        self.get_logger().info('Stopping rosbag recording(stop), '
+                               f'previous status: {previous_status}')
+        self.communicator.stop_rosbag()
+
+    def _handle_finish_transition(self, previous_status: str):
+        self.get_logger().info('Finishing rosbag recording, '
+                               f'previous status: {previous_status}')
+        self.communicator.finish_rosbag()
+
+    def _handle_reset_transition(self, previous_status: str):
+        self.get_logger().info(
+                'Stopping rosbag recording and delete recorded bag, '
+                f'previous status: {previous_status}')
+        self.communicator.stop_and_delete_rosbag()
 
     def _data_collection_timer_callback(self):
         error_msg = ''
@@ -466,6 +493,9 @@ class PhysicalAIServer(Node):
         current_status = self.data_manager.get_current_record_status()
         self.communicator.publish_status(status=current_status)
 
+        if True:
+            self.handle_rosbag_recording()
+
         if record_completed:
             self.get_logger().info('Recording completed')
             current_status.phase = TaskStatus.READY
@@ -475,13 +505,6 @@ class PhysicalAIServer(Node):
             self.on_recording = False
             self.timer_manager.stop(timer_name=self.operation_mode)
             return
-
-        try:
-            self.process_rosbag_recording()
-        except Exception as e:
-            error_msg = f'Error in rosbag recording: {str(e)}'
-            self.get_logger().error(traceback.format_exc())
-            self.get_logger().error(error_msg)
 
     def _inference_timer_callback(self):
         error_msg = ''

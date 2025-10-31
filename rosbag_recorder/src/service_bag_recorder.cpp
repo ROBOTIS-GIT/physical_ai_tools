@@ -199,8 +199,6 @@ void ServiceBagRecorder::handle_stop_and_delete()
   }
 
   try {
-    // Stop recording first
-    subscriptions_.clear();
     writer_.reset();
     type_for_topic_.clear();
     is_recording_ = false;
@@ -220,7 +218,10 @@ void ServiceBagRecorder::handle_finish()
   RCLCPP_INFO(this->get_logger(), "Finishing recording");
 
   subscriptions_.clear();
-  handle_stop();
+
+  if (is_recording_) {
+    handle_stop();
+  }
 }
 
 std::vector<std::string> ServiceBagRecorder::get_missing_topics(
