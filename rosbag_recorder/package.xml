@@ -2,25 +2,22 @@
 <?xml-model href="http://download.ros.org/schema/package_format3.xsd" schematypens="http://www.w3.org/2001/XMLSchema"?>
 <package format="3">
   <name>rosbag_recorder</name>
-  <version>0.0.0</version>
-  <description>TODO: Package description</description>
-  <maintainer email="wwj@robotis.com">root</maintainer>
-  <license>TODO: License declaration</license>
-
+  <version>0.6.13</version>
+  <description>
+    ROS 2 package to record rosbag data
+  </description>
+  <maintainer email="pyo@robotis.com">Pyo</maintainer>
+  <license>Apache 2.0</license>
+  <author email="wwj@robotis.com">Woojin Wie</author>
+  <author email="pkw@robotis.com">Kiwoong Park</author>
   <buildtool_depend>ament_cmake</buildtool_depend>
-
+  <build_depend>rosidl_default_generators</build_depend>
   <depend>rclcpp</depend>
   <depend>rosbag2_cpp</depend>
   <depend>std_srvs</depend>
   <depend>sensor_msgs</depend>
-
-  <build_depend>rosidl_default_generators</build_depend>
   <exec_depend>rosidl_default_runtime</exec_depend>
   <member_of_group>rosidl_interface_packages</member_of_group>
-
-  <test_depend>ament_lint_auto</test_depend>
-  <test_depend>ament_lint_common</test_depend>
-
   <export>
     <build_type>ament_cmake</build_type>
   </export>

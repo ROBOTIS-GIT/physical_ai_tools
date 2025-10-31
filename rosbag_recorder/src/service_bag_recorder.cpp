@@ -1,4 +1,20 @@
-#include <chrono>
+// Copyright 2025 ROBOTIS CO., LTD.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+//
+// Author: Woojin Wie, Kiwoong Park
+
+
 #include <memory>
 #include <mutex>
 #include <string>
@@ -78,7 +94,7 @@ void ServiceBagRecorder::handle_send_command(
 
 void ServiceBagRecorder::handle_prepare(const std::vector<std::string> & topics)
 {
-  RCLCPP_INFO(this->get_logger(), "Prepare recording()");
+  RCLCPP_INFO(this->get_logger(), "Prepare Rosbag recording");
 
   if (is_recording_) {
     throw std::runtime_error("Already recording");
@@ -114,7 +130,7 @@ void ServiceBagRecorder::handle_prepare(const std::vector<std::string> & topics)
 
 void ServiceBagRecorder::handle_start(const std::string & uri)
 {
-  RCLCPP_INFO(this->get_logger(), "Start recording()");
+  RCLCPP_INFO(this->get_logger(), "Start Rosbag recording");
 
   if (is_recording_) {
     throw std::runtime_error("Already recording");
@@ -173,7 +189,7 @@ void ServiceBagRecorder::handle_start(const std::string & uri)
 
 void ServiceBagRecorder::handle_stop()
 {
-  RCLCPP_INFO(this->get_logger(), "Stopping recording");
+  RCLCPP_INFO(this->get_logger(), "Stop Rosbag recording");
 
   if (!is_recording_) {
     throw std::runtime_error("Not recording");
@@ -192,16 +208,17 @@ void ServiceBagRecorder::handle_stop()
 
 void ServiceBagRecorder::handle_stop_and_delete()
 {
-  RCLCPP_INFO(this->get_logger(), "Stopping and deleting recording");
+  RCLCPP_INFO(this->get_logger(), "Stop and delete Rosbag recording");
 
   if (!is_recording_) {
     throw std::runtime_error("Not recording");
   }
 
   try {
+    is_recording_ = false;
+
     writer_.reset();
     type_for_topic_.clear();
-    is_recording_ = false;
 
     delete_bag_directory(current_bag_uri_);
 
@@ -215,7 +232,7 @@ void ServiceBagRecorder::handle_stop_and_delete()
 
 void ServiceBagRecorder::handle_finish()
 {
-  RCLCPP_INFO(this->get_logger(), "Finishing recording");
+  RCLCPP_INFO(this->get_logger(), "Finish Rosbag recording");
 
   subscriptions_.clear();
 
