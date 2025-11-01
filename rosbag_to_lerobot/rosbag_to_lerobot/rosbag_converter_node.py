@@ -60,7 +60,6 @@ class RosbagToLeRobotConverter(Node):
         self.declare_parameter('joint_order', descriptor=dyn)
         self.declare_parameter('config_yaml_path', descriptor=dyn)
         self.declare_parameter('use_optimized_save_mode', descriptor=dyn)
-        self.declare_parameter('skip_episodes', descriptor=dyn)
 
         # Helper parsers to support both YAML dict/list and JSON strings
         def parse_dict_param(param_name: str, required: bool = True) -> Dict[str, Any]:
@@ -107,81 +106,17 @@ class RosbagToLeRobotConverter(Node):
                 return []
 
         # Get parameters and validate them
-        rosbag_dir_param = self.get_parameter('rosbag_dir').value
-        if rosbag_dir_param is None:
-            # Try to fallback to reading from YAML file if provided
-            config_yaml_path = self.get_parameter('config_yaml_path').value
-            if config_yaml_path and os.path.isfile(config_yaml_path):
-                try:
-                    with open(config_yaml_path, 'r') as f:
-                        data = yaml.safe_load(f) or {}
-                    node_name = self.get_name()
-                    node_section = data.get(node_name, {})
-                    ros_params = node_section.get('ros__parameters', {})
-                    rosbag_dir_param = ros_params.get('rosbag_dir')
-                except Exception:
-                    pass
-        
-        if rosbag_dir_param is None:
-            raise ValueError("rosbag_dir parameter is required")
-        
-        # Support both single directory (string) and multiple directories (list)
-        if isinstance(rosbag_dir_param, str):
-            self.rosbag_dirs = [Path(rosbag_dir_param)]
-        elif isinstance(rosbag_dir_param, list):
-            self.rosbag_dirs = [Path(d) for d in rosbag_dir_param]
-        else:
-            raise ValueError(f"rosbag_dir must be a string or list, got: {type(rosbag_dir_param)}")
-        
+        self.rosbag_dir = Path(self.get_parameter('rosbag_dir').value)
         self.output_repo_id = self.get_parameter('output_repo_id').value
         self.task_name = self.get_parameter('task_name').value
         self.fps = self.get_parameter('fps').value
         self.use_videos = self.get_parameter('use_videos').value
         self.robot_type = self.get_parameter('robot_type').value
         self.use_optimized_save_mode = self.get_parameter('use_optimized_save_mode').value
-        
-        # Parse skip_episodes parameter (map from rosbag_dir to list of episode indices to skip)
-        skip_episodes_param = self.get_parameter('skip_episodes').value
-        if skip_episodes_param is None:
-            # Try to fallback to reading from YAML file if provided
-            config_yaml_path = self.get_parameter('config_yaml_path').value
-            if config_yaml_path and os.path.isfile(config_yaml_path):
-                try:
-                    with open(config_yaml_path, 'r') as f:
-                        data = yaml.safe_load(f) or {}
-                    node_name = self.get_name()
-                    node_section = data.get(node_name, {})
-                    ros_params = node_section.get('ros__parameters', {})
-                    skip_episodes_param = ros_params.get('skip_episodes')
-                except Exception:
-                    pass
-        
-        if skip_episodes_param is None:
-            self.skip_episodes = {}
-        else:
-            if isinstance(skip_episodes_param, dict):
-                self.skip_episodes = skip_episodes_param
-            elif isinstance(skip_episodes_param, str):
-                import json
-                try:
-                    self.skip_episodes = json.loads(skip_episodes_param)
-                except json.JSONDecodeError as e:
-                    raise ValueError(f"Invalid JSON for skip_episodes: {e}")
-            else:
-                raise ValueError(f"skip_episodes must be a dict or JSON string, got: {type(skip_episodes_param)}")
-            
-            # Validate skip_episodes structure
-            for rosbag_dir_str, episode_list in self.skip_episodes.items():
-                if not isinstance(episode_list, list):
-                    raise ValueError(f"skip_episodes['{rosbag_dir_str}'] must be a list, got: {type(episode_list)}")
-                for episode_idx in episode_list:
-                    if not isinstance(episode_idx, int) or episode_idx < 0:
-                        raise ValueError(f"Invalid episode index in skip_episodes['{rosbag_dir_str}']: {episode_idx}. Must be non-negative integer")
 
         # Validate basic parameters
-        for rosbag_dir in self.rosbag_dirs:
-            if not rosbag_dir.exists():
-                raise ValueError(f"Rosbag directory does not exist: {rosbag_dir}")
+        if not self.rosbag_dir.exists():
+            raise ValueError(f"Rosbag directory does not exist: {self.rosbag_dir}")
         if not self.output_repo_id:
             raise ValueError("output_repo_id parameter is required")
         if not self.task_name:
@@ -272,12 +207,7 @@ class RosbagToLeRobotConverter(Node):
                 raise ValueError(f"Invalid joint name: {joint_name}. Must be a non-empty string")
 
         self.get_logger().info(f'RosbagToLeRobotConverter initialized')
-        if len(self.rosbag_dirs) == 1:
-            self.get_logger().info(f'Rosbag directory: {self.rosbag_dirs[0]}')
-        else:
-            self.get_logger().info(f'Rosbag directories ({len(self.rosbag_dirs)}):')
-            for i, rosbag_dir in enumerate(self.rosbag_dirs):
-                self.get_logger().info(f'  {i}: {rosbag_dir}')
+        self.get_logger().info(f'Rosbag directory: {self.rosbag_dir}')
         self.get_logger().info(f'Output repo ID: {self.output_repo_id}')
         self.get_logger().info(f'Task name: {self.task_name}')
         self.get_logger().info(f'Target frequency: {self.fps} Hz')
@@ -290,12 +220,6 @@ class RosbagToLeRobotConverter(Node):
         self.get_logger().info(f'Joint state topics: {list(self.joint_state_topics.keys())}')
         self.get_logger().info(f'Action topics: {list(self.action_topics.keys())}')
         self.get_logger().info(f'Joint names ({len(self.joint_names)}): {self.joint_names}')
-        if self.skip_episodes:
-            self.get_logger().info('Episodes to skip:')
-            for rosbag_dir_str, episode_list in self.skip_episodes.items():
-                self.get_logger().info(f'  {rosbag_dir_str}: {episode_list}')
-        else:
-            self.get_logger().info('No episodes will be skipped')
 
     def rotate_image(self, image: np.ndarray, camera_name: str) -> np.ndarray:
         """Rotate image by the specified angle for the given camera."""
@@ -355,8 +279,8 @@ class RosbagToLeRobotConverter(Node):
             return {}
 
         # Read the first episode to get image shapes
-        first_rosbag_dir, first_episode_dir = episode_dirs[0]
-        self.get_logger().info(f"Reading first episode {first_episode_dir} from {first_rosbag_dir} to determine image shapes")
+        first_episode_dir = episode_dirs[0]
+        self.get_logger().info(f"Reading first episode {first_episode_dir} to determine image shapes")
 
         episode_data, num_frames = self.read_rosbag_episode(first_episode_dir)
 
@@ -382,35 +306,20 @@ class RosbagToLeRobotConverter(Node):
         return image_shapes
 
 
-    def find_episode_directories(self) -> List[Tuple[Path, Path]]:
-        """Find all episode directories across all rosbag directories.
-        
-        Returns:
-            List of tuples (rosbag_dir, episode_dir) for each episode found.
-        """
-        all_episode_dirs = []
-        
-        for rosbag_dir in self.rosbag_dirs:
-            if not rosbag_dir.exists():
-                self.get_logger().error(f"Rosbag directory does not exist: {rosbag_dir}")
-                continue
+    def find_episode_directories(self) -> List[Path]:
+        """Find all episode directories in the rosbag directory."""
+        if not self.rosbag_dir.exists():
+            self.get_logger().error(f"Rosbag directory does not exist: {self.rosbag_dir}")
+            return []
 
-            episode_dirs = []
-            for item in rosbag_dir.iterdir():
-                if item.is_dir() and item.name.isdigit():
-                    episode_dirs.append(item)
+        episode_dirs = []
+        for item in self.rosbag_dir.iterdir():
+            if item.is_dir() and item.name.isdigit():
+                episode_dirs.append(item)
 
-            episode_dirs.sort(key=lambda x: int(x.name))
-            self.get_logger().info(f"Found {len(episode_dirs)} episode directories in {rosbag_dir}")
-            
-            # Add (rosbag_dir, episode_dir) tuples
-            for episode_dir in episode_dirs:
-                all_episode_dirs.append((rosbag_dir, episode_dir))
-        
-        # Sort by rosbag_dir first, then by episode number
-        all_episode_dirs.sort(key=lambda x: (str(x[0]), int(x[1].name)))
-        self.get_logger().info(f"Found {len(all_episode_dirs)} total episode directories across all rosbag directories")
-        return all_episode_dirs
+        episode_dirs.sort(key=lambda x: int(x.name))
+        self.get_logger().info(f"Found {len(episode_dirs)} episode directories")
+        return episode_dirs
 
     def read_rosbag_episode(self, episode_dir: Path) -> Tuple[Dict, int]:
         """Read a single episode from rosbag directory."""
@@ -541,16 +450,8 @@ class RosbagToLeRobotConverter(Node):
             self.get_logger().info("Using standard save mode: images will be written to disk immediately")
 
         # Convert each episode
-        for rosbag_dir, episode_dir in episode_dirs:
+        for episode_dir in episode_dirs:
             episode_index = int(episode_dir.name)
-            rosbag_dir_str = str(rosbag_dir)
-            
-            # Skip episodes if they are in the skip list for this rosbag directory
-            skip_list = self.skip_episodes.get(rosbag_dir_str, [])
-            if episode_index in skip_list:
-                self.get_logger().info(f"Skipping episode {episode_index} from {rosbag_dir_str} (specified in skip_episodes)")
-                continue
-                
             self.convert_episode(dataset, episode_dir, episode_index)
 
         # Consolidate the dataset

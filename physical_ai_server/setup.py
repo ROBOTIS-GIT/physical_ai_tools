@@ -41,7 +41,6 @@ setup(
     entry_points={
         'console_scripts': [
             'physical_ai_server = physical_ai_server.physical_ai_server:main',
-            'image_rotator_node = physical_ai_server.image_rotator_node:main',
         ],
     },
 )
