@@ -394,8 +394,11 @@ class PhysicalAIServer(Node):
         rosbag_path = self.data_manager.get_save_rosbag_path()
 
         if rosbag_path is None:
-            self.get_logger().error('Failed to get rosbag path')
-            raise RuntimeError('Failed to get rosbag path')
+            self.get_logger().warning(
+                'Episode buffer not initialized yet, '
+                'rosbag recording will start shortly'
+            )
+            return
 
         self.communicator.start_rosbag(rosbag_uri=rosbag_path)
 
