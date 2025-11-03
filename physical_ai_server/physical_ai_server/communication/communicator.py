@@ -35,7 +35,10 @@ from physical_ai_interfaces.srv import (
 from physical_ai_server.communication.multi_subscriber import MultiSubscriber
 from physical_ai_server.data_processing.data_editor import DataEditor
 from physical_ai_server.utils.file_browse_utils import FileBrowseUtils
-from physical_ai_server.utils.parameter_utils import parse_topic_list_with_names
+from physical_ai_server.utils.parameter_utils import (
+    parse_topic_list,
+    parse_topic_list_with_names,
+)
 from rclpy.node import Node
 from rclpy.qos import (
     DurabilityPolicy,
@@ -79,6 +82,9 @@ class Communicator:
         # Parse topic lists for more convenient access
         self.camera_topics = parse_topic_list_with_names(self.params['camera_topic_list'])
         self.joint_topics = parse_topic_list_with_names(self.params['joint_topic_list'])
+        self.rosbag_extra_topics = parse_topic_list(
+            self.params['rosbag_extra_topic_list']
+        )
 
         # Determine which sources to enable based on operation mode
         self.enabled_sources = self._get_enabled_sources_for_mode(self.operation_mode)
@@ -95,6 +101,7 @@ class Communicator:
         # Log topic information
         node.get_logger().info(f'Parsed camera topics: {self.camera_topics}')
         node.get_logger().info(f'Parsed joint topics: {self.joint_topics}')
+        node.get_logger().info(f'Parsed rosbag extra topics: {self.rosbag_extra_topics}')
 
         self.camera_topic_msgs = {}
         self.follower_topic_msgs = {}
@@ -118,13 +125,13 @@ class Communicator:
             'mode': None
         }
 
-
     def get_all_topics(self):
         result = []
         for name, topic in self.camera_topics.items():
             result.append(topic)
         for name, topic in self.joint_topics.items():
             result.append(topic)
+        result.extend(self.rosbag_extra_topics)
         return result
 
     def _get_enabled_sources_for_mode(self, mode: str) -> Set[str]:
@@ -310,7 +317,7 @@ class Communicator:
         future = self._rosbag_send_command_client.call_async(req)
         future.add_done_callback(
             lambda f: self.node.get_logger().info(
-                f'Sent rosbag record command: {command} {f.result().message}' 
+                f'Sent rosbag record command: {command} {f.result().message}'
                 if f.done() and f.result().success
                 else 'Failed to send command: '
                      f'{command} {f.result().message if f.done() else "timeout"}'

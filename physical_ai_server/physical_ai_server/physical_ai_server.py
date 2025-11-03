@@ -164,6 +164,7 @@ class PhysicalAIServer(Node):
             'joint_topic_list',
             'observation_list',
             'joint_list',
+            'rosbag_extra_topic_list',
         ]
 
         # Declare parameters
