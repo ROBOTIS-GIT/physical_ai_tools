@@ -173,6 +173,10 @@ const InfoPanel = () => {
     if (useMultiTaskMode && !info.useOptimizedSave) {
       dispatch(setTaskInfo({ ...info, useOptimizedSave: true }));
     }
+
+    if (useMultiTaskMode && info.recordRosBag2) {
+      dispatch(setTaskInfo({ ...info, recordRosBag2: false }));
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [useMultiTaskMode, info.useOptimizedSave, dispatch]);
 
@@ -767,7 +771,7 @@ const InfoPanel = () => {
             </span>
           </div>
           {useMultiTaskMode && (
-            <span className="text-xs text-blue-600 ml-1">(Auto-enabled in Multi-Task mode)</span>
+            <span className="text-xs text-blue-600 ml-1">(Auto-disabled in Multi-Task mode)</span>
           )}
         </div>
       </div>
