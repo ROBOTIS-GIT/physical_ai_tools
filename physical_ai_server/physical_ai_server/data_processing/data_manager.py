@@ -67,7 +67,7 @@ class DataManager:
         self._robot_type = robot_type
         self._save_repo_name = f'{task_info.user_id}/{robot_type}_{task_info.task_name}'
         self._save_path = save_root_path / self._save_repo_name
-        self._save_rosbag_path = '/workspace/physical_ai_server/' + self._save_repo_name
+        self._save_rosbag_path = '/workspace/rosbag2/' + self._save_repo_name
         self._on_saving = False
         self._single_task = len(task_info.task_instruction) == 1
         self._task_info = task_info
