@@ -23,6 +23,7 @@ import { useRosServiceCaller } from '../hooks/useRosServiceCaller';
 import TagInput from './TagInput';
 import FileBrowserModal from './FileBrowserModal';
 import PolicyDownloadModal from './PolicyDownloadModal';
+import InferenceServerConfig from './InferenceServerConfig';
 import TaskPhase from '../constants/taskPhases';
 import { DEFAULT_PATHS, TARGET_FILES } from '../constants/paths';
 import { setTaskInfo } from '../features/tasks/taskSlice';
@@ -478,8 +479,6 @@ const InferencePanel = () => {
         </div>
       </div>
 
-      <div className="w-full h-1 my-2 border-t border-gray-300"></div>
-
       <div className={clsx('flex', 'items-center', 'mb-2.5')}>
         <span className={classLabel}>FPS</span>
         <input
@@ -492,9 +491,18 @@ const InferencePanel = () => {
         />
       </div>
 
-      <div className="text-xs text-gray-400 mt-1 ml-2">
+      <div className="text-xs text-gray-400 mt-1 ml-2 mb-4">
         Recording during inference will be supported in a future update
       </div>
+
+      <div className="w-full h-1 my-4 border-t border-gray-300"></div>
+
+      {/* Inference Server Configuration */}
+      <div className="mb-4">
+        <InferenceServerConfig disabled={!isEditable} />
+      </div>
+
+      <div className="w-full h-1 my-2 border-t border-gray-300"></div>
 
       {false && (
         <>

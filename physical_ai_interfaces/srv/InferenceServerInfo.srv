@@ -1,0 +1,10 @@
+# Request
+string server_ip
+int32 server_port
+string policy_type
+string policy_path
+string robot_type
+---
+# Response
+bool success
+string message

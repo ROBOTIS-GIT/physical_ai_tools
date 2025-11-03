@@ -44,6 +44,7 @@ from physical_ai_interfaces.srv import (
     GetSavedPolicyList,
     GetTrainingInfo,
     GetUserList,
+    InferenceServerInfo,
     SendCommand,
     SendTrainingCommand,
     SetHFUser,
@@ -99,15 +100,16 @@ class PhysicalAIServer(Node):
         self._init_ros_publisher()
         self._init_ros_service()
 
-        self._setup_timer_callbacks()
-
-        self.previous_data_manager_status = None
-
+        # Initialize ZMQ inference variables BEFORE _setup_timer_callbacks
+        self.zmq_inference = False
         self.zmq_client: Optional[ZmqInferenceClient] = None
         self.inference_info = {}
         self.remain_action = []
         self.wait_inference = False
         self.inference_check_time = time.time()
+
+        self._setup_timer_callbacks()
+        self.previous_data_manager_status = None
 
         self.visualizer = InferenceResultVisualizer(
             logger=self.get_logger(),
@@ -160,6 +162,7 @@ class PhysicalAIServer(Node):
             ),
             ('/huggingface/control', ControlHfServer, self.control_hf_server_callback),
             ('/training/get_training_info', GetTrainingInfo, self.get_training_info_callback),
+            ('/inference/set_server_info', InferenceServerInfo, self.set_inference_server_info_callback),
         ]
 
         for service_name, service_type, callback in service_definitions:
@@ -170,8 +173,11 @@ class PhysicalAIServer(Node):
     def _setup_timer_callbacks(self):
         self.timer_callback_dict = {
             'collection': self._data_collection_timer_callback,
-            'inference': self._zmq_inference_timer_callback
+            'inference': self._inference_timer_callback
         }
+
+        if self.zmq_inference:
+            self.timer_callback_dict['inference'] = self._zmq_inference_timer_callback
 
     def init_ros_params(self, robot_type):
         self.get_logger().info(f'Initializing ROS parameters for robot type: {robot_type}')
@@ -635,14 +641,10 @@ class PhysicalAIServer(Node):
             self.timer_manager.stop(timer_name=self.operation_mode)
             return
 
-        self.inference_info = {
-            'server_ip': '0.0.0.0',
-            'server_port': 5555,
-            'timeout_ms': 500000,
-            'policy_type': 'GR00T_N1_5_TRT',
-            'policy_path': '/workspace/checkpoints/ROBOTIS/ffw_bg2_rev4_pick_coffee_bottle_env5_1_to_31_joint_fix_20k',
-            'robot_type': 'ffw_bg2'
-        }
+        # Check if inference_info is configured
+        if not hasattr(self, 'inference_info') or self.inference_info is None:
+            self.get_logger().warn('Inference server not configured. Please configure via UI first.')
+            return
 
         if self.zmq_client is None:
             self.zmq_client = ZmqInferenceClient(
@@ -1003,14 +1005,15 @@ class PhysicalAIServer(Node):
                 task_info = request.task_info
                 self.task_instruction = task_info.task_instruction
 
-                # valid_result, result_message = self.inference_manager.validate_policy(
-                #     policy_path=task_info.policy_path)
+                if not self.zmq_inference:
+                    valid_result, result_message = self.inference_manager.validate_policy(
+                        policy_path=task_info.policy_path)
 
-                # if not valid_result:
-                #     response.success = False
-                #     response.message = result_message
-                #     self.get_logger().error(response.message)
-                #     return response
+                    if not valid_result:
+                        response.success = False
+                        response.message = result_message
+                        self.get_logger().error(response.message)
+                        return response
 
                 self.init_robot_control_parameters_from_user_task(
                     task_info
@@ -1295,6 +1298,64 @@ class PhysicalAIServer(Node):
             self.get_logger().error(f'Failed to set robot type: {str(e)}')
             response.success = False
             response.message = f'Failed to set robot type: {str(e)}'
+            return response
+
+    def set_inference_server_info_callback(self, request, response):
+        try:
+            self.get_logger().info('Setting inference server configuration...')
+            self.get_logger().info(f'  Server IP: {request.server_ip}')
+            self.get_logger().info(f'  Server Port: {request.server_port}')
+            self.get_logger().info(f'  Policy Type: {request.policy_type}')
+            self.get_logger().info(f'  Policy Path: {request.policy_path}')
+            self.get_logger().info(f'  Robot Type: {request.robot_type}')
+
+            # Validate inputs
+            if not request.server_ip:
+                response.success = False
+                response.message = 'Server IP cannot be empty'
+                return response
+
+            if request.server_port < 1 or request.server_port > 65535:
+                response.success = False
+                response.message = 'Server port must be between 1 and 65535'
+                return response
+
+            if not request.policy_type:
+                response.success = False
+                response.message = 'Policy type cannot be empty'
+                return response
+
+            if not request.policy_path:
+                response.success = False
+                response.message = 'Policy path cannot be empty'
+                return response
+
+            if not request.robot_type:
+                response.success = False
+                response.message = 'Robot type cannot be empty'
+                return response
+
+            # Store inference server configuration
+            self.inference_info = {
+                'server_ip': request.server_ip,
+                'server_port': request.server_port,
+                'timeout_ms': 500000,  # Default timeout
+                'policy_type': request.policy_type,
+                'policy_path': request.policy_path,
+                'robot_type': request.robot_type
+            }
+
+            self.get_logger().info(
+                'Inference server configuration saved successfully')
+            response.success = True
+            response.message = 'Inference server configured successfully'
+            return response
+
+        except Exception as e:
+            self.get_logger().error(f'Failed to set inference server info: {str(e)}')
+            self.get_logger().error(traceback.format_exc())
+            response.success = False
+            response.message = f'Failed to configure inference server: {str(e)}'
             return response
 
     def _init_hf_api_worker(self):

@@ -40,3 +40,68 @@ services:
           devices:
             - driver: nvidia
               capabilities: [gpu]
+
+  isaac_gr00t:
+    container_name: isaac_gr00t
+    image: isaac-gr00t-n1.5:l4t-jp6.2
+    tty: true
+    restart: always
+    cap_add:
+      - SYS_NICE
+    ulimits:
+      rtprio: 99
+      rttime: -1
+      memlock: 8428281856
+    network_mode: host
+    environment:
+      - PYTHONPATH=.:$PYTHONPATH
+      - TERM=${TERM:-xterm-256color}
+      - EDITOR=vi
+    volumes:
+      - /dev:/dev
+      - ../Isaac-GR00T:/workspace
+    privileged: true
+    working_dir: /workspace
+    command: python3 scripts/server_inference_async.py
+    runtime: nvidia
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              capabilities: [gpu]
+
+  lerobot:
+    container_name: lerobot
+    image: robotis/lerobot:latest
+    build:
+      context: ../lerobot
+      dockerfile: docker/Dockerfile.user
+      args:
+        PYTHON_VERSION: 3.10
+    tty: true
+    restart: unless-stopped
+    network_mode: host
+    environment:
+      - DISPLAY=${DISPLAY}
+      - MUJOCO_GL=egl
+      - HF_HOME=/root/.cache/huggingface
+      - HF_LEROBOT_HOME=/root/.cache/huggingface/lerobot
+      - TORCH_HOME=/root/.cache/torch
+      - TRITON_CACHE_DIR=/root/.cache/triton
+    volumes:
+      - /tmp/.X11-unix:/tmp/.X11-unix:rw
+      - /tmp/.docker.xauth:/tmp/.docker.xauth:rw
+      - ../lerobot:/lerobot
+      - ./huggingface:/root/.cache/huggingface
+      - /etc/timezone:/etc/timezone:ro
+      - /etc/localtime:/etc/localtime:ro
+    working_dir: /lerobot
+    command: /bin/bash
+    runtime: nvidia
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              capabilities: [gpu]

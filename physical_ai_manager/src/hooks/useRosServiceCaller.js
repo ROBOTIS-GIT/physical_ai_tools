@@ -570,6 +570,38 @@ export function useRosServiceCaller() {
     [callService]
   );
 
+  const setInferenceServerInfo = useCallback(
+    async ({ server_ip, server_port, policy_type, policy_path, robot_type }) => {
+      try {
+        console.log('Calling service /inference/set_server_info with request:', {
+          server_ip,
+          server_port,
+          policy_type,
+          policy_path,
+          robot_type,
+        });
+
+        const result = await callService(
+          '/inference/set_server_info',
+          'physical_ai_interfaces/srv/InferenceServerInfo',
+          {
+            server_ip: server_ip,
+            server_port: server_port,
+            policy_type: policy_type,
+            policy_path: policy_path,
+            robot_type: robot_type,
+          }
+        );
+        console.log('setInferenceServerInfo service response:', result);
+        return result;
+      } catch (error) {
+        console.error('Failed to set inference server info:', error);
+        throw new Error(`${error.message || error}`);
+      }
+    },
+    [callService]
+  );
+
   return {
     callService,
     sendRecordCommand,
@@ -588,5 +620,6 @@ export function useRosServiceCaller() {
     getDatasetInfo,
     controlHfServer,
     getTrainingInfo,
+    setInferenceServerInfo,
   };
 }
