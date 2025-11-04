@@ -32,6 +32,8 @@ from huggingface_hub import (
     DatasetCard,
     DatasetCardData,
     HfApi,
+    ModelCard,
+    ModelCardData,
     snapshot_download,
     upload_large_folder
 )
@@ -686,10 +688,144 @@ class DataManager:
         cls._progress_queue = progress_queue
 
     @staticmethod
-    def _create_readme_if_not_exists(local_dir, repo_type):
-        """Create README.md file if it doesn't exist in the dataset folder.
+    def _create_dataset_card(local_dir, readme_path):
+        """Create DatasetCard README for dataset repository.
 
-        Uses HuggingFace Hub's DatasetCard directly.
+        Args:
+            local_dir: Local directory path containing dataset
+            readme_path: Path where README.md will be saved
+        """
+        # Load meta/info.json for dataset structure info
+        info_path = Path(local_dir) / 'meta' / 'info.json'
+        dataset_info = None
+        if info_path.exists():
+            with open(info_path, 'r', encoding='utf-8') as f:
+                dataset_info = json.load(f)
+
+        # Prepare tags
+        tags = ['robotis', 'LeRobot']
+        robot_type = DataManager.get_robot_type_from_info_json(info_path)
+        if robot_type and robot_type != '':
+            tags.append(robot_type)
+
+        # Create DatasetCardData
+        card_data = DatasetCardData(
+            license='apache-2.0',
+            tags=tags,
+            url='https://ai.robotis.com/',
+            task_categories=['robotics'],
+            configs=[
+                {
+                    'config_name': 'default',
+                    'data_files': 'data/*/*.parquet',
+                }
+            ],
+        )
+
+        # Prepare dataset structure section
+        dataset_structure = ''
+        if dataset_info:
+            dataset_structure = "[meta/info.json](meta/info.json):\n"
+            dataset_structure += "```json\n"
+            info_json = json.dumps(dataset_info, indent=4)
+            dataset_structure += f"{info_json}\n"
+            dataset_structure += "```\n"
+
+        # Get template path
+        template_dir = Path(__file__).parent
+        template_path = str(template_dir / 'dataset_card_template.md')
+
+        # Create card from template
+        card = DatasetCard.from_template(
+            card_data,
+            template_path=template_path,
+            dataset_structure=dataset_structure,
+            url='https://ai.robotis.com/',
+            license='apache-2.0',
+        )
+        card.save(str(readme_path))
+        print('✅ Dataset README.md created using HuggingFace Hub')
+
+    @staticmethod
+    def _create_model_card(local_dir, readme_path):
+        """Create ModelCard README for model repository.
+
+        Args:
+            local_dir: Local directory path containing model
+            readme_path: Path where README.md will be saved
+        """
+        # Find train_config.json (check common locations first)
+        train_config = None
+        common_paths = [
+            Path(local_dir) / 'train_config.json',
+            Path(local_dir) / 'config' / 'train_config.json',
+            Path(local_dir) / 'pretrained_model' / 'train_config.json',
+        ]
+
+        # Check common paths first (fast)
+        for config_path in common_paths:
+            if config_path.exists():
+                try:
+                    with open(config_path, 'r', encoding='utf-8') as f:
+                        train_config = json.load(f)
+                    print(f'✓ Found train_config.json at {config_path}')
+                    break
+                except Exception as e:
+                    print(f'⚠️ Error reading {config_path}: {e}')
+                    continue
+
+        # If not found, search recursively (slower fallback)
+        if train_config is None:
+            for config_path in Path(local_dir).rglob('train_config.json'):
+                try:
+                    with open(config_path, 'r', encoding='utf-8') as f:
+                        train_config = json.load(f)
+                    print(f'✓ Found train_config.json at {config_path}')
+                    break
+                except Exception as e:
+                    print(f'⚠️ Error reading {config_path}: {e}')
+                    continue
+
+        if train_config is None:
+            print(f'⚠️ train_config.json not found in {local_dir}')
+
+        dataset_repo = ''
+        if train_config:
+            dataset_repo = train_config.get(
+                'dataset', {}
+            ).get('repo_id', '')
+
+        # Prepare tags
+        tags = ['robotis', 'robotics']
+
+        # Create ModelCardData with conditional datasets
+        card_data_kwargs = {
+            'license': 'apache-2.0',
+            'tags': tags,
+            'pipeline_tag': 'robotics',
+        }
+        if dataset_repo:
+            card_data_kwargs['datasets'] = [dataset_repo]
+
+        card_data = ModelCardData(**card_data_kwargs)
+
+        # Get template path
+        template_dir = Path(__file__).parent
+        template_path = str(template_dir / 'model_card_template.md')
+
+        # Create card from template
+        card = ModelCard.from_template(
+            card_data,
+            template_path=template_path,
+        )
+        card.save(str(readme_path))
+        print('✅ Model README.md created using HuggingFace Hub')
+
+    @staticmethod
+    def _create_readme_if_not_exists(local_dir, repo_type):
+        """Create README.md file if it doesn't exist in the folder.
+
+        Uses HuggingFace Hub's DatasetCard or ModelCard.
         """
         readme_path = Path(local_dir) / 'README.md'
 
@@ -701,58 +837,9 @@ class DataManager:
 
         try:
             if repo_type == 'dataset':
-                # Load meta/info.json for dataset structure info
-                info_path = Path(local_dir) / 'meta' / 'info.json'
-                dataset_info = None
-                if info_path.exists():
-                    with open(info_path, 'r', encoding='utf-8') as f:
-                        dataset_info = json.load(f)
-
-                # Prepare tags
-                tags = ['robotis', 'LeRobot']
-                robot_type = DataManager.get_robot_type_from_info_json(
-                    info_path
-                )
-                if robot_type and robot_type != '':
-                    tags.append(robot_type)
-
-                # Create DatasetCardData
-                card_data = DatasetCardData(
-                    license='apache-2.0',
-                    tags=tags,
-                    url='https://ai.robotis.com/',
-                    task_categories=['robotics'],
-                    configs=[
-                        {
-                            'config_name': 'default',
-                            'data_files': 'data/*/*.parquet',
-                        }
-                    ],
-                )
-
-                # Prepare dataset structure section
-                dataset_structure = ''
-                if dataset_info:
-                    dataset_structure = "[meta/info.json](meta/info.json):\n"
-                    dataset_structure += "```json\n"
-                    info_json = json.dumps(dataset_info, indent=4)
-                    dataset_structure += f"{info_json}\n"
-                    dataset_structure += "```\n"
-
-                # Get template path
-                template_dir = Path(__file__).parent
-                template_path = str(template_dir / 'dataset_card_template.md')
-
-                # Create card from template
-                card = DatasetCard.from_template(
-                    card_data,
-                    template_path=template_path,
-                    dataset_structure=dataset_structure,
-                    url='https://ai.robotis.com/',
-                    license='apache-2.0',
-                )
-                card.save(str(readme_path))
-                print('✅ README.md created using HuggingFace Hub')
+                DataManager._create_dataset_card(local_dir, readme_path)
+            elif repo_type == 'model':
+                DataManager._create_model_card(local_dir, readme_path)
 
         except Exception as e:
             print(f'⚠️ Warning: Failed to create README.md: {e}')
