@@ -24,10 +24,13 @@ import shutil
 import subprocess
 import threading
 import time
+import json
 
 import cv2
 from geometry_msgs.msg import Twist
 from huggingface_hub import (
+    DatasetCard,
+    DatasetCardData,
     HfApi,
     snapshot_download,
     upload_large_folder
@@ -536,6 +539,11 @@ class DataManager:
             self._task_info.num_episodes = 1_000_000
             self._task_info.episode_time_s = 1_000_000
 
+    def get_robot_type_from_info_json(info_json_path):
+        with open(info_json_path, 'r', encoding='utf-8') as f:
+            info = json.load(f)
+        return info.get('robot_type', '')
+
     @staticmethod
     def get_huggingface_user_id():
         def api_call():
@@ -678,10 +686,84 @@ class DataManager:
         cls._progress_queue = progress_queue
 
     @staticmethod
+    def _create_readme_if_not_exists(local_dir, repo_type):
+        """Create README.md file if it doesn't exist in the dataset folder.
+
+        Uses HuggingFace Hub's DatasetCard directly.
+        """
+        readme_path = Path(local_dir) / 'README.md'
+
+        if readme_path.exists():
+            print(f'README.md already exists in {local_dir}')
+            return
+
+        print(f'Creating README.md in {local_dir}')
+
+        try:
+            if repo_type == 'dataset':
+                # Load meta/info.json for dataset structure info
+                info_path = Path(local_dir) / 'meta' / 'info.json'
+                dataset_info = None
+                if info_path.exists():
+                    with open(info_path, 'r', encoding='utf-8') as f:
+                        dataset_info = json.load(f)
+
+                # Prepare tags
+                tags = ['robotis', 'LeRobot']
+                robot_type = DataManager.get_robot_type_from_info_json(
+                    info_path
+                )
+                if robot_type and robot_type != '':
+                    tags.append(robot_type)
+
+                # Create DatasetCardData
+                card_data = DatasetCardData(
+                    license='apache-2.0',
+                    tags=tags,
+                    url='https://ai.robotis.com/',
+                    task_categories=['robotics'],
+                    configs=[
+                        {
+                            'config_name': 'default',
+                            'data_files': 'data/*/*.parquet',
+                        }
+                    ],
+                )
+
+                # Prepare dataset structure section
+                dataset_structure = ''
+                if dataset_info:
+                    dataset_structure = "[meta/info.json](meta/info.json):\n"
+                    dataset_structure += "```json\n"
+                    info_json = json.dumps(dataset_info, indent=4)
+                    dataset_structure += f"{info_json}\n"
+                    dataset_structure += "```\n"
+
+                # Get template path
+                template_dir = Path(__file__).parent
+                template_path = str(template_dir / 'dataset_card_template.md')
+
+                # Create card from template
+                card = DatasetCard.from_template(
+                    card_data,
+                    template_path=template_path,
+                    dataset_structure=dataset_structure,
+                    url='https://ai.robotis.com/',
+                    license='apache-2.0',
+                )
+                card.save(str(readme_path))
+                print('✅ README.md created using HuggingFace Hub')
+
+        except Exception as e:
+            print(f'⚠️ Warning: Failed to create README.md: {e}')
+            import traceback
+            print(f'Traceback: {traceback.format_exc()}')
+
+    @staticmethod
     def upload_huggingface_repo(
         repo_id,
         repo_type,
-        local_dir
+        local_dir,
     ):
         try:
             api = HfApi()
@@ -707,6 +789,11 @@ class DataManager:
 
             # Delete .cache folder before upload
             DataManager._delete_dot_cache_folder_before_upload(local_dir)
+
+            # Create README.md if it doesn't exist
+            DataManager._create_readme_if_not_exists(
+                local_dir, repo_type
+            )
 
             print(f'Uploading folder {local_dir} to repository {repo_id}')
 
