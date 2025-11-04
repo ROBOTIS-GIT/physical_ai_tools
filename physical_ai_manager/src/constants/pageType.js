@@ -12,13 +12,14 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 //
-// Author: Kiwoong Park
+// Author: Kiwoong Park, Seongwoo Kim
 
 // PageType enum-like object for page types
 // Use this for better code readability and maintainability
 
 const PageType = {
   HOME: 'home',
+  SYSTEM: 'system',
   RECORD: 'record',
   INFERENCE: 'inference',
   TRAINING: 'training',

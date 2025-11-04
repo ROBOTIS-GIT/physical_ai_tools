@@ -13,7 +13,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  *
- * Author: Kiwoong Park
+ * Author: Kiwoong Park, Seongwoo Kim
  */
 
 import { createSlice } from '@reduxjs/toolkit';
@@ -23,13 +23,14 @@ import PageType from '../../constants/pageType';
 const initialState = {
   isLoading: false,
   error: null,
-  currentPage: PageType.HOME,
+  currentPage: PageType.SYSTEM,
   sidebarOpen: false,
   modalOpen: false,
   notifications: [],
   robotTypeList: [],
   isFirstLoad: {
     home: true,
+    system: true,
     record: true,
     inference: true,
   },

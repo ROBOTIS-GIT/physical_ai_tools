@@ -12,16 +12,17 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 //
-// Author: Kiwoong Park
+// Author: Kiwoong Park, Seongwoo Kim
 
 import React, { useEffect, useRef } from 'react';
 import clsx from 'clsx';
-import { MdHome, MdVideocam, MdMemory, MdWidgets } from 'react-icons/md';
+import { MdHome, MdVideocam, MdMemory, MdWidgets, MdSettings } from 'react-icons/md';
 import { GoGraph } from 'react-icons/go';
 import { Toaster } from 'react-hot-toast';
 import toast from 'react-hot-toast';
 import './App.css';
 import HomePage from './pages/HomePage';
+import SystemPage from './pages/SystemPage';
 import RecordPage from './pages/RecordPage';
 import InferencePage from './pages/InferencePage';
 import TrainingPage from './pages/TrainingPage';
@@ -60,20 +61,25 @@ function App() {
   }, []);
 
   useEffect(() => {
-    if (isFirstLoad.current && page === PageType.HOME && taskStatus.topicReceived) {
+    if (isFirstLoad.current && (page === PageType.HOME || page === PageType.SYSTEM) && taskStatus.topicReceived) {
       if (taskInfo?.taskType === PageType.RECORD) {
         dispatch(moveToPage(PageType.RECORD));
       } else if (taskInfo?.taskType === PageType.INFERENCE) {
         dispatch(moveToPage(PageType.INFERENCE));
       }
       isFirstLoad.current = false;
-    } else if (isFirstLoad.current && page === PageType.HOME && trainingTopicReceived) {
+    } else if (isFirstLoad.current && (page === PageType.HOME || page === PageType.SYSTEM) && trainingTopicReceived) {
       dispatch(moveToPage(PageType.TRAINING));
       isFirstLoad.current = false;
     }
   }, [page, taskInfo?.taskType, taskStatus.topicReceived, trainingTopicReceived, dispatch]);
 
-  const handleHomePageNavigation = () => {
+  const handleSystemPageNavigation = () => {
+    isFirstLoad.current = false;
+    dispatch(moveToPage(PageType.SYSTEM));
+  };
+
+    const handleHomePageNavigation = () => {
     isFirstLoad.current = false;
     dispatch(moveToPage(PageType.HOME));
   };
@@ -239,6 +245,21 @@ function App() {
       <aside className="w-30 min-w-28 bg-gray-100 min-h-screen flex flex-col items-center gap-4 shadow-[inset_0_0_2px_rgba(0,0,0,0.1)]">
         <div className="w-full h-screen flex flex-col gap-2 items-center overflow-y-auto scrollbar-thin">
           <div className="w-full h-8"></div>
+          {/* System page button */}
+          <button
+            className={clsx(classPageButton, {
+              'hover:bg-gray-200 active:bg-gray-400': page !== PageType.SYSTEM,
+              'bg-gray-300': page === PageType.SYSTEM,
+            })}
+            onClick={handleSystemPageNavigation}
+          >
+            <MdSettings size={32} className="mb-1.5" />
+            <span className="mt-1 text-sm">System</span>
+          </button>
+
+          {/* Divider line between System and Home */}
+          <div className="w-24 h-1 border-t-2 rounded-full border-gray-200 mt-1 mb-1"></div>
+
           {/* Home page button */}
           <button
             className={clsx(classPageButton, {
@@ -304,6 +325,8 @@ function App() {
       <main className="flex-1 flex flex-col h-screen">
         {page === PageType.HOME ? (
           <HomePage />
+        ) : page === PageType.SYSTEM ? (
+          <SystemPage isActive={page === PageType.SYSTEM} />
         ) : page === PageType.RECORD ? (
           <RecordPage isActive={page === PageType.RECORD} />
         ) : page === PageType.INFERENCE ? (
