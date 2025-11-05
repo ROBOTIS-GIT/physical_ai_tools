@@ -22,8 +22,8 @@ import os
 from pathlib import Path
 import threading
 import time
-from typing import Optional
 import traceback
+from typing import Optional
 
 from ament_index_python.packages import get_package_share_directory
 from physical_ai_interfaces.msg import (

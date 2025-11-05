@@ -47,10 +47,9 @@ from rclpy.qos import (
     ReliabilityPolicy
 )
 from sensor_msgs.msg import CompressedImage, JointState
+from rosbag_recorder.srv import SendCommand
 from std_msgs.msg import Empty, String
 from trajectory_msgs.msg import JointTrajectory
-
-from rosbag_recorder.srv import SendCommand
 
 
 class Communicator:

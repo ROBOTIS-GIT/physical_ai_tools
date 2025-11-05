@@ -17,6 +17,7 @@
 # Author: Dongyun Kim, Seongwoo Kim
 
 import gc
+import json
 import os
 from pathlib import Path
 import queue
@@ -24,7 +25,6 @@ import shutil
 import subprocess
 import threading
 import time
-import json
 
 import cv2
 from geometry_msgs.msg import Twist
@@ -689,11 +689,14 @@ class DataManager:
 
     @staticmethod
     def _create_dataset_card(local_dir, readme_path):
-        """Create DatasetCard README for dataset repository.
+        """
+        Create DatasetCard README for dataset repository.
 
-        Args:
-            local_dir: Local directory path containing dataset
-            readme_path: Path where README.md will be saved
+        Args
+        ----
+        local_dir: Local directory path containing dataset
+        readme_path: Path where README.md will be saved
+
         """
         # Load meta/info.json for dataset structure info
         info_path = Path(local_dir) / 'meta' / 'info.json'
@@ -724,11 +727,11 @@ class DataManager:
         # Prepare dataset structure section
         dataset_structure = ''
         if dataset_info:
-            dataset_structure = "[meta/info.json](meta/info.json):\n"
-            dataset_structure += "```json\n"
+            dataset_structure = '[meta/info.json](meta/info.json):\n'
+            dataset_structure += '```json\n'
             info_json = json.dumps(dataset_info, indent=4)
-            dataset_structure += f"{info_json}\n"
-            dataset_structure += "```\n"
+            dataset_structure += f'{info_json}\n'
+            dataset_structure += '```\n'
 
         # Get template path
         template_dir = Path(__file__).parent
@@ -746,11 +749,14 @@ class DataManager:
 
     @staticmethod
     def _create_model_card(local_dir, readme_path):
-        """Create ModelCard README for model repository.
+        """
+        Create ModelCard README for model repository.
 
-        Args:
-            local_dir: Local directory path containing model
-            readme_path: Path where README.md will be saved
+        Args
+        ----
+        local_dir: Local directory path containing model
+        readme_path: Path where README.md will be saved
+
         """
         # Find train_config.json (check common locations first)
         train_config = None
@@ -821,9 +827,11 @@ class DataManager:
 
     @staticmethod
     def _create_readme_if_not_exists(local_dir, repo_type):
-        """Create README.md file if it doesn't exist in the folder.
+        """
+        Create README.md file if it doesn't exist in the folder.
 
         Uses HuggingFace Hub's DatasetCard or ModelCard.
+
         """
         readme_path = Path(local_dir) / 'README.md'
 
