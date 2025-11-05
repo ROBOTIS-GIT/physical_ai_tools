@@ -692,7 +692,7 @@ class DataManager:
         """
         Create DatasetCard README for dataset repository.
 
-        Args
+        Args:
         ----
         local_dir: Local directory path containing dataset
         readme_path: Path where README.md will be saved
@@ -752,7 +752,7 @@ class DataManager:
         """
         Create ModelCard README for model repository.
 
-        Args
+        Args:
         ----
         local_dir: Local directory path containing model
         readme_path: Path where README.md will be saved
