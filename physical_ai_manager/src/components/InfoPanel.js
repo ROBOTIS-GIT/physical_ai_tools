@@ -754,7 +754,7 @@ const InfoPanel = () => {
       </div>
 
       <div className={clsx('flex', 'items-center', 'mb-2')}>
-        <span className={classLabel}>Record RosBag2</span>
+        <span className={classLabel}>Record Rosbag2</span>
         <div className="flex flex-col">
           <div className={clsx('flex', 'items-center')}>
             <input
