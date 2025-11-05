@@ -71,6 +71,11 @@ class PhysicalAIServer(Node):
     PUB_QOS_SIZE = 10
     TRAINING_STATUS_TIMER_FREQUENCY = 0.5  # seconds
 
+    class RosbagNotReadyException(Exception):
+        """Exception raised when rosbag recording cannot start yet."""
+
+        pass
+
     def __init__(self):
         super().__init__('physical_ai_server')
         self.get_logger().info('Start Physical AI Server')
@@ -375,6 +380,9 @@ class PhysicalAIServer(Node):
 
             self.previous_data_manager_status = current
 
+        except PhysicalAIServer.RosbagNotReadyException as e:
+            # Expected condition: rosbag not ready yet
+            self.get_logger().warn(str(e))
         except Exception as e:
             error_msg = f'Error in rosbag recording: {str(e)}'
             self.get_logger().error(traceback.format_exc())
@@ -394,11 +402,9 @@ class PhysicalAIServer(Node):
         rosbag_path = self.data_manager.get_save_rosbag_path()
 
         if rosbag_path is None:
-            self.get_logger().warning(
+            raise PhysicalAIServer.RosbagNotReadyException(
                 'Episode buffer not initialized yet, '
-                'rosbag recording will start shortly'
-            )
-            return
+                'rosbag recording will start shortly')
 
         self.communicator.start_rosbag(rosbag_uri=rosbag_path)
 
