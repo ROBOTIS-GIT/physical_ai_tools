@@ -541,6 +541,7 @@ class DataManager:
             self._task_info.num_episodes = 1_000_000
             self._task_info.episode_time_s = 1_000_000
 
+    @staticmethod
     def get_robot_type_from_info_json(info_json_path):
         with open(info_json_path, 'r', encoding='utf-8') as f:
             info = json.load(f)
