@@ -712,7 +712,6 @@ class DataManager:
         card_data = DatasetCardData(
             license='apache-2.0',
             tags=tags,
-            url='https://ai.robotis.com/',
             task_categories=['robotics'],
             configs=[
                 {
@@ -740,7 +739,6 @@ class DataManager:
             card_data,
             template_path=template_path,
             dataset_structure=dataset_structure,
-            url='https://ai.robotis.com/',
             license='apache-2.0',
         )
         card.save(str(readme_path))
@@ -838,9 +836,6 @@ class DataManager:
         try:
             if repo_type == 'dataset':
                 DataManager._create_dataset_card(local_dir, readme_path)
-            elif repo_type == 'model':
-                DataManager._create_model_card(local_dir, readme_path)
-
         except Exception as e:
             print(f'⚠️ Warning: Failed to create README.md: {e}')
             import traceback
