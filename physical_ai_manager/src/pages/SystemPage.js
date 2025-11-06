@@ -23,7 +23,7 @@ export default function SystemPage({ isActive = true }) {
   const heartbeatStatus = useSelector((state) => state.tasks.heartbeatStatus);
 
   // State for mode selection
-  const [selectedMode, setSelectedMode] = useState('manual'); // 'manual', 'autonomous', 'development'
+  const [selectedMode, setSelectedMode] = useState('manual'); // 'manual', 'autonomous'
 
   const classMainContainer = 'h-full flex flex-col overflow-hidden relative';
 
@@ -159,43 +159,6 @@ export default function SystemPage({ isActive = true }) {
                     </div>
                     <div className="text-xs text-gray-600 leading-tight">
                       {selectedMode === 'autonomous' ? 'AI policy running' : 'AI policy stopped'}
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            {/* Development Mode Row */}
-            <div className="bg-white rounded-lg p-8 shadow-sm">
-              <div className="flex items-start justify-between">
-                <div className="flex-1 pr-8">
-                  <h3 className="text-lg font-semibold text-gray-800 mb-3">Development Mode</h3>
-                  <p className="text-sm text-gray-600 leading-relaxed">
-                    To train your policies or edit your dataset, activate this mode. You do not need the robot to be activated.
-                  </p>
-                </div>
-                <div className="flex items-center gap-4 flex-shrink-0">
-                  <button
-                    onClick={() => setSelectedMode(selectedMode === 'development' ? '' : 'development')}
-                    className="w-52 h-20 px-4 py-3 rounded-lg font-medium transition-colors flex items-center justify-center bg-gray-400 text-white relative"
-                  >
-                    {selectedMode === 'development' ? (
-                      <MdStop size={32} className="text-red-400 absolute left-4" />
-                    ) : (
-                      <MdPlayArrow size={32} className="text-green-400 absolute left-4" />
-                    )}
-                    <span>{selectedMode === 'development' ? 'Deactivate' : 'Activate'}</span>
-                  </button>
-                  {/* Status Box */}
-                  <div className="w-52 h-20 px-4 py-2 rounded-lg border-2 border-black bg-white flex flex-col justify-center min-w-52 min-h-20">
-                    <div className="flex items-center gap-2 mb-1">
-                      <div className={`w-2 h-2 rounded-full ${selectedMode === 'development' ? 'bg-green-500' : 'bg-red-500'}`}></div>
-                      <span className={`text-sm font-semibold ${selectedMode === 'development' ? 'text-green-800' : 'text-red-800'}`}>
-                        Status: {selectedMode === 'development' ? 'Active' : 'Inactive'}
-                      </span>
-                    </div>
-                    <div className="text-xs text-gray-600 leading-tight">
-                      {selectedMode === 'development' ? 'Development tools ready' : 'Development mode disabled'}
                     </div>
                   </div>
                 </div>
