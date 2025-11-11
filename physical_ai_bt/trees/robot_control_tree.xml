@@ -1,0 +1,31 @@
+<?xml version="1.0"?>
+<root main_tree_to_execute="RobotControlTree">
+    <BehaviorTree ID="RobotControlTree">
+        <Sequence name="robot_control_sequence">
+            <Action ID="InferenceAction"
+                    name="VLA_Inference"
+                    policy_path="{policy_path}"
+                    task_instruction="{task_instruction}"
+                    timeout="5.0"/>
+            <Action ID="RuleAction"
+                    name="Rule_Based_Movement"
+                    current_positions="0,-0.378752,-0.151795,1.541355,0.006874,0.73828"
+                    target_positions="-1.5,-0.378752,-0.151795,1.541355,0.006874,0.73828"
+                    position_threshold="0.1"
+                    timeout="15.0"/>
+        </Sequence>
+    </BehaviorTree>
+    <TreeNodesModel>
+        <Action ID="InferenceAction">
+            <input_port name="policy_path" default="">Path to VLA policy model</input_port>
+            <input_port name="task_instruction" default="">Task instruction for robot</input_port>
+            <input_port name="timeout" default="5.0">Timeout in seconds</input_port>
+        </Action>
+        <Action ID="RuleAction">
+            <input_port name="current_positions" default="">Starting joint positions (comma-separated)</input_port>
+            <input_port name="target_positions" default="">Target joint positions (comma-separated)</input_port>
+            <input_port name="position_threshold" default="0.1">Position reach threshold</input_port>
+            <input_port name="timeout" default="15.0">Timeout in seconds</input_port>
+        </Action>
+    </TreeNodesModel>
+</root>
