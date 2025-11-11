@@ -29,7 +29,7 @@ if TYPE_CHECKING:
 class Sequence(BaseControl):
     """
     Sequence control node.
-    
+
     Executes children in order until one fails or all succeed.
     Returns SUCCESS if all children succeed.
     Returns FAILURE if any child fails.

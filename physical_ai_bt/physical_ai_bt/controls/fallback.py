@@ -29,7 +29,7 @@ if TYPE_CHECKING:
 class Fallback(BaseControl):
     """
     Fallback control node (also known as Selector).
-    
+
     Executes children in order until one succeeds or all fail.
     Returns SUCCESS if any child succeeds.
     Returns FAILURE if all children fail.

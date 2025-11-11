@@ -103,37 +103,32 @@ class InferenceAction(BaseAction):
 
         if elapsed >= self.timeout:
             # Timeout reached, stop inference
-            self.log_info(f"Inference duration ({self.timeout}s) reached, stopping inference")
             self._stop_inference()
-            # Wait a bit for AI Server to fully stop publishing
+            
+            # Wait for AI Server to fully stop publishing
             if not hasattr(self, '_stop_time'):
                 self._stop_time = current_time
                 return NodeStatus.RUNNING
 
-            # Wait 0.5 seconds after sending FINISH
-            if current_time - self._stop_time < 0.5:
+            # Wait 2 seconds after sending FINISH for AI Server cleanup
+            if current_time - self._stop_time < 2.0:
                 return NodeStatus.RUNNING
 
             return NodeStatus.SUCCESS
-
-        # Still running
-        if int(elapsed) != int(elapsed - 0.1):  # Log approximately once per second
-            self.log_info(f"Inference running... ({elapsed:.1f}s / {self.timeout}s)")
 
         return NodeStatus.RUNNING
 
     def _stop_inference(self):
         """Stop inference by calling AI Server service."""
         if not self.command_client.wait_for_service(timeout_sec=1.0):
-            self.log_warn("AI Server service not available for FINISH command")
+            self.log_warn("AI Server service not available")
             return
 
         request = SendCommand.Request()
         request.command = SendCommand.Request.FINISH
 
         try:
-            future = self.command_client.call_async(request)
-            self.log_info("Sent FINISH command to AI Server")
+            self.command_client.call_async(request)
         except Exception as e:
             self.log_warn(f"Failed to send FINISH command: {str(e)}")
 

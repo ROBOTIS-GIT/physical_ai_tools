@@ -72,10 +72,10 @@ class RuleAction(BaseAction):
             qos_profile
         )
 
-        # Subscriber for follower joint states
+        # Subscriber for follower joint states (for monitoring only)
         self.joint_state_sub = self.node.create_subscription(
             JointState,
-            '/follower/joint_states',
+            '/joint_states',
             self._joint_state_callback,
             qos_profile
         )
@@ -87,11 +87,20 @@ class RuleAction(BaseAction):
 
     def _joint_state_callback(self, msg: JointState):
         """Callback for joint state messages."""
-        self.latest_joint_positions = list(msg.position)
-        # Debug log (only log once)
-        if not hasattr(self, '_joint_state_received'):
-            self._joint_state_received = True
-            self.log_info(f"Receiving joint states: {len(self.latest_joint_positions)} joints")
+        # Reorder positions to match self.joint_names order
+        if hasattr(msg, 'name') and msg.name:
+            try:
+                # Create mapping from received names to positions
+                name_to_pos = {name: pos for name, pos in zip(msg.name, msg.position)}
+                # Reorder according to self.joint_names
+                self.latest_joint_positions = [name_to_pos[name] for name in self.joint_names]
+            except KeyError as e:
+                if not hasattr(self, '_joint_error_logged'):
+                    self._joint_error_logged = True
+                    self.log_error(f"Joint name mismatch: {e}")
+                self.latest_joint_positions = list(msg.position)
+        else:
+            self.latest_joint_positions = list(msg.position)
 
     def tick(self) -> NodeStatus:
         """Execute one tick of rule-based action."""
@@ -102,7 +111,6 @@ class RuleAction(BaseAction):
             self._send_trajectory_command()
             self.command_sent = True
             self.start_time = current_time
-            self.log_info("Sent fixed trajectory command")
             return NodeStatus.RUNNING
 
         # Step 2: Check if target reached or timeout
@@ -113,42 +121,37 @@ class RuleAction(BaseAction):
             return NodeStatus.FAILURE
 
         if self._is_target_reached():
-            self.log_info(f"Target position reached in {elapsed:.1f}s")
+            self.log_info(f"Target reached in {elapsed:.1f}s")
             return NodeStatus.SUCCESS
 
-        # Still running
-        self.log_info(f"Moving to target... ({elapsed:.1f}s)")
         return NodeStatus.RUNNING
 
     def _send_trajectory_command(self):
         """Publish trajectory command with target positions."""
         trajectory_msg = JointTrajectory()
         trajectory_msg.header.stamp = self.node.get_clock().now().to_msg()
-        
-        # Set joint names from config
         trajectory_msg.joint_names = self.joint_names
 
         # Create trajectory point
         point = JointTrajectoryPoint()
         point.positions = self.target_positions
-        point.time_from_start = Duration(sec=2, nanosec=0)  # 2 seconds to reach
-
+        point.time_from_start = Duration(sec=2, nanosec=0)
         trajectory_msg.points = [point]
 
         self.trajectory_pub.publish(trajectory_msg)
-        self.log_info(f"Published trajectory to joints {trajectory_msg.joint_names}")
 
     def _is_target_reached(self) -> bool:
         """Check if robot reached target position."""
         if self.latest_joint_positions is None:
-            self.log_warn("No joint states received yet")
             return False
 
         if len(self.latest_joint_positions) != len(self.target_positions):
-            self.log_warn(
-                f"Joint count mismatch: got {len(self.latest_joint_positions)}, "
-                f"expected {len(self.target_positions)}"
-            )
+            if not hasattr(self, '_mismatch_logged'):
+                self._mismatch_logged = True
+                self.log_warn(
+                    f"Joint count mismatch: got {len(self.latest_joint_positions)}, "
+                    f"expected {len(self.target_positions)}"
+                )
             return False
 
         # Check if all joints are within threshold
