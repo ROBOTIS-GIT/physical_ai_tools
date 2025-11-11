@@ -20,6 +20,7 @@ setup(
         ('share/' + package_name, ['package.xml']),
         ('share/' + package_name + '/launch', glob('launch/*.launch.py')),
         ('share/' + package_name + '/config', glob('config/*.yaml')),
+        ('share/' + package_name + '/trees', glob('trees/*.xml')),
     ],
     install_requires=['setuptools', 'physical_ai_interfaces', 'numpy', 'lxml'],
     zip_safe=True,
@@ -40,6 +41,7 @@ setup(
     entry_points={
         'console_scripts': [
             'physical_ai_bt = physical_ai_bt.bt_node:main',
+            'bt_node = physical_ai_bt.bt_node:main',
         ],
     },
 )

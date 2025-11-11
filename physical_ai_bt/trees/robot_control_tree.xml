@@ -26,25 +26,23 @@
               - Detects when AI Server starts inference (phase == INFERENCING)
               - Monitors for specified timeout duration
               - Sends FINISH command to stop inference
-              - Waits 0.5s for cleanup before completing
+              - Waits 2.0s for cleanup before completing
             -->
-            <Action ID="InferenceAction"
-                    name="VLA_Inference"
-                    timeout="5.0"/>
+            <InferenceAction name="VLA_Inference" 
+                             timeout="{inference_timeout}"/>
 
             <!--
               RuleAction:
               - Publishes fixed trajectory to /leader/joint_trajectory
-              - Monitors /follower/joint_states for position feedback
+              - Monitors /joint_states for position feedback
               - Completes when target position reached within threshold
+              - joint_names: Injected from config at runtime
             -->
-            <Action ID="RuleAction"
-                    name="Rule_Based_Movement"
-                    current_positions="0.0,-0.378752,-0.151795,1.541355,0.006874,0.73828"
-                    target_positions="-1.5,-0.378752,-0.151795,1.541355,0.006874,0.73828"
-                    joint_names="joint1,joint2,joint3,joint4,joint5,gripper_joint_1"
-                    position_threshold="0.1"
-                    timeout="15.0"/>
+            <RuleAction name="Rule_Based_Movement"
+                        timeout="{rule_timeout}"
+                        current_positions="{current_positions}"
+                        target_positions="{target_positions}"
+                        position_threshold="{position_threshold}"/>
         </Sequence>
     </BehaviorTree>
 

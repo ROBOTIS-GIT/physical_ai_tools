@@ -16,9 +16,11 @@
 #
 # Author: Seongwoo Kim
 
+import os
 import rclpy
+from ament_index_python.packages import get_package_share_directory
 from physical_ai_bt.actions.base_action import BTNode, NodeStatus
-from physical_ai_bt.tree_builder import TreeBuilder
+from physical_ai_bt.xml_loader import XMLTreeLoader
 from rclpy.executors import MultiThreadedExecutor
 from rclpy.node import Node
 
@@ -29,45 +31,82 @@ class BehaviorTreeNode(Node):
     def __init__(self):
         super().__init__('physical_ai_bt_node')
 
-        # Declare parameters
+        # Declare parameters with use_sim_time to allow parameter server override
         self.declare_parameter('robot_type', 'omx_f')
+        self.declare_parameter('tree_xml', 'robot_control_tree.xml')
+        self.declare_parameter('tick_rate', 10.0)  # Hz
+
+        # Declare BT behavior parameters
         self.declare_parameter('inference_timeout', 5.0)
         self.declare_parameter('rule_timeout', 15.0)
-        self.declare_parameter('tick_rate', 10.0)  # Hz
+        self.declare_parameter('position_threshold', 0.1)
         self.declare_parameter('current_positions', [0.0, -0.378752, -0.151795, 1.541355, 0.006874, 0.73828])
         self.declare_parameter('target_positions', [-1.5, -0.378752, -0.151795, 1.541355, 0.006874, 0.73828])
 
         # Get parameters
         robot_type = self.get_parameter('robot_type').value
-        inference_timeout = self.get_parameter('inference_timeout').value
-        rule_timeout = self.get_parameter('rule_timeout').value
+        tree_xml = self.get_parameter('tree_xml').value
         tick_rate = self.get_parameter('tick_rate').value
-        current_positions = self.get_parameter('current_positions').value
-        target_positions = self.get_parameter('target_positions').value
+
+        # Try to get robot_type from global parameter server first
+        try:
+            global_robot_type = self.get_parameter_or(
+                '/physical_ai_server/robot_type',
+                rclpy.Parameter('robot_type', rclpy.Parameter.Type.STRING, robot_type)
+            ).value
+            if global_robot_type and global_robot_type != robot_type:
+                self.get_logger().info(
+                    f'Using global robot_type from parameter server: {global_robot_type}'
+                )
+                robot_type = global_robot_type
+        except Exception as e:
+            self.get_logger().debug(f'Could not read global robot_type: {e}')
+
+        self.robot_type = robot_type
 
         # Load joint order from config
-        joint_names = self._load_joint_order(robot_type)
+        self.joint_names = self._load_joint_order(robot_type)
 
-        # Build behavior tree
-        self.root: BTNode = TreeBuilder.build_robot_control_tree(
-            node=self,
-            inference_timeout=inference_timeout,
-            rule_timeout=rule_timeout,
-            joint_names=joint_names,
-            current_positions=current_positions,
-            target_positions=target_positions
+        # Build runtime parameters for XML injection
+        self.runtime_params = {
+            'inference_timeout': self.get_parameter('inference_timeout').value,
+            'rule_timeout': self.get_parameter('rule_timeout').value,
+            'position_threshold': self.get_parameter('position_threshold').value,
+            'current_positions': ','.join(map(str, self.get_parameter('current_positions').value)),
+            'target_positions': ','.join(map(str, self.get_parameter('target_positions').value)),
+        }
+
+        # Get XML file path
+        pkg_share = get_package_share_directory('physical_ai_bt')
+        xml_path = os.path.join(pkg_share, 'trees', tree_xml)
+
+        if not os.path.exists(xml_path):
+            # Try relative path
+            xml_path = os.path.join(
+                os.path.dirname(os.path.dirname(__file__)),
+                'trees',
+                tree_xml
+            )
+
+        # Load behavior tree from XML with runtime parameters
+        self.xml_loader = XMLTreeLoader(
+            self,
+            joint_names=self.joint_names,
+            runtime_params=self.runtime_params
         )
-
-        self.tree_completed = False
+        self.root: BTNode = self.xml_loader.load_tree_from_file(xml_path)
 
         # Create timer for BT tick
         self.timer = self.create_timer(1.0 / tick_rate, self.tick_callback)
 
         self.get_logger().info('Behavior Tree Node initialized')
         self.get_logger().info(f'  Robot type: {robot_type}')
-        self.get_logger().info(f'  Joint names: {joint_names}')
+        self.get_logger().info(f'  Joint names: {self.joint_names}')
+        self.get_logger().info(f'  Tree XML: {tree_xml}')
         self.get_logger().info(f'  Tree: {self.root.name}')
         self.get_logger().info(f'  Tick rate: {tick_rate} Hz')
+        self.get_logger().info(f'  Runtime params: {self.runtime_params}')
+        self.get_logger().info('  Mode: Continuous (restarts after each completion)')
 
     def _load_joint_order(self, robot_type: str) -> list:
         """Load joint order from ROS2 parameters (config file)."""
@@ -98,22 +137,36 @@ class BehaviorTreeNode(Node):
 
     def tick_callback(self):
         """Timer callback for BT tick execution."""
-        if self.tree_completed:
-            return
-
         # Tick the root node
         status = self.root.tick()
 
         # Handle tree completion
         if status == NodeStatus.SUCCESS:
-            self.get_logger().info('Behavior Tree completed successfully!')
-            self.tree_completed = True
-            self.timer.cancel()
+            self.get_logger().info('Behavior Tree cycle completed successfully!')
+            self.get_logger().info('Resetting tree for next inference...')
+            self._reset_tree()
         elif status == NodeStatus.FAILURE:
             self.get_logger().error('Behavior Tree execution failed')
-            self.tree_completed = True
-            self.timer.cancel()
+            self.get_logger().info('Resetting tree to retry...')
+            self._reset_tree()
         # RUNNING: continue ticking
+
+    def _reset_tree(self):
+        """Reset the behavior tree for next execution cycle."""
+        # Get XML path again
+        tree_xml = self.get_parameter('tree_xml').value
+        pkg_share = get_package_share_directory('physical_ai_bt')
+        xml_path = os.path.join(pkg_share, 'trees', tree_xml)
+
+        if not os.path.exists(xml_path):
+            xml_path = os.path.join(
+                os.path.dirname(os.path.dirname(__file__)),
+                'trees',
+                tree_xml
+            )
+
+        # Reload tree from XML
+        self.root = self.xml_loader.load_tree_from_file(xml_path)
 
 
 def main(args=None):

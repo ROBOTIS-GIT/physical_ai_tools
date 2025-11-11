@@ -104,7 +104,7 @@ class InferenceAction(BaseAction):
         if elapsed >= self.timeout:
             # Timeout reached, stop inference
             self._stop_inference()
-            
+
             # Wait for AI Server to fully stop publishing
             if not hasattr(self, '_stop_time'):
                 self._stop_time = current_time
