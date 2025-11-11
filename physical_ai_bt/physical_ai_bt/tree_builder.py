@@ -34,27 +34,27 @@ class TreeBuilder:
     @staticmethod
     def build_robot_control_tree(
         node: 'Node',
-        policy_path: str,
-        task_instruction: str,
         inference_timeout: float,
         rule_timeout: float,
-        joint_names: list
+        joint_names: list,
+        current_positions: list,
+        target_positions: list
     ) -> BTNode:
         """
         Build the robot control behavior tree.
 
         Structure:
             Sequence (Execute in order)
-            ├─ InferenceAction (VLA for 5 seconds)
-            └─ RuleAction (Move joint1 to -1.5)
+            ├─ InferenceAction (VLA for specified duration)
+            └─ RuleAction (Move to target positions)
 
         Args:
             node: ROS2 node reference
-            policy_path: Path to VLA policy
-            task_instruction: Task instruction
             inference_timeout: Inference timeout in seconds
             rule_timeout: Rule-based timeout in seconds
             joint_names: Joint names from config
+            current_positions: Current joint positions
+            target_positions: Target joint positions
 
         Returns:
             BTNode: Root node of the tree
@@ -62,20 +62,18 @@ class TreeBuilder:
         # Create root sequence
         root = Sequence(node, name="RobotControlSequence")
 
-        # Add inference action (runs for 5 seconds)
+        # Add inference action
         inference_action = InferenceAction(
             node=node,
-            policy_path=policy_path,
-            task_instruction=task_instruction,
             timeout=inference_timeout
         )
         root.add_child(inference_action)
 
-        # Add rule-based action (moves joint1 to -1.5 after inference)
+        # Add rule-based action
         rule_action = RuleAction(
             node=node,
-            current_positions=[0, -0.378752, -0.151795, 1.541355, 0.006874, 0.73828],
-            target_positions=[-1.5, -0.378752, -0.151795, 1.541355, 0.006874, 0.73828],
+            current_positions=current_positions,
+            target_positions=target_positions,
             joint_names=joint_names,
             timeout=rule_timeout
         )

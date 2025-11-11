@@ -45,18 +45,6 @@ def generate_launch_description():
         description='Robot type (e.g., omx_f, omx_s)'
     )
 
-    policy_path_arg = DeclareLaunchArgument(
-        'policy_path',
-        default_value='',
-        description='Path to the VLA policy model'
-    )
-
-    task_instruction_arg = DeclareLaunchArgument(
-        'task_instruction',
-        default_value='Move the robot',
-        description='Task instruction for the robot'
-    )
-
     inference_timeout_arg = DeclareLaunchArgument(
         'inference_timeout',
         default_value='5.0',
@@ -85,8 +73,6 @@ def generate_launch_description():
             config_file,
             {
                 'robot_type': LaunchConfiguration('robot_type'),
-                'policy_path': LaunchConfiguration('policy_path'),
-                'task_instruction': LaunchConfiguration('task_instruction'),
                 'inference_timeout': LaunchConfiguration('inference_timeout'),
                 'rule_timeout': LaunchConfiguration('rule_timeout'),
                 'tick_rate': LaunchConfiguration('tick_rate'),
@@ -96,8 +82,6 @@ def generate_launch_description():
 
     return LaunchDescription([
         robot_type_arg,
-        policy_path_arg,
-        task_instruction_arg,
         inference_timeout_arg,
         rule_timeout_arg,
         tick_rate_arg,

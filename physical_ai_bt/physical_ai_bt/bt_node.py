@@ -31,19 +31,19 @@ class BehaviorTreeNode(Node):
 
         # Declare parameters
         self.declare_parameter('robot_type', 'omx_f')
-        self.declare_parameter('policy_path', '')
-        self.declare_parameter('task_instruction', 'Move the robot')
         self.declare_parameter('inference_timeout', 5.0)
         self.declare_parameter('rule_timeout', 15.0)
         self.declare_parameter('tick_rate', 10.0)  # Hz
+        self.declare_parameter('current_positions', [0.0, -0.378752, -0.151795, 1.541355, 0.006874, 0.73828])
+        self.declare_parameter('target_positions', [-1.5, -0.378752, -0.151795, 1.541355, 0.006874, 0.73828])
 
         # Get parameters
         robot_type = self.get_parameter('robot_type').value
-        policy_path = self.get_parameter('policy_path').value
-        task_instruction = self.get_parameter('task_instruction').value
         inference_timeout = self.get_parameter('inference_timeout').value
         rule_timeout = self.get_parameter('rule_timeout').value
         tick_rate = self.get_parameter('tick_rate').value
+        current_positions = self.get_parameter('current_positions').value
+        target_positions = self.get_parameter('target_positions').value
 
         # Load joint order from config
         joint_names = self._load_joint_order(robot_type)
@@ -51,11 +51,11 @@ class BehaviorTreeNode(Node):
         # Build behavior tree
         self.root: BTNode = TreeBuilder.build_robot_control_tree(
             node=self,
-            policy_path=policy_path,
-            task_instruction=task_instruction,
             inference_timeout=inference_timeout,
             rule_timeout=rule_timeout,
-            joint_names=joint_names
+            joint_names=joint_names,
+            current_positions=current_positions,
+            target_positions=target_positions
         )
 
         self.tree_completed = False
@@ -67,8 +67,6 @@ class BehaviorTreeNode(Node):
         self.get_logger().info(f'  Robot type: {robot_type}')
         self.get_logger().info(f'  Joint names: {joint_names}')
         self.get_logger().info(f'  Tree: {self.root.name}')
-        self.get_logger().info(f'  Policy: {policy_path}')
-        self.get_logger().info(f'  Instruction: {task_instruction}')
         self.get_logger().info(f'  Tick rate: {tick_rate} Hz')
 
     def _load_joint_order(self, robot_type: str) -> list:

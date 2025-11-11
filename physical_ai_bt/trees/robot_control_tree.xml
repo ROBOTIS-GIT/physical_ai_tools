@@ -1,31 +1,124 @@
 <?xml version="1.0"?>
-<root main_tree_to_execute="RobotControlTree">
-    <BehaviorTree ID="RobotControlTree">
-        <Sequence name="robot_control_sequence">
+<!--
+  Behavior Tree for Robot Control with VLA Inference and Rule-based Movement
+
+  Architecture:
+  1. Wait for AI Server to start inference independently
+  2. Monitor inference state via /task/status topic
+  3. Maintain inference for specified duration (default 5s)
+  4. Send FINISH command to AI Server to stop inference
+  5. Wait 0.5s for AI Server cleanup
+  6. Execute rule-based movement to fixed target position
+
+  Topics:
+  - Subscribe: /task/status (TaskStatus) - Monitor AI Server inference state
+  - Subscribe: /follower/joint_states (JointState) - Monitor robot position
+  - Publish: /leader/joint_trajectory (JointTrajectory) - Control robot movement
+
+  Services:
+  - /task/command (SendCommand) - Control AI Server inference
+-->
+<root main_tree_to_execute="RobotControlSequence">
+    <BehaviorTree ID="RobotControlSequence">
+        <Sequence name="RobotControlSequence">
+            <!--
+              InferenceAction:
+              - Detects when AI Server starts inference (phase == INFERENCING)
+              - Monitors for specified timeout duration
+              - Sends FINISH command to stop inference
+              - Waits 0.5s for cleanup before completing
+            -->
             <Action ID="InferenceAction"
                     name="VLA_Inference"
-                    policy_path="{policy_path}"
-                    task_instruction="{task_instruction}"
                     timeout="5.0"/>
+
+            <!--
+              RuleAction:
+              - Publishes fixed trajectory to /leader/joint_trajectory
+              - Monitors /follower/joint_states for position feedback
+              - Completes when target position reached within threshold
+            -->
             <Action ID="RuleAction"
                     name="Rule_Based_Movement"
-                    current_positions="0,-0.378752,-0.151795,1.541355,0.006874,0.73828"
+                    current_positions="0.0,-0.378752,-0.151795,1.541355,0.006874,0.73828"
                     target_positions="-1.5,-0.378752,-0.151795,1.541355,0.006874,0.73828"
+                    joint_names="joint1,joint2,joint3,joint4,joint5,gripper_joint_1"
                     position_threshold="0.1"
                     timeout="15.0"/>
         </Sequence>
     </BehaviorTree>
+
+    <!-- Node Definitions -->
     <TreeNodesModel>
+        <!-- Control Nodes -->
+        <Control ID="Sequence">
+            <description>
+                Execute children sequentially.
+                If any child returns FAILURE, stop and return FAILURE.
+                If any child returns RUNNING, return RUNNING.
+                If all children return SUCCESS, return SUCCESS.
+            </description>
+        </Control>
+
+        <Control ID="Fallback">
+            <description>
+                Execute children sequentially until one succeeds.
+                If any child returns SUCCESS, stop and return SUCCESS.
+                If any child returns RUNNING, return RUNNING.
+                If all children return FAILURE, return FAILURE.
+            </description>
+        </Control>
+
+        <!-- Action Nodes -->
         <Action ID="InferenceAction">
-            <input_port name="policy_path" default="">Path to VLA policy model</input_port>
-            <input_port name="task_instruction" default="">Task instruction for robot</input_port>
-            <input_port name="timeout" default="5.0">Timeout in seconds</input_port>
+            <input_port name="timeout" default="5.0">
+                Duration in seconds to maintain inference before stopping.
+                After timeout, sends FINISH command to AI Server.
+            </input_port>
+            <description>
+                Monitors AI Server status and manages VLA inference lifecycle.
+
+                States:
+                1. RUNNING - Waiting for inference to start
+                2. RUNNING - Monitoring inference duration
+                3. RUNNING - Waiting for cleanup (0.5s after FINISH)
+                4. SUCCESS - Inference completed and stopped
+
+                Uses /task/status to detect inference (phase == INFERENCING),
+                then sends FINISH command via /task/command after timeout.
+            </description>
         </Action>
+
         <Action ID="RuleAction">
-            <input_port name="current_positions" default="">Starting joint positions (comma-separated)</input_port>
-            <input_port name="target_positions" default="">Target joint positions (comma-separated)</input_port>
-            <input_port name="position_threshold" default="0.1">Position reach threshold</input_port>
-            <input_port name="timeout" default="15.0">Timeout in seconds</input_port>
+            <input_port name="current_positions" default="">
+                Starting joint positions (comma-separated floats).
+                Used for initialization only.
+            </input_port>
+            <input_port name="target_positions" default="">
+                Target joint positions (comma-separated floats).
+                Must match number of joints in joint_names.
+            </input_port>
+            <input_port name="joint_names" default="">
+                Joint names (comma-separated strings).
+                Loaded from physical_ai_server config's joint_order.
+            </input_port>
+            <input_port name="position_threshold" default="0.1">
+                Position error threshold (radians) to consider target reached.
+            </input_port>
+            <input_port name="timeout" default="15.0">
+                Maximum time (seconds) to reach target before returning FAILURE.
+            </input_port>
+            <description>
+                Moves robot to fixed target positions using trajectory control.
+
+                States:
+                1. RUNNING - Trajectory command sent, waiting for completion
+                2. SUCCESS - Target reached (all joints within threshold)
+                3. FAILURE - Timeout or invalid joint configuration
+
+                Publishes JointTrajectory to /leader/joint_trajectory,
+                monitors /follower/joint_states for position feedback.
+            </description>
         </Action>
     </TreeNodesModel>
 </root>

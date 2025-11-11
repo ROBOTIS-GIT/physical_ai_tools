@@ -36,8 +36,6 @@ class InferenceAction(BaseAction):
     def __init__(
         self,
         node: 'Node',
-        policy_path: str,
-        task_instruction: str,
         timeout: float = 5.0
     ):
         """
@@ -45,13 +43,9 @@ class InferenceAction(BaseAction):
 
         Args:
             node: ROS2 node reference
-            policy_path: Path to the policy model (not used, for future)
-            task_instruction: Instruction for the task (not used, for future)
             timeout: Duration to keep inference running
         """
         super().__init__(node, name="InferenceAction")
-        self.policy_path = policy_path
-        self.task_instruction = task_instruction
         self.timeout = timeout
 
         # Service client for AI Server
@@ -71,19 +65,14 @@ class InferenceAction(BaseAction):
             self._status_callback,
             qos_profile
         )
-        self.log_info("Subscribed to /task/status topic")
 
         # State variables
         self.inference_detected = False
         self.inference_start_time = None
         self.waiting_for_inference = True
-        self.log_info(f"InferenceAction initialized (timeout={timeout}s)")
 
     def _status_callback(self, msg: TaskStatus):
         """Callback for AI Server status messages."""
-        # Debug: Log all status messages
-        self.log_info(f"Status callback: phase={msg.phase} (INFERENCING={TaskStatus.INFERENCING})")
-
         # Check if inference is running (phase == INFERENCING)
         if msg.phase == TaskStatus.INFERENCING and not self.inference_detected:
             self.inference_detected = True
@@ -98,10 +87,6 @@ class InferenceAction(BaseAction):
         if self.waiting_for_inference:
             if not self.inference_detected:
                 # Still waiting for AI Server to start inference
-                # Log periodically
-                if not hasattr(self, '_last_wait_log') or (current_time - self._last_wait_log) > 2.0:
-                    self.log_info("Waiting for AI Server to start inference...")
-                    self._last_wait_log = current_time
                 return NodeStatus.RUNNING
 
             # Inference detected, start timer
