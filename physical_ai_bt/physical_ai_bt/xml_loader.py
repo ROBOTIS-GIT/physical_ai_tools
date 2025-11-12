@@ -22,6 +22,10 @@ import xml.etree.ElementTree as ET
 from typing import TYPE_CHECKING, Dict, Type
 
 from physical_ai_bt.actions import InferenceAction, RuleAction
+from physical_ai_bt.actions.control_publish_action import (
+    PauseActionPublishAction,
+    ResumeActionPublishAction
+)
 from physical_ai_bt.actions.base_action import BTNode, BaseAction, BaseControl
 from physical_ai_bt.controls import Sequence, Fallback
 
@@ -54,6 +58,8 @@ class XMLTreeLoader:
         self.action_types: Dict[str, Type[BaseAction]] = {
             'InferenceAction': InferenceAction,
             'RuleAction': RuleAction,
+            'PauseActionPublishAction': PauseActionPublishAction,
+            'ResumeActionPublishAction': ResumeActionPublishAction,
         }
 
     def load_tree_from_file(self, xml_path: str, main_tree_id: str = None) -> BTNode:
@@ -144,10 +150,10 @@ class XMLTreeLoader:
     def _resolve_placeholder(self, value: str) -> str:
         """
         Resolve placeholder values from runtime parameters.
-        
+
         Args:
             value: String that may contain {placeholder}
-            
+
         Returns:
             Resolved string value
         """
@@ -212,6 +218,12 @@ class XMLTreeLoader:
                 position_threshold=params.get('position_threshold', 0.1),
                 timeout=params.get('timeout', 15.0)
             )
+
+        elif action_class == PauseActionPublishAction:
+            return PauseActionPublishAction(node=self.node)
+
+        elif action_class == ResumeActionPublishAction:
+            return ResumeActionPublishAction(node=self.node)
 
         else:
             raise ValueError(f"Unknown action class: {action_class}")

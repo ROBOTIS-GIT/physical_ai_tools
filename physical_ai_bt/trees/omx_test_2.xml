@@ -1,0 +1,62 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<root BTCPP_format="3"
+      main_tree_to_execute="RobotControlSequence">
+  <BehaviorTree ID="RobotControlSequence">
+    <Sequence name="RobotControlSequence">
+      <InferenceAction name="VLA_Inference"
+                       timeout="5.0"/>
+      <PauseActionPublishAction name="Pause_Publishing_1"/>
+      <RuleAction name="Rule_Based_Movement_1"
+                  current_positions="0.0,-0.378752,-0.151795,1.541355,0.006874,0.73828"
+                  target_positions="-1.5,-0.378752,-0.151795,1.541355,0.006874,0.73828"
+                  joint_names=""
+                  position_threshold="0.1"
+                  timeout="15.0"/>
+      <RuleAction name="Rule_Based_Movement_2"
+                  current_positions="-1.5,-0.378752,-0.151795,1.541355,0.006874,0.73828"
+                  target_positions="0.0,-0.378752,-0.151795,1.541355,0.006874,0.73828"
+                  joint_names=""
+                  position_threshold="0.1"
+                  timeout="15.0"/>
+      <ResumeActionPublishAction name="Resume_Publishing_1"/>
+      <InferenceAction name="VLA_Inference_2"
+                       timeout="5.0"/>
+      <PauseActionPublishAction name="Pause_Publishing_1"/>
+      <RuleAction name="Rule_Based_Movement_3"
+                  current_positions="0.0,-0.378752,-0.151795,1.541355,0.006874,0.73828"
+                  target_positions="1.5,-0.378752,-0.151795,1.541355,0.006874,0.73828"
+                  joint_names=""
+                  position_threshold="0.1"
+                  timeout="15.0"/>
+      <RuleAction name="Rule_Based_Movement_4"
+                  current_positions="1.5,-0.378752,-0.151795,1.541355,0.006874,0.73828"
+                  target_positions="0.0,-0.378752,-0.151795,1.541355,0.006874,0.73828"
+                  joint_names=""
+                  position_threshold="0.1"
+                  timeout="15.0"/>
+      <ResumeActionPublishAction name="Resume_Publishing_1"/>
+      <InferenceAction name="VLA_Inference_3"
+                       timeout="20.0"/>
+    </Sequence>
+  </BehaviorTree>
+
+  <!-- Description of Node Models (used by Groot) -->
+  <TreeNodesModel>
+    <Action ID="InferenceAction">
+      <input_port name="timeout"
+                  default="5.0">&#10;        Duration in seconds to monitor inference.&#10;        Does NOT stop inference, just completes after timeout.&#10;      </input_port>
+    </Action>
+    <Action ID="PauseActionPublishAction"/>
+    <Action ID="ResumeActionPublishAction"/>
+    <Action ID="RuleAction">
+      <input_port name="current_positions">&#10;        Starting joint positions (comma-separated floats).&#10;        Used for initialization only.&#10;      </input_port>
+      <input_port name="target_positions">&#10;        Target joint positions (comma-separated floats).&#10;        Must match number of joints in joint_names.&#10;      </input_port>
+      <input_port name="joint_names">&#10;        Joint names (comma-separated strings).&#10;        Loaded from physical_ai_server config's joint_order.&#10;      </input_port>
+      <input_port name="position_threshold"
+                  default="0.1">&#10;        Position error threshold (radians) to consider target reached.&#10;      </input_port>
+      <input_port name="timeout"
+                  default="15.0">&#10;        Maximum time (seconds) to reach target before returning FAILURE.&#10;      </input_port>
+    </Action>
+  </TreeNodesModel>
+
+</root>

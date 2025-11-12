@@ -44,6 +44,7 @@ from physical_ai_interfaces.srv import (
     SendTrainingCommand,
     SetHFUser,
     SetRobotType,
+    ControlActionPublish,
 )
 
 from physical_ai_server.communication.communicator import Communicator
@@ -139,6 +140,7 @@ class PhysicalAIServer(Node):
             ),
             ('/huggingface/control', ControlHfServer, self.control_hf_server_callback),
             ('/training/get_training_info', GetTrainingInfo, self.get_training_info_callback),
+            ('/control_action_publish', ControlActionPublish, self.control_action_publish_callback),
         ]
 
         for service_name, service_type, callback in service_definitions:
@@ -445,6 +447,8 @@ class PhysicalAIServer(Node):
         except Exception as e:
             error_msg = f'Failed to convert messages: {str(e)}, please check the robot type again!'
             self.on_inference = False
+            # Reset action publish control when inference fails
+            self.communicator.action_publish_enabled = True
             current_status.phase = TaskStatus.READY
             current_status.error = error_msg
             self.communicator.publish_status(status=current_status)
@@ -493,6 +497,8 @@ class PhysicalAIServer(Node):
             error_msg = f'Inference failed, please check : {str(e)}'
             self.on_recording = False
             self.on_inference = False
+            # Reset action publish control when inference fails
+            self.communicator.action_publish_enabled = True
             current_status = self.data_manager.get_current_record_status()
             current_status.phase = TaskStatus.READY
             current_status.error = error_msg
@@ -714,6 +720,8 @@ class PhysicalAIServer(Node):
                 if task_info.record_inference_mode:
                     self.on_recording = True
                 self.on_inference = True
+                # Reset action publish control to enabled when inference starts
+                self.communicator.action_publish_enabled = True
                 self.start_recording_time = time.perf_counter()
                 response.success = True
                 response.message = 'Inference started'
@@ -748,6 +756,8 @@ class PhysicalAIServer(Node):
                         self.get_logger().info('Terminating all operations')
                         self.data_manager.record_finish()
                         self.on_inference = False
+                        # Reset action publish control to enabled when inference stops
+                        self.communicator.action_publish_enabled = True
                         response.success = True
                         response.message = 'All operations terminated'
 
@@ -1229,6 +1239,31 @@ class PhysicalAIServer(Node):
             self.get_logger().info('HF API Worker cleaned up successfully')
         except Exception as e:
             self.get_logger().error(f'Error cleaning up HF API Worker: {str(e)}')
+
+    def control_action_publish_callback(self, request, response):
+        """Control action publishing during inference.
+
+        This service should only be used by external BT nodes.
+        When BT is not running, action publishing is always enabled.
+        """
+        try:
+            # Only allow disabling if we're in inference mode
+            if not self.on_inference:
+                response.success = False
+                response.message = 'Cannot control action publish: inference not active'
+                self.get_logger().warn('Attempted to control action publish while not inferencing')
+                return response
+
+            self.communicator.action_publish_enabled = request.enable
+            status = "enabled" if request.enable else "disabled"
+            self.get_logger().info(f'Action publishing {status} by external control')
+            response.success = True
+            response.message = f'Action publishing {status} successfully'
+        except Exception as e:
+            self.get_logger().error(f'Failed to control action publish: {str(e)}')
+            response.success = False
+            response.message = f'Failed to control action publish: {str(e)}'
+        return response
 
 
 def main(args=None):

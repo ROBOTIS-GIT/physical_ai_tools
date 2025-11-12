@@ -23,7 +23,6 @@ from typing import TYPE_CHECKING
 
 from physical_ai_bt.actions.base_action import NodeStatus, BaseAction
 from physical_ai_interfaces.msg import TaskStatus
-from physical_ai_interfaces.srv import SendCommand
 from rclpy.qos import QoSProfile, ReliabilityPolicy
 
 if TYPE_CHECKING:
@@ -48,12 +47,6 @@ class InferenceAction(BaseAction):
         super().__init__(node, name="InferenceAction")
         self.timeout = timeout
 
-        # Service client for AI Server
-        self.command_client = self.node.create_client(
-            SendCommand,
-            '/task/command'
-        )
-
         # Subscriber to monitor AI Server status
         qos_profile = QoSProfile(
             depth=10,
@@ -70,28 +63,36 @@ class InferenceAction(BaseAction):
         self.inference_detected = False
         self.inference_start_time = None
         self.waiting_for_inference = True
+        self.latest_status = None
+        self.execution_active = False  # True only during active tick() execution
 
     def _status_callback(self, msg: TaskStatus):
         """Callback for AI Server status messages."""
-        # Check if inference is running (phase == INFERENCING)
+        self.latest_status = msg
+        
+        # Only process INFERENCING callbacks when execution is active AND waiting
+        # This prevents stale callbacks after SUCCESS from setting start_time
+        if not self.execution_active or not self.waiting_for_inference:
+            return
+        
+        # Check if inference is running and set start time once
         if msg.phase == TaskStatus.INFERENCING and not self.inference_detected:
+            if self.inference_start_time is None:
+                self.inference_start_time = time.time()
             self.inference_detected = True
-            self.inference_start_time = time.time()
-            self.log_info("Detected inference started from AI Server")
 
     def tick(self) -> NodeStatus:
         """Execute one tick of inference action."""
+        self.execution_active = True
         current_time = time.time()
 
         # Step 1: Wait for inference to start
         if self.waiting_for_inference:
             if not self.inference_detected:
-                # Still waiting for AI Server to start inference
                 return NodeStatus.RUNNING
 
-            # Inference detected, start timer
+            # Inference detected, start monitoring
             self.waiting_for_inference = False
-            self.log_info(f"Inference monitoring started, will run for {self.timeout}s")
             return NodeStatus.RUNNING
 
         # Step 2: Monitor inference duration
@@ -102,35 +103,16 @@ class InferenceAction(BaseAction):
         elapsed = current_time - self.inference_start_time
 
         if elapsed >= self.timeout:
-            # Timeout reached, stop inference
-            self._stop_inference()
-
-            # Wait for AI Server to fully stop publishing
-            if not hasattr(self, '_stop_time'):
-                self._stop_time = current_time
-                return NodeStatus.RUNNING
-
-            # Wait 2 seconds after sending FINISH for AI Server cleanup
-            if current_time - self._stop_time < 2.0:
-                return NodeStatus.RUNNING
-
+            # Timeout reached, complete without stopping inference
+            # Reset state for next execution
+            self.inference_detected = False
+            self.inference_start_time = None
+            self.waiting_for_inference = True
+            self.execution_active = False
+            
             return NodeStatus.SUCCESS
 
         return NodeStatus.RUNNING
-
-    def _stop_inference(self):
-        """Stop inference by calling AI Server service."""
-        if not self.command_client.wait_for_service(timeout_sec=1.0):
-            self.log_warn("AI Server service not available")
-            return
-
-        request = SendCommand.Request()
-        request.command = SendCommand.Request.FINISH
-
-        try:
-            self.command_client.call_async(request)
-        except Exception as e:
-            self.log_warn(f"Failed to send FINISH command: {str(e)}")
 
     def reset(self):
         """Reset action state for re-execution."""
@@ -138,5 +120,4 @@ class InferenceAction(BaseAction):
         self.inference_detected = False
         self.inference_start_time = None
         self.waiting_for_inference = True
-        if hasattr(self, '_stop_time'):
-            delattr(self, '_stop_time')
+        self.execution_active = False

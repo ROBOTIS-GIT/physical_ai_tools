@@ -1,0 +1,8 @@
+# Request: Enable or disable action publishing
+bool enable  # true to enable publishing, false to disable
+
+---
+
+# Response
+bool success
+string message

@@ -78,6 +78,9 @@ class Communicator:
         self.camera_topics = parse_topic_list_with_names(self.params['camera_topic_list'])
         self.joint_topics = parse_topic_list_with_names(self.params['joint_topic_list'])
 
+        # Action publish control flag
+        self.action_publish_enabled = True
+
         # Determine which sources to enable based on operation mode
         self.enabled_sources = self._get_enabled_sources_for_mode(self.operation_mode)
 
@@ -274,6 +277,9 @@ class Communicator:
         self.node.get_logger().info('Cleared latest data from communicator')
 
     def publish_action(self, joint_msg_datas: Dict[str, Any]):
+        if not self.action_publish_enabled:
+            # Skip publishing when action publish is disabled
+            return
         for name, joint_msg in joint_msg_datas.items():
             self.joint_publishers[name].publish(joint_msg)
 
