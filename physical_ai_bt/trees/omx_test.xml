@@ -3,14 +3,9 @@
       main_tree_to_execute="RobotControlSequence">
   <BehaviorTree ID="RobotControlSequence">
     <Sequence name="RobotControlSequence">
-      <!-- First inference phase -->
       <InferenceAction name="VLA_Inference"
                        timeout="5.0"/>
-
-      <!-- Pause action publishing before rule-based movement -->
       <PauseActionPublishAction name="Pause_Publishing_1"/>
-
-      <!-- First rule-based movements -->
       <RuleAction name="Rule_Based_Movement_1"
                   current_positions="0.0,-0.378752,-0.151795,1.541355,0.006874,0.73828"
                   target_positions="-1.5,-0.378752,-0.151795,1.541355,0.006874,0.73828"
@@ -23,81 +18,52 @@
                   joint_names=""
                   position_threshold="0.1"
                   timeout="15.0"/>
-
-      <!-- Resume action publishing before second inference -->
       <ResumeActionPublishAction name="Resume_Publishing_1"/>
-
-      <!-- Second inference phase -->
       <InferenceAction name="VLA_Inference_2"
                        timeout="5.0"/>
-
-      <!-- Pause action publishing before second rule-based movement -->
       <PauseActionPublishAction name="Pause_Publishing_2"/>
-
-      <!-- Second rule-based movement -->
       <RuleAction name="Rule_Based_Movement_3"
                   current_positions="0.0,-0.378752,-0.151795,1.541355,0.006874,0.73828"
                   target_positions="1.5,-0.378752,-0.151795,1.541355,0.006874,0.73828"
                   joint_names=""
                   position_threshold="0.1"
                   timeout="15.0"/>
-
-      <!-- Resume action publishing at the end -->
+      <RuleAction name="Rule_Based_Movement_4"
+                  current_positions="1.5,-0.378752,-0.151795,1.541355,0.006874,0.73828"
+                  target_positions="0.0,-0.378752,-0.151795,1.541355,0.006874,0.73828"
+                  joint_names=""
+                  position_threshold="0.1"
+                  timeout="15.0"/>
       <ResumeActionPublishAction name="Resume_Publishing_2"/>
+      <InferenceAction name="VLA_Inference_3"
+                       timeout="20.0"/>
+      <PauseActionPublishAction name="Pause_Publishing_3"/>
+      <RuleAction name="Rule_Based_Movement_5"
+                  current_positions="0.0,-0.378752,-0.151795,1.541355,0.006874,0.73828"
+                  target_positions="0.75,-0.378752,-0.151795,1.541355,0.006874,0.73828"
+                  joint_names=""
+                  position_threshold="0.1"
+                  timeout="15.0"/>
+      <ResumeActionPublishAction name="Resume_Publishing_3"/>
     </Sequence>
   </BehaviorTree>
 
   <!-- Description of Node Models (used by Groot) -->
   <TreeNodesModel>
     <Action ID="InferenceAction">
-      <input_port name="timeout" default="5.0">
-        Duration in seconds to monitor inference.
-        Does NOT stop inference, just completes after timeout.
-      </input_port>
-      <description>
-        Monitors AI Server status and manages VLA inference lifecycle.
-        Does not stop inference, only monitors for specified duration.
-      </description>
+      <input_port name="timeout"
+                  default="5.0">&#10;        Duration in seconds to monitor inference.&#10;        Does NOT stop inference, just completes after timeout.&#10;      </input_port>
     </Action>
-
+    <Action ID="PauseActionPublishAction"/>
+    <Action ID="ResumeActionPublishAction"/>
     <Action ID="RuleAction">
-      <input_port name="current_positions" default="">
-        Starting joint positions (comma-separated floats).
-        Used for initialization only.
-      </input_port>
-      <input_port name="target_positions" default="">
-        Target joint positions (comma-separated floats).
-        Must match number of joints in joint_names.
-      </input_port>
-      <input_port name="joint_names" default="">
-        Joint names (comma-separated strings).
-        Loaded from physical_ai_server config's joint_order.
-      </input_port>
-      <input_port name="position_threshold" default="0.1">
-        Position error threshold (radians) to consider target reached.
-      </input_port>
-      <input_port name="timeout" default="15.0">
-        Maximum time (seconds) to reach target before returning FAILURE.
-      </input_port>
-      <description>
-        Moves robot to fixed target positions using trajectory control.
-      </description>
-    </Action>
-
-    <Action ID="PauseActionPublishAction">
-      <description>
-        Pauses action publishing from AI Server.
-        Inference continues but /leader/joint_trajectory is not published.
-        This allows rule-based movements without topic conflicts.
-      </description>
-    </Action>
-
-    <Action ID="ResumeActionPublishAction">
-      <description>
-        Resumes action publishing from AI Server.
-        Allows /leader/joint_trajectory to be published again.
-        Call this after rule-based movements are complete.
-      </description>
+      <input_port name="current_positions">&#10;        Starting joint positions (comma-separated floats).&#10;        Used for initialization only.&#10;      </input_port>
+      <input_port name="target_positions">&#10;        Target joint positions (comma-separated floats).&#10;        Must match number of joints in joint_names.&#10;      </input_port>
+      <input_port name="joint_names">&#10;        Joint names (comma-separated strings).&#10;        Loaded from physical_ai_server config's joint_order.&#10;      </input_port>
+      <input_port name="position_threshold"
+                  default="0.1">&#10;        Position error threshold (radians) to consider target reached.&#10;      </input_port>
+      <input_port name="timeout"
+                  default="15.0">&#10;        Maximum time (seconds) to reach target before returning FAILURE.&#10;      </input_port>
     </Action>
   </TreeNodesModel>
 
