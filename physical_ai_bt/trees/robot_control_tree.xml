@@ -28,7 +28,7 @@
               - Sends FINISH command to stop inference
               - Waits 2.0s for cleanup before completing
             -->
-            <InferenceAction name="VLA_Inference" 
+            <InferenceAction name="VLA_Inference"
                              timeout="{inference_timeout}"/>
 
             <!--

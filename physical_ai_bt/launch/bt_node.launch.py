@@ -82,7 +82,7 @@ def generate_launch_description():
 
     tree_xml_arg = DeclareLaunchArgument(
         'tree_xml',
-        default_value='robot_control_tree.xml',
+        default_value='omx_test_2.xml',
         description='Name of XML file in physical_ai_bt/trees/ directory'
     )
 
