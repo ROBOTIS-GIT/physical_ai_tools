@@ -1,0 +1,8 @@
+source;share/physical_ai_tools/hook/cmake_prefix_path.ps1
+source;share/physical_ai_tools/hook/cmake_prefix_path.dsv
+source;share/physical_ai_tools/hook/cmake_prefix_path.sh
+source;share/physical_ai_tools/local_setup.bash
+source;share/physical_ai_tools/local_setup.dsv
+source;share/physical_ai_tools/local_setup.ps1
+source;share/physical_ai_tools/local_setup.sh
+source;share/physical_ai_tools/local_setup.zsh

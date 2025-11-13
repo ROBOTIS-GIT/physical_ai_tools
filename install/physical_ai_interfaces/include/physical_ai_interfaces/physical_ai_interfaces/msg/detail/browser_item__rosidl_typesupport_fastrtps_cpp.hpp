@@ -1,0 +1,1 @@
+/home/ai/physical_ai_tools/build/physical_ai_interfaces/rosidl_typesupport_fastrtps_cpp/physical_ai_interfaces/msg/detail/browser_item__rosidl_typesupport_fastrtps_cpp.hpp

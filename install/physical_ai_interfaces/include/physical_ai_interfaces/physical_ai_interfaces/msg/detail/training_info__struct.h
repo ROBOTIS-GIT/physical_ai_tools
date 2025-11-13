@@ -1,0 +1,1 @@
+/home/ai/physical_ai_tools/build/physical_ai_interfaces/rosidl_generator_c/physical_ai_interfaces/msg/detail/training_info__struct.h

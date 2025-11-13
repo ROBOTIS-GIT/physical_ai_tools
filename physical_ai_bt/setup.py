@@ -18,9 +18,10 @@ setup(
     data_files=[
         ('share/ament_index/resource_index/packages', ['resource/' + package_name]),
         ('share/' + package_name, ['package.xml']),
-        ('share/' + package_name + '/launch', glob('launch/*.launch.py')),
         ('share/' + package_name + '/config', glob('config/*.yaml')),
         ('share/' + package_name + '/trees', glob('trees/*.xml')),
+        ('share/' + package_name + '/bt_bringup/launch', glob('bt_bringup/launch/*.launch.py')),
+        ('share/' + package_name + '/bt_bringup/params', glob('bt_bringup/params/*.yaml')),
     ],
     install_requires=['setuptools', 'physical_ai_interfaces', 'numpy', 'lxml'],
     zip_safe=True,

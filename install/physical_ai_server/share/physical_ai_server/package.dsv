@@ -1,0 +1,9 @@
+source;share/physical_ai_server/hook/pythonpath.ps1
+source;share/physical_ai_server/hook/pythonpath.dsv
+source;share/physical_ai_server/hook/pythonpath.sh
+source;share/physical_ai_server/hook/ament_prefix_path.ps1
+source;share/physical_ai_server/hook/ament_prefix_path.dsv
+source;share/physical_ai_server/hook/ament_prefix_path.sh
+source;../../build/physical_ai_server/share/physical_ai_server/hook/pythonpath_develop.ps1
+source;../../build/physical_ai_server/share/physical_ai_server/hook/pythonpath_develop.dsv
+source;../../build/physical_ai_server/share/physical_ai_server/hook/pythonpath_develop.sh

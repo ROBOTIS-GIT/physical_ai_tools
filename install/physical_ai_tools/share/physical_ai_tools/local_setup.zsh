@@ -1,0 +1,1 @@
+/home/ai/physical_ai_tools/build/physical_ai_tools/ament_cmake_environment_hooks/local_setup.zsh

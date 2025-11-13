@@ -20,7 +20,7 @@ import os
 import rclpy
 from ament_index_python.packages import get_package_share_directory
 from physical_ai_bt.actions.base_action import BTNode, NodeStatus
-from physical_ai_bt.xml_loader import XMLTreeLoader
+from physical_ai_bt.bt_nodes_loader import XMLTreeLoader
 from rclpy.executors import MultiThreadedExecutor
 from rclpy.node import Node
 
@@ -66,6 +66,9 @@ class BehaviorTreeNode(Node):
 
         # Load joint order from config
         self.joint_names = self._load_joint_order(robot_type)
+        
+        # Load topic configuration for multi-publisher support
+        self.topic_config = self._load_topic_config(robot_type)
 
         # Build runtime parameters for XML injection
         self.runtime_params = {
@@ -92,7 +95,8 @@ class BehaviorTreeNode(Node):
         self.xml_loader = XMLTreeLoader(
             self,
             joint_names=self.joint_names,
-            runtime_params=self.runtime_params
+            runtime_params=self.runtime_params,
+            topic_config=self.topic_config
         )
         self.root: BTNode = self.xml_loader.load_tree_from_file(xml_path)
 
@@ -110,7 +114,7 @@ class BehaviorTreeNode(Node):
 
     def _load_joint_order(self, robot_type: str) -> list:
         """Load joint order from ROS2 parameters (config file)."""
-        # Declare joint_list parameter
+        # Load from bt_node namespace (from bt_node_params.yaml)
         self.declare_parameter(f'{robot_type}.joint_list', [''])
         joint_list_param = self.get_parameter(f'{robot_type}.joint_list').value
 
@@ -120,20 +124,76 @@ class BehaviorTreeNode(Node):
             )
             return ['joint1', 'joint2', 'joint3', 'joint4', 'joint5', 'gripper_joint_1']
 
-        # Get first joint name (e.g., 'leader')
-        joint_name = joint_list_param[0]
+        # Collect joint orders from all joint groups
+        all_joint_order = []
+        for joint_name in joint_list_param:
+            # Load joint_order from bt_node namespace
+            param_name = f'{robot_type}.joint_order.{joint_name}'
+            self.declare_parameter(param_name, [''])
+            joint_order = self.get_parameter(param_name).value
 
-        # Declare joint_order parameter
-        param_name = f'{robot_type}.joint_order.{joint_name}'
-        self.declare_parameter(param_name, [''])
-        joint_order = self.get_parameter(param_name).value
+            if joint_order and joint_order != ['']:
+                all_joint_order.extend(joint_order)
+                self.get_logger().info(f'Loaded {len(joint_order)} joints from {joint_name}')
 
-        if not joint_order or joint_order == ['']:
-            self.get_logger().error(f'No joint_order found for {joint_name}')
+        if not all_joint_order:
+            self.get_logger().error(f'No joint_order found for any joint group')
             return ['joint1', 'joint2', 'joint3', 'joint4', 'joint5', 'gripper_joint_1']
 
-        self.get_logger().info(f'Loaded joint order from config: {joint_order}')
-        return joint_order
+        self.get_logger().info(f'Total joints loaded: {len(all_joint_order)}')
+        return all_joint_order
+
+    def _load_topic_config(self, robot_type: str) -> dict:
+        """
+        Load topic configuration for multi-publisher support.
+        
+        Returns:
+            dict: {
+                'joint_list': ['leader_left', 'leader_right', ...],
+                'joint_topic_list': ['leader_left:/topic1', 'leader_right:/topic2', ...],
+                'topic_map': {
+                    'leader_left': '/topic1',
+                    'leader_right': '/topic2',
+                    ...
+                },
+                'joint_order': {
+                    'leader_left': ['arm_l_joint1', ...],
+                    'leader_right': ['arm_r_joint1', ...],
+                    ...
+                }
+            }
+        """
+        # joint_list is already declared in _load_joint_order, just get it
+        joint_list = self.get_parameter(f'{robot_type}.joint_list').value
+        
+        # Load joint_topic_list
+        self.declare_parameter(f'{robot_type}.joint_topic_list', [''])
+        joint_topic_list = self.get_parameter(f'{robot_type}.joint_topic_list').value
+        
+        # Build topic_map: parse "joint_group:/topic" format
+        topic_map = {}
+        for topic_entry in joint_topic_list:
+            if ':' in topic_entry:
+                joint_group, topic = topic_entry.split(':', 1)
+                topic_map[joint_group] = topic
+        
+        # Load joint_order for each joint group (already declared in _load_joint_order)
+        joint_order = {}
+        for joint_name in joint_list:
+            param_name = f'{robot_type}.joint_order.{joint_name}'
+            order = self.get_parameter(param_name).value
+            if order and order != ['']:
+                joint_order[joint_name] = order
+        
+        config = {
+            'joint_list': joint_list,
+            'joint_topic_list': joint_topic_list,
+            'topic_map': topic_map,
+            'joint_order': joint_order
+        }
+        
+        self.get_logger().info(f'Loaded topic config for {len(topic_map)} joint groups')
+        return config
 
     def tick_callback(self):
         """Timer callback for BT tick execution."""
