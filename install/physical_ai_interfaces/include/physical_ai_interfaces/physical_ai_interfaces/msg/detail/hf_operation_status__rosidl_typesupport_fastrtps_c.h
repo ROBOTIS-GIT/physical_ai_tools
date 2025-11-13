@@ -1,1 +1,0 @@
-/home/ai/physical_ai_tools/build/physical_ai_interfaces/rosidl_typesupport_fastrtps_c/physical_ai_interfaces/msg/detail/hf_operation_status__rosidl_typesupport_fastrtps_c.h

@@ -1,1 +1,0 @@
-/home/ai/physical_ai_tools/build/physical_ai_interfaces/rosidl_typesupport_introspection_c/physical_ai_interfaces/srv/detail/get_user_list__rosidl_typesupport_introspection_c.h

@@ -1,1 +1,0 @@
-/home/ai/physical_ai_tools/build/physical_ai_interfaces/rosidl_generator_c/physical_ai_interfaces/srv/detail/send_command__struct.h
