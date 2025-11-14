@@ -6,14 +6,3 @@ bt_node:
     # Behavior tree configuration
     tree_xml: 'ffw_test.xml'
     tick_rate: 10.0
-
-    # Action timeouts
-    inference_timeout: 5.0
-    rule_timeout: 15.0
-
-    # Motion parameters
-    position_threshold: 0.1
-    # Default positions for ffw_sg2_rev1
-    # Total joints: leader_left(8) + leader_right(8) + leader_head(2) + leader_lift(1) + leader_mobile(3) = 22
-    current_positions: [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
-    target_positions: [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]

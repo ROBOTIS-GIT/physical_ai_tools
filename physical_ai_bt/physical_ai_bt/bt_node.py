@@ -31,55 +31,19 @@ class BehaviorTreeNode(Node):
     def __init__(self):
         super().__init__('physical_ai_bt_node')
 
-        # Declare parameters with use_sim_time to allow parameter server override
-        self.declare_parameter('robot_type', 'omx_f')
-        self.declare_parameter('tree_xml', 'robot_control_tree.xml')
+        self.declare_parameter('robot_type', 'ffw_sg2_rev1')
+        self.declare_parameter('tree_xml', 'ffw_test.xml')
         self.declare_parameter('tick_rate', 10.0)  # Hz
 
-        # Declare BT behavior parameters
-        self.declare_parameter('inference_timeout', 5.0)
-        self.declare_parameter('rule_timeout', 15.0)
-        self.declare_parameter('position_threshold', 0.1)
-        self.declare_parameter('current_positions', [0.0, -0.378752, -0.151795, 1.541355, 0.006874, 0.73828])
-        self.declare_parameter('target_positions', [-1.5, -0.378752, -0.151795, 1.541355, 0.006874, 0.73828])
-
-        # Get parameters
         robot_type = self.get_parameter('robot_type').value
         tree_xml = self.get_parameter('tree_xml').value
         tick_rate = self.get_parameter('tick_rate').value
 
-        # Try to get robot_type from global parameter server first
-        try:
-            global_robot_type = self.get_parameter_or(
-                '/physical_ai_server/robot_type',
-                rclpy.Parameter('robot_type', rclpy.Parameter.Type.STRING, robot_type)
-            ).value
-            if global_robot_type and global_robot_type != robot_type:
-                self.get_logger().info(
-                    f'Using global robot_type from parameter server: {global_robot_type}'
-                )
-                robot_type = global_robot_type
-        except Exception as e:
-            self.get_logger().debug(f'Could not read global robot_type: {e}')
-
         self.robot_type = robot_type
-
-        # Load joint order from config
         self.joint_names = self._load_joint_order(robot_type)
-        
-        # Load topic configuration for multi-publisher support
         self.topic_config = self._load_topic_config(robot_type)
+        self.runtime_params = {}
 
-        # Build runtime parameters for XML injection
-        self.runtime_params = {
-            'inference_timeout': self.get_parameter('inference_timeout').value,
-            'rule_timeout': self.get_parameter('rule_timeout').value,
-            'position_threshold': self.get_parameter('position_threshold').value,
-            'current_positions': ','.join(map(str, self.get_parameter('current_positions').value)),
-            'target_positions': ','.join(map(str, self.get_parameter('target_positions').value)),
-        }
-
-        # Get XML file path
         pkg_share = get_package_share_directory('physical_ai_bt')
         xml_path = os.path.join(pkg_share, 'trees', tree_xml)
 
@@ -122,7 +86,7 @@ class BehaviorTreeNode(Node):
             self.get_logger().warn(
                 f'No joint_list found in config for {robot_type}, using default'
             )
-            return ['joint1', 'joint2', 'joint3', 'joint4', 'joint5', 'gripper_joint_1']
+            return []
 
         # Collect joint orders from all joint groups
         all_joint_order = []
@@ -138,7 +102,7 @@ class BehaviorTreeNode(Node):
 
         if not all_joint_order:
             self.get_logger().error(f'No joint_order found for any joint group')
-            return ['joint1', 'joint2', 'joint3', 'joint4', 'joint5', 'gripper_joint_1']
+            return []
 
         self.get_logger().info(f'Total joints loaded: {len(all_joint_order)}')
         return all_joint_order
@@ -146,7 +110,7 @@ class BehaviorTreeNode(Node):
     def _load_topic_config(self, robot_type: str) -> dict:
         """
         Load topic configuration for multi-publisher support.
-        
+
         Returns:
             dict: {
                 'joint_list': ['leader_left', 'leader_right', ...],
@@ -165,18 +129,18 @@ class BehaviorTreeNode(Node):
         """
         # joint_list is already declared in _load_joint_order, just get it
         joint_list = self.get_parameter(f'{robot_type}.joint_list').value
-        
+
         # Load joint_topic_list
         self.declare_parameter(f'{robot_type}.joint_topic_list', [''])
         joint_topic_list = self.get_parameter(f'{robot_type}.joint_topic_list').value
-        
+
         # Build topic_map: parse "joint_group:/topic" format
         topic_map = {}
         for topic_entry in joint_topic_list:
             if ':' in topic_entry:
                 joint_group, topic = topic_entry.split(':', 1)
                 topic_map[joint_group] = topic
-        
+
         # Load joint_order for each joint group (already declared in _load_joint_order)
         joint_order = {}
         for joint_name in joint_list:
@@ -184,14 +148,14 @@ class BehaviorTreeNode(Node):
             order = self.get_parameter(param_name).value
             if order and order != ['']:
                 joint_order[joint_name] = order
-        
+
         config = {
             'joint_list': joint_list,
             'joint_topic_list': joint_topic_list,
             'topic_map': topic_map,
             'joint_order': joint_order
         }
-        
+
         self.get_logger().info(f'Loaded topic config for {len(topic_map)} joint groups')
         return config
 
