@@ -196,6 +196,35 @@ class RuleAction(BaseAction):
     def _send_trajectory_command(self):
         """Publish trajectory command with target positions, starting from latest joint_states if available."""
         # Use latest joint positions if available, else fallback to initial current_positions
+        # Compose goal positions for all joint groups
+        # Left arm
+        left_arm_goal = [0.5954753044455301, -0.05522330830078125, -0.17947575197753907, 0.22714006458231562, 0.003069460332193454, 0.8517752421836835, 0.3084807633854421, -1.2033011704101564]
+        # Right arm
+        right_arm_goal = [0.5939405742794334, -0.05982525065917969, -0.20555342534179688, 0.49725257381533955, -0.15186409782714844, 0.7827123847093308, -0.5292233712158203, -1.1388739773925782]
+        # Head (linear neck)
+        head_goal = [-0.01793636702335067, -0.009748462565261374]
+        # Lift
+        lift_goal = [-0.020166984446496245]
+        # Swerve (rotate in place)
+        swerve_goal = [0.0, 0.0, 0.5]  # angular_z=0.5 rad/s
+
+        # Compose full target_positions in joint_list order
+        joint_list = self.topic_config.get('joint_list', [])
+        joint_order = self.topic_config.get('joint_order', {})
+        full_goal = []
+        for group in joint_list:
+            if group == 'leader_left':
+                full_goal.extend(left_arm_goal)
+            elif group == 'leader_right':
+                full_goal.extend(right_arm_goal)
+            elif group == 'leader_head':
+                full_goal.extend(head_goal)
+            elif group == 'leader_lift':
+                full_goal.extend(lift_goal)
+            elif group == 'leader_mobile':
+                full_goal.extend(swerve_goal)
+
+        self.target_positions = full_goal
         start_positions = self.latest_joint_positions if self.latest_joint_positions is not None else self.current_positions
         if self.publishers:
             self._publish_multi_topic(start_positions)
@@ -205,7 +234,8 @@ class RuleAction(BaseAction):
     def _publish_single_topic(self, start_positions):
         """Publish to single topic (legacy mode), using start_positions as initial pose."""
         trajectory_msg = JointTrajectory()
-        trajectory_msg.header.stamp = self.node.get_clock().now().to_msg()
+        trajectory_msg.header.stamp.sec = 0
+        trajectory_msg.header.stamp.nanosec = 0
         trajectory_msg.joint_names = self.joint_names
 
         # Create trajectory points: start and target
@@ -215,7 +245,7 @@ class RuleAction(BaseAction):
 
         target_point = JointTrajectoryPoint()
         target_point.positions = self.target_positions
-        target_point.time_from_start = Duration(sec=2, nanosec=0)
+        target_point.time_from_start = Duration(sec=0, nanosec=0)
 
         trajectory_msg.points = [start_point, target_point]
 
@@ -249,26 +279,32 @@ class RuleAction(BaseAction):
             if joint_group == 'leader_mobile':
                 # Mobile: publish Twist message (target only)
                 twist_msg = Twist()
-                if len(group_target_positions) >= 3:
-                    twist_msg.linear.x = group_target_positions[0]
-                    twist_msg.linear.y = group_target_positions[1]
-                    twist_msg.angular.z = group_target_positions[2]
+                twist_msg.linear.x = 0.0
+                twist_msg.linear.y = 0.0
+                twist_msg.angular.z = 0.5
                 self.publishers[joint_group].publish(twist_msg)
-                self.log_info(f"Published Twist to {joint_group}: linear_x={twist_msg.linear.x:.3f}")
+                self.log_info(f"Published Twist to {joint_group}: angular_z=0.5 (rotate 90deg in place)")
             else:
-                # Joint group: publish JointTrajectory with start and target points
+                # Joint group: publish JointTrajectory with only valid start point
                 trajectory_msg = JointTrajectory()
-                trajectory_msg.header.stamp = self.node.get_clock().now().to_msg()
+                trajectory_msg.header.stamp.sec = 0
+                trajectory_msg.header.stamp.nanosec = 0
                 trajectory_msg.joint_names = group_joints
-                start_point = JointTrajectoryPoint()
-                start_point.positions = group_start_positions
-                start_point.time_from_start = Duration(sec=0, nanosec=0)
+                points = []
+                # Only add start point if valid
+                if group_start_positions and len(group_start_positions) == len(group_joints):
+                    start_point = JointTrajectoryPoint()
+                    start_point.positions = group_start_positions
+                    start_point.time_from_start = Duration(sec=0, nanosec=0)
+                    points.append(start_point)
+                # Always add goal point
                 target_point = JointTrajectoryPoint()
                 target_point.positions = group_target_positions
-                target_point.time_from_start = Duration(sec=2, nanosec=0)
-                trajectory_msg.points = [start_point, target_point]
+                target_point.time_from_start = Duration(sec=0, nanosec=0)
+                points.append(target_point)
+                trajectory_msg.points = points
                 self.publishers[joint_group].publish(trajectory_msg)
-                self.log_info(f"Published trajectory to {joint_group}: {len(group_joints)} joints (start from latest pose)")
+                self.log_info(f"Published trajectory to {joint_group}: {len(group_joints)} joints (start/goal points: {len(points)})")
 
     def _has_mobile_command(self) -> bool:
         """Check if this action includes mobile base commands."""
