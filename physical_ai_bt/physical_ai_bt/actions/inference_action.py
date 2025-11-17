@@ -30,7 +30,6 @@ if TYPE_CHECKING:
 
 
 class InferenceAction(BaseAction):
-    """Action that monitors and manages VLA inference from AI Server."""
 
     def __init__(
         self,
@@ -69,12 +68,12 @@ class InferenceAction(BaseAction):
     def _status_callback(self, msg: TaskStatus):
         """Callback for AI Server status messages."""
         self.latest_status = msg
-        
+
         # Only process INFERENCING callbacks when execution is active AND waiting
         # This prevents stale callbacks after SUCCESS from setting start_time
         if not self.execution_active or not self.waiting_for_inference:
             return
-        
+
         # Check if inference is running and set start time once
         if msg.phase == TaskStatus.INFERENCING and not self.inference_detected:
             if self.inference_start_time is None:
@@ -109,7 +108,7 @@ class InferenceAction(BaseAction):
             self.inference_start_time = None
             self.waiting_for_inference = True
             self.execution_active = False
-            
+
             return NodeStatus.SUCCESS
 
         return NodeStatus.RUNNING

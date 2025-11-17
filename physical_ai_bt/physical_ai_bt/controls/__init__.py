@@ -19,6 +19,5 @@
 """Control nodes for Behavior Tree."""
 
 from physical_ai_bt.controls.sequence import Sequence
-from physical_ai_bt.controls.fallback import Fallback
 
-__all__ = ['Sequence', 'Fallback']
+__all__ = ['Sequence']

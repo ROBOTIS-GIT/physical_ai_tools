@@ -1,26 +1,20 @@
 #!/usr/bin/env python3
-#
 # Copyright 2025 ROBOTIS CO., LTD.
-#
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
 # You may obtain a copy of the License at
-#
 #     http://www.apache.org/licenses/LICENSE-2.0
-#
 # Unless required by applicable law or agreed to in writing, software
 # distributed under the License is distributed on an "AS IS" BASIS,
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-#
 # Author: Seongwoo Kim
 
-"""Rule-based action for fixed position movement."""
+"""Whole-body rule-based action for fixed position movement."""
 
 import time
 from typing import TYPE_CHECKING, List
-
 from builtin_interfaces.msg import Duration
 from geometry_msgs.msg import Twist
 from physical_ai_bt.actions.base_action import NodeStatus, BaseAction
@@ -31,33 +25,19 @@ from trajectory_msgs.msg import JointTrajectory, JointTrajectoryPoint
 if TYPE_CHECKING:
     from rclpy.node import Node
 
-
-class RuleAction(BaseAction):
-    """Action that moves robot to fixed target positions."""
-
+class RuleWholeBody(BaseAction):
+    """Whole-body action that moves robot to fixed target positions."""
     def __init__(
-        self,
-        node: 'Node',
-        current_positions: List[float],
-        target_positions: List[float],
-        joint_names: List[str],
-        position_threshold: float = 0.1,
-        timeout: float = 15.0,
-        topic_config: dict = None
-    ):
-        """
-        Initialize rule-based action.
-
-        Args:
-            node: ROS2 node reference
-            current_positions: Starting joint positions
-            target_positions: Target joint positions
-            joint_names: Joint names in correct order
-            position_threshold: Threshold for position reach check
-            timeout: Maximum time to reach target
-            topic_config: Topic configuration for multi-publisher support
-        """
-        super().__init__(node, name="RuleAction")
+            self,
+            node: 'Node',
+            current_positions: List[float],
+            target_positions: List[float],
+            joint_names: List[str],
+            position_threshold: float = 0.001,
+            timeout: float = 15.0,
+            topic_config: dict = None
+        ):
+        super().__init__(node, name="RuleWholeBody")
         self.current_positions = current_positions
         self.target_positions = target_positions
         self.joint_names = joint_names
@@ -66,7 +46,6 @@ class RuleAction(BaseAction):
         self.topic_config = topic_config or {}
         if not isinstance(self.topic_config, dict):
             self.topic_config = {}
-
         # QoS profile for publishers
         qos_profile = QoSProfile(
             depth=10,
@@ -152,7 +131,7 @@ class RuleAction(BaseAction):
             self.latest_joint_positions = list(msg.position)
 
     def tick(self) -> NodeStatus:
-        """Execute one tick of rule-based action."""
+        """Execute one tick of whole-body rule-based action."""
         current_time = time.time()
 
         # Step 1: Send trajectory command if not sent
@@ -206,10 +185,7 @@ class RuleAction(BaseAction):
         # Lift
         lift_goal = [-0.020166984446496245]
         # Swerve (rotate in place)
-        if self.timeout > 0:
-            angular_z = (3.141592653589793 / 2) / self.timeout  # π/2 / timeout
-        else:
-            angular_z = 0.5  # fallback
+        angular_z = (3.141592653589793 / 2) / self.timeout
         swerve_goal = [0.0, 0.0, angular_z]
 
         # Compose full target_positions in joint_list order

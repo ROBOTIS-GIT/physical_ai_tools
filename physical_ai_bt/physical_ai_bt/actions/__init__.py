@@ -20,6 +20,7 @@
 
 from physical_ai_bt.actions.base_action import BaseAction
 from physical_ai_bt.actions.inference_action import InferenceAction
-from physical_ai_bt.actions.rule_action import RuleAction
+from physical_ai_bt.actions.rule_whole_body import RuleWholeBody
+from physical_ai_bt.actions.rule_swerve import RuleSwerve
 
-__all__ = ['BaseAction', 'InferenceAction', 'RuleAction']
+__all__ = ['BaseAction', 'InferenceAction', 'RuleWholeBody', 'RuleSwerve']

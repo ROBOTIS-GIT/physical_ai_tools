@@ -21,13 +21,13 @@
 import xml.etree.ElementTree as ET
 from typing import TYPE_CHECKING, Dict, Type
 
-from physical_ai_bt.actions import InferenceAction, RuleAction
+from physical_ai_bt.actions import InferenceAction, RuleWholeBody, RuleSwerve
 from physical_ai_bt.actions.control_publish_action import (
     PauseActionPublishAction,
     ResumeActionPublishAction
 )
 from physical_ai_bt.actions.base_action import BTNode, BaseAction, BaseControl
-from physical_ai_bt.controls import Sequence, Fallback
+from physical_ai_bt.controls import Sequence
 
 if TYPE_CHECKING:
     from rclpy.node import Node
@@ -42,7 +42,7 @@ class XMLTreeLoader:
 
         Args:
             node: ROS2 node reference
-            joint_names: Joint names from config (for RuleAction)
+            joint_names: Joint names from config (for RuleWholeBody)
             topic_config: Topic configuration for multi-publisher support
         """
         self.node = node
@@ -52,12 +52,12 @@ class XMLTreeLoader:
         # Register available node types
         self.control_types: Dict[str, Type[BaseControl]] = {
             'Sequence': Sequence,
-            'Fallback': Fallback,
         }
 
         self.action_types: Dict[str, Type[BaseAction]] = {
             'InferenceAction': InferenceAction,
-            'RuleAction': RuleAction,
+            'RuleWholeBody': RuleWholeBody,
+            'RuleSwerve': RuleSwerve,
             'PauseActionPublishAction': PauseActionPublishAction,
             'ResumeActionPublishAction': ResumeActionPublishAction,
         }
@@ -188,15 +188,22 @@ class XMLTreeLoader:
                 timeout=params.get('timeout', 5.0)
             )
 
-        elif action_class == RuleAction:
-            return RuleAction(
+        elif action_class == RuleWholeBody:
+            return RuleWholeBody(
                 node=self.node,
                 current_positions=params.get('current_positions', []),
                 target_positions=params.get('target_positions', []),
-                joint_names=self.joint_names,  # Use joint_names from loader
+                joint_names=self.joint_names,
                 position_threshold=params.get('position_threshold', 0.1),
                 timeout=params.get('timeout', 15.0),
-                topic_config=self.topic_config  # Pass topic config for multi-publisher
+                topic_config=self.topic_config
+            )
+
+        elif action_class == RuleSwerve:
+            return RuleSwerve(
+                node=self.node,
+                timeout=params.get('timeout', 15.0),
+                topic_config=self.topic_config
             )
 
         elif action_class == PauseActionPublishAction:
