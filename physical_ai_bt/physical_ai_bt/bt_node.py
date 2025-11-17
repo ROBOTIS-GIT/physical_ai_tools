@@ -33,7 +33,7 @@ class BehaviorTreeNode(Node):
 
         self.declare_parameter('robot_type', 'ffw_sg2_rev1')
         self.declare_parameter('tree_xml', 'ffw_test.xml')
-        self.declare_parameter('tick_rate', 10.0)  # Hz
+        self.declare_parameter('tick_rate', 10.0)
 
         robot_type = self.get_parameter('robot_type').value
         tree_xml = self.get_parameter('tree_xml').value
@@ -42,7 +42,6 @@ class BehaviorTreeNode(Node):
         self.robot_type = robot_type
         self.joint_names = self._load_joint_order(robot_type)
         self.topic_config = self._load_topic_config(robot_type)
-        self.runtime_params = {}
 
         pkg_share = get_package_share_directory('physical_ai_bt')
         xml_path = os.path.join(pkg_share, 'trees', tree_xml)
@@ -55,11 +54,10 @@ class BehaviorTreeNode(Node):
                 tree_xml
             )
 
-        # Load behavior tree from XML with runtime parameters
+        # Load behavior tree from XML
         self.xml_loader = XMLTreeLoader(
             self,
             joint_names=self.joint_names,
-            runtime_params=self.runtime_params,
             topic_config=self.topic_config
         )
         self.root: BTNode = self.xml_loader.load_tree_from_file(xml_path)
@@ -73,7 +71,7 @@ class BehaviorTreeNode(Node):
         self.get_logger().info(f'  Tree XML: {tree_xml}')
         self.get_logger().info(f'  Tree: {self.root.name}')
         self.get_logger().info(f'  Tick rate: {tick_rate} Hz')
-        self.get_logger().info(f'  Runtime params: {self.runtime_params}')
+    # self.get_logger().info('  Runtime params: (managed by XMLTreeLoader)')
         self.get_logger().info('  Mode: Continuous (restarts after each completion)')
 
     def _load_joint_order(self, robot_type: str) -> list:

@@ -36,19 +36,17 @@ if TYPE_CHECKING:
 class XMLTreeLoader:
     """Load behavior tree from XML file (Groot format)."""
 
-    def __init__(self, node: 'Node', joint_names: list = None, runtime_params: Dict = None, topic_config: dict = None):
+    def __init__(self, node: 'Node', joint_names: list = None, topic_config: dict = None):
         """
         Initialize XML tree loader.
 
         Args:
             node: ROS2 node reference
             joint_names: Joint names from config (for RuleAction)
-            runtime_params: Runtime parameters to inject into XML placeholders
             topic_config: Topic configuration for multi-publisher support
         """
         self.node = node
         self.joint_names = joint_names or []
-        self.runtime_params = runtime_params or {}
         self.topic_config = topic_config or {}
 
         # Register available node types
@@ -142,33 +140,12 @@ class XMLTreeLoader:
         # Parse all attributes except ID and name
         for key, value in xml_node.attrib.items():
             if key not in ['ID', 'name']:
-                # Resolve placeholders like {param_name}
-                resolved_value = self._resolve_placeholder(value)
-                # Try to convert to appropriate type
-                params[key] = self._convert_value(resolved_value)
+                # No placeholder resolution needed
+                params[key] = self._convert_value(value)
 
         return params
 
-    def _resolve_placeholder(self, value: str) -> str:
-        """
-        Resolve placeholder values from runtime parameters.
-
-        Args:
-            value: String that may contain {placeholder}
-
-        Returns:
-            Resolved string value
-        """
-        # Check if value is a placeholder like {param_name}
-        if isinstance(value, str) and value.startswith('{') and value.endswith('}'):
-            param_name = value[1:-1]  # Remove { }
-            if param_name in self.runtime_params:
-                return str(self.runtime_params[param_name])
-            else:
-                self.node.get_logger().warn(
-                    f"Placeholder '{value}' not found in runtime_params, using as-is"
-                )
-        return value
+    # _resolve_placeholder removed: runtime_params not used
 
     def _convert_value(self, value: str):
         """Convert string value to appropriate type."""
