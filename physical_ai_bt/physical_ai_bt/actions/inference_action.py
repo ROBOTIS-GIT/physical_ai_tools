@@ -41,7 +41,7 @@ class InferenceAction(BaseAction):
 
         Args:
             node: ROS2 node reference
-            timeout: Duration to keep inference running
+            timeout: (legacy, unused) Duration to keep inference running
         """
         super().__init__(node, name="InferenceAction")
         self.timeout = timeout
@@ -58,12 +58,22 @@ class InferenceAction(BaseAction):
             qos_profile
         )
 
+        # Subscriber to /joint_states for gripper monitoring
+        self.joint_state_sub = self.node.create_subscription(
+            __import__('sensor_msgs.msg').msg.JointState,
+            '/joint_states',
+            self._joint_state_callback,
+            qos_profile
+        )
+
         # State variables
         self.inference_detected = False
         self.inference_start_time = None
         self.waiting_for_inference = True
         self.latest_status = None
         self.execution_active = False  # True only during active tick() execution
+        self.gripper_triggered = False
+        self.gripper_hold_start = None
 
     def _status_callback(self, msg: TaskStatus):
         """Callback for AI Server status messages."""
@@ -83,7 +93,6 @@ class InferenceAction(BaseAction):
     def tick(self) -> NodeStatus:
         """Execute one tick of inference action."""
         self.execution_active = True
-        current_time = time.time()
 
         # Step 1: Wait for inference to start
         if self.waiting_for_inference:
@@ -94,24 +103,39 @@ class InferenceAction(BaseAction):
             self.waiting_for_inference = False
             return NodeStatus.RUNNING
 
-        # Step 2: Monitor inference duration
-        if self.inference_start_time is None:
-            self.log_error("Inference start time not set")
-            return NodeStatus.FAILURE
-
-        elapsed = current_time - self.inference_start_time
-
-        if elapsed >= self.timeout:
-            # Timeout reached, complete without stopping inference
-            # Reset state for next execution
-            self.inference_detected = False
-            self.inference_start_time = None
-            self.waiting_for_inference = True
-            self.execution_active = False
-
-            return NodeStatus.SUCCESS
+        # Step 2: Monitor gripper joint states
+        if self.gripper_triggered:
+            now = time.time()
+            if self.gripper_hold_start is None:
+                self.gripper_hold_start = now
+            elif now - self.gripper_hold_start >= 2.0:
+                # Condition held for 2 seconds, terminate inference
+                self.inference_detected = False
+                self.inference_start_time = None
+                self.waiting_for_inference = True
+                self.execution_active = False
+                self.gripper_triggered = False
+                self.gripper_hold_start = None
+                self.log_info("Gripper joint held >= 1.0 for 2.0s, ending inference.")
+                return NodeStatus.SUCCESS
+        else:
+            self.gripper_hold_start = None
 
         return NodeStatus.RUNNING
+    def _joint_state_callback(self, msg):
+        """Callback for /joint_states to monitor gripper joints."""
+        if not self.execution_active or self.waiting_for_inference:
+            return
+        # Find gripper_l_joint1 and gripper_r_joint1 in msg.name
+        try:
+            name_to_pos = {name: pos for name, pos in zip(msg.name, msg.position)}
+            l_val = name_to_pos.get('gripper_l_joint1', 0.0)
+            if l_val >= 1.0:
+                self.gripper_triggered = True
+            else:
+                self.gripper_triggered = False
+        except Exception as e:
+            self.log_warn(f"Error in joint state callback: {e}")
 
     def reset(self):
         """Reset action state for re-execution."""
@@ -120,3 +144,5 @@ class InferenceAction(BaseAction):
         self.inference_start_time = None
         self.waiting_for_inference = True
         self.execution_active = False
+        self.gripper_triggered = False
+        self.gripper_hold_start = None
