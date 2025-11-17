@@ -164,14 +164,14 @@ class RuleAction(BaseAction):
 
         # Step 2: For mobile base, continue sending velocity commands
         elapsed = current_time - self.start_time
-        if self._has_mobile_command() and elapsed < 2.5:
+        if self._has_mobile_command() and elapsed < self.timeout:
             # Continue publishing mobile velocity commands every tick
             self._publish_mobile_command()
 
         # Step 3: Check if target reached or timeout
         # If joint state subscription failed, use time-based completion (2s trajectory time + 0.5s buffer)
         if self.joint_state_sub is None:
-            if elapsed >= 2.5:
+            if elapsed > self.timeout:
                 # Stop mobile base before completing
                 if self._has_mobile_command():
                     self._stop_mobile()
@@ -206,7 +206,11 @@ class RuleAction(BaseAction):
         # Lift
         lift_goal = [-0.020166984446496245]
         # Swerve (rotate in place)
-        swerve_goal = [0.0, 0.0, 0.5]  # angular_z=0.5 rad/s
+        if self.timeout > 0:
+            angular_z = (3.141592653589793 / 2) / self.timeout  # π/2 / timeout
+        else:
+            angular_z = 0.5  # fallback
+        swerve_goal = [0.0, 0.0, angular_z]
 
         # Compose full target_positions in joint_list order
         joint_list = self.topic_config.get('joint_list', [])
@@ -279,11 +283,11 @@ class RuleAction(BaseAction):
             if joint_group == 'leader_mobile':
                 # Mobile: publish Twist message (target only)
                 twist_msg = Twist()
-                twist_msg.linear.x = 0.0
-                twist_msg.linear.y = 0.0
-                twist_msg.angular.z = 0.5
+                twist_msg.linear.x = group_target_positions[0] if len(group_target_positions) > 0 else 0.0
+                twist_msg.linear.y = group_target_positions[1] if len(group_target_positions) > 1 else 0.0
+                twist_msg.angular.z = group_target_positions[2] if len(group_target_positions) > 2 else 0.0
                 self.publishers[joint_group].publish(twist_msg)
-                self.log_info(f"Published Twist to {joint_group}: angular_z=0.5 (rotate 90deg in place)")
+                self.log_info(f"Published Twist to {joint_group}: angular_z={twist_msg.angular.z} (rotate 90deg in place)")
             else:
                 # Joint group: publish JointTrajectory with only valid start point
                 trajectory_msg = JointTrajectory()
