@@ -202,7 +202,7 @@ class XMLTreeLoader:
         elif action_class == RuleSwerve:
             return RuleSwerve(
                 node=self.node,
-                timeout=params.get('timeout', 15.0),
+                angle_deg=params.get('angle_deg', 90.0),
                 topic_config=self.topic_config
             )
 

@@ -30,14 +30,18 @@ class RuleSwerve(BaseAction):
     def __init__(
             self,
             node: 'Node',
-            timeout: float = 15.0,
+            angle_deg: float = 90.0,
             topic_config: dict = None
         ):
         super().__init__(node, name="RuleSwerve")
-        self.timeout = timeout
+        self.angle_deg = angle_deg
         self.topic_config = topic_config or {}
         if not isinstance(self.topic_config, dict):
             self.topic_config = {}
+        # Set a fixed angular velocity (rad/s)
+        self.angular_velocity = 0.5  # rad/s (can be tuned)
+        # Calculate timeout based on desired angle
+        self.timeout = abs((self.angle_deg * 3.141592653589793 / 180.0) / self.angular_velocity)
         qos_profile = QoSProfile(
             depth=10,
             reliability=ReliabilityPolicy.RELIABLE
@@ -61,7 +65,7 @@ class RuleSwerve(BaseAction):
         self.start_time = None
 
     def tick(self) -> NodeStatus:
-        """Rotate robot 90 degrees in place for the specified timeout."""
+        """Rotate robot by the desired angle at fixed angular velocity."""
         current_time = time.time()
         if not self.command_sent:
             self._send_trajectory_command()
@@ -73,12 +77,12 @@ class RuleSwerve(BaseAction):
             self._publish_mobile_command()
             return NodeStatus.RUNNING
         self._stop_mobile()
-        self.log_info(f"Swerve completed in {elapsed:.1f}s (90 degree rotation)")
+        self.log_info(f"Swerve completed in {elapsed:.1f}s ({self.angle_deg} degree rotation)")
         return NodeStatus.SUCCESS
 
     def _send_trajectory_command(self):
-        """Publish only the swerve (90 degree rotation) command."""
-        angular_z = (3.141592653589793 / 2) / self.timeout
+        """Publish swerve command for desired angle at fixed angular velocity."""
+        angular_z = self.angular_velocity if self.angle_deg >= 0 else -self.angular_velocity
         swerve_goal = [0.0, 0.0, angular_z]
         if self.publishers and 'leader_mobile' in self.publishers:
             twist_msg = Twist()
@@ -103,7 +107,7 @@ class RuleSwerve(BaseAction):
     def _publish_mobile_command(self):
         """Publish swerve velocity command (called repeatedly during execution)."""
         if 'leader_mobile' in self.publishers:
-            angular_z = (3.141592653589793 / 2) / self.timeout
+            angular_z = self.angular_velocity if self.angle_deg >= 0 else -self.angular_velocity
             twist_msg = Twist()
             twist_msg.linear.x = 0.0
             twist_msg.linear.y = 0.0
