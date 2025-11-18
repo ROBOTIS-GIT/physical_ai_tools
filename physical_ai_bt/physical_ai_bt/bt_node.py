@@ -18,11 +18,16 @@
 
 import os
 import rclpy
+import time
 from ament_index_python.packages import get_package_share_directory
+from physical_ai_interfaces.msg import TaskStatus
+from rclpy.qos import QoSProfile, ReliabilityPolicy
 from physical_ai_bt.actions.base_action import BTNode, NodeStatus
 from physical_ai_bt.bt_nodes_loader import XMLTreeLoader
 from rclpy.executors import MultiThreadedExecutor
 from rclpy.node import Node
+
+
 
 
 class BehaviorTreeNode(Node):
@@ -30,6 +35,20 @@ class BehaviorTreeNode(Node):
 
     def __init__(self):
         super().__init__('physical_ai_bt_node')
+
+        # --- Inference trigger state ---
+        self.inference_detected = False
+        self.inference_start_time = None
+        self.waiting_for_inference = True
+        self.latest_status = None
+
+        qos_profile = QoSProfile(depth=10, reliability=ReliabilityPolicy.RELIABLE)
+        self.status_sub = self.create_subscription(
+            TaskStatus,
+            '/task/status',
+            self._status_callback,
+            qos_profile
+        )
 
         self.declare_parameter('robot_type', 'ffw_sg2_rev1')
         self.declare_parameter('tree_xml', 'ffw_test.xml')
@@ -60,7 +79,7 @@ class BehaviorTreeNode(Node):
             joint_names=self.joint_names,
             topic_config=self.topic_config
         )
-        self.root: BTNode = self.xml_loader.load_tree_from_file(xml_path)
+        self.root = self.xml_loader.load_tree_from_file(xml_path)
 
         # Create timer for BT tick
         self.timer = self.create_timer(1.0 / tick_rate, self.tick_callback)
@@ -71,8 +90,16 @@ class BehaviorTreeNode(Node):
         self.get_logger().info(f'  Tree XML: {tree_xml}')
         self.get_logger().info(f'  Tree: {self.root.name}')
         self.get_logger().info(f'  Tick rate: {tick_rate} Hz')
-    # self.get_logger().info('  Runtime params: (managed by XMLTreeLoader)')
-        self.get_logger().info('  Mode: Continuous (restarts after each completion)')
+
+    def _status_callback(self, msg):
+        self.latest_status = msg
+        if not self.waiting_for_inference:
+            return
+        # Trigger condition: phase == INFERENCING and not detected
+        if hasattr(msg, 'phase') and msg.phase == getattr(msg, 'INFERENCING', 'INFERENCING') and not self.inference_detected:
+            if self.inference_start_time is None:
+                self.inference_start_time = time.time()
+            self.inference_detected = True
 
     def _load_joint_order(self, robot_type: str) -> list:
         """Load joint order from ROS2 parameters (config file)."""
@@ -159,7 +186,14 @@ class BehaviorTreeNode(Node):
 
     def tick_callback(self):
         """Timer callback for BT tick execution."""
-        # Tick the root node
+        # Step 1: Wait for inference trigger
+        if self.waiting_for_inference:
+            if not self.inference_detected:
+                return  # Do not tick tree until trigger
+            self.waiting_for_inference = False
+            self.get_logger().info('Inference trigger detected. Starting BT tree execution.')
+
+        # Step 2: Tick the root node
         status = self.root.tick()
 
         # Handle tree completion
@@ -167,10 +201,16 @@ class BehaviorTreeNode(Node):
             self.get_logger().info('Behavior Tree cycle completed successfully!')
             self.get_logger().info('Resetting tree for next inference...')
             self._reset_tree()
+            self.inference_detected = False
+            self.inference_start_time = None
+            self.waiting_for_inference = True
         elif status == NodeStatus.FAILURE:
             self.get_logger().error('Behavior Tree execution failed')
             self.get_logger().info('Resetting tree to retry...')
             self._reset_tree()
+            self.inference_detected = False
+            self.inference_start_time = None
+            self.waiting_for_inference = True
         # RUNNING: continue ticking
 
     def _reset_tree(self):
