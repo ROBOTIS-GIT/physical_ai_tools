@@ -27,17 +27,19 @@ if TYPE_CHECKING:
     from rclpy.node import Node
 
 
-class PauseActionPublishAction(BaseAction):
-    """Action to pause action publishing from AI Server."""
+
+
+class PauseInference(BaseAction):
+    """Action to pause inference and action publishing from AI Server."""
 
     def __init__(self, node: 'Node'):
         """
-        Initialize pause action publish.
+        Initialize pause inference action.
 
         Args:
             node: ROS2 node reference
         """
-        super().__init__(node, name="PauseActionPublishAction")
+        super().__init__(node, name="PauseInference")
 
         # Service client for controlling action publish
         self.control_client = self.node.create_client(
@@ -50,7 +52,7 @@ class PauseActionPublishAction(BaseAction):
         self.future = None
 
     def tick(self) -> NodeStatus:
-        """Execute pause action publish."""
+        """Execute pause inference action."""
         # First tick: send request
         if not self.request_sent:
             if not self.control_client.wait_for_service(timeout_sec=1.0):
@@ -74,10 +76,10 @@ class PauseActionPublishAction(BaseAction):
             try:
                 response = self.future.result()
                 if response.success:
-                    self.log_info("Action publishing paused")
+                    self.log_info("Inference and action publishing paused")
                     return NodeStatus.SUCCESS
                 else:
-                    self.log_error(f"Failed to pause action publish: {response.message}")
+                    self.log_error(f"Failed to pause inference/action publish: {response.message}")
                     return NodeStatus.FAILURE
             except Exception as e:
                 self.log_error(f"Exception while getting pause response: {str(e)}")
@@ -93,17 +95,17 @@ class PauseActionPublishAction(BaseAction):
         self.future = None
 
 
-class ResumeActionPublishAction(BaseAction):
-    """Action to resume action publishing from AI Server."""
+class ResumeInference(BaseAction):
+    """Action to resume inference and action publishing from AI Server."""
 
     def __init__(self, node: 'Node'):
         """
-        Initialize resume action publish.
+        Initialize resume inference action.
 
         Args:
             node: ROS2 node reference
         """
-        super().__init__(node, name="ResumeActionPublishAction")
+        super().__init__(node, name="ResumeInference")
 
         # Service client for controlling action publish
         self.control_client = self.node.create_client(
@@ -116,7 +118,7 @@ class ResumeActionPublishAction(BaseAction):
         self.future = None
 
     def tick(self) -> NodeStatus:
-        """Execute resume action publish."""
+        """Execute resume inference action."""
         # First tick: send request
         if not self.request_sent:
             if not self.control_client.wait_for_service(timeout_sec=1.0):
@@ -140,10 +142,10 @@ class ResumeActionPublishAction(BaseAction):
             try:
                 response = self.future.result()
                 if response.success:
-                    self.log_info("Action publishing resumed")
+                    self.log_info("Inference and action publishing resumed")
                     return NodeStatus.SUCCESS
                 else:
-                    self.log_error(f"Failed to resume action publish: {response.message}")
+                    self.log_error(f"Failed to resume inference/action publish: {response.message}")
                     return NodeStatus.FAILURE
             except Exception as e:
                 self.log_error(f"Exception while getting resume response: {str(e)}")

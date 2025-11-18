@@ -21,10 +21,10 @@
 import xml.etree.ElementTree as ET
 from typing import TYPE_CHECKING, Dict, Type
 
-from physical_ai_bt.actions import InferenceAction, RuleWholeBody, RuleSwerve
-from physical_ai_bt.actions.control_publish_action import (
-    PauseActionPublishAction,
-    ResumeActionPublishAction
+from physical_ai_bt.actions import Inference, RuleWholeBody, RuleSwerve
+from physical_ai_bt.actions.control_inference import (
+    PauseInference,
+    ResumeInference
 )
 from physical_ai_bt.actions.base_action import BTNode, BaseAction, BaseControl
 from physical_ai_bt.controls import Sequence
@@ -55,11 +55,11 @@ class XMLTreeLoader:
         }
 
         self.action_types: Dict[str, Type[BaseAction]] = {
-            'InferenceAction': InferenceAction,
+            'Inference': Inference,
             'RuleWholeBody': RuleWholeBody,
             'RuleSwerve': RuleSwerve,
-            'PauseActionPublishAction': PauseActionPublishAction,
-            'ResumeActionPublishAction': ResumeActionPublishAction,
+            'PauseInference': PauseInference,
+            'ResumeInference': ResumeInference,
         }
 
     def load_tree_from_file(self, xml_path: str, main_tree_id: str = None) -> BTNode:
@@ -182,10 +182,9 @@ class XMLTreeLoader:
             BaseAction: Created action instance
         """
         # Map XML parameters to constructor arguments
-        if action_class == InferenceAction:
-            return InferenceAction(
+        if action_class == Inference:
+            return Inference(
                 node=self.node,
-                timeout=params.get('timeout', 5.0)
             )
 
         elif action_class == RuleWholeBody:
@@ -206,11 +205,11 @@ class XMLTreeLoader:
                 topic_config=self.topic_config
             )
 
-        elif action_class == PauseActionPublishAction:
-            return PauseActionPublishAction(node=self.node)
+        elif action_class == PauseInference:
+            return PauseInference(node=self.node)
 
-        elif action_class == ResumeActionPublishAction:
-            return ResumeActionPublishAction(node=self.node)
+        elif action_class == ResumeInference:
+            return ResumeInference(node=self.node)
 
         else:
             raise ValueError(f"Unknown action class: {action_class}")

@@ -3,25 +3,25 @@
       main_tree_to_execute="RobotControlSequence">
   <BehaviorTree ID="RobotControlSequence">
     <Sequence name="RobotControlSequence">
-      <InferenceAction name="VLA_Inference"
-                       timeout="10.0"/>
-      <PauseActionPublishAction name="Pause_Publishing"/>
+  <Inference name="VLA_Inference"
+           timeout="10.0"/>
+  <PauseInference name="Pause_Publishing"/>
   <RuleWholeBody name="Rule_Based_Movement"
                   target_positions="0.6215657171320058,-7.158593009678102e-12,-0.3865631582291661,0.9146991786686525,0.09822273033867776,-0.07209709728787451,0.9146991789842444,0.4926483832188114,-0.17180584799831639,0.1918412707676318,1.0632028575287613,-0.041417480980437196,-0.5537670639620821,-0.6320000836926196,1.2533884347076807e-10,0.00745046999980814,-0.20726609627149745,-0.1422105072539469,-1.0583336289692779e-07,-4.666003828023858e-10,-0.005520657798395322,-1.1004913005313687e-07,2.2640204186913167e-10,-8.168226161852434e-08,-4.575741764177651e-10"
       position_threshold="0.001"
       timeout="5.0"/>
-      <ResumeActionPublishAction name="Resume_Publishing"/>
+  <ResumeInference name="Resume_Publishing"/>
     </Sequence>
   </BehaviorTree>
 
   <!-- Description of Node Models (used by Groot) -->
   <TreeNodesModel>
-    <Action ID="InferenceAction">
+  <Action ID="Inference">
       <input_port name="timeout"
                   default="10.0">&#10;        Duration in seconds to monitor inference.&#10;        Does NOT stop inference, just completes after timeout.&#10;      </input_port>
     </Action>
-    <Action ID="PauseActionPublishAction"/>
-    <Action ID="ResumeActionPublishAction"/>
+  <Action ID="PauseInference"/>
+  <Action ID="ResumeInference"/>
     <Action ID="RuleWholeBody">
       <input_port name="current_positions">&#10;        Starting joint positions (comma-separated floats).&#10;        Used for initialization only.&#10;      </input_port>
       <input_port name="target_positions">&#10;        Target joint positions (comma-separated floats).&#10;        Must match number of joints.&#10;      </input_port>

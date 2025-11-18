@@ -19,8 +19,16 @@
 """Behavior Tree Actions for Physical AI."""
 
 from physical_ai_bt.actions.base_action import BaseAction
-from physical_ai_bt.actions.inference_action import InferenceAction
+from physical_ai_bt.actions.inference import Inference
 from physical_ai_bt.actions.rule_whole_body import RuleWholeBody
 from physical_ai_bt.actions.rule_swerve import RuleSwerve
+from physical_ai_bt.actions.control_inference import PauseInference, ResumeInference
 
-__all__ = ['BaseAction', 'InferenceAction', 'RuleWholeBody', 'RuleSwerve']
+__all__ = [
+    'BaseAction',
+    'Inference',
+    'RuleWholeBody',
+    'RuleSwerve',
+    'PauseInference',
+    'ResumeInference'
+]

@@ -29,12 +29,12 @@ if TYPE_CHECKING:
     from rclpy.node import Node
 
 
-class InferenceAction(BaseAction):
+
+class Inference(BaseAction):
 
     def __init__(
         self,
         node: 'Node',
-        timeout: float = 5.0
     ):
         """
         Initialize inference action.
@@ -43,8 +43,7 @@ class InferenceAction(BaseAction):
             node: ROS2 node reference
             timeout: (legacy, unused) Duration to keep inference running
         """
-        super().__init__(node, name="InferenceAction")
-        self.timeout = timeout
+        super().__init__(node, name="Inference")
 
         # Subscriber to monitor AI Server status
         qos_profile = QoSProfile(

@@ -3,9 +3,9 @@
       main_tree_to_execute="RobotControlSequence">
   <BehaviorTree ID="RobotControlSequence">
     <Sequence name="RobotControlSequence">
-      <InferenceAction name="VLA_Inference"
-                       timeout="5.0"/>
-      <PauseActionPublishAction name="Pause_Publishing_1"/>
+  <Inference name="VLA_Inference"
+           timeout="5.0"/>
+  <PauseInference name="Pause_Publishing_1"/>
       <RuleAction name="Rule_Based_Movement_1"
                   current_positions="0.0,-0.378752,-0.151795,1.541355,0.006874,0.73828"
                   target_positions="-1.5,-0.378752,-0.151795,1.541355,0.006874,0.73828"
@@ -16,10 +16,10 @@
                   target_positions="0.0,-0.378752,-0.151795,1.541355,0.006874,0.73828"
                   position_threshold="0.1"
                   timeout="15.0"/>
-      <ResumeActionPublishAction name="Resume_Publishing_1"/>
-      <InferenceAction name="VLA_Inference_2"
-                       timeout="5.0"/>
-      <PauseActionPublishAction name="Pause_Publishing_2"/>
+  <ResumeInference name="Resume_Publishing_1"/>
+  <Inference name="VLA_Inference_2"
+           timeout="5.0"/>
+  <PauseInference name="Pause_Publishing_2"/>
       <RuleAction name="Rule_Based_Movement_3"
                   current_positions="0.0,-0.378752,-0.151795,1.541355,0.006874,0.73828"
                   target_positions="1.5,-0.378752,-0.151795,1.541355,0.006874,0.73828"
@@ -30,35 +30,35 @@
                   target_positions="0.0,-0.378752,-0.151795,1.541355,0.006874,0.73828"
                   position_threshold="0.1"
                   timeout="15.0"/>
-      <ResumeActionPublishAction name="Resume_Publishing_2"/>
-      <InferenceAction name="VLA_Inference_3"
-                       timeout="20.0"/>
-      <PauseActionPublishAction name="Pause_Publishing_3"/>
+  <ResumeInference name="Resume_Publishing_2"/>
+  <Inference name="VLA_Inference_3"
+           timeout="20.0"/>
+  <PauseInference name="Pause_Publishing_3"/>
       <RuleAction name="Rule_Based_Movement_5"
                   current_positions="0.0,-0.378752,-0.151795,1.541355,0.006874,0.73828"
                   target_positions="0.75,-0.378752,-0.151795,1.541355,0.006874,0.73828"
                   position_threshold="0.1"
                   timeout="15.0"/>
-      <ResumeActionPublishAction name="Resume_Publishing_3"/>
-      <InferenceAction name="VLA_Inference_4"
-                       timeout="10.0"/>
-      <PauseActionPublishAction name="Pause_Publishing_4"/>
+  <ResumeInference name="Resume_Publishing_3"/>
+  <Inference name="VLA_Inference_4"
+           timeout="10.0"/>
+  <PauseInference name="Pause_Publishing_4"/>
       <RuleAction name="Rule_Based_Movement_6"
                   current_positions="-0.75,-0.378752,-0.151795,1.541355,0.006874,0.73828"
                   target_positions="0.0,-0.378752,-0.151795,1.541355,0.006874,0.73828"
                   position_threshold="0.1"
                   timeout="15.0"/>
-      <ResumeActionPublishAction name="Resume_Publishing_4"/>
+  <ResumeInference name="Resume_Publishing_4"/>
     </Sequence>
   </BehaviorTree>
 
   <!-- Description of Node Models (used by Groot) -->
   <TreeNodesModel>
-    <Action ID="InferenceAction">
+  <Action ID="Inference">
       <input_port name="timeout"
                   default="5.0">&#10;        Duration in seconds to monitor inference.&#10;        Does NOT stop inference, just completes after timeout.&#10;      </input_port>
     </Action>
-    <Action ID="PauseActionPublishAction"/>
+  <Action ID="PauseInference"/>
     <Action ID="ResumeActionPublishAction"/>
     <Action ID="RuleAction">
       <input_port name="current_positions">&#10;        Starting joint positions (comma-separated floats).&#10;        Used for initialization only.&#10;      </input_port>
