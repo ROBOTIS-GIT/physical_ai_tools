@@ -44,7 +44,7 @@ from physical_ai_interfaces.srv import (
     SendTrainingCommand,
     SetHFUser,
     SetRobotType,
-    ControlActionPublish,
+    ControlInference,
 )
 
 from physical_ai_server.communication.communicator import Communicator
@@ -141,7 +141,7 @@ class PhysicalAIServer(Node):
             ),
             ('/huggingface/control', ControlHfServer, self.control_hf_server_callback),
             ('/training/get_training_info', GetTrainingInfo, self.get_training_info_callback),
-            ('/control_action_publish', ControlActionPublish, self.control_action_publish_callback),
+            ('/control_inference', ControlInference, self.control_action_publish_callback),
         ]
 
         for service_name, service_type, callback in service_definitions:

@@ -21,7 +21,7 @@
 from typing import TYPE_CHECKING
 
 from physical_ai_bt.actions.base_action import NodeStatus, BaseAction
-from physical_ai_interfaces.srv import ControlActionPublish
+from physical_ai_interfaces.srv import ControlInference
 
 if TYPE_CHECKING:
     from rclpy.node import Node
@@ -43,8 +43,8 @@ class PauseInference(BaseAction):
 
         # Service client for controlling action publish
         self.control_client = self.node.create_client(
-            ControlActionPublish,
-            '/control_action_publish'
+            ControlInference,
+            '/control_inference'
         )
 
         # State tracking
@@ -59,7 +59,7 @@ class PauseInference(BaseAction):
                 self.log_error("Control action publish service not available")
                 return NodeStatus.FAILURE
 
-            request = ControlActionPublish.Request()
+            request = ControlInference.Request()
             request.enable = False
             request.pause_inference = True
 
@@ -109,8 +109,8 @@ class ResumeInference(BaseAction):
 
         # Service client for controlling action publish
         self.control_client = self.node.create_client(
-            ControlActionPublish,
-            '/control_action_publish'
+            ControlInference,
+            '/control_inference'
         )
 
         # State tracking
@@ -125,7 +125,7 @@ class ResumeInference(BaseAction):
                 self.log_error("Control action publish service not available")
                 return NodeStatus.FAILURE
 
-            request = ControlActionPublish.Request()
+            request = ControlInference.Request()
             request.enable = True
             request.pause_inference = False
 
