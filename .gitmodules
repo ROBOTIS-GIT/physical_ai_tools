@@ -1,7 +1,7 @@
 [submodule "lerobot"]
-	path = lerobot
+	path = third_party/lerobot
 	url = https://github.com/huggingface/lerobot.git
   branch = feature-robotis
 [submodule "Isaac-GR00T"]
-	path = Isaac-GR00T
+	path = third_party/Isaac-GR00T
 	url = https://github.com/ROBOTIS-GIT/Isaac-GR00T.git
