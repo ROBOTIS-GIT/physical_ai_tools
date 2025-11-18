@@ -59,6 +59,7 @@ class PauseActionPublishAction(BaseAction):
 
             request = ControlActionPublish.Request()
             request.enable = False
+            request.pause_inference = True
 
             try:
                 self.future = self.control_client.call_async(request)
@@ -124,6 +125,7 @@ class ResumeActionPublishAction(BaseAction):
 
             request = ControlActionPublish.Request()
             request.enable = True
+            request.pause_inference = False
 
             try:
                 self.future = self.control_client.call_async(request)
