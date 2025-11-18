@@ -25,9 +25,8 @@ from lerobot.datasets.lerobot_dataset import LeRobotDataset
 from lerobot.datasets.utils import (
     validate_episode_buffer,
     validate_frame,
-    write_episode,
-    write_episode_stats,
-    write_info
+    write_info,
+    write_stats
 )
 import numpy as np
 from physical_ai_server.video_encoder.ffmpeg_encoder import FFmpegEncoder
@@ -146,10 +145,13 @@ class LeRobotDatasetWrapper(LeRobotDataset):
             self._append_in_progress = False
 
     def add_frame_without_write_image(self, frame: dict, task: str) -> None:
+        # Add task to frame before validation
+        frame['task'] = task
         validate_frame(frame, self.features)
 
         if self.episode_buffer is None:
-            self.episode_buffer = self.create_episode_buffer()
+            # Use current total_episodes as episode_index (0-based indexing)
+            self.episode_buffer = self.create_episode_buffer(episode_index=self.meta.total_episodes)
 
         # Automatically add frame_index and timestamp to episode buffer
         frame_index = self.episode_buffer['size']
@@ -157,14 +159,13 @@ class LeRobotDatasetWrapper(LeRobotDataset):
         self.episode_buffer['frame_index'].append(frame_index)
         self.episode_buffer['timestamp'].append(timestamp)
 
-        # Add frame features to episode_buffer
+        # Add frame features to episode_buffer (task is already in frame)
         for key in frame:
             if key not in self.episode_buffer:
                 self.episode_buffer[key] = [frame[key]]
             else:
                 self.episode_buffer[key].append(frame[key])
 
-        self.episode_buffer['task'].append(task)
         self.episode_buffer['size'] += 1
 
     def save_episode_without_video_encoding(self):
@@ -185,10 +186,16 @@ class LeRobotDatasetWrapper(LeRobotDataset):
         episode_buffer['episode_index'] = np.full((episode_length,), episode_index)
 
         # Add new tasks to the tasks dictionary
-        for task in episode_tasks:
-            task_index = self.meta.get_task_index(task)
-            if task_index is None:
-                self.meta.add_task(task)
+        # Initialize tasks if None
+        if self.meta.tasks is None:
+            # Save all episode tasks at once to initialize the tasks DataFrame
+            self.meta.save_episode_tasks(episode_tasks)
+        else:
+            # Add only new tasks
+            for task in episode_tasks:
+                task_index = self.meta.get_task_index(task)
+                if task_index is None:
+                    self.meta.add_task(task)
 
         # Given tasks in natural language, find their corresponding task indices
         episode_buffer['task_index'] = np.array([self.meta.get_task_index(task) for task in tasks])
@@ -199,14 +206,25 @@ class LeRobotDatasetWrapper(LeRobotDataset):
                 continue
             episode_buffer[key] = np.stack(episode_buffer[key])
 
-        self._save_episode_table(episode_buffer, episode_index)
+        ep_metadata = self._save_episode_data(episode_buffer)
         ep_stats = self.compute_episode_stats_buffer(episode_buffer, self.features)
+
+        # Get chunk and file indices from metadata returned by _save_episode_data
+        chunk_idx = ep_metadata['data/chunk_index']
+        file_idx = ep_metadata['data/file_index']
 
         video_paths = {}
         video_count = 0
         for key, ep in self.episode_buffer.items():
             if 'observation.images' in key:
-                video_path = self.root / self.meta.get_video_file_path(episode_index, key)
+                # Build video path using the format string directly
+                video_path_format = self.meta.video_path
+                video_path_str = video_path_format.format(
+                    video_key=key, 
+                    chunk_index=chunk_idx, 
+                    file_index=file_idx
+                )
+                video_path = self.root / video_path_str
                 video_paths[key] = str(video_path)
                 video_count += 1
                 video_info = {
@@ -218,12 +236,14 @@ class LeRobotDatasetWrapper(LeRobotDataset):
                 }
                 self.meta.info['features'][key]['info'] = video_info
 
+        # Pass ep_metadata to save_meta_info which contains data chunk/file indices
         self.save_meta_info(
             video_count,
             episode_index,
             episode_length,
             episode_tasks,
-            ep_stats
+            ep_stats,
+            episode_metadata=ep_metadata
         )
         self.append_episode_buffer(episode_buffer, episode_length)
 
@@ -243,11 +263,9 @@ class LeRobotDatasetWrapper(LeRobotDataset):
             self.meta.total_frames,
             self.meta.total_frames + episode_length)
         episode_buffer['episode_index'] = np.full((episode_length,), episode_index)
-        # Add new tasks to the tasks dictionary
-        for task in episode_tasks:
-            task_index = self.meta.get_task_index(task)
-            if task_index is None:
-                self.meta.add_task(task)
+        
+        # Update tasks - save_episode_tasks automatically handles new tasks
+        self.meta.save_episode_tasks(episode_tasks)
 
         # Given tasks in natural language, find their corresponding task indices
         episode_buffer['task_index'] = np.array([self.meta.get_task_index(task) for task in tasks])
@@ -258,17 +276,40 @@ class LeRobotDatasetWrapper(LeRobotDataset):
                 continue
             episode_buffer[key] = np.stack(episode_buffer[key])
 
-        self._save_episode_table(episode_buffer, episode_index)
+        ep_metadata = self._save_episode_data(episode_buffer)
         ep_stats = self.compute_episode_stats_buffer(episode_buffer, self.features)
+
+        # Get chunk and file indices from metadata returned by _save_episode_data
+        chunk_idx = ep_metadata['data/chunk_index']
+        file_idx = ep_metadata['data/file_index']
 
         video_paths = {}
         video_count = 0
+        # Video metadata to add to episode metadata
+        video_metadata = {}
+        
         for key, ep in self.episode_buffer.items():
             if 'observation.images' in key:
-                video_path = self.root / self.meta.get_video_file_path(episode_index, key)
+                # Build video path using the format string directly
+                video_path_format = self.meta.video_path
+                video_path_str = video_path_format.format(
+                    video_key=key, 
+                    chunk_index=chunk_idx, 
+                    file_index=file_idx
+                )
+                video_path = self.root / video_path_str
                 video_paths[key] = str(video_path)
                 self._create_video(ep, video_path)
                 video_count += 1
+                
+                # Add video metadata (similar to LeRobot's _save_episode_video)
+                # Calculate video duration from number of frames and fps
+                video_duration_s = len(ep) / self.fps
+                video_metadata[f"videos/{key}/chunk_index"] = chunk_idx
+                video_metadata[f"videos/{key}/file_index"] = file_idx
+                video_metadata[f"videos/{key}/from_timestamp"] = 0.0  # Will be updated when concatenating
+                video_metadata[f"videos/{key}/to_timestamp"] = video_duration_s
+                
                 video_info = {
                     'video.height': self.features[key]['shape'][0],
                     'video.width': self.features[key]['shape'][1],
@@ -278,12 +319,16 @@ class LeRobotDatasetWrapper(LeRobotDataset):
                 }
                 self.meta.info['features'][key]['info'] = video_info
 
+        # Merge video metadata into ep_metadata
+        ep_metadata.update(video_metadata)
+        
         self.save_meta_info(
             video_count,
             episode_index,
             episode_length,
             episode_tasks,
-            ep_stats
+            ep_stats,
+            ep_metadata
         )
 
     def save_meta_info(
@@ -292,25 +337,55 @@ class LeRobotDatasetWrapper(LeRobotDataset):
             episode_index,
             episode_length,
             episode_tasks,
-            episode_stats):
-        chunk = self.meta.get_episode_chunk(episode_index)
-        if chunk >= self.meta.total_chunks:
-            self.meta.info['total_chunks'] += 1
-        self.meta.info['total_episodes'] += 1
-        self.meta.info['total_frames'] += episode_length
+            episode_stats,
+            episode_metadata=None):
+        # episode_metadata can optionally contain chunk/file info from _save_episode_data
+        if episode_metadata is None:
+            episode_metadata = {}
+        
+        # Use LeRobotDataset's save_episode method instead of manual write functions
+        # This handles writing episode metadata, stats, and updating info
+        self.meta.save_episode(
+            episode_index=episode_index,
+            episode_length=episode_length,
+            episode_tasks=episode_tasks,
+            episode_stats=episode_stats,
+            episode_metadata=episode_metadata
+        )
+        
+        # Update custom fields that save_episode doesn't handle
+        # Initialize total_videos if it doesn't exist
+        if 'total_videos' not in self.meta.info:
+            self.meta.info['total_videos'] = 0
         self.meta.info['total_videos'] += video_count
-        self.meta.info['splits'] = {'train': f"0:{self.meta.info['total_episodes']}"}
         self.meta.info['robot_type'] = self._robot_type
-
-        episode_dict = {
-            'episode_index': episode_index,
-            'tasks': episode_tasks,
-            'length': episode_length,
-        }
-
         write_info(self.meta.info, self.meta.root)
-        write_episode(episode_dict, self.meta.root)
-        write_episode_stats(episode_index, episode_stats, self.meta.root)
+        
+        # Flush episode metadata buffer to ensure episodes are written to disk
+        # Note: Don't close the writer here as it prevents adding more episodes
+        self.meta._flush_metadata_buffer()
+
+    def finalize(self):
+        """Finalize the dataset by closing all ParquetWriters.
+        
+        This MUST be called after data collection is complete to write
+        the parquet file footers. Without this, the parquet files will
+        be corrupted and the dataset won't be loadable.
+        
+        This should be called when:
+        1. Data collection is complete (before upload)
+        2. Switching to a new dataset
+        3. Shutting down the system
+        
+        This wraps the LeRobot dataset's finalize() method which closes
+        both the data writer and the metadata writer.
+        """
+        try:
+            # Call the parent class finalize which closes all writers
+            super().finalize()
+            print("Dataset finalized successfully - all writers closed")
+        except Exception as e:
+            print(f"Error finalizing dataset: {e}")
 
     def _create_video(
             self,

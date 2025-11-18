@@ -17,10 +17,11 @@
 # Author: Dongyun Kim
 
 import os
+from pathlib import Path
 
 from ament_index_python.packages import get_package_share_directory
 from launch import LaunchDescription
-from launch.actions import IncludeLaunchDescription
+from launch.actions import IncludeLaunchDescription, SetEnvironmentVariable
 from launch.launch_description_sources import PythonLaunchDescriptionSource
 from launch_ros.actions import Node
 from launch_xml.launch_description_sources import XMLLaunchDescriptionSource
@@ -29,6 +30,13 @@ from launch_xml.launch_description_sources import XMLLaunchDescriptionSource
 def generate_launch_description():
     pkg_dir = get_package_share_directory('physical_ai_server')
     rosbridge_pkg_dir = get_package_share_directory('rosbridge_server')
+
+    # Add third_party/lerobot to PYTHONPATH
+    repo_root = Path(pkg_dir).parent.parent.parent.parent / 'src' / 'physical_ai_tools'
+    lerobot_path = repo_root / 'third_party' / 'lerobot' / 'src'
+    
+    current_pythonpath = os.environ.get('PYTHONPATH', '')
+    new_pythonpath = f"{lerobot_path}:{current_pythonpath}" if current_pythonpath else str(lerobot_path)
 
     # Include physical_ai_server.launch.py
     physical_ai_server_launch = IncludeLaunchDescription(
@@ -55,6 +63,7 @@ def generate_launch_description():
     )
 
     return LaunchDescription([
+        SetEnvironmentVariable('PYTHONPATH', new_pythonpath),
         physical_ai_server_launch,
         rosbridge_server_launch,
         web_video_server_node

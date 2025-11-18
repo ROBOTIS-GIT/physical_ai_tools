@@ -18,15 +18,26 @@
 
 import glob
 import os
+from pathlib import Path
 
 from ament_index_python.packages import get_package_share_directory
 from launch import LaunchDescription
+from launch.actions import SetEnvironmentVariable
 from launch_ros.actions import Node
 
 
 def generate_launch_description():
     # Find package share directory for the physical_ai_server package
     pkg_dir = get_package_share_directory('physical_ai_server')
+
+    # Add third_party/lerobot to PYTHONPATH
+    # Get the repository root (assuming workspace structure)
+    repo_root = Path(pkg_dir).parent.parent.parent.parent / 'src' / 'physical_ai_tools'
+    lerobot_path = repo_root / 'third_party' / 'lerobot' / 'src'
+    
+    # Get current PYTHONPATH and append lerobot path
+    current_pythonpath = os.environ.get('PYTHONPATH', '')
+    new_pythonpath = f"{lerobot_path}:{current_pythonpath}" if current_pythonpath else str(lerobot_path)
 
     config_dir = os.path.join(pkg_dir, 'config')
     config_files = glob.glob(os.path.join(config_dir, '*.yaml'))
@@ -37,9 +48,11 @@ def generate_launch_description():
         executable='physical_ai_server',
         name='physical_ai_server',
         output='screen',
-        parameters=config_files
+        parameters=config_files,
+        additional_env={'PYTHONPATH': new_pythonpath}
     )
 
     return LaunchDescription([
+        SetEnvironmentVariable('PYTHONPATH', new_pythonpath),
         physical_ai_server
     ])

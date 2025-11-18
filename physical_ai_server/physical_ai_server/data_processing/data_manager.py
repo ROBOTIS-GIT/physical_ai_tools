@@ -32,7 +32,6 @@ from huggingface_hub import (
     snapshot_download,
     upload_large_folder
 )
-from huggingface_hub.errors import LocalTokenNotFoundError
 from lerobot.datasets.utils import DEFAULT_FEATURES
 from nav_msgs.msg import Odometry
 import numpy as np
@@ -114,9 +113,9 @@ class DataManager:
                         frame,
                         self.current_instruction)
                 else:
-                    self._lerobot_dataset.add_frame(
-                        frame,
-                        self.current_instruction)
+                    # LeRobot v3.0: task must be inside the frame dict
+                    frame['task'] = self.current_instruction
+                    self._lerobot_dataset.add_frame(frame)
 
         elif self._status == 'save':
             if self._on_saving:
@@ -171,11 +170,22 @@ class DataManager:
                 if self._lerobot_dataset.check_video_encoding_completed():
                     self._on_saving = False
                     self._episode_reset()
+                    # Increment episode count for the last saved episode
+                    self._record_episode_count += 1
+                    # Finalize the dataset before uploading to close all writers
+                    if self._lerobot_dataset is not None:
+                        self._lerobot_dataset.finalize()
+                    # Upload first, before setting dataset to None
                     if (self._task_info.push_to_hub and
                             self._record_episode_count > 0):
                         self._upload_dataset(
                             self._task_info.tags,
                             self._task_info.private_mode)
+                    # Now reset dataset to None so it will be recreated on next recording
+                    if self._lerobot_dataset is not None:
+                        self._lerobot_dataset = None
+                    # Reset episode count for next recording session
+                    self._record_episode_count = 0
                     return self.RECORD_COMPLETED
             else:
                 self.save()
@@ -186,11 +196,19 @@ class DataManager:
 
         if self._record_episode_count >= self._task_info.num_episodes:
             if self._lerobot_dataset.check_video_encoding_completed():
+                # Finalize the dataset before uploading
+                if self._lerobot_dataset is not None:
+                    self._lerobot_dataset.finalize()
+                # Upload
                 if (self._task_info.push_to_hub and
                         self._record_episode_count > 0):
                     self._upload_dataset(
                         self._task_info.tags,
                         self._task_info.private_mode)
+                # Reset dataset and episode count
+                if self._lerobot_dataset is not None:
+                    self._lerobot_dataset = None
+                self._record_episode_count = 0
                 return self.RECORD_COMPLETED
 
         return self.RECORDING
@@ -206,6 +224,9 @@ class DataManager:
         else:
             if self._lerobot_dataset.episode_buffer['size'] > 0:
                 self._lerobot_dataset.save_episode()
+                # Flush episode metadata to ensure episodes are written to disk
+                # Note: Don't close the writer here as it prevents adding more episodes
+                self._lerobot_dataset.meta._flush_metadata_buffer()
 
     def create_frame(
             self,
@@ -235,11 +256,21 @@ class DataManager:
 
     def re_record(self):
         self._stop_save_completed = False
+        # Finalize the dataset before resetting to close all writers
+        if self._lerobot_dataset is not None:
+            self._lerobot_dataset.finalize()
+            # Reset dataset to None so it will be recreated on next recording
+            self._lerobot_dataset = None
         self._episode_reset()
         self._status = 'reset'
 
     def record_skip_task(self):
         self._stop_save_completed = False
+        # Finalize the dataset before skipping to close all writers
+        if self._lerobot_dataset is not None:
+            self._lerobot_dataset.finalize()
+            # Reset dataset to None so it will be recreated on next recording
+            self._lerobot_dataset = None
         self._episode_reset()
         self._status = 'skip_task'
         self._get_current_scenario_number()
@@ -247,6 +278,21 @@ class DataManager:
 
     def record_next_episode(self):
         self._status = 'save'
+
+    @property
+    def status(self):
+        """Get the current status of the data manager."""
+        return self._status
+
+    def get_status(self):
+        """Get the current status of the data manager (legacy method)."""
+        return self._status
+
+    def get_save_rosbag_path(self):
+        """Get the rosbag save path from the LeRobot dataset."""
+        if self._lerobot_dataset is not None and hasattr(self._lerobot_dataset, 'root'):
+            return str(self._lerobot_dataset.root)
+        return None
 
     def get_current_record_status(self):
         current_status = TaskStatus()
@@ -405,7 +451,50 @@ class DataManager:
                 if not os.path.exists(os.path.join(root, folder)):
                     print(f'Dataset {repo_id} is incomplete, missing {folder} folder.')
                     invalid_foler = True
+            
             if not invalid_foler:
+                # Check dataset compatibility
+                info_path = os.path.join(root, 'meta', 'info.json')
+                episodes_path = os.path.join(root, 'meta', 'episodes', 'chunk-000', 'file-000.parquet')
+                
+                if os.path.exists(info_path):
+                    import json
+                    try:
+                        with open(info_path, 'r') as f:
+                            info = json.load(f)
+                            # Check version
+                            version = info.get('codebase_version', '2.0')
+                            if version.startswith('2.'):
+                                print(f'Dataset {repo_id} is v{version} (incompatible with v3.0).')
+                                print(f'Deleting old v2.x dataset and creating new v3.0 dataset...')
+                                shutil.rmtree(root)
+                                return False
+                            
+                            # Check if it has required video metadata for resuming
+                            if os.path.exists(episodes_path) and info.get('total_episodes', 0) > 0:
+                                import pyarrow.parquet as pq
+                                table = pq.read_table(episodes_path)
+                                columns = table.column_names
+                                
+                                # Check if video metadata columns exist
+                                video_keys = [k for k in info.get('features', {}).keys() 
+                                             if k.startswith('observation.images')]
+                                has_video_metadata = all(
+                                    f"videos/{key}/chunk_index" in columns 
+                                    for key in video_keys
+                                )
+                                
+                                if not has_video_metadata and len(video_keys) > 0:
+                                    print(f'Dataset {repo_id} is v3.0 but missing video metadata.')
+                                    print(f'This was created with an older version of the code.')
+                                    print(f'Deleting incomplete dataset and creating new one...')
+                                    shutil.rmtree(root)
+                                    return False
+                    except Exception as e:
+                        print(f'Error checking dataset compatibility: {e}')
+                        print(f'Deleting potentially corrupted dataset...')
+                        shutil.rmtree(root)
+                        return False
                 return True
             else:
                 print(f'Dataset {repo_id} is incomplete, re-creating dataset.')
@@ -432,7 +521,8 @@ class DataManager:
                         self._save_path):
                     self._lerobot_dataset = LeRobotDatasetWrapper(
                         self._save_repo_name,
-                        self._save_path
+                        self._save_path,
+                        batch_encoding_size=1
                     )
                 else:
                     self._lerobot_dataset = self._create_dataset(
@@ -444,6 +534,30 @@ class DataManager:
                             num_processes=1,
                             num_threads=1
                         )
+            else:
+                # If dataset already exists but we're switching to a new one,
+                # finalize the previous dataset first
+                if self._save_repo_name != self._lerobot_dataset.meta.repo_id:
+                    self._lerobot_dataset.finalize()
+                    
+                    if self._check_dataset_exists(
+                            self._save_repo_name,
+                            self._save_path):
+                        self._lerobot_dataset = LeRobotDatasetWrapper(
+                            self._save_repo_name,
+                            self._save_path
+                        )
+                    else:
+                        self._lerobot_dataset = self._create_dataset(
+                            self._save_repo_name,
+                            images, joint_list)
+
+                    if not self._task_info.use_optimized_save_mode:
+                        self._lerobot_dataset.start_image_writer(
+                                num_processes=1,
+                                num_threads=1
+                            )
+                            
             self._lerobot_dataset.set_robot_type(self._robot_type)
 
             return True
@@ -480,7 +594,8 @@ class DataManager:
                 repo_id=repo_id,
                 fps=self._task_info.fps,
                 features=features,
-                use_videos=True
+                use_videos=True,
+                batch_encoding_size=1
             )
 
     def _upload_dataset(self, tags, private=False):
@@ -523,12 +638,10 @@ class DataManager:
                 for org_info in user_info['orgs']:
                     user_ids.append(org_info['name'])
                 return user_ids
-            except LocalTokenNotFoundError as e:
-                print(f'No registered HuggingFace token found: {e}')
-                raise Exception('No registered HuggingFace token found')
             except Exception as e:
                 print(f'Token validation failed: {e}')
-                raise
+                # Return None instead of raising when token is not available
+                return None
 
         # Use queue to get result from thread
         result_queue = queue.Queue()
@@ -552,7 +665,9 @@ class DataManager:
                     print(data)
                 return data
             else:
-                raise data
+                # Return None instead of raising for token errors
+                print(f'HuggingFace API error: {data}')
+                return None
         except queue.Empty:
             print('Token validation timed out after 1.5 seconds')
             return None

@@ -26,7 +26,6 @@ from lerobot.configs.train import TrainPipelineConfig
 from physical_ai_interfaces.msg import TrainingInfo, TrainingStatus
 from physical_ai_server.training.trainers.lerobot.lerobot_trainer import LerobotTrainer
 # TODO: Uncomment when training metrics is implemented
-# from physical_ai_server.training.trainers.gr00tn1.gr00tn1_trainer import Gr00tN1Trainer
 # from physical_ai_server.training.trainers.openvla.openvla_trainer import OpenVLATrainer
 
 
@@ -42,15 +41,17 @@ class TrainingManager:
 
     # Supported trainer mapping
     TRAINER_MAPPING = {
-        'pi0fast': LerobotTrainer,
-        'pi0': LerobotTrainer,
-        'diffusion': LerobotTrainer,
         'act': LerobotTrainer,
+        'diffusion': LerobotTrainer,
+        'groot': LerobotTrainer,
+        'pi0': LerobotTrainer,
+        'pi0fast': LerobotTrainer,
+        'pi05': LerobotTrainer,
+        'sac': LerobotTrainer,
+        'smolvla': LerobotTrainer,
         'tdmpc': LerobotTrainer,
         'vqbet': LerobotTrainer,
-        'smolvla': LerobotTrainer
         # TODO: Add support for additional trainers when implemented
-        # 'gr00tn1': Gr00tN1Trainer,
         # 'openvla': OpenVLATrainer,
     }
 
@@ -196,13 +197,16 @@ class TrainingManager:
 
         """
         policy_list = [
-            'tdmpc',
-            'diffusion',
             'act',
-            'vqbet',
+            'diffusion',
+            'groot',
             'pi0',
             'pi0fast',
+            'pi05',
+            'sac',
             'smolvla',
+            'tdmpc',
+            'vqbet',
         ]
 
         device_list = [

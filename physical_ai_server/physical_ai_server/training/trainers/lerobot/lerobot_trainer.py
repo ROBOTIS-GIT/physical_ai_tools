@@ -30,7 +30,7 @@ from lerobot.optim.factory import make_optimizer_and_scheduler
 from lerobot.policies.factory import make_policy
 from lerobot.policies.pretrained import PreTrainedPolicy
 from lerobot.policies.utils import get_device_from_parameters
-from lerobot.scripts.eval import eval_policy
+from lerobot.scripts.lerobot_eval import eval_policy
 from lerobot.utils.logging_utils import AverageMeter, MetricsTracker
 from lerobot.utils.random_utils import set_seed
 from lerobot.utils.train_utils import (
@@ -45,7 +45,7 @@ from lerobot.utils.utils import (
     get_safe_torch_device,
     has_method,
 )
-from lerobot.utils.wandb_utils import WandBLogger
+from lerobot.rl.wandb_utils import WandBLogger
 from physical_ai_server.training.trainers.trainer import Trainer
 from rclpy.logging import get_logger
 from termcolor import colored

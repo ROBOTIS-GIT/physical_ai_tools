@@ -100,6 +100,16 @@ class InferenceManager:
             state: list,
             task_instruction: str = None) -> dict:
 
+        # Debug: Print state dimension
+        print(f"[DEBUG] Input state dimension: {len(state)}")
+        
+        # TODO: Temporary padding for testing - need to add actual head/lift joints
+        # Model expects 22 dimensions but only receiving 19
+        # Padding with 3 zeros for now (likely head_joint1, head_joint2, lift_joint)
+        if len(state) == 19:
+            print(f"[DEBUG] Padding state from 19 to 22 dimensions with zeros")
+            state = state + [0.0, 0.0, 0.0]
+        
         observation = self._convert_images2tensors(images)
         observation['observation.state'] = self._convert_np2tensors(state)
         for key in observation.keys():
