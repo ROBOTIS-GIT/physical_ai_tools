@@ -1,11 +1,12 @@
 [submodule "lerobot"]
 	path = third_party/lerobot
 	url = https://github.com/huggingface/lerobot.git
-  branch = feature-robotis
+    branch = feature-robotis
 [submodule "Isaac-GR00T"]
 	path = third_party/Isaac-GR00T
 	url = https://github.com/ROBOTIS-GIT/Isaac-GR00T.git
-[submodule "third_party/robotis_dds_python"]
+	branch = feature-add-dds
+[submodule "robotis_dds_python"]
 	path = third_party/robotis_dds_python
 	url = https://github.com/ROBOTIS-GIT/robotis_dds_python.git
 	branch = feature-add-service-and-callback
