@@ -40,16 +40,40 @@ class RuleSwerve(BaseAction):
             d += 360
         return d
     """Whole-body action that moves robot to fixed target positions."""
-    def __init__(self, node: 'Node', angle_deg: float = 90.0, topic: str = None, topic_config: dict = None):
+    def __init__(
+            self,
+            node: 'Node',
+            angle_deg: float = 90.0,
+            topic_config: dict = None
+        ):
         super().__init__(node, name="RuleSwerve")
         self.angle_deg = angle_deg
-        self.angular_velocity = 0.5  # rad/s (can be tuned)
-        if topic is None:
-            topic = '/leader/cmd_vel'
-        qos_profile = QoSProfile(depth=10, reliability=ReliabilityPolicy.RELIABLE)
-        self.cmd_pub = self.node.create_publisher(Twist, topic, qos_profile)
+        self.topic_config = topic_config or {}
+        if not isinstance(self.topic_config, dict):
+            self.topic_config = {}
+        self.angular_velocity = 0.2
+        qos_profile = QoSProfile(
+            depth=10,
+            reliability=ReliabilityPolicy.RELIABLE
+        )
+        self.publishers = {}
+        if self.topic_config and 'topic_map' in self.topic_config:
+            for joint_group, topic in self.topic_config['topic_map'].items():
+                if joint_group == 'leader_mobile':
+                    self.publishers[joint_group] = self.node.create_publisher(
+                        Twist,
+                        topic,
+                        qos_profile
+                    )
+        else:
+            self.trajectory_pub = self.node.create_publisher(
+                JointTrajectory,
+                '/leader/joint_trajectory',
+                qos_profile
+            )
         self.command_sent = False
         self.start_time = None
+
         # For odom monitoring
         from nav_msgs.msg import Odometry
         self.odom_sub = self.node.create_subscription(
@@ -60,6 +84,7 @@ class RuleSwerve(BaseAction):
         )
         self.odom_start_yaw = None
         self.odom_last_yaw = None
+
     def _odom_callback(self, msg):
         # Extract yaw from odometry quaternion
         import math
@@ -92,7 +117,7 @@ class RuleSwerve(BaseAction):
             delta_deg = self.angle_diff_deg(last_deg, start_deg)
             delta_deg_norm = ((delta_deg + 180) % 360) - 180
             self.log_info(f"[ODOM] Actual rotation: {delta_deg_norm:.2f} deg (target: {self.angle_deg} deg)")
-            tolerance = 0.1
+            tolerance = 0.15
             if self.angle_deg > 0:
                 if abs(delta_deg_norm - self.angle_deg) <= tolerance or abs((delta_deg_norm + 360) - self.angle_deg) <= tolerance:
                     self._stop_mobile()
@@ -115,27 +140,31 @@ class RuleSwerve(BaseAction):
     def _send_trajectory_command(self):
         """Publish swerve command for desired angle at fixed angular velocity."""
         angular_z = self.angular_velocity if self.angle_deg >= 0 else -self.angular_velocity
-        twist_msg = Twist()
-        twist_msg.linear.x = 0.0
-        twist_msg.linear.y = 0.0
-        twist_msg.angular.z = angular_z
-        self.cmd_pub.publish(twist_msg)
-        self.log_info(f"Published Twist for swerve: angular_z={twist_msg.angular.z}")
+        swerve_goal = [0.0, 0.0, angular_z]
+        if self.publishers and 'leader_mobile' in self.publishers:
+            twist_msg = Twist()
+            twist_msg.linear.x = swerve_goal[0]
+            twist_msg.linear.y = swerve_goal[1]
+            twist_msg.angular.z = swerve_goal[2]
+            self.publishers['leader_mobile'].publish(twist_msg)
+            self.log_info(f"Published Twist for swerve: angular_z={twist_msg.angular.z}")
 
     def _publish_mobile_command(self):
         """Publish swerve velocity command (called repeatedly during execution)."""
-        angular_z = self.angular_velocity if self.angle_deg >= 0 else -self.angular_velocity
-        twist_msg = Twist()
-        twist_msg.linear.x = 0.0
-        twist_msg.linear.y = 0.0
-        twist_msg.angular.z = angular_z
-        self.cmd_pub.publish(twist_msg)
+        if 'leader_mobile' in self.publishers:
+            angular_z = self.angular_velocity if self.angle_deg >= 0 else -self.angular_velocity
+            twist_msg = Twist()
+            twist_msg.linear.x = 0.0
+            twist_msg.linear.y = 0.0
+            twist_msg.angular.z = angular_z
+            self.publishers['leader_mobile'].publish(twist_msg)
 
     def _stop_mobile(self):
         """Stop mobile base by publishing zero velocity."""
-        twist_msg = Twist()
-        self.cmd_pub.publish(twist_msg)
-        self.log_info("Mobile base stopped")
+        if 'leader_mobile' in self.publishers:
+            twist_msg = Twist()
+            self.publishers['leader_mobile'].publish(twist_msg)
+            self.log_info("Mobile base stopped")
 
     def reset(self):
         """Reset action state for re-execution."""
