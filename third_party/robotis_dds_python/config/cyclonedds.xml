@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<CycloneDDS xmlns="https://cdds.io/config" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="https://cdds.io/config https://raw.githubusercontent.com/eclipse-cyclonedds/cyclonedds/master/etc/cyclonedds.xsd">
+  <Domain id="any">
+    <General>
+      <!-- Network interface to use: 'auto' or specific IP address -->
+      <NetworkInterfaceAddress>auto</NetworkInterfaceAddress>
+      
+      <!-- Disable multicast for WAN communication, enable for LAN -->
+      <AllowMulticast>true</AllowMulticast>
+    </General>
+    
+    <Discovery>
+      <ParticipantIndex>auto</ParticipantIndex>
+      
+      <!-- For local network communication, leave Peers empty -->
+      <!-- For remote communication, add peer addresses here -->
+      <!--
+      <Peers>
+        <Peer address="192.168.1.100"/>
+        <Peer address="cloud-server.example.com:7400"/>
+      </Peers>
+      -->
+    </Discovery>
+  </Domain>
+</CycloneDDS>

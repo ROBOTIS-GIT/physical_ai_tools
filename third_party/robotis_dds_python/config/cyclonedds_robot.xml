@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<CycloneDDS xmlns="https://cdds.io/config">
+  <Domain id="any">
+    <General>
+      <!-- Use any available network interface -->
+      <NetworkInterfaceAddress>auto</NetworkInterfaceAddress>
+      
+      <!-- Disable multicast for internet communication -->
+      <AllowMulticast>false</AllowMulticast>
+    </General>
+    
+    <Discovery>
+      <ParticipantIndex>auto</ParticipantIndex>
+      
+      <!-- Add cloud server IP addresses here -->
+      <Peers>
+        <Peer address="CLOUD_SERVER_IP:7400"/>
+        <!-- Example: <Peer address="52.12.34.56:7400"/> -->
+        <!-- Example: <Peer address="cloud.example.com:7400"/> -->
+      </Peers>
+    </Discovery>
+  </Domain>
+</CycloneDDS>
