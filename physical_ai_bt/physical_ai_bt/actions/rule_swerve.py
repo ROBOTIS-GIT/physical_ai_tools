@@ -20,11 +20,10 @@
 
 import time
 from typing import TYPE_CHECKING
-from builtin_interfaces.msg import Duration
 from geometry_msgs.msg import Twist
 from physical_ai_bt.actions.base_action import NodeStatus, BaseAction
 from rclpy.qos import QoSProfile, ReliabilityPolicy
-from trajectory_msgs.msg import JointTrajectory, JointTrajectoryPoint
+from trajectory_msgs.msg import JointTrajectory
 
 if TYPE_CHECKING:
     from rclpy.node import Node
@@ -39,7 +38,7 @@ class RuleSwerve(BaseAction):
         while d < -180:
             d += 360
         return d
-    """Whole-body action that moves robot to fixed target positions."""
+
     def __init__(
             self,
             node: 'Node',
@@ -98,7 +97,7 @@ class RuleSwerve(BaseAction):
         self.odom_last_yaw = yaw
 
     def tick(self) -> NodeStatus:
-        """Rotate robot by the desired angle at fixed angular velocity."""
+        """Rotate robot by the desired angle at fixed angular velocity with real-time feedback."""
         current_time = time.time()
         if not self.command_sent:
             self._send_trajectory_command()
@@ -116,24 +115,25 @@ class RuleSwerve(BaseAction):
             last_deg = math.degrees(self.odom_last_yaw)
             delta_deg = self.angle_diff_deg(last_deg, start_deg)
             delta_deg_norm = ((delta_deg + 180) % 360) - 180
-            self.log_info(f"[ODOM] Actual rotation: {delta_deg_norm:.2f} deg (target: {self.angle_deg} deg)")
-            tolerance = 0.15
-            if self.angle_deg > 0:
-                if abs(delta_deg_norm - self.angle_deg) <= tolerance or abs((delta_deg_norm + 360) - self.angle_deg) <= tolerance:
-                    self._stop_mobile()
-                    self.log_info(f"[ODOM] Final rotation: {delta_deg_norm:.2f} deg (target: {self.angle_deg} deg)")
-                    elapsed = current_time - self.start_time
-                    self.log_info(f"Swerve completed in {elapsed:.1f}s ({self.angle_deg} degree rotation)")
-                    return NodeStatus.SUCCESS
-            elif self.angle_deg < 0:
-                if abs(delta_deg_norm - self.angle_deg) <= tolerance or abs((delta_deg_norm - 360) - self.angle_deg) <= tolerance:
-                    self._stop_mobile()
-                    self.log_info(f"[ODOM] Final rotation: {delta_deg_norm:.2f} deg (target: {self.angle_deg} deg)")
-                    elapsed = current_time - self.start_time
-                    self.log_info(f"Swerve completed in {elapsed:.1f}s ({self.angle_deg} degree rotation)")
-                    return NodeStatus.SUCCESS
+            tolerance = 0.5
+            error = self.angle_deg - delta_deg_norm
+            if abs(error) <= tolerance:
+                self._stop_mobile()
+                self.log_info(f"[ODOM] Final rotation: {delta_deg_norm:.2f} deg (target: {self.angle_deg} deg)")
+                elapsed = current_time - self.start_time
+                self.log_info(f"Swerve completed in {elapsed:.1f}s ({self.angle_deg} degree rotation)")
+                return NodeStatus.SUCCESS
+            else:
+                angular_z = self.angular_velocity if error > 0 else -self.angular_velocity
+                if 'leader_mobile' in self.publishers:
+                    twist_msg = Twist()
+                    twist_msg.linear.x = 0.0
+                    twist_msg.linear.y = 0.0
+                    twist_msg.angular.z = angular_z
+                    self.publishers['leader_mobile'].publish(twist_msg)
+                return NodeStatus.RUNNING
 
-        # If not reached, keep publishing command
+        # If odom not ready, keep publishing command
         self._publish_mobile_command()
         return NodeStatus.RUNNING
 
