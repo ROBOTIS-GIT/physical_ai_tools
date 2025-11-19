@@ -2,7 +2,7 @@
 <root BTCPP_format="3" main_tree_to_execute="RobotControlSequence">
   <BehaviorTree ID="RobotControlSequence">
     <Sequence name="RobotControlSequence">
-  <Inference name="VLA_Inference_1"/>
+  <!-- <Inference name="VLA_Inference_1"/> -->
   <PauseInference name="Pause_Publishing_1"/>
       <RuleSwerve name="Rule_Based_Rotation_1" angle_deg="180.0"/>
   <ResumeInference name="Resume_Publishing_1"/>
@@ -11,8 +11,9 @@
       <RuleSwerve name="Rule_Based_Rotation_2" angle_deg="-90"/>
   <ResumeInference name="Resume_Publishing_1"/>
   <Inference name="VLA_Inference_3"/>
+  <CameraDepth name="Check_Depth_1" depth_topic="/camera/cam_wrist_right/depth/image_rect_raw"/>
   <PauseInference name="Pause_Publishing_3"/>
-      <RuleSwerve name="Rule_Based_Rotation_3" angle_deg="-90"/>
+    <RuleSwerve name="Rule_Based_Rotation_3" angle_deg="-90"/>
   <ResumeInference name="Resume_Publishing"/>
     </Sequence>
   </BehaviorTree>
@@ -26,6 +27,11 @@
       <input_port name="angle_deg" default="90.0">
         Desired rotation angle in degrees.
         Positive for CCW, negative for CW.
+      </input_port>
+    </Action>
+    <Action ID="CameraDepth">
+      <input_port name="depth_topic" default="/camera/depth/image_raw">
+        ROS topic for depth image (sensor_msgs/Image)
       </input_port>
     </Action>
   </TreeNodesModel>
