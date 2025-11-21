@@ -2,7 +2,7 @@
 Changelog for package physical_ai_manager
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-0.7.0 (2025-11-05)
+0.7.0 (2025-11-21)
 ------------------
 * Added rosbag2 record option to the Record page
 * Contributors: Kiwoong Park

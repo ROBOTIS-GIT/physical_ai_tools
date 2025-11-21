@@ -2,7 +2,7 @@
 Changelog for package physical_ai_server
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-0.7.0 (2025-11-05)
+0.7.0 (2025-11-21)
 ------------------
 * Added rosbag2 recording support when collecting LeRobot datasets
 * Contributors: Woojin Wie, Kiwoong Park
