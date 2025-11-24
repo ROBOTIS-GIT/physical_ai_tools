@@ -28,7 +28,7 @@ class RuleArms(BaseAction):
             node: 'Node',
             left_positions: List[float],
             right_positions: List[float],
-            position_threshold: float = 0.09
+            position_threshold: float = 0.1
         ):
         super().__init__(node, name="RuleArms")
         self.left_joint_names = [
@@ -75,7 +75,7 @@ class RuleArms(BaseAction):
             left_traj.joint_names = self.left_joint_names
             left_point = JointTrajectoryPoint()
             left_point.positions = self.left_positions
-            left_point.time_from_start.sec = 2
+            left_point.time_from_start.sec = 10
             left_traj.points.append(left_point)
             self.left_pub.publish(left_traj)
 
@@ -84,13 +84,13 @@ class RuleArms(BaseAction):
             right_traj.joint_names = self.right_joint_names
             right_point = JointTrajectoryPoint()
             right_point.positions = self.right_positions
-            right_point.time_from_start.sec = 2
+            right_point.time_from_start.sec = 10
             right_traj.points.append(right_point)
             self.right_pub.publish(right_traj)
 
             self.command_sent = True
             self.start_time = current_time
-            self.log_info(f"Published left arm: {self.left_positions}, right arm: {self.right_positions}")
+            # Essential log only
             return NodeStatus.RUNNING
 
         # Feedback: check if joints reached target positions
@@ -103,12 +103,10 @@ class RuleArms(BaseAction):
                 if idx is not None:
                     pos = self.joint_state.position[idx]
                     diff = abs(pos - target)
-                    self.log_info(f"Left joint {jname}: current={pos:.4f}, target={target:.4f}, diff={diff:.4f}, threshold={self.position_threshold}")
                     if diff > self.position_threshold:
                         all_reached = False
                         break
                 else:
-                    self.log_warn(f"Left joint {jname} not found in joint_state.")
                     all_reached = False
                     break
             # Right arm joints
@@ -118,22 +116,16 @@ class RuleArms(BaseAction):
                     if idx is not None:
                         pos = self.joint_state.position[idx]
                         diff = abs(pos - target)
-                        self.log_info(f"Right joint {jname}: current={pos:.4f}, target={target:.4f}, diff={diff:.4f}, threshold={self.position_threshold}")
                         if diff > self.position_threshold:
                             all_reached = False
                             break
                     else:
-                        self.log_warn(f"Right joint {jname} not found in joint_state.")
                         all_reached = False
                         break
             if all_reached:
-                self.log_info("All arm joints reached target positions. Returning SUCCESS.")
                 self.status = NodeStatus.SUCCESS
                 return NodeStatus.SUCCESS
-            else:
-                self.log_info("Not all arm joints reached target positions. Returning RUNNING.")
-        else:
-            self.log_warn("No joint_state received yet.")
+        # No joint_state received yet: silent
 
         return NodeStatus.RUNNING
 
