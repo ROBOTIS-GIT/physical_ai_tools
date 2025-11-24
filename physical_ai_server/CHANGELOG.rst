@@ -2,6 +2,11 @@
 Changelog for package physical_ai_server
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
+0.6.13 (2025-10-27)
+------------------
+* Fixed physical_ai_server crash when querying user ID without locally registered HuggingFace token
+* Contributors: Kiwoong Park
+
 0.6.12 (2025-10-21)
 ------------------
 * Added training resume functionality.

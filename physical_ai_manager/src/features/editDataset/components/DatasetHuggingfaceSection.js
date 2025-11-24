@@ -256,7 +256,7 @@ const HuggingfaceSection = () => {
         toast.error('Failed to get user ID list from response');
       }
     } catch (error) {
-      console.error('Error loading HF user list:', error);
+      console.warn('Error loading HF user list:', error);
       toast.error(`Failed to load user ID list: ${error.message}`);
     } finally {
       setIsLoading(false);
