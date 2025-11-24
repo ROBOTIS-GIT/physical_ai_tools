@@ -221,7 +221,6 @@ class BehaviorTreeNode(Node):
                 self.inference_detected = False
         else:
             if self.latest_status is None:
-                self.get_logger().warn("No /task/status received at all: inference_detected=False.")
                 self.inference_detected = False
         if prev and not self.inference_detected:
             self.get_logger().info("inference_detected True->False: Resetting tree due to topic staleness.")
