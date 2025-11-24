@@ -34,13 +34,6 @@ from rclpy.node import Node
 class BehaviorTreeNode(Node):
     """Generic ROS2 node for Behavior Tree execution."""
 
-    @property
-    def latest_task_info(self):
-        """Return the latest task_info from the most recent TaskStatus message."""
-        if self.latest_status and hasattr(self.latest_status, 'task_info'):
-            return self.latest_status.task_info
-        return None
-
     def __init__(self):
         super().__init__('physical_ai_bt_node')
 
@@ -54,16 +47,11 @@ class BehaviorTreeNode(Node):
         self._prev_inference_detected = False
 
         qos_profile = QoSProfile(depth=10, reliability=ReliabilityPolicy.RELIABLE)
+        # Subscribe to /task/status for monitoring AI Server inference state
         self.status_sub = self.create_subscription(
             TaskStatus,
             '/task/status',
             self._status_callback,
-            qos_profile
-        )
-        # Publisher for broadcasting updated TaskStatus
-        self.status_pub = self.create_publisher(
-            TaskStatus,
-            '/task/status',
             qos_profile
         )
 
