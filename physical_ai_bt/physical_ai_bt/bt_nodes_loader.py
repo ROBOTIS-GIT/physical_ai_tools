@@ -56,6 +56,7 @@ class XMLTreeLoader:
 
         from physical_ai_bt.actions.camera_depth import CameraDepth
         from physical_ai_bt.actions.rule_head_lift import RuleHeadLift
+        from physical_ai_bt.actions.rule_arms import RuleArms
         self.action_types: Dict[str, Type[BaseAction]] = {
             'Inference': Inference,
             'RuleWholeBody': RuleWholeBody,
@@ -64,6 +65,7 @@ class XMLTreeLoader:
             'ResumeInference': ResumeInference,
             'CameraDepth': CameraDepth,
             'RuleHeadLift': RuleHeadLift,
+            'RuleArms': RuleArms,
         }
 
     def load_tree_from_file(self, xml_path: str, main_tree_id: str = None) -> BTNode:
@@ -225,6 +227,14 @@ class XMLTreeLoader:
                 node=self.node,
                 head_positions=params.get('head_positions', [0.0, 0.0]),
                 lift_position=params.get('lift_position', 0.0),
+                position_threshold=params.get('position_threshold', 0.001),
+                timeout=params.get('timeout', 10.0)
+            )
+        elif action_class.__name__ == "RuleArms":
+            return action_class(
+                node=self.node,
+                left_positions=params.get('left_positions', [0.0]*8),
+                right_positions=params.get('right_positions', [0.0]*8),
                 position_threshold=params.get('position_threshold', 0.001),
                 timeout=params.get('timeout', 10.0)
             )

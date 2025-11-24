@@ -33,7 +33,7 @@ class RuleHeadLift(BaseAction):
             node: 'Node',
             head_positions: List[float],
             lift_position: float,
-            position_threshold: float = 0.001,
+            position_threshold: float = 0.01,
             timeout: float = 10.0
         ):
         super().__init__(node, name="RuleHeadLift")
