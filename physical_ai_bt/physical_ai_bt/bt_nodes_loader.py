@@ -57,6 +57,7 @@ class XMLTreeLoader:
         from physical_ai_bt.actions.camera_depth import CameraDepth
         from physical_ai_bt.actions.rule_head_lift import RuleHeadLift
         from physical_ai_bt.actions.rule_arms import RuleArms
+        from physical_ai_bt.actions.send_language_instruction import SendLanguageInstruction
         self.action_types: Dict[str, Type[BaseAction]] = {
             'Inference': Inference,
             'RuleSwerve': RuleSwerve,
@@ -65,6 +66,7 @@ class XMLTreeLoader:
             'CameraDepth': CameraDepth,
             'RuleHeadLift': RuleHeadLift,
             'RuleArms': RuleArms,
+            'SendLanguageInstruction': SendLanguageInstruction,
         }
 
     def load_tree_from_file(self, xml_path: str, main_tree_id: str = None) -> BTNode:
@@ -127,6 +129,11 @@ class XMLTreeLoader:
             params = self._parse_node_params(xml_node)
             return self._create_action(action_class, node_name, params)
 
+        elif node_id == 'SendLanguageInstruction':
+            action_class = self.action_types[node_id]
+            params = self._parse_node_params(xml_node)
+            instruction = params.get('instruction', '')
+            return action_class(self.node, instruction)
         else:
             raise ValueError(f"Unknown node type or ID: {node_type} / {node_id}")
 
@@ -221,6 +228,11 @@ class XMLTreeLoader:
                 node=self.node,
                 left_positions=params.get('left_positions', [0.0]*8),
                 right_positions=params.get('right_positions', [0.0]*8)
+            )
+        elif action_class.__name__ == "SendLanguageInstruction":
+            return action_class(
+                self.node,
+                params.get('instruction', '')
             )
         else:
             raise ValueError(f"Unknown action class: {action_class}")

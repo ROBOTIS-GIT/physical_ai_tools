@@ -9,8 +9,9 @@
       <RuleSwerve name="Rule_Based_Rotation_1" angle_deg="180.0"/>
       <RuleSwerve name="Rule_Based_Rotation_2" angle_deg="-90"/>
       <RuleHeadLift name="HeadLiftControl_1"
-        head_positions="0.785,0.0"
+        head_positions="0.695,0.0"
         lift_position="-0.1"/>
+      <SendLanguageInstruction name="SendLangInst_1" instruction="Pick it up like before."/>
       <ResumeInference name="Resume_Publishing_1"/>
       <Inference name="VLA_Inference_1"/>
     </Sequence>
@@ -47,6 +48,9 @@
       <input_port name="right_positions" default="0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0">
         Target positions for right arm joints (comma-separated).
       </input_port>
+    </Action>
+    <Action ID="SendLanguageInstruction">
+      <input_port name="instruction" default=""/>
     </Action>
   </TreeNodesModel>
 

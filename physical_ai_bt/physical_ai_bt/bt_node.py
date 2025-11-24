@@ -31,6 +31,12 @@ from rclpy.node import Node
 
 
 class BehaviorTreeNode(Node):
+    @property
+    def latest_task_info(self):
+        """Return the latest task_info from the most recent TaskStatus message."""
+        if self.latest_status and hasattr(self.latest_status, 'task_info'):
+            return self.latest_status.task_info
+        return None
     def __init__(self):
         super().__init__('physical_ai_bt_node')
         # --- Inference trigger state ---
@@ -60,6 +66,12 @@ class BehaviorTreeNode(Node):
             TaskStatus,
             '/task/status',
             self._status_callback,
+            qos_profile
+        )
+        # Publisher for broadcasting updated TaskStatus
+        self.status_pub = self.create_publisher(
+            TaskStatus,
+            '/task/status',
             qos_profile
         )
 

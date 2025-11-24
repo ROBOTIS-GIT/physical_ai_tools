@@ -33,7 +33,7 @@ class RuleHeadLift(BaseAction):
             node: 'Node',
             head_positions: List[float],
             lift_position: float,
-            position_threshold: float = 0.1,
+            position_threshold: float = 0.0001,
         ):
         super().__init__(node, name="RuleHeadLift")
         self.head_joint_names = ["head_joint1", "head_joint2"]
@@ -74,7 +74,7 @@ class RuleHeadLift(BaseAction):
             head_traj.joint_names = self.head_joint_names
             head_point = JointTrajectoryPoint()
             head_point.positions = self.head_positions
-            head_point.time_from_start.sec = 2
+            head_point.time_from_start.sec = 5
             head_traj.points.append(head_point)
             self.head_pub.publish(head_traj)
 
@@ -83,7 +83,7 @@ class RuleHeadLift(BaseAction):
             lift_traj.joint_names = [self.lift_joint_name]
             lift_point = JointTrajectoryPoint()
             lift_point.positions = [self.lift_position]
-            lift_point.time_from_start.sec = 2
+            lift_point.time_from_start.sec = 5
             lift_traj.points.append(lift_point)
             self.lift_pub.publish(lift_traj)
 

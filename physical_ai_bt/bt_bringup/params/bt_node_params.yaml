@@ -5,4 +5,4 @@ bt_node:
 
     # Behavior tree configuration
     tree_xml: 'ffw_test.xml'
-    tick_rate: 30.0
+    tick_rate: 100.0
