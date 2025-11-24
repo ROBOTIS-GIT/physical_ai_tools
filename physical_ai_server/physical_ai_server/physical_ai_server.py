@@ -96,12 +96,11 @@ class PhysicalAIServer(Node):
         self.training_status_timer = None
 
         self._init_core_components()
-
         self._init_ros_publisher()
         self._init_ros_service()
 
         # Initialize ZMQ inference variables BEFORE _setup_timer_callbacks
-        self.zmq_inference = False
+        self.zmq_inference = True
         self.zmq_client: Optional[ZmqInferenceClient] = None
         self.inference_info = {}
         self.remain_action = []
@@ -495,13 +494,6 @@ class PhysicalAIServer(Node):
             self.timer_manager.stop(timer_name=self.operation_mode)
             return
 
-        try:
-            self.process_rosbag_recording()
-        except Exception as e:
-            error_msg = f'Error in rosbag recording: {str(e)}'
-            self.get_logger().error(traceback.format_exc())
-            self.get_logger().error(error_msg)
-
     def _inference_timer_callback(self):
         error_msg = ''
         current_status = TaskStatus()
@@ -695,7 +687,7 @@ class PhysicalAIServer(Node):
                         'state.left_arm': left_arm_obs,
                         'state.right_arm': right_arm_obs,
                         'annotation.human.action.task_description': [
-                            'Place bottles in color-matching boxes: red→top left, green→bottom left, white→top right, orange→bottom right'],
+                            self.task_instruction],
                     }
 
                     # Start async inference
@@ -1000,9 +992,12 @@ class PhysicalAIServer(Node):
                 response.message = 'Recording started'
 
             elif request.command == SendCommand.Request.START_INFERENCE:
+                # Always initialize all inference components for new session
+                self.get_logger().info('Starting new inference session')
+                task_info = request.task_info
+                
                 self.joint_topic_types = self.communicator.get_publisher_msg_types()
                 self.operation_mode = 'inference'
-                task_info = request.task_info
                 self.task_instruction = task_info.task_instruction
 
                 if not self.zmq_inference:
@@ -1024,6 +1019,31 @@ class PhysicalAIServer(Node):
                 self.start_recording_time = time.perf_counter()
                 response.success = True
                 response.message = 'Inference started'
+
+            elif request.command == SendCommand.Request.UPDATE_TASK_INSTRUCTION:
+                # Update task instruction during active inference session
+                if not self.on_inference:
+                    response.success = False
+                    response.message = 'Cannot update task instruction: inference not active'
+                    self.get_logger().warning(response.message)
+                    return response
+
+                task_info = request.task_info
+                if not task_info.task_instruction:
+                    response.success = False
+                    response.message = 'Task instruction cannot be empty'
+                    self.get_logger().warning(response.message)
+                    return response
+
+                # Update task instruction without reinitializing inference components
+                self.get_logger().info(f'Updating task instruction: {task_info.task_instruction}')
+                self.task_instruction = task_info.task_instruction
+                
+                if hasattr(self, 'data_manager') and self.data_manager is not None:
+                    self.data_manager.update_task_instruction(task_info.task_instruction)
+                
+                response.success = True
+                response.message = 'Task instruction updated successfully'
 
             else:
                 if not self.on_recording and not self.on_inference:

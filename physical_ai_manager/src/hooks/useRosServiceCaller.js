@@ -111,6 +111,9 @@ export function useRosServiceCaller() {
           case 'finish':
             command_enum = TaskCommand.FINISH;
             break;
+          case 'update_task_instruction':
+            command_enum = TaskCommand.UPDATE_TASK_INSTRUCTION;
+            break;
           default:
             throw new Error(`Unknown command: ${command}`);
         }

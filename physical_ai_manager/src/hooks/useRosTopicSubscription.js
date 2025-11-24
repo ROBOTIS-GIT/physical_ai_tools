@@ -263,26 +263,32 @@ export function useRosTopicSubscription() {
 
         // Extract TaskInfo from TaskStatus message
         if (msg.task_info) {
-          // update task info only when task is not stopped
-          dispatch(
-            setTaskInfo({
-              taskName: msg.task_info.task_name || '',
-              taskType: msg.task_info.task_type || '',
-              taskInstruction: msg.task_info.task_instruction || [],
-              policyPath: msg.task_info.policy_path || '',
-              recordInferenceMode: msg.task_info.record_inference_mode || false,
-              userId: msg.task_info.user_id || '',
-              fps: msg.task_info.fps || 0,
-              tags: msg.task_info.tags || [],
-              warmupTime: msg.task_info.warmup_time_s || 0,
-              episodeTime: msg.task_info.episode_time_s || 0,
-              resetTime: msg.task_info.reset_time_s || 0,
-              numEpisodes: msg.task_info.num_episodes || 0,
-              pushToHub: msg.task_info.push_to_hub || false,
-              privateMode: msg.task_info.private_mode || false,
-              useOptimizedSave: msg.task_info.use_optimized_save_mode || false,
-            })
-          );
+          // Prepare the task info update
+          const taskInfoUpdate = {
+            taskName: msg.task_info.task_name || '',
+            taskType: msg.task_info.task_type || '',
+            policyPath: msg.task_info.policy_path || '',
+            recordInferenceMode: msg.task_info.record_inference_mode || false,
+            userId: msg.task_info.user_id || '',
+            fps: msg.task_info.fps || 0,
+            tags: msg.task_info.tags || [],
+            warmupTime: msg.task_info.warmup_time_s || 0,
+            episodeTime: msg.task_info.episode_time_s || 0,
+            resetTime: msg.task_info.reset_time_s || 0,
+            numEpisodes: msg.task_info.num_episodes || 0,
+            pushToHub: msg.task_info.push_to_hub || false,
+            privateMode: msg.task_info.private_mode || false,
+            useOptimizedSave: msg.task_info.use_optimized_save_mode || false,
+          };
+
+          // Only update taskInstruction if NOT in INFERENCING phase
+          // This allows users to edit task instruction during inference without it being overwritten
+          const isInferencing = msg.phase === TaskPhase.INFERENCING;
+          if (!isInferencing) {
+            taskInfoUpdate.taskInstruction = msg.task_info.task_instruction || [];
+          }
+
+          dispatch(setTaskInfo(taskInfoUpdate));
         }
 
         // Set multi-task index safely with null checks and optimized search

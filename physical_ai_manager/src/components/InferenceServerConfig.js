@@ -227,8 +227,8 @@ const InferenceServerConfig = ({ disabled = false }) => {
   });
 
   const policyTypes = [
-    { value: 'GR00T_N1_5_TRT', label: 'GR00T N1.5 (TensorRT)' },
     { value: 'GR00T_N1_5', label: 'GR00T N1.5 (PyTorch)' },
+    { value: 'GR00T_N1_5_TRT', label: 'GR00T N1.5 (TensorRT)' },
     { value: 'LEROBOT_ACT', label: 'LeRobot ACT' },
     { value: 'LEROBOT_DIFFUSION', label: 'LeRobot Diffusion' },
   ];

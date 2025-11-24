@@ -62,41 +62,7 @@ services:
       - ../Isaac-GR00T:/workspace
     privileged: true
     working_dir: /workspace
-    command: python3 scripts/server_inference_async.py
-    runtime: nvidia
-    deploy:
-      resources:
-        reservations:
-          devices:
-            - driver: nvidia
-              capabilities: [gpu]
-
-  lerobot:
-    container_name: lerobot
-    image: robotis/lerobot:latest
-    build:
-      context: ../lerobot
-      dockerfile: docker/Dockerfile.user
-      args:
-        PYTHON_VERSION: 3.10
-    tty: true
-    restart: unless-stopped
-    network_mode: host
-    environment:
-      - DISPLAY=${DISPLAY}
-      - MUJOCO_GL=egl
-      - HF_HOME=/root/.cache/huggingface
-      - HF_LEROBOT_HOME=/root/.cache/huggingface/lerobot
-      - TORCH_HOME=/root/.cache/torch
-      - TRITON_CACHE_DIR=/root/.cache/triton
-    volumes:
-      - /tmp/.X11-unix:/tmp/.X11-unix:rw
-      - /tmp/.docker.xauth:/tmp/.docker.xauth:rw
-      - ./huggingface:/root/.cache/huggingface
-      - /etc/timezone:/etc/timezone:ro
-      - /etc/localtime:/etc/localtime:ro
-    working_dir: /lerobot
-    command: /bin/bash
+    # command: python3 scripts/server_inference_async.py
     runtime: nvidia
     deploy:
       resources:

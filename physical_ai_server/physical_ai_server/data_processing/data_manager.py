@@ -84,6 +84,15 @@ class DataManager:
         self._init_task_limits()
         self._current_scenario_number = 0
 
+    def update_task_instruction(self, new_task_instruction):
+        if self._task_info is not None:
+            self._task_info.task_instruction = new_task_instruction
+            self._single_task = len(new_task_instruction) == 1
+            # Update current instruction based on current task index
+            self.current_instruction = self._task_info.task_instruction[
+                self._current_task % len(self._task_info.task_instruction)
+            ]
+
     def record(
             self,
             images,

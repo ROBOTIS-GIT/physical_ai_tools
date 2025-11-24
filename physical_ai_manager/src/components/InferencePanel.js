@@ -59,14 +59,20 @@ const InferencePanel = () => {
   // Policy download modal states
   const [showPolicyDownloadModal, setShowPolicyDownloadModal] = useState(false);
 
-  const { registerHFUser, getRegisteredHFUser } = useRosServiceCaller();
+  const { registerHFUser, getRegisteredHFUser, sendRecordCommand } = useRosServiceCaller();
 
   const handleChange = useCallback(
     (field, value) => {
-      if (!isEditable) return; // Block changes when not editable
+      // Allow taskInstruction to be edited during inference
+      if (field === 'taskInstruction' && taskStatus.phase === TaskPhase.INFERENCING) {
+        dispatch(setTaskInfo({ ...info, [field]: value }));
+        return;
+      }
+      // For other fields, block changes when not editable
+      if (!isEditable) return;
       dispatch(setTaskInfo({ ...info, [field]: value }));
     },
-    [isEditable, info, dispatch]
+    [isEditable, info, dispatch, taskStatus.phase]
   );
 
   const handlePolicyPathSelect = useCallback(
@@ -392,13 +398,57 @@ const InferencePanel = () => {
         >
           Task Instruction
         </span>
-        <textarea
-          className={classTaskInstructionTextarea}
-          value={info.taskInstruction || ''}
-          onChange={(e) => handleChange('taskInstruction', [e.target.value])}
-          disabled={!isEditable}
-          placeholder="Enter Task Instruction"
-        />
+        <div className={clsx('flex', 'flex-col', 'flex-1', 'gap-2')}>
+          <textarea
+            className={classTaskInstructionTextarea}
+            value={info.taskInstruction || ''}
+            onChange={(e) => handleChange('taskInstruction', [e.target.value])}
+            disabled={taskStatus.phase !== TaskPhase.READY && taskStatus.phase !== TaskPhase.INFERENCING}
+            placeholder="Enter Task Instruction"
+          />
+          {/* Update Task Instruction Button - only visible during inference */}
+          {taskStatus.phase === TaskPhase.INFERENCING && (
+            <button
+              onClick={async () => {
+                if (!info.taskInstruction || info.taskInstruction.length === 0 || info.taskInstruction[0].trim() === '') {
+                  toast.error('Task instruction cannot be empty');
+                  return;
+                }
+                try {
+                  const result = await sendRecordCommand('update_task_instruction');
+                  if (result && result.success) {
+                    toast.success('Task instruction updated successfully');
+                  } else {
+                    toast.error(result?.message || 'Failed to update task instruction');
+                  }
+                } catch (error) {
+                  console.error('Error updating task instruction:', error);
+                  toast.error(`Failed to update task instruction: ${error.message}`);
+                }
+              }}
+              className={clsx(
+                'flex',
+                'items-center',
+                'justify-center',
+                'gap-2',
+                'px-4',
+                'py-2',
+                'text-sm',
+                'font-medium',
+                'bg-green-50',
+                'text-green-700',
+                'border',
+                'border-green-200',
+                'rounded-lg',
+                'hover:bg-green-100',
+                'transition-colors',
+                'w-full'
+              )}
+            >
+              🔄 Update Instruction
+            </button>
+          )}
+        </div>
       </div>
 
       <div className={clsx('flex', 'items-start', 'mb-2.5')}>

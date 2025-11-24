@@ -26,6 +26,7 @@ const TaskCommand = {
   RERECORD: 5,
   FINISH: 6,
   SKIP_TASK: 7,
+  UPDATE_TASK_INSTRUCTION: 8,
 };
 
 export default TaskCommand;
