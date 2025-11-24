@@ -26,7 +26,6 @@ from physical_ai_bt.actions.camera_depth import CameraDepth
 from physical_ai_bt.actions.rule_head_lift import RuleHeadLift
 
 from physical_ai_bt.actions.rule_arms import RuleArms
-from physical_ai_bt.actions.send_language_instruction import SendLanguageInstruction
 
 __all__ = [
     'BaseAction',
@@ -37,5 +36,4 @@ __all__ = [
     'CameraDepth',
     'RuleHeadLift',
     'RuleArms',
-    'SendLanguageInstruction'
 ]
