@@ -115,10 +115,6 @@ class RuleHeadLift(BaseAction):
                 self.status = NodeStatus.SUCCESS
                 return NodeStatus.SUCCESS
 
-        # Timeout fallback
-        if self.start_time and (current_time - self.start_time) > self.timeout:
-            self.status = NodeStatus.SUCCESS
-            return NodeStatus.SUCCESS
         return NodeStatus.RUNNING
 
     def reset(self):
