@@ -33,8 +33,7 @@ class RuleHeadLift(BaseAction):
             node: 'Node',
             head_positions: List[float],
             lift_position: float,
-            position_threshold: float = 0.01,
-            timeout: float = 10.0
+            position_threshold: float = 0.1,
         ):
         super().__init__(node, name="RuleHeadLift")
         self.head_joint_names = ["head_joint1", "head_joint2"]
@@ -42,7 +41,6 @@ class RuleHeadLift(BaseAction):
         self.lift_joint_name = "lift_joint"
         self.lift_position = lift_position
         self.position_threshold = position_threshold
-        self.timeout = timeout
         qos_profile = QoSProfile(depth=10, reliability=ReliabilityPolicy.RELIABLE)
         self.head_pub = self.node.create_publisher(
             JointTrajectory,

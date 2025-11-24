@@ -215,8 +215,6 @@ class XMLTreeLoader:
                 node=self.node,
                 head_positions=params.get('head_positions', [0.0, 0.0]),
                 lift_position=params.get('lift_position', 0.0),
-                position_threshold=params.get('position_threshold', 0.001),
-                timeout=params.get('timeout', 10.0)
             )
         elif action_class.__name__ == "RuleArms":
             return action_class(

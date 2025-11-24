@@ -3,23 +3,16 @@
   <BehaviorTree ID="RobotControlSequence">
     <Sequence name="RobotControlSequence">
       <PauseInference name="Pause_Publishing_1"/>
+      <RuleArms name="ArmsControl_1"
+        left_positions="0.75, 0.0, 0.0, -2.3, 0.0, 0.0, 0.0, 0.0"
+        right_positions="0.75, 0.0, 0.0, -2.3, 0.0, 0.0, 0.0, 0.0"/>
       <RuleSwerve name="Rule_Based_Rotation_1" angle_deg="180.0"/>
+      <RuleSwerve name="Rule_Based_Rotation_2" angle_deg="-90"/>
+      <RuleHeadLift name="HeadLiftControl_1"
+        head_positions="0.785,0.0"
+        lift_position="-0.1"/>
       <ResumeInference name="Resume_Publishing_1"/>
       <Inference name="VLA_Inference_1"/>
-      <PauseInference name="Pause_Publishing_2"/>
-      <RuleSwerve name="Rule_Based_Rotation_2" angle_deg="-90"/>
-      <ResumeInference name="Resume_Publishing_1"/>
-      <Inference name="VLA_Inference_2"/>
-      <CameraDepth name="Check_Depth_1" depth_topic="/camera/cam_wrist_right/depth/image_rect_raw"/>
-      <PauseInference name="Pause_Publishing_3"/>
-      <RuleSwerve name="Rule_Based_Rotation_3" angle_deg="-90"/>
-      <RuleHeadLift name="HeadLiftControl_1"
-        head_positions="0.5,0.0"
-        lift_position="-0.1"/>
-      <RuleArms name="ArmsControl_1"
-        left_positions="0.5954753044455301, -0.05522330830078125, -0.17947575197753907, 0.22714006458231562, 0.003069460332193454, 0.8517752421836835, 0.3084807633854421, 1.0"
-        right_positions="0.5939405742794334, -0.05982525065917969, -0.20555342534179688, 0.49725257381533955, -0.15186409782714844, 0.7827123847093308, -0.5292233712158203, 1.0"/>
-      <ResumeInference name="Resume_Publishing"/>
     </Sequence>
   </BehaviorTree>
 
