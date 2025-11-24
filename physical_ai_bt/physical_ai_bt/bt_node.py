@@ -215,13 +215,11 @@ class BehaviorTreeNode(Node):
         if self.latest_status is not None and msg_time is not None:
             msg_age = now - msg_time
             if msg_age > status_timeout:
-                self.get_logger().warn(f"/task/status NOT UPDATED for {msg_age:.2f}s (>1.0s): inference_detected=False")
                 self.inference_detected = False
         else:
             if self.latest_status is None:
                 self.inference_detected = False
         if prev and not self.inference_detected:
-            self.get_logger().info("inference_detected True->False: Resetting tree due to topic staleness.")
             self._reset_tree()
         self._prev_inference_detected = self.inference_detected
 
@@ -230,7 +228,6 @@ class BehaviorTreeNode(Node):
             if not self.inference_detected:
                 return  # Do not tick tree until trigger
             self.waiting_for_inference = False
-            self.get_logger().info('Inference trigger detected. Starting BT tree execution.')
 
         # Step 2: Tick the root node
         status = self.root.tick()
