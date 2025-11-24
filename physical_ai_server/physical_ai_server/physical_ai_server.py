@@ -564,11 +564,11 @@ class PhysicalAIServer(Node):
                     self.communicator.publish_status(status=current_status)
                     return
 
-            action = self.inference_manager.predict(
-                    images=camera_data,
-                    state=follower_data,
-                    task_instruction=self.task_instruction[0]
-                )
+                action = self.inference_manager.predict(
+                        images=camera_data,
+                        state=follower_data,
+                        task_instruction=self.task_instruction[0]
+                    )
             except Exception as e:
                 self.get_logger().error(f'Inference failed, please check : {str(e)}')
                 # Stop inference on error
@@ -686,6 +686,7 @@ class PhysicalAIServer(Node):
                 'robot_type': self.inference_info['robot_type']
             }
             response = self.zmq_client.execute_command('load_policy', policy_info)
+            self.stop_inference = True
             self.get_logger().info(f'ZMQ load_policy response: {response}')
 
             # Initialize inference state variables
