@@ -26,6 +26,7 @@ from physical_ai_bt.actions.control_inference import (
     PauseInference,
     ResumeInference
 )
+from physical_ai_bt.actions.update_task_instruction import UpdateTaskInstruction
 from physical_ai_bt.actions.base_action import BTNode, BaseAction, BaseControl
 from physical_ai_bt.controls import Sequence
 
@@ -62,6 +63,7 @@ class XMLTreeLoader:
             'RuleSwerve': RuleSwerve,
             'PauseInference': PauseInference,
             'ResumeInference': ResumeInference,
+            'UpdateTaskInstruction': UpdateTaskInstruction,
             'CameraDepth': CameraDepth,
             'RuleHeadLift': RuleHeadLift,
             'RuleArms': RuleArms,
@@ -201,6 +203,12 @@ class XMLTreeLoader:
 
         elif action_class == ResumeInference:
             return ResumeInference(node=self.node)
+
+        elif action_class == UpdateTaskInstruction:
+            return UpdateTaskInstruction(
+                node=self.node,
+                instruction=params.get('instruction', '')
+            )
 
         elif action_class.__name__ == "CameraDepth":
             return action_class(
