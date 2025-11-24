@@ -21,7 +21,7 @@
 import xml.etree.ElementTree as ET
 from typing import TYPE_CHECKING, Dict, Type
 
-from physical_ai_bt.actions import Inference, RuleWholeBody, RuleSwerve
+from physical_ai_bt.actions import Inference, RuleSwerve
 from physical_ai_bt.actions.control_inference import (
     PauseInference,
     ResumeInference
@@ -42,7 +42,7 @@ class XMLTreeLoader:
 
         Args:
             node: ROS2 node reference
-            joint_names: Joint names from config (for RuleWholeBody)
+            joint_names: Joint names from config
             topic_config: Topic configuration for multi-publisher support
         """
         self.node = node
@@ -59,7 +59,6 @@ class XMLTreeLoader:
         from physical_ai_bt.actions.rule_arms import RuleArms
         self.action_types: Dict[str, Type[BaseAction]] = {
             'Inference': Inference,
-            'RuleWholeBody': RuleWholeBody,
             'RuleSwerve': RuleSwerve,
             'PauseInference': PauseInference,
             'ResumeInference': ResumeInference,
@@ -191,17 +190,6 @@ class XMLTreeLoader:
         if action_class == Inference:
             return Inference(
                 node=self.node,
-            )
-
-        elif action_class == RuleWholeBody:
-            return RuleWholeBody(
-                node=self.node,
-                current_positions=params.get('current_positions', []),
-                target_positions=params.get('target_positions', []),
-                joint_names=self.joint_names,
-                position_threshold=params.get('position_threshold', 0.1),
-                timeout=params.get('timeout', 15.0),
-                topic_config=self.topic_config
             )
 
         elif action_class == RuleSwerve:

@@ -1,34 +1,59 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<root BTCPP_format="3"
-      main_tree_to_execute="RobotControlSequence">
+<root BTCPP_format="3" main_tree_to_execute="RobotControlSequence">
   <BehaviorTree ID="RobotControlSequence">
     <Sequence name="RobotControlSequence">
-  <Inference name="VLA_Inference"
-           timeout="10.0"/>
-  <PauseInference name="Pause_Publishing"/>
-  <RuleWholeBody name="Rule_Based_Movement"
-                  target_positions="0.6215657171320058,-7.158593009678102e-12,-0.3865631582291661,0.9146991786686525,0.09822273033867776,-0.07209709728787451,0.9146991789842444,0.4926483832188114,-0.17180584799831639,0.1918412707676318,1.0632028575287613,-0.041417480980437196,-0.5537670639620821,-0.6320000836926196,1.2533884347076807e-10,0.00745046999980814,-0.20726609627149745,-0.1422105072539469,-1.0583336289692779e-07,-4.666003828023858e-10,-0.005520657798395322,-1.1004913005313687e-07,2.2640204186913167e-10,-8.168226161852434e-08,-4.575741764177651e-10"
-      position_threshold="0.001"
-      timeout="5.0"/>
-  <ResumeInference name="Resume_Publishing"/>
+      <PauseInference name="Pause_Publishing_1"/>
+      <RuleSwerve name="Rule_Based_Rotation_1" angle_deg="180.0"/>
+      <ResumeInference name="Resume_Publishing_1"/>
+      <Inference name="VLA_Inference_1"/>
+      <PauseInference name="Pause_Publishing_2"/>
+      <RuleSwerve name="Rule_Based_Rotation_2" angle_deg="-90"/>
+      <ResumeInference name="Resume_Publishing_1"/>
+      <Inference name="VLA_Inference_2"/>
+      <CameraDepth name="Check_Depth_1" depth_topic="/camera/cam_wrist_right/depth/image_rect_raw"/>
+      <PauseInference name="Pause_Publishing_3"/>
+      <RuleSwerve name="Rule_Based_Rotation_3" angle_deg="-90"/>
+      <RuleHeadLift name="HeadLiftControl_1"
+        head_positions="0.5,0.0"
+        lift_position="-0.1"/>
+      <RuleArms name="ArmsControl_1"
+        left_positions="0.5954753044455301, -0.05522330830078125, -0.17947575197753907, 0.22714006458231562, 0.003069460332193454, 0.8517752421836835, 0.3084807633854421, 1.0"
+        right_positions="0.5939405742794334, -0.05982525065917969, -0.20555342534179688, 0.49725257381533955, -0.15186409782714844, 0.7827123847093308, -0.5292233712158203, 1.0"/>
+      <ResumeInference name="Resume_Publishing"/>
     </Sequence>
   </BehaviorTree>
 
   <!-- Description of Node Models (used by Groot) -->
   <TreeNodesModel>
-  <Action ID="Inference">
-      <input_port name="timeout"
-                  default="10.0">&#10;        Duration in seconds to monitor inference.&#10;        Does NOT stop inference, just completes after timeout.&#10;      </input_port>
+    <Action ID="Inference"/>
+    <Action ID="PauseInference"/>
+    <Action ID="ResumeInference"/>
+    <Action ID="RuleSwerve">
+      <input_port name="angle_deg" default="90.0">
+        Desired rotation angle in degrees.
+        Positive for CCW, negative for CW.
+      </input_port>
     </Action>
-  <Action ID="PauseInference"/>
-  <Action ID="ResumeInference"/>
-    <Action ID="RuleWholeBody">
-      <input_port name="current_positions">&#10;        Starting joint positions (comma-separated floats).&#10;        Used for initialization only.&#10;      </input_port>
-      <input_port name="target_positions">&#10;        Target joint positions (comma-separated floats).&#10;        Must match number of joints.&#10;      </input_port>
-      <input_port name="position_threshold"
-                  default="0.1">&#10;        Position error threshold (radians) to consider target reached.&#10;      </input_port>
-      <input_port name="timeout"
-                  default="15.0">&#10;        Maximum time (seconds) to reach target before returning FAILURE.&#10;      </input_port>
+    <Action ID="CameraDepth">
+      <input_port name="depth_topic" default="/camera/depth/image_raw">
+        ROS topic for depth image (sensor_msgs/Image)
+      </input_port>
+    </Action>
+    <Action ID="RuleHeadLift">
+      <input_port name="head_positions" default="0.0,0.0">
+        Target positions for head joints (comma-separated).
+      </input_port>
+      <input_port name="lift_position" default="0.0">
+        Target position for lift joint.
+      </input_port>
+    </Action>
+    <Action ID="RuleArms">
+      <input_port name="left_positions" default="0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0">
+        Target positions for left arm joints (comma-separated).
+      </input_port>
+      <input_port name="right_positions" default="0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0">
+        Target positions for right arm joints (comma-separated).
+      </input_port>
     </Action>
   </TreeNodesModel>
 
