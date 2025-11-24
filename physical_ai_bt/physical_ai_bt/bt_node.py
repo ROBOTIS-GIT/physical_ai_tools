@@ -110,11 +110,9 @@ class BehaviorTreeNode(Node):
         if hasattr(msg, 'header') and hasattr(msg.header, 'stamp'):
             try:
                 self._last_status_stamp = msg.header.stamp.sec + msg.header.stamp.nanosec * 1e-9
-            except Exception as e:
-                self.get_logger().warn(f"Could not read msg.header.stamp: {e}. Using system time.")
+            except Exception:
                 self._last_status_stamp = time.time()
         else:
-            self.get_logger().warn("No header.stamp in /task/status message. Using system time.")
             self._last_status_stamp = time.time()
         self._last_status_checked_time = time.time()
         if not self.waiting_for_inference:
