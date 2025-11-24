@@ -60,6 +60,7 @@ services:
     volumes:
       - /dev:/dev
       - ../Isaac-GR00T:/workspace
+      - ./huggingface:/root/.cache/huggingface
     privileged: true
     working_dir: /workspace
     # command: python3 scripts/server_inference_async.py

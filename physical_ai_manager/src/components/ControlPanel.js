@@ -207,13 +207,14 @@ export default function ControlPanel() {
 
       switch (label) {
         case 'Start':
-          // Start button disabled when task is running or when running flag is true
+          // For inference without recording, allow restart even when running (for pause/resume)
+          if (isInferenceTaskType && !taskInfo.recordInferenceMode) {
+            return true; // Always enabled for inference-only mode
+          }
+          // Start button disabled when task is running
           return !taskStatus.running;
         case 'Stop':
-          if (isInferenceTaskType) {
-            return taskStatus.running && taskInfo.recordInferenceMode;
-          }
-          // Stop button enabled only when task is running
+          // Stop button enabled when task is running (for both record and inference)
           return taskStatus.running;
         case 'Retry':
           if (isRecordTaskType && useMultiTaskMode) {

@@ -105,6 +105,7 @@ class PhysicalAIServer(Node):
         self.inference_info = {}
         self.remain_action = []
         self.wait_inference = False
+        self.stop_inference = False
         self.inference_check_time = time.time()
 
         self._setup_timer_callbacks()
@@ -510,6 +511,9 @@ class PhysicalAIServer(Node):
         error_msg = ''
         current_status = TaskStatus()
         camera_msgs, follower_msgs, _ = self.communicator.get_latest_data()
+        if self.stop_inference:
+            return
+
         if (camera_msgs is None or
                 len(camera_msgs) != len(self.params['camera_topic_list'])):
             self.get_logger().info('Waiting for camera data...')
@@ -604,7 +608,7 @@ class PhysicalAIServer(Node):
         self,
         new_action_chunk: np.ndarray,
         last_executed_action: np.ndarray,
-        search_range: int = 5,
+        search_range: int = 6,
         distance_metric: str = 'l2'
     ) -> int:
         search_actions = new_action_chunk[:search_range]
@@ -620,6 +624,10 @@ class PhysicalAIServer(Node):
         error_msg = ''
         current_status = TaskStatus()
         camera_msgs, follower_msgs, _ = self.communicator.get_latest_data()
+        if self.stop_inference:
+            self.remain_action = []
+            return
+
         if (camera_msgs is None or
                 len(camera_msgs) != len(self.params['camera_topic_list'])):
             self.get_logger().info('Waiting for camera data...')
@@ -687,7 +695,7 @@ class PhysicalAIServer(Node):
                 return
 
             try:
-                re_inference_threshold = 4
+                re_inference_threshold = 6
                 # Check if we need to start a new inference
                 if len(self.remain_action) <= re_inference_threshold and not self.wait_inference:
                     resized_cam_head = cv2.resize(camera_data['cam_head'], (224, 224))
@@ -1022,9 +1030,13 @@ class PhysicalAIServer(Node):
                         self.get_logger().error(response.message)
                         return response
 
-                self.init_robot_control_parameters_from_user_task(
-                    task_info
-                )
+                if self.stop_inference:
+                    self.stop_inference = False
+                else:
+                    self.init_robot_control_parameters_from_user_task(
+                        task_info
+                    )
+
                 if task_info.record_inference_mode:
                     self.on_recording = True
                 self.on_inference = True
@@ -1063,10 +1075,15 @@ class PhysicalAIServer(Node):
                     response.message = 'Not currently recording'
                 else:
                     if request.command == SendCommand.Request.STOP:
-                        self.get_logger().info('Stopping recording')
-                        self.data_manager.record_stop()
-                        response.success = True
-                        response.message = 'Recording stopped'
+                        self.get_logger().info('Stop')
+                        if self.on_recording:
+                            self.data_manager.record_stop()
+                            response.success = True
+                            response.message = 'Recording stopped'
+                        if self.on_inference:
+                            self.stop_inference = True
+                            response.success = True
+                            response.message = 'Inference stopped'
 
                     elif request.command == SendCommand.Request.MOVE_TO_NEXT:
                         self.get_logger().info('Moving to next episode')
@@ -1085,8 +1102,11 @@ class PhysicalAIServer(Node):
 
                     elif request.command == SendCommand.Request.FINISH:
                         self.get_logger().info('Terminating all operations')
-                        self.data_manager.record_finish()
-                        self.on_inference = False
+                        if self.on_recording:
+                            self.data_manager.record_finish()
+                            self.on_recording = False
+                        if self.on_inference:
+                            self.on_inference = False
                         response.success = True
                         response.message = 'All operations terminated'
 

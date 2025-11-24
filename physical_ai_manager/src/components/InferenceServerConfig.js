@@ -29,7 +29,7 @@ const InferenceServerConfig = ({ disabled = false }) => {
   // Server configuration states
   const [serverIp, setServerIp] = useState('0.0.0.0');
   const [serverPort, setServerPort] = useState(5555);
-  const [policyType, setPolicyType] = useState('GR00T_N1_5_TRT');
+  const [policyType, setPolicyType] = useState('GR00T_N1_5');
   const [policyPath, setPolicyPath] = useState('');
   const [robotType, setRobotType] = useState('');
 
@@ -105,7 +105,7 @@ const InferenceServerConfig = ({ disabled = false }) => {
   const handleReset = useCallback(() => {
     setServerIp('0.0.0.0');
     setServerPort(5555);
-    setPolicyType('GR00T_N1_5_TRT');
+    setPolicyType('GR00T_N1_5');
     setPolicyPath('');
     toast.success('Configuration reset to defaults');
   }, []);
@@ -362,11 +362,11 @@ const InferenceServerConfig = ({ disabled = false }) => {
         <FileBrowserModal
           isOpen={showPolicyPathModal}
           onClose={() => setShowPolicyPathModal(false)}
-          onSelect={handlePolicyPathSelect}
+          onFileSelect={handlePolicyPathSelect}
           initialPath={DEFAULT_PATHS.POLICY_MODEL_PATH}
-          targetFiles={['*']}
-          title="Select Policy Model"
-          selectMode="folder"
+          title="Select Policy Model Path"
+          allowDirectorySelect={true}
+          allowFileSelect={false}
         />
       )}
     </div>
