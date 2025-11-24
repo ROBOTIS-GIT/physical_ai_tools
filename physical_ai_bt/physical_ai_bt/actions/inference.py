@@ -41,7 +41,6 @@ class Inference(BaseAction):
 
         Args:
             node: ROS2 node reference
-            timeout: (legacy, unused) Duration to keep inference running
         """
         super().__init__(node, name="Inference")
 
