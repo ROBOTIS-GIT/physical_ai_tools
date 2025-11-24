@@ -115,7 +115,7 @@ class RuleSwerve(BaseAction):
             last_deg = math.degrees(self.odom_last_yaw)
             delta_deg = self.angle_diff_deg(last_deg, start_deg)
             delta_deg_norm = ((delta_deg + 180) % 360) - 180
-            tolerance = 0.3
+            tolerance = 0.4
             error = self.angle_deg - delta_deg_norm
             if abs(error) <= tolerance:
                 self._stop_mobile()

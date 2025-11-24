@@ -2,27 +2,29 @@
 <root BTCPP_format="3" main_tree_to_execute="RobotControlSequence">
   <BehaviorTree ID="RobotControlSequence">
     <Sequence name="RobotControlSequence">
-  <!-- <Inference name="VLA_Inference_1"/> -->
-  <PauseInference name="Pause_Publishing_1"/>
+      <PauseInference name="Pause_Publishing_1"/>
       <RuleSwerve name="Rule_Based_Rotation_1" angle_deg="180.0"/>
-  <ResumeInference name="Resume_Publishing_1"/>
-  <Inference name="VLA_Inference_2"/>
-  <PauseInference name="Pause_Publishing_2"/>
+      <ResumeInference name="Resume_Publishing_1"/>
+      <Inference name="VLA_Inference_1"/>
+      <PauseInference name="Pause_Publishing_2"/>
       <RuleSwerve name="Rule_Based_Rotation_2" angle_deg="-90"/>
-  <ResumeInference name="Resume_Publishing_1"/>
-  <Inference name="VLA_Inference_3"/>
-  <CameraDepth name="Check_Depth_1" depth_topic="/camera/cam_wrist_right/depth/image_rect_raw"/>
-  <PauseInference name="Pause_Publishing_3"/>
-    <RuleSwerve name="Rule_Based_Rotation_3" angle_deg="-90"/>
-  <ResumeInference name="Resume_Publishing"/>
+      <ResumeInference name="Resume_Publishing_1"/>
+      <Inference name="VLA_Inference_2"/>
+      <!-- <CameraDepth name="Check_Depth_1" depth_topic="/camera/cam_wrist_right/depth/image_rect_raw"/> -->
+      <PauseInference name="Pause_Publishing_3"/>
+      <RuleSwerve name="Rule_Based_Rotation_3" angle_deg="-90"/>
+      <RuleHeadLift name="HeadLiftControl_1"
+        head_positions="0.5,0.0"
+        lift_position="-0.1"/>
+      <ResumeInference name="Resume_Publishing"/>
     </Sequence>
   </BehaviorTree>
 
   <!-- Description of Node Models (used by Groot) -->
   <TreeNodesModel>
-  <Action ID="Inference"/>
-  <Action ID="PauseInference"/>
-  <Action ID="ResumeInference"/>
+    <Action ID="Inference"/>
+    <Action ID="PauseInference"/>
+    <Action ID="ResumeInference"/>
     <Action ID="RuleSwerve">
       <input_port name="angle_deg" default="90.0">
         Desired rotation angle in degrees.

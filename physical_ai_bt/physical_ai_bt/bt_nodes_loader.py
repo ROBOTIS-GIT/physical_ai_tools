@@ -55,6 +55,7 @@ class XMLTreeLoader:
         }
 
         from physical_ai_bt.actions.camera_depth import CameraDepth
+        from physical_ai_bt.actions.rule_head_lift import RuleHeadLift
         self.action_types: Dict[str, Type[BaseAction]] = {
             'Inference': Inference,
             'RuleWholeBody': RuleWholeBody,
@@ -62,6 +63,7 @@ class XMLTreeLoader:
             'PauseInference': PauseInference,
             'ResumeInference': ResumeInference,
             'CameraDepth': CameraDepth,
+            'RuleHeadLift': RuleHeadLift,
         }
 
     def load_tree_from_file(self, xml_path: str, main_tree_id: str = None) -> BTNode:
@@ -217,6 +219,14 @@ class XMLTreeLoader:
             return action_class(
                 node=self.node,
                 depth_topic=params.get('depth_topic', "/camera/depth/image_raw")
+            )
+        elif action_class.__name__ == "RuleHeadLift":
+            return action_class(
+                node=self.node,
+                head_positions=params.get('head_positions', [0.0, 0.0]),
+                lift_position=params.get('lift_position', 0.0),
+                position_threshold=params.get('position_threshold', 0.001),
+                timeout=params.get('timeout', 10.0)
             )
         else:
             raise ValueError(f"Unknown action class: {action_class}")
