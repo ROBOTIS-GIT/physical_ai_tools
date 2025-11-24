@@ -146,7 +146,7 @@ class PhysicalAIServer(Node):
     def _init_ros_service(self):
         self.get_logger().info('Initializing ROS services...')
         service_definitions = [
-            ('/task/command', SendCommand, self.user_interaction_callback),
+            ('/ai_server/task/command', SendCommand, self.user_interaction_callback),
             ('/get_robot_types', GetRobotTypeList, self.get_robot_types_callback),
             ('/set_robot_type', SetRobotType, self.set_robot_type_callback),
             ('/register_hf_user', SetHFUser, self.set_hf_user_callback),
