@@ -1,0 +1,8 @@
+bt_node:
+  ros__parameters:
+    # Robot configuration
+    robot_type: 'ffw_sg2_rev1'
+
+    # Behavior tree configuration
+    tree_xml: 'ffw_test.xml'
+    tick_rate: 100.0
