@@ -31,6 +31,16 @@ from rclpy.node import Node
 
 
 class BehaviorTreeNode(Node):
+    def __init__(self):
+        super().__init__('physical_ai_bt_node')
+        # --- Inference trigger state ---
+        self.inference_detected = False
+        self.inference_start_time = None
+        self.waiting_for_inference = True
+        self.latest_status = None
+        self._last_status_stamp = None
+        self._last_status_checked_time = time.time()
+        self._prev_inference_detected = False
     """Generic ROS2 node for Behavior Tree execution."""
 
     def __init__(self):
@@ -41,6 +51,9 @@ class BehaviorTreeNode(Node):
         self.inference_start_time = None
         self.waiting_for_inference = True
         self.latest_status = None
+        self._last_status_stamp = None
+        self._last_status_checked_time = time.time()
+        self._prev_inference_detected = False
 
         qos_profile = QoSProfile(depth=10, reliability=ReliabilityPolicy.RELIABLE)
         self.status_sub = self.create_subscription(
@@ -52,7 +65,7 @@ class BehaviorTreeNode(Node):
 
         self.declare_parameter('robot_type', 'ffw_sg2_rev1')
         self.declare_parameter('tree_xml', 'ffw_test.xml')
-        self.declare_parameter('tick_rate', 10.0)
+        self.declare_parameter('tick_rate', 30.0)
 
         robot_type = self.get_parameter('robot_type').value
         tree_xml = self.get_parameter('tree_xml').value
@@ -93,6 +106,17 @@ class BehaviorTreeNode(Node):
 
     def _status_callback(self, msg):
         self.latest_status = msg
+        # Save last status timestamp for freshness check
+        if hasattr(msg, 'header') and hasattr(msg.header, 'stamp'):
+            try:
+                self._last_status_stamp = msg.header.stamp.sec + msg.header.stamp.nanosec * 1e-9
+            except Exception as e:
+                self.get_logger().warn(f"Could not read msg.header.stamp: {e}. Using system time.")
+                self._last_status_stamp = time.time()
+        else:
+            self.get_logger().warn("No header.stamp in /task/status message. Using system time.")
+            self._last_status_stamp = time.time()
+        self._last_status_checked_time = time.time()
         if not self.waiting_for_inference:
             return
         # Trigger condition: phase == INFERENCING and not detected
@@ -186,7 +210,25 @@ class BehaviorTreeNode(Node):
 
     def tick_callback(self):
         """Timer callback for BT tick execution."""
-        # Step 1: Wait for inference trigger
+        prev = self.inference_detected
+        status_timeout = 1.0
+        now = time.time()
+        msg_time = self._last_status_stamp
+        if self.latest_status is not None and msg_time is not None:
+            msg_age = now - msg_time
+            if msg_age > status_timeout:
+                self.get_logger().warn(f"/task/status NOT UPDATED for {msg_age:.2f}s (>1.0s): inference_detected=False")
+                self.inference_detected = False
+        else:
+            if self.latest_status is None:
+                self.get_logger().warn("No /task/status received at all: inference_detected=False.")
+                self.inference_detected = False
+        if prev and not self.inference_detected:
+            self.get_logger().info("inference_detected True->False: Resetting tree due to topic staleness.")
+            self._reset_tree()
+        self._prev_inference_detected = self.inference_detected
+
+        # Step 2: Wait for inference trigger
         if self.waiting_for_inference:
             if not self.inference_detected:
                 return  # Do not tick tree until trigger
@@ -211,7 +253,6 @@ class BehaviorTreeNode(Node):
             self.inference_detected = False
             self.inference_start_time = None
             self.waiting_for_inference = True
-        # RUNNING: continue ticking
 
     def _reset_tree(self):
         """Reset the behavior tree for next execution cycle."""
