@@ -28,8 +28,7 @@ class RuleArms(BaseAction):
             node: 'Node',
             left_positions: List[float],
             right_positions: List[float],
-            position_threshold: float = 0.01,
-            timeout: float = 10.0
+            position_threshold: float = 0.09
         ):
         super().__init__(node, name="RuleArms")
         self.left_joint_names = [
@@ -43,7 +42,6 @@ class RuleArms(BaseAction):
         self.left_positions = left_positions
         self.right_positions = right_positions
         self.position_threshold = position_threshold
-        self.timeout = timeout
         qos_profile = QoSProfile(depth=10, reliability=ReliabilityPolicy.RELIABLE)
         self.left_pub = self.node.create_publisher(
             JointTrajectory,

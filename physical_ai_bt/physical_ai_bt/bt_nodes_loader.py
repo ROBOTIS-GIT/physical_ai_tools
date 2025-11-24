@@ -234,8 +234,7 @@ class XMLTreeLoader:
             return action_class(
                 node=self.node,
                 left_positions=params.get('left_positions', [0.0]*8),
-                right_positions=params.get('right_positions', [0.0]*8),
-                position_threshold=params.get('position_threshold', 0.001)
+                right_positions=params.get('right_positions', [0.0]*8)
             )
         else:
             raise ValueError(f"Unknown action class: {action_class}")
