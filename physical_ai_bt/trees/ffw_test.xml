@@ -6,15 +6,24 @@
       <RuleArms name="ArmsControl_1"
         left_positions="0.75, 0.0, 0.0, -2.3, 0.0, 0.0, 0.0, 0.0"
         right_positions="0.75, 0.0, 0.0, -2.3, 0.0, 0.0, 0.0, 0.0"/>
-      <RuleSwerve name="Rule_Based_Rotation_1" angle_deg="180.0"/>
-      <RuleSwerve name="Rule_Based_Rotation_2" angle_deg="-90"/>
       <RuleHeadLift name="HeadLiftControl_1"
-        head_positions="0.695,0.0"
-        lift_position="-0.1"/>
-      <UpdateTaskInstruction name="ChangeInstruction_1"
-        instruction="pick up the cup and place it on the table"/>
+        head_positions="0.3,0.0"
+        lift_position="0.0"/>
       <ResumeInference name="Resume_Publishing_1"/>
       <Inference name="VLA_Inference_1"/>
+      <PauseInference name="Pause_Publishing_2"/>
+      <RuleSwerve name="Rule_Based_Rotation_1" angle_deg="90.0"/>
+      <UpdateTaskInstruction name="ChangeInstruction_1"
+        instruction="stay"/>
+      <RuleSwerve name="Rule_Based_Rotation_2" angle_deg="-90"/>
+      <RuleArms name="ArmsControl_2"
+        left_positions="0.75, 0.0, 0.0, -2.3, 0.0, 0.0, 0.0, 0.0"
+        right_positions="0.75, 0.0, 0.0, -2.3, 0.0, 0.0, 0.0, 0.0"/>
+      <RuleHeadLift name="HeadLiftControl_2"
+        head_positions="0.3,0.0"
+        lift_position="0.0"/>
+      <ResumeInference name="Resume_Publishing_2"/>
+      <Inference name="VLA_Inference_2"/>
     </Sequence>
   </BehaviorTree>
 
