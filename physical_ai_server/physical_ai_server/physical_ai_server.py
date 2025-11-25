@@ -1698,10 +1698,14 @@ class PhysicalAIServer(Node):
 
 
 def main(args=None):
+    from rclpy.executors import MultiThreadedExecutor
+
     rclpy.init(args=args)
     node = PhysicalAIServer()
+    executor = MultiThreadedExecutor()
+    executor.add_node(node)
     try:
-        rclpy.spin(node)
+        executor.spin()
     except KeyboardInterrupt:
         pass
     finally:
