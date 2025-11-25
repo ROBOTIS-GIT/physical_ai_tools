@@ -157,7 +157,8 @@ export function useRosServiceCaller() {
         const result = await callService(
           '/task/command',
           'physical_ai_interfaces/srv/SendCommand',
-          request
+          request,
+          60000  // 60초 타임아웃 (모델 로딩 대기)
         );
 
         console.log(`Service response for command '${command}':`, result);
@@ -593,7 +594,8 @@ export function useRosServiceCaller() {
             policy_type: policy_type,
             policy_path: policy_path,
             robot_type: robot_type,
-          }
+          },
+          60000  // 60초 타임아웃 (모델 로딩 대기)
         );
         console.log('setInferenceServerInfo service response:', result);
         return result;

@@ -43,7 +43,10 @@ def generate_launch_description():
             os.path.join(
                 rosbridge_pkg_dir, 'launch', 'rosbridge_websocket_launch.xml'
             )
-        )
+        ),
+        launch_arguments={
+            'service_timeout': '60'  # 60초 타임아웃 (모델 로딩 대기)
+        }.items()
     )
 
     # web_video_server node
