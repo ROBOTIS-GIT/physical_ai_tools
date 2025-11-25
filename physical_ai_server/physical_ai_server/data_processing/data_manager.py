@@ -17,6 +17,7 @@
 # Author: Dongyun Kim, Seongwoo Kim
 
 import gc
+import json
 import os
 from pathlib import Path
 import queue
@@ -28,7 +29,11 @@ import time
 import cv2
 from geometry_msgs.msg import Twist
 from huggingface_hub import (
+    DatasetCard,
+    DatasetCardData,
     HfApi,
+    ModelCard,
+    ModelCardData,
     snapshot_download,
     upload_large_folder
 )
@@ -67,6 +72,7 @@ class DataManager:
         self._robot_type = robot_type
         self._save_repo_name = f'{task_info.user_id}/{robot_type}_{task_info.task_name}'
         self._save_path = save_root_path / self._save_repo_name
+        self._save_rosbag_path = '/workspace/rosbag2/' + self._save_repo_name
         self._on_saving = False
         self._single_task = len(task_info.task_instruction) == 1
         self._task_info = task_info
@@ -84,6 +90,18 @@ class DataManager:
         self._current_task = 0
         self._init_task_limits()
         self._current_scenario_number = 0
+
+    def get_status(self):
+        return self._status
+
+    def get_save_rosbag_path(self):
+        episode_index = self._lerobot_dataset.get_episode_index()
+        if episode_index is None:
+            return None
+        return self._save_rosbag_path + f'/{episode_index}'
+
+    def should_record_rosbag2(self):
+        return self._task_info.record_rosbag2
 
     def record(
             self,
@@ -131,9 +149,17 @@ class DataManager:
                     self._record_episode_count += 1
                     self._get_current_scenario_number()
                     self._current_task += 1
-                    self._status = 'reset'
-                    self._start_time_s = 0
                     self._on_saving = False
+
+                    # Check if we've reached the target episode count
+                    if (self._record_episode_count <
+                            self._task_info.num_episodes):
+                        # Not finished yet, go to reset for next episode
+                        self._status = 'reset'
+                        self._start_time_s = 0
+                    else:
+                        # Finished! Set status to 'finish' to skip reset
+                        self._status = 'finish'
             else:
                 self.save()
                 self._on_saving = True
@@ -264,11 +290,13 @@ class DataManager:
             current_status.total_time = int(self._task_info.reset_time_s)
         elif self._status == 'save' or self._status == 'finish':
             is_saving, encoding_progress = self._get_encoding_progress()
+            current_status.phase = TaskStatus.SAVING
+            current_status.total_time = int(0)
+            self._proceed_time = int(0)
             if is_saving:
-                current_status.phase = TaskStatus.SAVING
-                current_status.total_time = int(0)
-                self._proceed_time = int(0)
                 current_status.encoding_progress = encoding_progress
+            else:
+                current_status.encoding_progress = 0.0
         elif self._status == 'stop':
             is_saving, encoding_progress = self._get_encoding_progress()
             current_status.total_time = int(0)
@@ -514,6 +542,12 @@ class DataManager:
             self._task_info.episode_time_s = 1_000_000
 
     @staticmethod
+    def get_robot_type_from_info_json(info_json_path):
+        with open(info_json_path, 'r', encoding='utf-8') as f:
+            info = json.load(f)
+        return info.get('robot_type', '')
+
+    @staticmethod
     def get_huggingface_user_id():
         def api_call():
             api = HfApi()
@@ -655,10 +689,172 @@ class DataManager:
         cls._progress_queue = progress_queue
 
     @staticmethod
+    def _create_dataset_card(local_dir, readme_path):
+        """
+        Create DatasetCard README for dataset repository.
+
+        Args:
+        ----
+        local_dir: Local directory path containing dataset
+        readme_path: Path where README.md will be saved
+
+        """
+        # Load meta/info.json for dataset structure info
+        info_path = Path(local_dir) / 'meta' / 'info.json'
+        dataset_info = None
+        if info_path.exists():
+            with open(info_path, 'r', encoding='utf-8') as f:
+                dataset_info = json.load(f)
+
+        # Prepare tags
+        tags = ['robotis', 'LeRobot']
+        robot_type = DataManager.get_robot_type_from_info_json(info_path)
+        if robot_type and robot_type != '':
+            tags.append(robot_type)
+
+        # Create DatasetCardData
+        card_data = DatasetCardData(
+            license='apache-2.0',
+            tags=tags,
+            task_categories=['robotics'],
+            configs=[
+                {
+                    'config_name': 'default',
+                    'data_files': 'data/*/*.parquet',
+                }
+            ],
+        )
+
+        # Prepare dataset structure section
+        dataset_structure = ''
+        if dataset_info:
+            dataset_structure = '[meta/info.json](meta/info.json):\n'
+            dataset_structure += '```json\n'
+            info_json = json.dumps(dataset_info, indent=4)
+            dataset_structure += f'{info_json}\n'
+            dataset_structure += '```\n'
+
+        # Get template path
+        template_dir = Path(__file__).parent
+        template_path = str(template_dir / 'dataset_card_template.md')
+
+        # Create card from template
+        card = DatasetCard.from_template(
+            card_data,
+            template_path=template_path,
+            dataset_structure=dataset_structure,
+            license='apache-2.0',
+        )
+        card.save(str(readme_path))
+        print('✅ Dataset README.md created using HuggingFace Hub')
+
+    @staticmethod
+    def _create_model_card(local_dir, readme_path):
+        """
+        Create ModelCard README for model repository.
+
+        Args:
+        ----
+        local_dir: Local directory path containing model
+        readme_path: Path where README.md will be saved
+
+        """
+        # Find train_config.json (check common locations first)
+        train_config = None
+        common_paths = [
+            Path(local_dir) / 'train_config.json',
+            Path(local_dir) / 'config' / 'train_config.json',
+            Path(local_dir) / 'pretrained_model' / 'train_config.json',
+        ]
+
+        # Check common paths first (fast)
+        for config_path in common_paths:
+            if config_path.exists():
+                try:
+                    with open(config_path, 'r', encoding='utf-8') as f:
+                        train_config = json.load(f)
+                    print(f'✓ Found train_config.json at {config_path}')
+                    break
+                except Exception as e:
+                    print(f'⚠️ Error reading {config_path}: {e}')
+                    continue
+
+        # If not found, search recursively (slower fallback)
+        if train_config is None:
+            for config_path in Path(local_dir).rglob('train_config.json'):
+                try:
+                    with open(config_path, 'r', encoding='utf-8') as f:
+                        train_config = json.load(f)
+                    print(f'✓ Found train_config.json at {config_path}')
+                    break
+                except Exception as e:
+                    print(f'⚠️ Error reading {config_path}: {e}')
+                    continue
+
+        if train_config is None:
+            print(f'⚠️ train_config.json not found in {local_dir}')
+
+        dataset_repo = ''
+        if train_config:
+            dataset_repo = train_config.get(
+                'dataset', {}
+            ).get('repo_id', '')
+
+        # Prepare tags
+        tags = ['robotis', 'robotics']
+
+        # Create ModelCardData with conditional datasets
+        card_data_kwargs = {
+            'license': 'apache-2.0',
+            'tags': tags,
+            'pipeline_tag': 'robotics',
+        }
+        if dataset_repo:
+            card_data_kwargs['datasets'] = [dataset_repo]
+
+        card_data = ModelCardData(**card_data_kwargs)
+
+        # Get template path
+        template_dir = Path(__file__).parent
+        template_path = str(template_dir / 'model_card_template.md')
+
+        # Create card from template
+        card = ModelCard.from_template(
+            card_data,
+            template_path=template_path,
+        )
+        card.save(str(readme_path))
+        print('✅ Model README.md created using HuggingFace Hub')
+
+    @staticmethod
+    def _create_readme_if_not_exists(local_dir, repo_type):
+        """
+        Create README.md file if it doesn't exist in the folder.
+
+        Uses HuggingFace Hub's DatasetCard or ModelCard.
+
+        """
+        readme_path = Path(local_dir) / 'README.md'
+
+        if readme_path.exists():
+            print(f'README.md already exists in {local_dir}')
+            return
+
+        print(f'Creating README.md in {local_dir}')
+
+        try:
+            if repo_type == 'dataset':
+                DataManager._create_dataset_card(local_dir, readme_path)
+        except Exception as e:
+            print(f'⚠️ Warning: Failed to create README.md: {e}')
+            import traceback
+            print(f'Traceback: {traceback.format_exc()}')
+
+    @staticmethod
     def upload_huggingface_repo(
         repo_id,
         repo_type,
-        local_dir
+        local_dir,
     ):
         try:
             api = HfApi()
@@ -684,6 +880,11 @@ class DataManager:
 
             # Delete .cache folder before upload
             DataManager._delete_dot_cache_folder_before_upload(local_dir)
+
+            # Create README.md if it doesn't exist
+            DataManager._create_readme_if_not_exists(
+                local_dir, repo_type
+            )
 
             print(f'Uploading folder {local_dir} to repository {repo_id}')
 

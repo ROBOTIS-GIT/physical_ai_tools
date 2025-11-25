@@ -22,6 +22,7 @@ import os
 from pathlib import Path
 import threading
 import time
+import traceback
 from typing import Optional
 
 from ament_index_python.packages import get_package_share_directory
@@ -70,6 +71,11 @@ class PhysicalAIServer(Node):
     PUB_QOS_SIZE = 10
     TRAINING_STATUS_TIMER_FREQUENCY = 0.5  # seconds
 
+    class RosbagNotReadyException(Exception):
+        """Exception raised when rosbag recording cannot start yet."""
+
+        pass
+
     def __init__(self):
         super().__init__('physical_ai_server')
         self.get_logger().info('Start Physical AI Server')
@@ -94,6 +100,10 @@ class PhysicalAIServer(Node):
         self._init_ros_service()
 
         self._setup_timer_callbacks()
+
+        self.previous_data_manager_status = None
+
+        self.goal_repo_id = None
 
     def _init_core_components(self):
         self.communicator: Optional[Communicator] = None
@@ -159,6 +169,7 @@ class PhysicalAIServer(Node):
             'joint_topic_list',
             'observation_list',
             'joint_list',
+            'rosbag_extra_topic_list',
         ]
 
         # Declare parameters
@@ -343,6 +354,81 @@ class PhysicalAIServer(Node):
         self.get_logger().info(f'Available robot types: {robot_type_list}')
         return robot_type_list
 
+    def handle_rosbag_recording(self):
+        try:
+            current = self.data_manager.get_status()
+            previous = self.previous_data_manager_status
+
+            # Early return if no status change
+            if current == previous:
+                return
+
+            handlers = {
+                ('*', 'warmup'): self._handle_warmup_transition,
+                ('*', 'run'): self._handle_run_transition,
+                ('run', 'save'): self._handle_save_transition,
+                ('run', 'stop'): self._handle_stop_transition,
+                ('*', 'finish'): self._handle_finish_transition,
+                ('run', 'reset'): self._handle_reset_transition,
+            }
+
+            # Try exact match first, then wildcard match
+            handler = handlers.get((previous, current)) or handlers.get(('*', current))
+
+            if handler:
+                handler(previous)
+
+            self.previous_data_manager_status = current
+
+        except PhysicalAIServer.RosbagNotReadyException as e:
+            # Expected condition: rosbag not ready yet
+            self.get_logger().warn(str(e))
+        except Exception as e:
+            error_msg = f'Error in rosbag recording: {str(e)}'
+            self.get_logger().error(traceback.format_exc())
+            self.get_logger().error(error_msg)
+
+    def _handle_warmup_transition(self, previous_status: str):
+        self.get_logger().info('Preparing rosbag recording, '
+                               f'previous status: {previous_status}')
+
+        rosbag_topics = self.communicator.get_all_topics()
+        self.communicator.prepare_rosbag(topics=rosbag_topics)
+
+    def _handle_run_transition(self, previous_status: str):
+        self.get_logger().info('Starting rosbag recording, '
+                               f'previous status: {previous_status}')
+
+        rosbag_path = self.data_manager.get_save_rosbag_path()
+
+        if rosbag_path is None:
+            raise PhysicalAIServer.RosbagNotReadyException(
+                'Episode buffer not initialized yet, '
+                'rosbag recording will start shortly')
+
+        self.communicator.start_rosbag(rosbag_uri=rosbag_path)
+
+    def _handle_save_transition(self, previous_status: str):
+        self.get_logger().info('Stopping rosbag recording(save), '
+                               f'previous status: {previous_status}')
+        self.communicator.stop_rosbag()
+
+    def _handle_stop_transition(self, previous_status: str):
+        self.get_logger().info('Stopping rosbag recording(stop), '
+                               f'previous status: {previous_status}')
+        self.communicator.stop_rosbag()
+
+    def _handle_finish_transition(self, previous_status: str):
+        self.get_logger().info('Finishing rosbag recording, '
+                               f'previous status: {previous_status}')
+        self.communicator.finish_rosbag()
+
+    def _handle_reset_transition(self, previous_status: str):
+        self.get_logger().info(
+                'Stopping rosbag recording and delete recorded bag, '
+                f'previous status: {previous_status}')
+        self.communicator.stop_and_delete_rosbag()
+
     def _data_collection_timer_callback(self):
         error_msg = ''
         current_status = TaskStatus()
@@ -414,6 +500,9 @@ class PhysicalAIServer(Node):
 
         current_status = self.data_manager.get_current_record_status()
         self.communicator.publish_status(status=current_status)
+
+        if self.data_manager.should_record_rosbag2():
+            self.handle_rosbag_recording()
 
         if record_completed:
             self.get_logger().info('Recording completed')
