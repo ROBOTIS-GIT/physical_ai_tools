@@ -2,6 +2,11 @@
 Changelog for package physical_ai_server
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
+0.7.0 (2025-11-21)
+------------------
+* Added rosbag2 recording support when collecting LeRobot datasets
+* Contributors: Woojin Wie, Kiwoong Park
+
 0.6.13 (2025-10-27)
 ------------------
 * Fixed physical_ai_server crash when querying user ID without locally registered HuggingFace token

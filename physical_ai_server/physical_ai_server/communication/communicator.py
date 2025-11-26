@@ -17,7 +17,7 @@
 # Author: Dongyun Kim, Seongwoo Kim, Kiwoong Park
 
 from functools import partial
-from typing import Any, Dict, Optional, Set, Tuple
+from typing import Any, Dict, List, Optional, Set, Tuple
 
 from geometry_msgs.msg import Twist
 from nav_msgs.msg import Odometry
@@ -35,7 +35,10 @@ from physical_ai_interfaces.srv import (
 from physical_ai_server.communication.multi_subscriber import MultiSubscriber
 from physical_ai_server.data_processing.data_editor import DataEditor
 from physical_ai_server.utils.file_browse_utils import FileBrowseUtils
-from physical_ai_server.utils.parameter_utils import parse_topic_list_with_names
+from physical_ai_server.utils.parameter_utils import (
+    parse_topic_list,
+    parse_topic_list_with_names,
+)
 from rclpy.node import Node
 from rclpy.qos import (
     DurabilityPolicy,
@@ -43,6 +46,7 @@ from rclpy.qos import (
     QoSProfile,
     ReliabilityPolicy
 )
+from rosbag_recorder.srv import SendCommand
 from sensor_msgs.msg import CompressedImage, JointState
 from std_msgs.msg import Empty, String
 from trajectory_msgs.msg import JointTrajectory
@@ -77,6 +81,9 @@ class Communicator:
         # Parse topic lists for more convenient access
         self.camera_topics = parse_topic_list_with_names(self.params['camera_topic_list'])
         self.joint_topics = parse_topic_list_with_names(self.params['joint_topic_list'])
+        self.rosbag_extra_topics = parse_topic_list(
+            self.params['rosbag_extra_topic_list']
+        )
 
         # Determine which sources to enable based on operation mode
         self.enabled_sources = self._get_enabled_sources_for_mode(self.operation_mode)
@@ -93,6 +100,7 @@ class Communicator:
         # Log topic information
         node.get_logger().info(f'Parsed camera topics: {self.camera_topics}')
         node.get_logger().info(f'Parsed joint topics: {self.joint_topics}')
+        node.get_logger().info(f'Parsed rosbag extra topics: {self.rosbag_extra_topics}')
 
         self.camera_topic_msgs = {}
         self.follower_topic_msgs = {}
@@ -105,6 +113,8 @@ class Communicator:
             history=HistoryPolicy.KEEP_LAST
         )
 
+        self.rosbag_service_available = False
+
         self.init_subscribers()
         self.init_publishers()
         self.init_services()
@@ -113,6 +123,15 @@ class Communicator:
             'updated': False,
             'mode': None
         }
+
+    def get_all_topics(self):
+        result = []
+        for name, topic in self.camera_topics.items():
+            result.append(topic)
+        for name, topic in self.joint_topics.items():
+            result.append(topic)
+        result.extend(self.rosbag_extra_topics)
+        return result
 
     def _get_enabled_sources_for_mode(self, mode: str) -> Set[str]:
         enabled_sources = set()
@@ -236,6 +255,72 @@ class Communicator:
             GetDatasetInfo,
             '/dataset/get_info',
             self.get_dataset_info_callback
+        )
+
+        self._rosbag_send_command_client = self.node.create_client(
+            SendCommand,
+            'rosbag_recorder/send_command')
+
+        if self._check_rosbag_services_available():
+            self.rosbag_service_available = True
+            self.node.get_logger().info('Rosbag service is available')
+        else:
+            self.node.get_logger().error('Failed to connect to rosbag service')
+            self.rosbag_service_available = False
+
+    def _check_rosbag_services_available(self):
+        return self._rosbag_send_command_client.wait_for_service(timeout_sec=3.0)
+
+    def prepare_rosbag(self, topics: List[str]):
+        self._send_rosbag_command(
+            command=SendCommand.Request.PREPARE,
+            topics=topics
+        )
+
+    def start_rosbag(self, rosbag_uri: str):
+        self._send_rosbag_command(
+            command=SendCommand.Request.START,
+            uri=rosbag_uri
+        )
+
+    def stop_rosbag(self):
+        self._send_rosbag_command(
+            command=SendCommand.Request.STOP
+        )
+
+    def stop_and_delete_rosbag(self):
+        self._send_rosbag_command(
+            command=SendCommand.Request.STOP_AND_DELETE
+        )
+
+    def finish_rosbag(self):
+        self._send_rosbag_command(
+            command=SendCommand.Request.FINISH
+        )
+
+    def _send_rosbag_command(self,
+                             command: int,
+                             topics: List[str] = None,
+                             uri: str = None):
+
+        if not self.rosbag_service_available:
+            self.node.get_logger().error('Rosbag service is not available')
+            raise RuntimeError('Rosbag service is not available')
+
+        req = SendCommand.Request()
+        req.command = command
+        req.topics = topics if topics is not None else []
+        req.uri = uri if uri is not None else ''
+
+        # Asynchronous service call - fire and forget
+        future = self._rosbag_send_command_client.call_async(req)
+        future.add_done_callback(
+            lambda f: self.node.get_logger().info(
+                f'Sent rosbag record command: {command} {f.result().message}'
+                if f.done() and f.result().success
+                else 'Failed to send command: '
+                     f'{command} {f.result().message if f.done() else "timeout"}'
+            )
         )
 
     def _camera_callback(self, name: str, msg: CompressedImage) -> None:
@@ -471,6 +556,13 @@ class Communicator:
                 self.node.destroy_service(service)
                 setattr(self, service_attr_name, None)
 
+    def _destroy_client_if_exists(self, client_attr_name: str):
+        if hasattr(self, client_attr_name):
+            client = getattr(self, client_attr_name)
+            if client is not None:
+                self.node.destroy_client(client)
+                setattr(self, client_attr_name, None)
+
     def _destroy_publisher_if_exists(self, publisher_attr_name: str):
         if hasattr(self, publisher_attr_name):
             publisher = getattr(self, publisher_attr_name)
@@ -526,6 +618,13 @@ class Communicator:
         ]
         for service_name in service_names:
             self._destroy_service_if_exists(service_name)
+
+    def _cleanup_clients(self):
+        client_names = [
+            '_rosbag_send_command_client'
+        ]
+        for client_name in client_names:
+            self._destroy_client_if_exists(client_name)
 
     def heartbeat_timer_callback(self):
         heartbeat_msg = Empty()

@@ -2,6 +2,11 @@
 Changelog for package physical_ai_manager
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
+0.7.0 (2025-11-21)
+------------------
+* Added rosbag2 record option to the Record page
+* Contributors: Kiwoong Park
+
 0.6.13 (2025-10-27)
 ------------------
 * Changed to skip automatic HF user ID loading on Record page when Push to Hub is disabled
