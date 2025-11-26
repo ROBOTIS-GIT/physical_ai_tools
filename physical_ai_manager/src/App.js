@@ -16,7 +16,7 @@
 
 import React, { useEffect, useRef } from 'react';
 import clsx from 'clsx';
-import { MdHome, MdVideocam, MdMemory, MdWidgets } from 'react-icons/md';
+import { MdHome, MdVideocam, MdMemory, MdWidgets, MdPlayCircleFilled } from 'react-icons/md';
 import { GoGraph } from 'react-icons/go';
 import { Toaster } from 'react-hot-toast';
 import toast from 'react-hot-toast';
@@ -26,6 +26,7 @@ import RecordPage from './pages/RecordPage';
 import InferencePage from './pages/InferencePage';
 import TrainingPage from './pages/TrainingPage';
 import EditDatasetPage from './pages/EditDatasetPage';
+import DemoPage from './pages/DemoPage';
 import { useRosTopicSubscription } from './hooks/useRosTopicSubscription';
 import rosConnectionManager from './utils/rosConnectionManager';
 import { useDispatch, useSelector } from 'react-redux';
@@ -44,6 +45,7 @@ function App() {
 
   const page = useSelector((state) => state.ui.currentPage);
   const robotType = useSelector((state) => state.tasks.taskStatus.robotType);
+  const isDemoPage = page === PageType.DEMO;
 
   const isFirstLoad = useRef(true);
 
@@ -201,6 +203,11 @@ function App() {
     dispatch(moveToPage(PageType.EDIT_DATASET));
   };
 
+  const handleDemoPageNavigation = () => {
+    isFirstLoad.current = false;
+    dispatch(moveToPage(PageType.DEMO));
+  };
+
   // Force cleanup of all image streams when page changes
   useEffect(() => {
     return () => {
@@ -236,71 +243,84 @@ function App() {
 
   return (
     <div className="flex min-h-screen w-screen">
-      <aside className="w-30 min-w-28 bg-gray-100 min-h-screen flex flex-col items-center gap-4 shadow-[inset_0_0_2px_rgba(0,0,0,0.1)]">
-        <div className="w-full h-screen flex flex-col gap-2 items-center overflow-y-auto scrollbar-thin">
-          <div className="w-full h-8"></div>
-          {/* Home page button */}
-          <button
-            className={clsx(classPageButton, {
-              'hover:bg-gray-200 active:bg-gray-400': page !== PageType.HOME,
-              'bg-gray-300': page === PageType.HOME,
-            })}
-            onClick={handleHomePageNavigation}
-          >
-            <MdHome size={32} className="mb-1.5" />
-            <span className="mt-1 text-sm">Home</span>
-          </button>
+      {!isDemoPage && (
+        <aside className="w-30 min-w-28 bg-gray-100 min-h-screen flex flex-col items-center gap-4 shadow-[inset_0_0_2px_rgba(0,0,0,0.1)]">
+          <div className="w-full h-screen flex flex-col gap-2 items-center overflow-y-auto scrollbar-thin">
+            <div className="w-full h-8"></div>
+            {/* Home page button */}
+            <button
+              className={clsx(classPageButton, {
+                'hover:bg-gray-200 active:bg-gray-400': page !== PageType.HOME,
+                'bg-gray-300': page === PageType.HOME,
+              })}
+              onClick={handleHomePageNavigation}
+            >
+              <MdHome size={32} className="mb-1.5" />
+              <span className="mt-1 text-sm">Home</span>
+            </button>
 
-          {/* Record page button */}
-          <button
-            className={clsx(classPageButton, {
-              'hover:bg-gray-200 active:bg-gray-400': page !== PageType.RECORD,
-              'bg-gray-300': page === PageType.RECORD,
-            })}
-            onClick={handleRecordPageNavigation}
-          >
-            <MdVideocam size={32} className="mb-1.5" />
-            <span className="mt-1 text-sm">Record</span>
-          </button>
-          {/* Training page button */}
-          <button
-            className={clsx(classPageButton, {
-              'hover:bg-gray-200 active:bg-gray-400': page !== PageType.TRAINING,
-              'bg-gray-300': page === PageType.TRAINING,
-            })}
-            onClick={handleTrainingPageNavigation}
-          >
-            <GoGraph size={28} className="mb-1.5" />
-            <span className="mt-1 text-sm">Training</span>
-          </button>
-          {/* Inference page button */}
-          <button
-            className={clsx(classPageButton, {
-              'hover:bg-gray-200 active:bg-gray-400': page !== PageType.INFERENCE,
-              'bg-gray-300': page === PageType.INFERENCE,
-            })}
-            onClick={handleInferencePageNavigation}
-          >
-            <MdMemory size={32} className="mb-1.5" />
-            <span className="mt-1 text-sm">Inference</span>
-          </button>
+            {/* Demo page button */}
+            <button
+              className={clsx(classPageButton, {
+                'hover:bg-gray-200 active:bg-gray-400': page !== PageType.DEMO,
+                'bg-gray-300': page === PageType.DEMO,
+              })}
+              onClick={handleDemoPageNavigation}
+            >
+              <MdPlayCircleFilled size={32} className="mb-1.5" />
+              <span className="mt-1 text-sm">Demo</span>
+            </button>
+            {/* Record page button */}
+            <button
+              className={clsx(classPageButton, {
+                'hover:bg-gray-200 active:bg-gray-400': page !== PageType.RECORD,
+                'bg-gray-300': page === PageType.RECORD,
+              })}
+              onClick={handleRecordPageNavigation}
+            >
+              <MdVideocam size={32} className="mb-1.5" />
+              <span className="mt-1 text-sm">Record</span>
+            </button>
+            {/* Training page button */}
+            <button
+              className={clsx(classPageButton, {
+                'hover:bg-gray-200 active:bg-gray-400': page !== PageType.TRAINING,
+                'bg-gray-300': page === PageType.TRAINING,
+              })}
+              onClick={handleTrainingPageNavigation}
+            >
+              <GoGraph size={28} className="mb-1.5" />
+              <span className="mt-1 text-sm">Training</span>
+            </button>
+            {/* Inference page button */}
+            <button
+              className={clsx(classPageButton, {
+                'hover:bg-gray-200 active:bg-gray-400': page !== PageType.INFERENCE,
+                'bg-gray-300': page === PageType.INFERENCE,
+              })}
+              onClick={handleInferencePageNavigation}
+            >
+              <MdMemory size={32} className="mb-1.5" />
+              <span className="mt-1 text-sm">Inference</span>
+            </button>
 
-          {/* Divider line */}
-          <div className="w-24 h-1 border-t-2 rounded-full border-gray-200 mt-3"></div>
+            {/* Divider line */}
+            <div className="w-24 h-1 border-t-2 rounded-full border-gray-200 mt-3"></div>
 
-          {/* Edit dataset page button */}
-          <button
-            className={clsx(classPageButton, {
-              'hover:bg-gray-200 active:bg-gray-400': page !== PageType.EDIT_DATASET,
-              'bg-gray-300': page === PageType.EDIT_DATASET,
-            })}
-            onClick={handleEditDatasetPageNavigation}
-          >
-            <MdWidgets size={28} className="mb-2" />
-            <span className="mt-1 text-sm whitespace-nowrap">Data Tools</span>
-          </button>
-        </div>
-      </aside>
+            {/* Edit dataset page button */}
+            <button
+              className={clsx(classPageButton, {
+                'hover:bg-gray-200 active:bg-gray-400': page !== PageType.EDIT_DATASET,
+                'bg-gray-300': page === PageType.EDIT_DATASET,
+              })}
+              onClick={handleEditDatasetPageNavigation}
+            >
+              <MdWidgets size={28} className="mb-2" />
+              <span className="mt-1 text-sm whitespace-nowrap">Data Tools</span>
+            </button>
+          </div>
+        </aside>
+      )}
       <main className="flex-1 flex flex-col h-screen">
         {page === PageType.HOME ? (
           <HomePage />
@@ -312,6 +332,8 @@ function App() {
           <TrainingPage isActive={page === PageType.TRAINING} />
         ) : page === PageType.EDIT_DATASET ? (
           <EditDatasetPage isActive={page === PageType.EDIT_DATASET} />
+        ) : page === PageType.DEMO ? (
+          <DemoPage onBackToHome={handleHomePageNavigation} />
         ) : (
           <HomePage />
         )}
