@@ -137,6 +137,8 @@ class DataEditor:
         total_parquets_processed_overall = 0
         actual_episode_counts_per_dataset: List[int] = []
 
+        merged_task_mapping = self._build_merged_task_mapping(dataset_paths)
+
         self._log(
             '--- Processing Parquet Files and Determining Episode Counts ---',
             logging.INFO
@@ -152,12 +154,15 @@ class DataEditor:
             current_dataset_frames = info_data.get(
                 'total_frames', 0) if isinstance(info_data.get('total_frames'), int) else 0
 
+            task_index_map = merged_task_mapping.get(i, {})
+
             processed_eps = self._copy_parquet_and_update_indices_for_merge(
                 dataset_path,
                 data_dst_dir,
                 chunk_name,
                 cumulative_episode_offset_parquets,
                 cumulative_frame_offset_parquets,
+                task_index_map,
             )
             self._log(
                 f'Processed {processed_eps} Parquet '
@@ -198,6 +203,52 @@ class DataEditor:
             dataset_episode_counts=actual_episode_counts_per_dataset,
         )
 
+    def _build_merged_task_mapping(
+        self,
+        dataset_paths: List[Path]
+    ) -> dict:
+        """
+        Build task_index mapping for each dataset.
+
+        Returns a dict where:
+        - Key: dataset index (0, 1, 2, ...)
+        - Value: dict of {old_task_index: new_task_index}
+        """
+        merged_tasks = {}
+        next_task_idx = 0
+        dataset_mappings = {}
+
+        for ds_idx, dataset_path in enumerate(dataset_paths):
+            src_tasks_path = dataset_path / 'meta' / 'tasks.jsonl'
+            if not src_tasks_path.exists():
+                dataset_mappings[ds_idx] = {}
+                continue
+
+            src_tasks = FileIO.read_jsonl(src_tasks_path)
+            old_to_new_map = {}
+
+            for task_record in src_tasks:
+                task_name = task_record.get('task')
+                old_task_idx = task_record.get('task_index')
+
+                if task_name is None or old_task_idx is None:
+                    continue
+
+                # Check if this task already exists in merged tasks
+                if task_name in merged_tasks:
+                    new_task_idx = merged_tasks[task_name]
+                else:
+                    # New task, assign new index
+                    new_task_idx = next_task_idx
+                    merged_tasks[task_name] = new_task_idx
+                    next_task_idx += 1
+
+                old_to_new_map[old_task_idx] = new_task_idx
+
+            dataset_mappings[ds_idx] = old_to_new_map
+
+        return dataset_mappings
+
     def _copy_parquet_and_update_indices_for_merge(
         self,
         src_root: Path,
@@ -205,6 +256,7 @@ class DataEditor:
         chunk_name: str,
         episode_idx_offset: int,
         frame_idx_offset: int,
+        task_index_map: dict,
         verbose: bool | None = None,
     ) -> int:
         src_chunk_dir = src_root / 'data' / chunk_name
@@ -234,6 +286,16 @@ class DataEditor:
                     df['index'] = df['index'] + frame_idx_offset
                 if 'frame_index' in df.columns:
                     df['frame_index'] = df['frame_index'] + frame_idx_offset
+
+                # Update task_index using the mapping
+                if 'task_index' in df.columns and task_index_map:
+                    # Get unique task_index values in this parquet
+                    unique_old_tasks = df['task_index'].unique()
+                    for old_task_idx in unique_old_tasks:
+                        if old_task_idx in task_index_map:
+                            new_task_idx = task_index_map[old_task_idx]
+                            df.loc[df['task_index'] == old_task_idx, 'task_index'] = new_task_idx
+
                 df.to_parquet(dst_file_path)
                 count_processed += 1
             except Exception as e:
