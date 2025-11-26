@@ -670,12 +670,20 @@ class PhysicalAIServer(Node):
             return
 
         if self.zmq_client is None:
+            self.get_logger().info('[DEBUG] === ZMQ Client Creation Start ===')
+            self.get_logger().info(f'[DEBUG] inference_info: {self.inference_info}')
+            import time as time_module
+            start_time = time_module.time()
+
             self.zmq_client = ZmqInferenceClient(
                 host=self.inference_info['server_ip'],
                 port=self.inference_info['server_port'],
                 timeout_ms=self.inference_info['timeout_ms']
             )
+            self.get_logger().info(f'[DEBUG] ZmqInferenceClient created in {time_module.time() - start_time:.2f}s')
+
             is_alive = self.zmq_client.ping()
+            self.get_logger().info(f'[DEBUG] ping result: {is_alive}')
             if not is_alive:
                 self.get_logger().error('Failed opening ZMQ client')
                 return
@@ -685,12 +693,19 @@ class PhysicalAIServer(Node):
                 'policy_path': self.inference_info['policy_path'],
                 'robot_type': self.inference_info['robot_type']
             }
+            self.get_logger().info(f'[DEBUG] Calling load_policy with: {policy_info}')
+            self.get_logger().info(f'[DEBUG] policy_path exists: {os.path.exists(policy_info["policy_path"])}')
+            self.get_logger().info(f'[DEBUG] policy_path is_dir: {os.path.isdir(policy_info["policy_path"])}')
+
+            load_start = time_module.time()
             response = self.zmq_client.execute_command('load_policy', policy_info)
+            self.get_logger().info(f'[DEBUG] load_policy completed in {time_module.time() - load_start:.2f}s')
             self.stop_inference = True
-            self.get_logger().info(f'ZMQ load_policy response: {response}')
+            self.get_logger().info(f'[DEBUG] load_policy response: {response}')
 
             # Initialize inference state variables
             self._reset_inference_state()
+            self.get_logger().info('[DEBUG] === ZMQ Client Creation End ===')
 
         try:
             if not self.on_inference:
@@ -1025,9 +1040,19 @@ class PhysicalAIServer(Node):
 
             elif request.command == SendCommand.Request.START_INFERENCE:
                 # Always initialize all inference components for new session
+                import time as time_module
+                callback_start = time_module.time()
+                self.get_logger().info(f'[DEBUG] === START_INFERENCE callback started at {callback_start} ===')
+                self.get_logger().info(f'[DEBUG] zmq_inference: {self.zmq_inference}')
+                self.get_logger().info(f'[DEBUG] zmq_client is None: {self.zmq_client is None}')
+                self.get_logger().info(f'[DEBUG] stop_inference: {self.stop_inference}')
+                self.get_logger().info(f'[DEBUG] on_inference: {self.on_inference}')
+
                 self.get_logger().info('Starting new inference session')
                 task_info = request.task_info
-                
+                self.get_logger().info(f'[DEBUG] task_info.policy_path: {task_info.policy_path}')
+                self.get_logger().info(f'[DEBUG] task_info.task_instruction: {task_info.task_instruction}')
+
                 self.joint_topic_types = self.communicator.get_publisher_msg_types()
                 self.operation_mode = 'inference'
                 self.task_instruction = task_info.task_instruction
@@ -1043,8 +1068,10 @@ class PhysicalAIServer(Node):
                         return response
 
                 if self.stop_inference:
+                    self.get_logger().info('[DEBUG] stop_inference is True, setting to False')
                     self.stop_inference = False
                 else:
+                    self.get_logger().info('[DEBUG] stop_inference is False, calling init_robot_control_parameters_from_user_task')
                     self.init_robot_control_parameters_from_user_task(
                         task_info
                     )
@@ -1055,6 +1082,7 @@ class PhysicalAIServer(Node):
                 # Reset action publish control to enabled when inference starts
                 self.communicator.action_publish_enabled = True
                 self.start_recording_time = time.perf_counter()
+                self.get_logger().info(f'[DEBUG] === START_INFERENCE callback completed in {time_module.time() - callback_start:.2f}s ===')
                 response.success = True
                 response.message = 'Inference started'
 
@@ -1412,6 +1440,10 @@ class PhysicalAIServer(Node):
                 'policy_path': request.policy_path,
                 'robot_type': request.robot_type
             }
+
+            self.get_logger().info(f'[DEBUG] inference_info saved: {self.inference_info}')
+            self.get_logger().info(f'[DEBUG] policy_path exists: {os.path.exists(request.policy_path)}')
+            self.get_logger().info(f'[DEBUG] policy_path is_dir: {os.path.isdir(request.policy_path)}')
 
             self.get_logger().info(
                 'Inference server configuration saved successfully')
