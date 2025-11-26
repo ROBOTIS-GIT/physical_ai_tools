@@ -27,9 +27,6 @@ from physical_ai_interfaces.msg import TaskInfo
 if TYPE_CHECKING:
     from rclpy.node import Node
 
-
-
-
 class PauseInference(BaseAction):
     """Action to pause inference and action publishing from AI Server."""
 
@@ -42,10 +39,10 @@ class PauseInference(BaseAction):
         """
         super().__init__(node, name="PauseInference")
 
-        # Service client for controlling action publish
+        # Service client for controlling action publish (direct to AI Server)
         self.control_client = self.node.create_client(
             SendCommand,
-            '/task/command'
+            '/ai_server/task/command'
         )
 
         # State tracking
@@ -108,10 +105,10 @@ class ResumeInference(BaseAction):
         """
         super().__init__(node, name="ResumeInference")
 
-        # Service client for controlling action publish
+        # Service client for controlling action publish (direct to AI Server)
         self.control_client = self.node.create_client(
             SendCommand,
-            '/task/command'
+            '/ai_server/task/command'
         )
 
         # State tracking
