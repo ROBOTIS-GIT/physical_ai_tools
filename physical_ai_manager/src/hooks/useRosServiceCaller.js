@@ -574,10 +574,10 @@ export function useRosServiceCaller() {
   const sendDemoCommand = useCallback(
     async (command, item_list = []) => {
       try {
-        let command_enum = TaskCommand.IDLE;
+        let command_enum = TaskCommand.NONE;
 
         if (command === 'start') {
-          command_enum = TaskCommand.IDLE;
+          command_enum = TaskCommand.NONE;
         } else if (command === 'finish') {
           command_enum = TaskCommand.FINISH;
         }
