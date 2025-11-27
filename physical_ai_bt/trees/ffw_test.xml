@@ -4,7 +4,7 @@
     <Sequence name="RobotControlSequence">
       <PauseInference name="Pause_Publishing_1"/>
       <UpdateTaskInstruction name="ChangeInstruction_1"
-        instruction="stay"/>
+        instruction="Stay"/>
       <RuleArms name="ArmsControl_1"
         left_positions="0.75, 0.0, 0.0, -2.3, 0.0, 0.0, 0.0, 0.0"
         right_positions="0.75, 0.0, 0.0, -2.3, 0.0, 0.0, 0.0, 0.0"/>

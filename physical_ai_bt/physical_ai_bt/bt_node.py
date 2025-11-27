@@ -70,7 +70,8 @@ class BehaviorTreeNode(Node):
         self.declare_parameter('tree_xml', 'ffw_test.xml')
         self.declare_parameter('tick_rate', 30.0)
 
-        robot_type = self.get_parameter('robot_type').value
+        # robot_type = self.get_parameter('robot_type').value
+        robot_type = 'ffw_sg2_rev1'
         tree_xml = self.get_parameter('tree_xml').value
         tick_rate = self.get_parameter('tick_rate').value
 
