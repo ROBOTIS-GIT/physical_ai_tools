@@ -32,8 +32,9 @@ class BehaviorTreeNode(Node):
     def __init__(self):
         super().__init__('physical_ai_bt_node')
 
-        # --- Inference trigger state ---
-        self.inference_detected = False
+        # --- Model load and BT trigger state ---
+        self.model_loaded = False  # AI Server model load completion status
+        self.inference_detected = False  # BT Tree execution trigger
         self.inference_start_time = None
         self.waiting_for_inference = True
 
@@ -239,29 +240,38 @@ class BehaviorTreeNode(Node):
         try:
             result = future.result()
             if result.success:
-                self.get_logger().info('Model loaded - starting BT Tree')
-                # Model load complete - now trigger the BT Tree
-                self.inference_detected = True
-                self.inference_start_time = time.time()
-                self.waiting_for_inference = False
+                self.get_logger().info('Model loaded - waiting for /demo/start to begin BT Tree')
+                # Model load complete - mark as ready but do NOT start tree
+                self.model_loaded = True
+                # Keep waiting state - tree will start when /demo/start is received
+                self.inference_detected = False
+                self.waiting_for_inference = True
             else:
                 self.get_logger().error(f'AI Server failed: {result.message}')
+                self.model_loaded = False
                 self.inference_detected = False
                 self.waiting_for_inference = True
         except Exception as e:
             self.get_logger().error(f'AI Server relay error: {e}')
+            self.model_loaded = False
             self.inference_detected = False
             self.waiting_for_inference = True
 
     def _demo_start_callback(self, request, response):
         """
-        Handle demo start command - triggers BT Tree directly without AI Server relay.
-        Used for subsequent sequences after model is already loaded.
+        Handle demo start command - triggers BT Tree.
+        Requires model to be loaded first.
         """
         try:
-            self.get_logger().info('Demo start received - triggering BT Tree directly')
+            if not self.model_loaded:
+                self.get_logger().warn('Demo start requested but model not loaded yet')
+                response.success = False
+                response.message = 'Model not loaded - send /task/command first'
+                return response
 
-            # Trigger BT Tree immediately (model already loaded)
+            self.get_logger().info('Demo start received - triggering BT Tree')
+
+            # Trigger BT Tree
             self.inference_detected = True
             self.inference_start_time = time.time()
             self.waiting_for_inference = False
@@ -294,12 +304,14 @@ class BehaviorTreeNode(Node):
             self.inference_detected = False
             self.inference_start_time = None
             self.waiting_for_inference = True
+            # model_loaded remains True - ready for next /demo/start
         elif status == NodeStatus.FAILURE:
             self.get_logger().error('Behavior Tree execution failed')
             self._reset_tree()
             self.inference_detected = False
             self.inference_start_time = None
             self.waiting_for_inference = True
+            # model_loaded remains True
 
     def _reset_tree(self):
         """Reset the behavior tree for next execution cycle."""
