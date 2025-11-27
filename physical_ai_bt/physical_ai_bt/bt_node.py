@@ -189,14 +189,14 @@ class BehaviorTreeNode(Node):
             self.get_logger().info(f'Received command: {request.command}')
 
             if request.command == SendCommand.Request.START_INFERENCE:
-                self.get_logger().info('START_INFERENCE received - activating BT trigger')
+                self.get_logger().info('START_INFERENCE received - relaying to AI Server')
 
-                # 1. Activate BT trigger immediately
-                self.inference_detected = True
-                self.inference_start_time = time.time()
-                self.waiting_for_inference = False
+                # Keep waiting state until AI Server confirms model load
+                self.inference_detected = False
+                self.waiting_for_inference = True
 
-                # 2. Relay command to AI Server asynchronously (no blocking wait)
+                # Relay command to AI Server asynchronously
+                # Tree will start when _relay_done_callback receives success
                 relay_request = SendCommand.Request()
                 relay_request.command = request.command
                 relay_request.task_info = request.task_info
@@ -204,9 +204,8 @@ class BehaviorTreeNode(Node):
                 future = self.ai_server_client.call_async(relay_request)
                 future.add_done_callback(self._relay_done_callback)
 
-                # 3. Return success immediately
                 response.success = True
-                response.message = 'BT triggered, command relayed to AI Server'
+                response.message = 'Command relayed, waiting for model load'
 
             else:
                 # For other commands, also relay asynchronously
@@ -233,10 +232,13 @@ class BehaviorTreeNode(Node):
         try:
             result = future.result()
             if result.success:
-                self.get_logger().info('AI Server relay succeeded')
+                self.get_logger().info('Model loaded - starting BT Tree')
+                # Model load complete - now trigger the BT Tree
+                self.inference_detected = True
+                self.inference_start_time = time.time()
+                self.waiting_for_inference = False
             else:
-                self.get_logger().error(f'AI Server relay failed: {result.message}')
-                # Reset BT trigger if relay failed
+                self.get_logger().error(f'AI Server failed: {result.message}')
                 self.inference_detected = False
                 self.waiting_for_inference = True
         except Exception as e:

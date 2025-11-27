@@ -664,48 +664,10 @@ class PhysicalAIServer(Node):
             self.timer_manager.stop(timer_name=self.operation_mode)
             return
 
-        # Check if inference_info is configured
-        if not hasattr(self, 'inference_info') or self.inference_info is None:
-            self.get_logger().warn('Inference server not configured. Please configure via UI first.')
-            return
-
+        # ZMQ client should already be initialized in user_interaction_callback
         if self.zmq_client is None:
-            self.get_logger().info('[DEBUG] === ZMQ Client Creation Start ===')
-            self.get_logger().info(f'[DEBUG] inference_info: {self.inference_info}')
-            import time as time_module
-            start_time = time_module.time()
-
-            self.zmq_client = ZmqInferenceClient(
-                host=self.inference_info['server_ip'],
-                port=self.inference_info['server_port'],
-                timeout_ms=self.inference_info['timeout_ms']
-            )
-            self.get_logger().info(f'[DEBUG] ZmqInferenceClient created in {time_module.time() - start_time:.2f}s')
-
-            is_alive = self.zmq_client.ping()
-            self.get_logger().info(f'[DEBUG] ping result: {is_alive}')
-            if not is_alive:
-                self.get_logger().error('Failed opening ZMQ client')
-                return
-            self.get_logger().info('ZMQ client connected to server')
-            policy_info = {
-                'policy_type': self.inference_info['policy_type'],
-                'policy_path': self.inference_info['policy_path'],
-                'robot_type': self.inference_info['robot_type']
-            }
-            self.get_logger().info(f'[DEBUG] Calling load_policy with: {policy_info}')
-            self.get_logger().info(f'[DEBUG] policy_path exists: {os.path.exists(policy_info["policy_path"])}')
-            self.get_logger().info(f'[DEBUG] policy_path is_dir: {os.path.isdir(policy_info["policy_path"])}')
-
-            load_start = time_module.time()
-            response = self.zmq_client.execute_command('load_policy', policy_info)
-            self.get_logger().info(f'[DEBUG] load_policy completed in {time_module.time() - load_start:.2f}s')
-            self.stop_inference = True
-            self.get_logger().info(f'[DEBUG] load_policy response: {response}')
-
-            # Initialize inference state variables
-            self._reset_inference_state()
-            self.get_logger().info('[DEBUG] === ZMQ Client Creation End ===')
+            self.get_logger().error('ZMQ client not initialized. Call START_INFERENCE first.')
+            return
 
         try:
             if not self.on_inference:
@@ -1039,19 +1001,8 @@ class PhysicalAIServer(Node):
                 response.message = 'Recording started'
 
             elif request.command == SendCommand.Request.START_INFERENCE:
-                # Always initialize all inference components for new session
-                import time as time_module
-                callback_start = time_module.time()
-                self.get_logger().info(f'[DEBUG] === START_INFERENCE callback started at {callback_start} ===')
-                self.get_logger().info(f'[DEBUG] zmq_inference: {self.zmq_inference}')
-                self.get_logger().info(f'[DEBUG] zmq_client is None: {self.zmq_client is None}')
-                self.get_logger().info(f'[DEBUG] stop_inference: {self.stop_inference}')
-                self.get_logger().info(f'[DEBUG] on_inference: {self.on_inference}')
-
                 self.get_logger().info('Starting new inference session')
                 task_info = request.task_info
-                self.get_logger().info(f'[DEBUG] task_info.policy_path: {task_info.policy_path}')
-                self.get_logger().info(f'[DEBUG] task_info.task_instruction: {task_info.task_instruction}')
 
                 self.joint_topic_types = self.communicator.get_publisher_msg_types()
                 self.operation_mode = 'inference'
@@ -1067,24 +1018,58 @@ class PhysicalAIServer(Node):
                         self.get_logger().error(response.message)
                         return response
 
-                if self.stop_inference:
-                    self.get_logger().info('[DEBUG] stop_inference is True, setting to False')
-                    self.stop_inference = False
-                else:
-                    self.get_logger().info('[DEBUG] stop_inference is False, calling init_robot_control_parameters_from_user_task')
-                    self.init_robot_control_parameters_from_user_task(
-                        task_info
-                    )
+                # ZMQ inference: load model synchronously before responding
+                if self.zmq_inference and self.zmq_client is None:
+                    try:
+                        self.get_logger().info('Initializing ZMQ client and loading model...')
+                        self.zmq_client = ZmqInferenceClient(
+                            host=self.inference_info['server_ip'],
+                            port=self.inference_info['server_port'],
+                            timeout_ms=self.inference_info['timeout_ms']
+                        )
+
+                        if not self.zmq_client.ping():
+                            response.success = False
+                            response.message = 'Failed to connect to GR00T server'
+                            self.zmq_client = None
+                            return response
+
+                        self.get_logger().info('ZMQ client connected, loading policy...')
+                        policy_info = {
+                            'policy_type': self.inference_info['policy_type'],
+                            'policy_path': self.inference_info['policy_path'],
+                            'robot_type': self.inference_info['robot_type']
+                        }
+                        load_response = self.zmq_client.execute_command('load_policy', policy_info)
+
+                        if load_response.get('status') != 'ok':
+                            response.success = False
+                            response.message = f"Model load failed: {load_response.get('message')}"
+                            self.zmq_client = None
+                            return response
+
+                        self.get_logger().info('Model loaded successfully')
+                        self._reset_inference_state()
+
+                    except Exception as e:
+                        self.get_logger().error(f'ZMQ initialization failed: {str(e)}')
+                        response.success = False
+                        response.message = f'ZMQ initialization failed: {str(e)}'
+                        self.zmq_client = None
+                        return response
+
+                # Initialize timer for inference
+                self.init_robot_control_parameters_from_user_task(task_info)
 
                 if task_info.record_inference_mode:
                     self.on_recording = True
                 self.on_inference = True
-                # Reset action publish control to enabled when inference starts
+                self.stop_inference = False
                 self.communicator.action_publish_enabled = True
                 self.start_recording_time = time.perf_counter()
-                self.get_logger().info(f'[DEBUG] === START_INFERENCE callback completed in {time_module.time() - callback_start:.2f}s ===')
+
                 response.success = True
-                response.message = 'Inference started'
+                response.message = 'Model loaded, inference ready'
 
             elif request.command == SendCommand.Request.UPDATE_TASK_INSTRUCTION:
                 # Update task instruction during active inference session
