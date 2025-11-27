@@ -22,6 +22,7 @@ import time
 from ament_index_python.packages import get_package_share_directory
 from physical_ai_interfaces.srv import SendCommand
 from physical_ai_bt.actions.base_action import BTNode, NodeStatus
+from physical_ai_bt.blackboard import Blackboard
 from physical_ai_bt.bt_nodes_loader import XMLTreeLoader
 from rclpy.executors import MultiThreadedExecutor
 from rclpy.node import Node
@@ -31,6 +32,9 @@ class BehaviorTreeNode(Node):
 
     def __init__(self):
         super().__init__('physical_ai_bt_node')
+
+        # Blackboard initialization
+        self.blackboard = Blackboard()
 
         # --- Model load and BT trigger state ---
         self.model_loaded = False  # AI Server model load completion status
@@ -270,6 +274,15 @@ class BehaviorTreeNode(Node):
                 return response
 
             self.get_logger().info('Demo start received - triggering BT Tree')
+
+            # Store task_instruction to blackboard
+            if request.task_info and request.task_info.task_instruction:
+                # Use first element of task_instruction array
+                task_obj = request.task_info.task_instruction[0] if request.task_info.task_instruction else ""
+                self.blackboard.set('task_instruction', task_obj)
+                self.get_logger().info(f'Stored task_instruction to blackboard: {task_obj}')
+            else:
+                self.get_logger().warn('No task_instruction in request')
 
             # Trigger BT Tree
             self.inference_detected = True

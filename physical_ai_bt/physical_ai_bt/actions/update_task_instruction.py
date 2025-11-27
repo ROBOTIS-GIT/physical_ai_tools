@@ -21,6 +21,7 @@
 from typing import TYPE_CHECKING
 
 from physical_ai_bt.actions.base_action import NodeStatus, BaseAction
+from physical_ai_bt.blackboard import Blackboard
 from physical_ai_interfaces.srv import SendCommand
 from physical_ai_interfaces.msg import TaskInfo
 
@@ -31,17 +32,20 @@ if TYPE_CHECKING:
 class UpdateTaskInstruction(BaseAction):
     """Action to update language instruction during active inference session."""
 
-    def __init__(self, node: 'Node', instruction: str = ""):
+    def __init__(self, node: 'Node', instruction: str = "", prefix: str = "Pick up the "):
         """
         Initialize update task instruction action.
 
         Args:
             node: ROS2 node reference
-            instruction: New task instruction to send to AI Server
+            instruction: Fixed instruction (ignored if blackboard has task_instruction)
+            prefix: Prefix to prepend to blackboard value (default: "Pick up the ")
         """
         super().__init__(node, name="UpdateTaskInstruction")
 
-        self.instruction = instruction
+        self.instruction = instruction  # Fallback if blackboard empty
+        self.prefix = prefix
+        self.blackboard = Blackboard()
 
         # Service client for sending command to AI Server
         self.command_client = self.node.create_client(
@@ -61,8 +65,20 @@ class UpdateTaskInstruction(BaseAction):
                 self.log_error("AI Server command service not available")
                 return NodeStatus.FAILURE
 
+            # Build instruction from blackboard or use fallback
+            task_obj = self.blackboard.get('task_instruction', '')
+
+            if task_obj:
+                # Build instruction: prefix + blackboard value
+                final_instruction = self.prefix + task_obj
+                self.log_info(f"Built instruction from blackboard: '{final_instruction}'")
+            else:
+                # Use fallback instruction
+                final_instruction = self.instruction
+                self.log_info(f"Using fallback instruction: '{final_instruction}'")
+
             # Validate instruction
-            if not self.instruction or self.instruction.strip() == "":
+            if not final_instruction or final_instruction.strip() == "":
                 self.log_error("Instruction cannot be empty")
                 return NodeStatus.FAILURE
 
@@ -70,10 +86,10 @@ class UpdateTaskInstruction(BaseAction):
             request = SendCommand.Request()
             request.command = SendCommand.Request.UPDATE_TASK_INSTRUCTION
             request.task_info = TaskInfo()
-            request.task_info.task_instruction = [self.instruction]
+            request.task_info.task_instruction = [final_instruction]
 
             try:
-                self.log_info(f"Updating task instruction: '{self.instruction}'")
+                self.log_info(f"Updating task instruction: '{final_instruction}'")
                 self.future = self.command_client.call_async(request)
                 self.request_sent = True
                 return NodeStatus.RUNNING
