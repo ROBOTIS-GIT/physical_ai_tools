@@ -28,7 +28,7 @@ class RuleArms(BaseAction):
             node: 'Node',
             left_positions: List[float],
             right_positions: List[float],
-            position_threshold: float = 0.1
+            position_threshold: float = 0.01
         ):
         super().__init__(node, name="RuleArms")
         self.left_joint_names = [
@@ -84,7 +84,7 @@ class RuleArms(BaseAction):
             right_traj.joint_names = self.right_joint_names
             right_point = JointTrajectoryPoint()
             right_point.positions = self.right_positions
-            right_point.time_from_start.sec = 10
+            right_point.time_from_start.sec = 5
             right_traj.points.append(right_point)
             self.right_pub.publish(right_traj)
 

@@ -33,7 +33,7 @@ class RuleHeadLift(BaseAction):
             node: 'Node',
             head_positions: List[float],
             lift_position: float,
-            position_threshold: float = 0.0001,
+            position_threshold: float = 0.01,
         ):
         super().__init__(node, name="RuleHeadLift")
         self.head_joint_names = ["head_joint1", "head_joint2"]
