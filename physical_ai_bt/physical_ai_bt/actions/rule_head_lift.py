@@ -18,6 +18,7 @@
 
 """Action to move only head and lift joints to target positions."""
 
+import threading
 import time
 from typing import TYPE_CHECKING, List
 from trajectory_msgs.msg import JointTrajectory, JointTrajectoryPoint
@@ -63,59 +64,103 @@ class RuleHeadLift(BaseAction):
             qos_profile
         )
 
+        # Thread control
+        self._thread = None
+        self._thread_done = False
+        self._thread_success = False
+        self._control_rate = 100  # Hz
+
     def _joint_state_callback(self, msg):
         self.joint_state = msg
 
-    def tick(self) -> NodeStatus:
-        current_time = time.time()
-        if not self.command_sent:
-            # Head trajectory
-            head_traj = JointTrajectory()
-            head_traj.joint_names = self.head_joint_names
-            head_point = JointTrajectoryPoint()
-            head_point.positions = self.head_positions
-            head_point.time_from_start.sec = 5
-            head_traj.points.append(head_point)
-            self.head_pub.publish(head_traj)
+    def _control_loop(self):
+        """Independent control loop running in separate thread."""
+        rate_sleep = 1.0 / self._control_rate
 
-            # Lift trajectory
-            lift_traj = JointTrajectory()
-            lift_traj.joint_names = [self.lift_joint_name]
-            lift_point = JointTrajectoryPoint()
-            lift_point.positions = [self.lift_position]
-            lift_point.time_from_start.sec = 5
-            lift_traj.points.append(lift_point)
-            self.lift_pub.publish(lift_traj)
+        # Publish trajectory commands once
+        head_traj = JointTrajectory()
+        head_traj.joint_names = self.head_joint_names
+        head_point = JointTrajectoryPoint()
+        head_point.positions = self.head_positions
+        head_point.time_from_start.sec = 5
+        head_traj.points.append(head_point)
+        self.head_pub.publish(head_traj)
 
-            self.command_sent = True
-            self.start_time = current_time
-            return NodeStatus.RUNNING
+        lift_traj = JointTrajectory()
+        lift_traj.joint_names = [self.lift_joint_name]
+        lift_point = JointTrajectoryPoint()
+        lift_point.positions = [self.lift_position]
+        lift_point.time_from_start.sec = 5
+        lift_traj.points.append(lift_point)
+        self.lift_pub.publish(lift_traj)
 
-        # Feedback: check if joints reached target positions
-        if self.joint_state:
-            # Find indices for head and lift joints
+        self.log_info("Head/Lift trajectory published")
+
+        # Wait for joint_state and check positions
+        timeout_count = 0
+        while not self._thread_done and timeout_count < 1000:  # 20s timeout
+            if self.joint_state is None:
+                time.sleep(rate_sleep)
+                timeout_count += 1
+                continue
+
             name_to_idx = {n: i for i, n in enumerate(self.joint_state.name)}
             all_reached = True
-            # Head joints
+
+            # Check head joints
             for jname, target in zip(self.head_joint_names, self.head_positions):
                 idx = name_to_idx.get(jname)
                 if idx is not None:
                     pos = self.joint_state.position[idx]
                     if abs(pos - target) > self.position_threshold:
                         all_reached = False
-            # Lift joint
-            idx = name_to_idx.get(self.lift_joint_name)
-            if idx is not None:
-                pos = self.joint_state.position[idx]
-                if abs(pos - self.lift_position) > self.position_threshold:
-                    all_reached = False
+                        break
+
+            # Check lift joint
             if all_reached:
-                self.status = NodeStatus.SUCCESS
-                return NodeStatus.SUCCESS
+                idx = name_to_idx.get(self.lift_joint_name)
+                if idx is not None:
+                    pos = self.joint_state.position[idx]
+                    if abs(pos - self.lift_position) > self.position_threshold:
+                        all_reached = False
+
+            if all_reached:
+                self.log_info("Head/Lift reached target positions")
+                self._thread_success = True
+                self._thread_done = True
+                break
+
+            time.sleep(rate_sleep)
+            timeout_count += 1
+
+        if not self._thread_success and not self._thread_done:
+            self.log_error("Head/Lift timeout waiting for target positions")
+            self._thread_done = True
+
+    def tick(self) -> NodeStatus:
+        """Check thread status - actual control runs in separate thread."""
+        if self._thread is None:
+            self.joint_state = None
+            self._thread_done = False
+            self._thread_success = False
+
+            self._thread = threading.Thread(target=self._control_loop, daemon=True)
+            self._thread.start()
+            self.log_info("HeadLift thread started")
+            return NodeStatus.RUNNING
+
+        if self._thread_done:
+            return NodeStatus.SUCCESS if self._thread_success else NodeStatus.FAILURE
 
         return NodeStatus.RUNNING
 
     def reset(self):
+        """Reset action state for re-execution."""
         super().reset()
-        self.command_sent = False
-        self.start_time = None
+        if self._thread is not None and self._thread.is_alive():
+            self._thread_done = True
+            self._thread.join(timeout=1.0)
+        self._thread = None
+        self._thread_done = False
+        self._thread_success = False
+        self.joint_state = None

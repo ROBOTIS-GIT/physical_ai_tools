@@ -18,15 +18,20 @@
 
 """Whole-body rule-based action for fixed position movement."""
 
+import math
+import threading
 import time
 from typing import TYPE_CHECKING
+
 from geometry_msgs.msg import Twist
+from nav_msgs.msg import Odometry
 from physical_ai_bt.actions.base_action import NodeStatus, BaseAction
 from rclpy.qos import QoSProfile, ReliabilityPolicy
 from trajectory_msgs.msg import JointTrajectory
 
 if TYPE_CHECKING:
     from rclpy.node import Node
+
 
 class RuleSwerve(BaseAction):
     @staticmethod
@@ -51,10 +56,12 @@ class RuleSwerve(BaseAction):
         if not isinstance(self.topic_config, dict):
             self.topic_config = {}
         self.angular_velocity = 0.2
+
         qos_profile = QoSProfile(
             depth=10,
             reliability=ReliabilityPolicy.RELIABLE
         )
+
         self.publishers = {}
         if self.topic_config and 'topic_map' in self.topic_config:
             for joint_group, topic in self.topic_config['topic_map'].items():
@@ -70,11 +77,8 @@ class RuleSwerve(BaseAction):
                 '/leader/joint_trajectory',
                 qos_profile
             )
-        self.command_sent = False
-        self.start_time = None
 
-        # For odom monitoring
-        from nav_msgs.msg import Odometry
+        # Odom subscription
         self.odom_sub = self.node.create_subscription(
             Odometry,
             '/odom',
@@ -84,11 +88,15 @@ class RuleSwerve(BaseAction):
         self.odom_start_yaw = None
         self.odom_last_yaw = None
 
+        # Thread control
+        self._thread = None
+        self._thread_done = False
+        self._thread_success = False
+        self._control_rate = 100  # Hz
+
     def _odom_callback(self, msg):
-        # Extract yaw from odometry quaternion
-        import math
+        """Extract yaw from odometry quaternion."""
         q = msg.pose.pose.orientation
-        # Quaternion to yaw
         siny_cosp = 2 * (q.w * q.z + q.x * q.y)
         cosy_cosp = 1 - 2 * (q.y * q.y + q.z * q.z)
         yaw = math.atan2(siny_cosp, cosy_cosp)
@@ -96,68 +104,77 @@ class RuleSwerve(BaseAction):
             self.odom_start_yaw = yaw
         self.odom_last_yaw = yaw
 
-    def tick(self) -> NodeStatus:
-        """Rotate robot by the desired angle at fixed angular velocity with real-time feedback."""
-        current_time = time.time()
-        if not self.command_sent:
-            self._send_trajectory_command()
-            self.command_sent = True
-            self.start_time = current_time
-            # Reset odom start yaw for measurement
-            self.odom_start_yaw = None
-            self.odom_last_yaw = None
-            return NodeStatus.RUNNING
+    def _control_loop(self):
+        """Independent control loop running in separate thread."""
+        rate_sleep = 1.0 / self._control_rate
 
-        # Odometry-based feedback control
-        if self.odom_start_yaw is not None and self.odom_last_yaw is not None:
-            import math
+        # Wait for first odom
+        timeout_count = 0
+        while self.odom_start_yaw is None and timeout_count < 500:
+            time.sleep(0.01)
+            timeout_count += 1
+
+        if self.odom_start_yaw is None:
+            self.log_error("Timeout waiting for odom data")
+            self._thread_done = True
+            self._thread_success = False
+            return
+
+        while not self._thread_done:
+            if self.odom_last_yaw is None:
+                time.sleep(rate_sleep)
+                continue
+
+            # Calculate error
             start_deg = math.degrees(self.odom_start_yaw)
             last_deg = math.degrees(self.odom_last_yaw)
             delta_deg = self.angle_diff_deg(last_deg, start_deg)
             delta_deg_norm = ((delta_deg + 180) % 360) - 180
-            tolerance = 0.4
+
+            tolerance = 0.1
             error = self.angle_deg - delta_deg_norm
+
             if abs(error) <= tolerance:
+                # Target reached
                 self._stop_mobile()
-                self.log_info(f"[ODOM] Final rotation: {delta_deg_norm:.2f} deg (target: {self.angle_deg} deg)")
-                elapsed = current_time - self.start_time
-                self.log_info(f"Swerve completed in {elapsed:.1f}s ({self.angle_deg} degree rotation)")
+                self.log_info(f"[Thread] Rotation complete: {delta_deg_norm:.2f} deg (target: {self.angle_deg} deg)")
+                self._thread_success = True
+                self._thread_done = True
+                break
+
+            # Publish command
+            angular_z = self.angular_velocity if error > 0 else -self.angular_velocity
+            if 'leader_mobile' in self.publishers:
+                twist_msg = Twist()
+                twist_msg.linear.x = 0.0
+                twist_msg.linear.y = 0.0
+                twist_msg.angular.z = angular_z
+                self.publishers['leader_mobile'].publish(twist_msg)
+
+            time.sleep(rate_sleep)
+
+    def tick(self) -> NodeStatus:
+        """Check thread status - actual control runs in separate thread."""
+        if self._thread is None:
+            # First tick - start control thread
+            self.odom_start_yaw = None
+            self.odom_last_yaw = None
+            self._thread_done = False
+            self._thread_success = False
+
+            self._thread = threading.Thread(target=self._control_loop, daemon=True)
+            self._thread.start()
+            self.log_info(f"Swerve thread started (target: {self.angle_deg} deg)")
+            return NodeStatus.RUNNING
+
+        # Subsequent ticks - just check thread status
+        if self._thread_done:
+            if self._thread_success:
                 return NodeStatus.SUCCESS
             else:
-                angular_z = self.angular_velocity if error > 0 else -self.angular_velocity
-                if 'leader_mobile' in self.publishers:
-                    twist_msg = Twist()
-                    twist_msg.linear.x = 0.0
-                    twist_msg.linear.y = 0.0
-                    twist_msg.angular.z = angular_z
-                    self.publishers['leader_mobile'].publish(twist_msg)
-                return NodeStatus.RUNNING
+                return NodeStatus.FAILURE
 
-        # If odom not ready, keep publishing command
-        self._publish_mobile_command()
         return NodeStatus.RUNNING
-
-    def _send_trajectory_command(self):
-        """Publish swerve command for desired angle at fixed angular velocity."""
-        angular_z = self.angular_velocity if self.angle_deg >= 0 else -self.angular_velocity
-        swerve_goal = [0.0, 0.0, angular_z]
-        if self.publishers and 'leader_mobile' in self.publishers:
-            twist_msg = Twist()
-            twist_msg.linear.x = swerve_goal[0]
-            twist_msg.linear.y = swerve_goal[1]
-            twist_msg.angular.z = swerve_goal[2]
-            self.publishers['leader_mobile'].publish(twist_msg)
-            self.log_info(f"Published Twist for swerve: angular_z={twist_msg.angular.z}")
-
-    def _publish_mobile_command(self):
-        """Publish swerve velocity command (called repeatedly during execution)."""
-        if 'leader_mobile' in self.publishers:
-            angular_z = self.angular_velocity if self.angle_deg >= 0 else -self.angular_velocity
-            twist_msg = Twist()
-            twist_msg.linear.x = 0.0
-            twist_msg.linear.y = 0.0
-            twist_msg.angular.z = angular_z
-            self.publishers['leader_mobile'].publish(twist_msg)
 
     def _stop_mobile(self):
         """Stop mobile base by publishing zero velocity."""
@@ -169,7 +186,12 @@ class RuleSwerve(BaseAction):
     def reset(self):
         """Reset action state for re-execution."""
         super().reset()
-        self.command_sent = False
-        self.start_time = None
+        # Stop thread if running
+        if self._thread is not None and self._thread.is_alive():
+            self._thread_done = True
+            self._thread.join(timeout=1.0)
+        self._thread = None
+        self._thread_done = False
+        self._thread_success = False
         self.odom_start_yaw = None
         self.odom_last_yaw = None
