@@ -21,6 +21,7 @@ import rclpy
 import time
 from ament_index_python.packages import get_package_share_directory
 from physical_ai_interfaces.srv import SendCommand
+from physical_ai_interfaces.msg import TaskInfo
 from physical_ai_bt.actions.base_action import BTNode, NodeStatus
 from physical_ai_bt.blackboard import Blackboard
 from physical_ai_bt.bt_nodes_loader import XMLTreeLoader
@@ -245,9 +246,14 @@ class BehaviorTreeNode(Node):
         try:
             result = future.result()
             if result.success:
-                self.get_logger().info('Model loaded - waiting for /demo/start to begin BT Tree')
+                self.get_logger().info('Model loaded - pausing inference before /demo/start')
+
                 # Model load complete - mark as ready but do NOT start tree
                 self.model_loaded = True
+
+                # AUTO-PAUSE: Send STOP command to AI Server immediately
+                self._send_pause_inference()
+
                 # Keep waiting state - tree will start when /demo/start is received
                 self.inference_detected = False
                 self.waiting_for_inference = True
@@ -261,6 +267,33 @@ class BehaviorTreeNode(Node):
             self.model_loaded = False
             self.inference_detected = False
             self.waiting_for_inference = True
+
+    def _send_pause_inference(self):
+        """Send STOP command to AI Server to pause inference."""
+        try:
+            # Create STOP request
+            pause_request = SendCommand.Request()
+            pause_request.command = SendCommand.Request.STOP
+            pause_request.task_info = TaskInfo()
+
+            # Send async (non-blocking)
+            pause_future = self.ai_server_client.call_async(pause_request)
+
+            # Add callback to log result
+            def _pause_callback(fut):
+                try:
+                    pause_result = fut.result()
+                    if pause_result.success:
+                        self.get_logger().info('✓ Inference paused successfully - robot stopped')
+                    else:
+                        self.get_logger().warn(f'Failed to pause inference: {pause_result.message}')
+                except Exception as e:
+                    self.get_logger().error(f'Error in pause callback: {str(e)}')
+
+            pause_future.add_done_callback(_pause_callback)
+
+        except Exception as e:
+            self.get_logger().error(f'Failed to send pause inference: {str(e)}')
 
     def _demo_start_callback(self, request, response):
         """
