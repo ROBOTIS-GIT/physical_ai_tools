@@ -2,7 +2,6 @@
 <root BTCPP_format="3" main_tree_to_execute="RobotControlSequence">
   <BehaviorTree ID="RobotControlSequence">
     <Sequence name="RobotControlSequence">
-      <PauseInference name="Pause_Publishing_1"/>
       <UpdateTaskInstruction name="ChangeInstruction_1"
         instruction="Stay"/>
       <RuleArms name="ArmsControl_1"
@@ -12,6 +11,8 @@
         head_positions="0.695,0.0"
         lift_position="-0.1"/>
       <ResumeInference name="Resume_Publishing_1"/>
+      <TimedInference name="VLA_Inference_1" duration="30.0"/>
+      <PauseInference name="Pause_Publishing_1"/>
       <!-- <RuleArms name="ArmsControl_1"
         left_positions="0.75, 0.0, 0.0, -2.3, 0.0, 0.0, 0.0, 0.0"
         right_positions="0.75, 0.0, 0.0, -2.3, 0.0, 0.0, 0.0, 0.0"/>
@@ -39,6 +40,11 @@
   <!-- Description of Node Models (used by Groot) -->
   <TreeNodesModel>
     <Action ID="Inference"/>
+    <Action ID="TimedInference">
+      <input_port name="duration" default="20.0">
+        Duration in seconds to run inference.
+      </input_port>
+    </Action>
     <Action ID="PauseInference"/>
     <Action ID="ResumeInference"/>
     <Action ID="RuleSwerve">

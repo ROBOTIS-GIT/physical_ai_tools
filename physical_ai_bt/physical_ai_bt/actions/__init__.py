@@ -20,6 +20,7 @@
 
 from physical_ai_bt.actions.base_action import BaseAction
 from physical_ai_bt.actions.inference import Inference
+from physical_ai_bt.actions.timed_inference import TimedInference
 from physical_ai_bt.actions.rule_swerve import RuleSwerve
 from physical_ai_bt.actions.control_inference import PauseInference, ResumeInference
 from physical_ai_bt.actions.camera_depth import CameraDepth
@@ -30,6 +31,7 @@ from physical_ai_bt.actions.rule_arms import RuleArms
 __all__ = [
     'BaseAction',
     'Inference',
+    'TimedInference',
     'RuleSwerve',
     'PauseInference',
     'ResumeInference',

@@ -22,6 +22,7 @@ import xml.etree.ElementTree as ET
 from typing import TYPE_CHECKING, Dict, Type
 
 from physical_ai_bt.actions import Inference, RuleSwerve
+from physical_ai_bt.actions.timed_inference import TimedInference
 from physical_ai_bt.actions.control_inference import (
     PauseInference,
     ResumeInference
@@ -60,6 +61,7 @@ class XMLTreeLoader:
         from physical_ai_bt.actions.rule_arms import RuleArms
         self.action_types: Dict[str, Type[BaseAction]] = {
             'Inference': Inference,
+            'TimedInference': TimedInference,
             'RuleSwerve': RuleSwerve,
             'PauseInference': PauseInference,
             'ResumeInference': ResumeInference,
@@ -226,6 +228,11 @@ class XMLTreeLoader:
                 node=self.node,
                 left_positions=params.get('left_positions', [0.0]*8),
                 right_positions=params.get('right_positions', [0.0]*8)
+            )
+        elif action_class == TimedInference:
+            return TimedInference(
+                node=self.node,
+                duration=params.get('duration', 20.0)
             )
         else:
             raise ValueError(f"Unknown action class: {action_class}")
