@@ -25,8 +25,9 @@ from physical_ai_bt.actions.rule_swerve import RuleSwerve
 from physical_ai_bt.actions.control_inference import PauseInference, ResumeInference
 from physical_ai_bt.actions.camera_depth import CameraDepth
 from physical_ai_bt.actions.rule_head_lift import RuleHeadLift
-
 from physical_ai_bt.actions.rule_arms import RuleArms
+from physical_ai_bt.actions.rule_lift import RuleLift
+from physical_ai_bt.actions.rule_gripper import RuleGripper
 
 __all__ = [
     'BaseAction',
@@ -38,4 +39,6 @@ __all__ = [
     'CameraDepth',
     'RuleHeadLift',
     'RuleArms',
+    'RuleLift',
+    'RuleGripper',
 ]

@@ -79,6 +79,25 @@
         New task instruction to send to AI Server.
       </input_port>
     </Action>
+    <Action ID="RuleLift">
+      <input_port name="lift_position" default="0.0">
+        Target position for lift joint.
+      </input_port>
+      <input_port name="position_threshold" default="0.01">
+        Position tolerance for completion.
+      </input_port>
+    </Action>
+    <Action ID="RuleGripper">
+      <input_port name="closed_threshold" default="1.0">
+        Threshold to detect closed gripper (>= this value).
+      </input_port>
+      <input_port name="open_position" default="0.0">
+        Target open position for grippers.
+      </input_port>
+      <input_port name="position_threshold" default="0.01">
+        Position tolerance for completion.
+      </input_port>
+    </Action>
   </TreeNodesModel>
 
 </root>
