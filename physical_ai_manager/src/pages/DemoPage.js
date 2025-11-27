@@ -93,7 +93,9 @@ function DemoPage({ onBackToHome }) {
       if (prev.includes(productId)) {
         return prev.filter((id) => id !== productId);
       }
-      return [...prev, productId];
+      // TEMPORARY: Allow only one item selection
+      return [productId];
+      // return [...prev, productId]; // Uncomment for multiple selection
     });
   };
 
