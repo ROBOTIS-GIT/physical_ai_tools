@@ -23,6 +23,7 @@ import time
 from typing import TYPE_CHECKING, List
 from trajectory_msgs.msg import JointTrajectory, JointTrajectoryPoint
 from physical_ai_bt.actions.base_action import NodeStatus, BaseAction
+from physical_ai_bt.blackboard import Blackboard
 from rclpy.qos import QoSProfile, ReliabilityPolicy
 
 if TYPE_CHECKING:
@@ -32,16 +33,31 @@ class RuleHeadLift(BaseAction):
     def __init__(
             self,
             node: 'Node',
-            head_positions: List[float],
-            lift_position: float,
+            head_positions: List[float] = None,
+            lift_position: float = None,
             position_threshold: float = 0.01,
         ):
         super().__init__(node, name="RuleHeadLift")
         self.head_joint_names = ["head_joint1", "head_joint2"]
-        self.head_positions = head_positions
+
+        # Default positions (used as fallback)
+        self.default_head_positions = head_positions if head_positions else [0.695, 0.0]
+        self.default_lift_position = lift_position if lift_position is not None else -0.1
+
+        # Current positions (will be set dynamically)
+        self.head_positions = self.default_head_positions
+        self.lift_position = self.default_lift_position
+
         self.lift_joint_name = "lift_joint"
-        self.lift_position = lift_position
         self.position_threshold = position_threshold
+
+        # Blackboard reference
+        self.blackboard = Blackboard()
+
+        # Special object positions
+        self.special_objects = ["yellow paintbrush", "orange toothbrush", "red and yellow screwdriver"]
+        self.special_head_positions = [0.3, 0.0]
+        self.special_lift_position = 0.0
         qos_profile = QoSProfile(depth=10, reliability=ReliabilityPolicy.RELIABLE)
         self.head_pub = self.node.create_publisher(
             JointTrajectory,
@@ -137,16 +153,32 @@ class RuleHeadLift(BaseAction):
             self.log_error("Head/Lift timeout waiting for target positions")
             self._thread_done = True
 
+    def _update_positions_from_blackboard(self):
+        """Update head and lift positions based on blackboard task_instruction."""
+        task_obj = self.blackboard.get('task_instruction', '')
+
+        if task_obj in self.special_objects:
+            self.head_positions = self.special_head_positions
+            self.lift_position = self.special_lift_position
+            self.log_info(f"Using special positions for '{task_obj}': head={self.head_positions}, lift={self.lift_position}")
+        else:
+            self.head_positions = self.default_head_positions
+            self.lift_position = self.default_lift_position
+            self.log_info(f"Using default positions for '{task_obj}': head={self.head_positions}, lift={self.lift_position}")
+
     def tick(self) -> NodeStatus:
         """Check thread status - actual control runs in separate thread."""
         if self._thread is None:
+            # Update positions from blackboard BEFORE starting thread
+            self._update_positions_from_blackboard()
+
             self.joint_state = None
             self._thread_done = False
             self._thread_success = False
 
             self._thread = threading.Thread(target=self._control_loop, daemon=True)
             self._thread.start()
-            self.log_info("HeadLift thread started")
+            self.log_info(f"HeadLift thread started with head={self.head_positions}, lift={self.lift_position}")
             return NodeStatus.RUNNING
 
         if self._thread_done:

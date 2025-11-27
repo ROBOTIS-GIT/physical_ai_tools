@@ -3,14 +3,14 @@
   <BehaviorTree ID="RobotControlSequence">
     <Sequence name="RobotControlSequence">
       <PauseInference name="Pause_Publishing_1"/>
+      <UpdateTaskInstruction name="ChangeInstruction_1"
+        instruction="stay"/>
       <RuleArms name="ArmsControl_1"
         left_positions="0.75, 0.0, 0.0, -2.3, 0.0, 0.0, 0.0, 0.0"
         right_positions="0.75, 0.0, 0.0, -2.3, 0.0, 0.0, 0.0, 0.0"/>
       <RuleHeadLift name="HeadLiftControl_1"
         head_positions="0.3,0.0"
         lift_position="0.0"/>
-      <UpdateTaskInstruction name="ChangeInstruction_1"
-        instruction="stay"/>
       <ResumeInference name="Resume_Publishing_1"/>
       <!-- <RuleArms name="ArmsControl_1"
         left_positions="0.75, 0.0, 0.0, -2.3, 0.0, 0.0, 0.0, 0.0"
