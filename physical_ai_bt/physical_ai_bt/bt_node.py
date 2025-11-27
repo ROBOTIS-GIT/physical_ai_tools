@@ -44,6 +44,13 @@ class BehaviorTreeNode(Node):
             self._command_callback
         )
 
+        # Service server for demo restart (no relay to AI Server)
+        self.demo_service = self.create_service(
+            SendCommand,
+            '/demo/start',
+            self._demo_start_callback
+        )
+
         # Service client to relay commands to Physical AI Server
         self.ai_server_client = self.create_client(
             SendCommand,
@@ -245,6 +252,29 @@ class BehaviorTreeNode(Node):
             self.get_logger().error(f'AI Server relay error: {e}')
             self.inference_detected = False
             self.waiting_for_inference = True
+
+    def _demo_start_callback(self, request, response):
+        """
+        Handle demo start command - triggers BT Tree directly without AI Server relay.
+        Used for subsequent sequences after model is already loaded.
+        """
+        try:
+            self.get_logger().info('Demo start received - triggering BT Tree directly')
+
+            # Trigger BT Tree immediately (model already loaded)
+            self.inference_detected = True
+            self.inference_start_time = time.time()
+            self.waiting_for_inference = False
+
+            response.success = True
+            response.message = 'BT Tree started'
+
+        except Exception as e:
+            self.get_logger().error(f'Error in demo start callback: {str(e)}')
+            response.success = False
+            response.message = f'Error: {str(e)}'
+
+        return response
 
     def tick_callback(self):
         """Timer callback for BT tick execution."""
