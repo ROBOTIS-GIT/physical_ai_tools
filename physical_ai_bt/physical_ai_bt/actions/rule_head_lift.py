@@ -55,7 +55,7 @@ class RuleHeadLift(BaseAction):
         self.blackboard = Blackboard()
 
         # Special object positions
-        self.special_objects = ["yellow paintbrush", "orange toothbrush", "red and yellow screwdriver"]
+        self.special_objects = ["paintbrush", "toothbrush", "screwdriver"]
         self.special_head_positions = [0.3, 0.0]
         self.special_lift_position = 0.0
         qos_profile = QoSProfile(depth=10, reliability=ReliabilityPolicy.RELIABLE)
@@ -92,6 +92,10 @@ class RuleHeadLift(BaseAction):
     def _control_loop(self):
         """Independent control loop running in separate thread."""
         rate_sleep = 1.0 / self._control_rate
+
+        self.log_info(f'[DEBUG] _control_loop started')
+        self.log_info(f'[DEBUG] Publishing head trajectory: {self.head_positions}')
+        self.log_info(f'[DEBUG] Publishing lift trajectory: {self.lift_position}')
 
         # Publish trajectory commands once
         head_traj = JointTrajectory()
@@ -157,20 +161,35 @@ class RuleHeadLift(BaseAction):
         """Update head and lift positions based on blackboard task_instruction."""
         task_obj = self.blackboard.get('task_instruction', '')
 
+        self.log_info(f'[DEBUG] ==== RuleHeadLift Position Update ====')
+        self.log_info(f'[DEBUG] Blackboard task_instruction: "{task_obj}" (type: {type(task_obj)})')
+        self.log_info(f'[DEBUG] Special objects list: {self.special_objects}')
+        self.log_info(f'[DEBUG] Checking if "{task_obj}" in {self.special_objects}: {task_obj in self.special_objects}')
+
         if task_obj in self.special_objects:
             self.head_positions = self.special_head_positions
             self.lift_position = self.special_lift_position
+            self.log_info(f'[DEBUG] ✓ MATCHED! Using SPECIAL positions')
+            self.log_info(f'[DEBUG]   → head={self.head_positions}, lift={self.lift_position}')
             self.log_info(f"Using special positions for '{task_obj}': head={self.head_positions}, lift={self.lift_position}")
         else:
             self.head_positions = self.default_head_positions
             self.lift_position = self.default_lift_position
+            self.log_info(f'[DEBUG] ✗ NO MATCH. Using DEFAULT positions')
+            self.log_info(f'[DEBUG]   → head={self.head_positions}, lift={self.lift_position}')
             self.log_info(f"Using default positions for '{task_obj}': head={self.head_positions}, lift={self.lift_position}")
+
+        self.log_info(f'[DEBUG] =====================================')
 
     def tick(self) -> NodeStatus:
         """Check thread status - actual control runs in separate thread."""
         if self._thread is None:
+            self.log_info(f'[DEBUG] Starting RuleHeadLift - calling _update_positions_from_blackboard()')
+
             # Update positions from blackboard BEFORE starting thread
             self._update_positions_from_blackboard()
+
+            self.log_info(f'[DEBUG] After update - Final positions: head={self.head_positions}, lift={self.lift_position}')
 
             self.joint_state = None
             self._thread_done = False
