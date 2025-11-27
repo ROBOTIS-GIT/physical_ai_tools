@@ -32,7 +32,12 @@ if TYPE_CHECKING:
 class UpdateTaskInstruction(BaseAction):
     """Action to update language instruction during active inference session."""
 
-    def __init__(self, node: 'Node', instruction: str = "", prefix: str = "Pick up the "):
+    def __init__(self,
+                 node: 'Node',
+                 instruction: str = "",
+                 prefix: str = "Pick up the ",
+                 suffix: str = " with the right gripper and place it into the box below."
+    ):
         """
         Initialize update task instruction action.
 
@@ -45,6 +50,7 @@ class UpdateTaskInstruction(BaseAction):
 
         self.instruction = instruction  # Fallback if blackboard empty
         self.prefix = prefix
+        self.suffix = suffix
         self.blackboard = Blackboard()
 
         # Service client for sending command to AI Server
@@ -69,8 +75,8 @@ class UpdateTaskInstruction(BaseAction):
             task_obj = self.blackboard.get('task_instruction', '')
 
             if task_obj:
-                # Build instruction: prefix + blackboard value
-                final_instruction = self.prefix + task_obj
+                # Build instruction: prefix + blackboard value + suffix
+                final_instruction = self.prefix + task_obj + self.suffix
                 self.log_info(f"Built instruction from blackboard: '{final_instruction}'")
             else:
                 # Use fallback instruction
