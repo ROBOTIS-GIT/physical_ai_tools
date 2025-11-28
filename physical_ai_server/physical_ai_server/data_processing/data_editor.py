@@ -222,11 +222,13 @@ class DataEditor:
         Uses episodes.jsonl to build episode_index -> task_instruction mapping,
         which is more reliable than tasks.jsonl alone.
 
-        Returns:
-            tuple containing:
+        Returns
+        -------
+        tuple containing:
             - dataset_mappings: dict[int, dict[int, int]] where key is dataset index,
               value is {episode_index: new_task_index}
             - task_name_to_index: dict[str, int] where key is task_name, value is new_task_index
+
         """
         task_name_to_index: dict[str, int] = {}
         next_task_idx = 0
