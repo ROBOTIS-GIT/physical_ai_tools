@@ -83,6 +83,7 @@ class DataEditor:
     ):
         self.verbose = verbose
         self.logger = logger or _default_logger(verbose)
+        self.total_task_num = 0
 
     def _log(self, msg: str, level: int = logging.INFO):
         if level == logging.INFO and not self.verbose:
@@ -137,7 +138,7 @@ class DataEditor:
         total_parquets_processed_overall = 0
         actual_episode_counts_per_dataset: List[int] = []
 
-        merged_task_mapping = self._build_merged_task_mapping(dataset_paths)
+        merged_task_mapping, task_name_to_index = self._build_merged_task_mapping(dataset_paths)
 
         self._log(
             '--- Processing Parquet Files and Determining Episode Counts ---',
@@ -185,7 +186,7 @@ class DataEditor:
 
         self._log('--- Processing Metadata Files ---', logging.INFO)
         self._merge_all_meta_files(
-            dataset_paths, meta_dst_dir, actual_episode_counts_per_dataset
+            dataset_paths, meta_dst_dir, actual_episode_counts_per_dataset, task_name_to_index
         )
 
         self._log('--- Processing Video Files ---', logging.INFO)
@@ -214,20 +215,22 @@ class DataEditor:
     def _build_merged_task_mapping(
         self,
         dataset_paths: List[Path]
-    ) -> dict:
+    ) -> tuple[dict[int, dict[int, int]], dict[str, int]]:
         """
         Build task_index mapping for each dataset.
 
         Uses episodes.jsonl to build episode_index -> task_instruction mapping,
         which is more reliable than tasks.jsonl alone.
 
-        Returns a dict where:
-        - Key: dataset index (0, 1, 2, ...)
-        - Value: dict of {episode_index: new_task_index}
+        Returns:
+            tuple containing:
+            - dataset_mappings: dict[int, dict[int, int]] where key is dataset index,
+              value is {episode_index: new_task_index}
+            - task_name_to_index: dict[str, int] where key is task_name, value is new_task_index
         """
-        merged_tasks = {}
+        task_name_to_index: dict[str, int] = {}
         next_task_idx = 0
-        dataset_mappings = {}
+        dataset_mappings: dict[int, dict[int, int]] = {}
 
         for ds_idx, dataset_path in enumerate(dataset_paths):
             src_episodes_path = dataset_path / 'meta' / 'episodes.jsonl'
@@ -247,27 +250,29 @@ class DataEditor:
 
                 task_name = tasks_list[0]
 
-                # Check if this task already exists in merged tasks
-                if task_name in merged_tasks:
-                    new_task_idx = merged_tasks[task_name]
+                # Check if this task already exists in the global mapping
+                if task_name in task_name_to_index:
+                    new_task_idx = task_name_to_index[task_name]
                 else:
                     # New task, assign new index
                     new_task_idx = next_task_idx
-                    merged_tasks[task_name] = new_task_idx
+                    task_name_to_index[task_name] = new_task_idx
                     next_task_idx += 1
 
                 # Map episode_index to new_task_index
                 episode_to_task_map[episode_idx] = new_task_idx
-                # Also handle type variations
+                # Also handle type variations (int/str) for robustness
                 try:
                     episode_to_task_map[int(episode_idx)] = new_task_idx
                     episode_to_task_map[str(episode_idx)] = new_task_idx
                 except (ValueError, TypeError):
+                    # episode_idx may be a type that cannot be converted to int or str
+                    # In such cases, skip adding those type variations
                     pass
 
             dataset_mappings[ds_idx] = episode_to_task_map
 
-        return dataset_mappings
+        return dataset_mappings, task_name_to_index
 
     def _copy_parquet_and_update_indices_for_merge(
         self,
@@ -276,18 +281,21 @@ class DataEditor:
         chunk_name: str,
         episode_idx_offset: int,
         frame_idx_offset: int,
-        episode_to_task_map: dict,
+        episode_to_task_map: dict[int, int],
         verbose: bool | None = None,
     ) -> int:
+        # Use provided verbose or fall back to instance verbose
+        use_verbose = verbose if verbose is not None else self.verbose
+
         src_chunk_dir = src_root / 'data' / chunk_name
         if not src_chunk_dir.exists():
-            if verbose:
+            if use_verbose:
                 self._log(
                     f'Source chunk directory not found: {src_chunk_dir}', logging.INFO)
             return 0
         src_files = self._natural_sort_paths(src_chunk_dir.glob('episode_*.parquet'))
         if not src_files:
-            if verbose:
+            if use_verbose:
                 self._log(
                     f'No Parquet files found in {src_chunk_dir}', logging.INFO)
             return 0
@@ -316,18 +324,19 @@ class DataEditor:
                     if original_episode_idx in episode_to_task_map:
                         new_task_idx = episode_to_task_map[original_episode_idx]
                     else:
-                        # Try type conversions
+                        # Try type conversions as fallback
                         try:
                             if int(original_episode_idx) in episode_to_task_map:
                                 new_task_idx = episode_to_task_map[int(original_episode_idx)]
                             elif str(original_episode_idx) in episode_to_task_map:
                                 new_task_idx = episode_to_task_map[str(original_episode_idx)]
                         except (ValueError, TypeError):
+                            # Ignore conversion errors; we're just trying alternative key types
                             pass
 
                     if new_task_idx is not None:
                         df['task_index'] = new_task_idx
-                    elif verbose:
+                    elif use_verbose:
                         self._log(
                             f'Warning: No task mapping found for episode {original_episode_idx} '
                             f'in {src_file_path.name}. task_index will remain unchanged.',
@@ -346,7 +355,8 @@ class DataEditor:
         self,
         dataset_paths: List[Path],
         meta_dst_dir: Path,
-        actual_episode_counts: List[int]
+        actual_episode_counts: List[int],
+        task_name_to_index: dict[str, int]
     ):
         current_meta_episode_offset = 0
         ep_stats_out = meta_dst_dir / 'episodes_stats.jsonl'
@@ -373,16 +383,15 @@ class DataEditor:
             self._merge_episodes(
                 src_meta_dir / 'episodes.jsonl',
                 ep_out, current_meta_episode_offset)
-            # tasks.jsonl
-            self._merge_tasks(
-                src_meta_dir / 'tasks.jsonl',
-                tasks_out)
             # info.json
             self._merge_info(
                 src_meta_dir / 'info.json',
                 info_out)
 
             current_meta_episode_offset += eps_in_this_ds_for_meta
+
+        # Generate tasks.jsonl from global task mapping (ensures consistency with parquet files)
+        self._write_merged_tasks(tasks_out, task_name_to_index)
 
         # Ensure train split correctness
         info_data = FileIO.read_json(info_out, default={}) or {}
@@ -432,20 +441,14 @@ class DataEditor:
                 self._log(f'Failed patching episode record: {e}', logging.INFO)
         FileIO.write_jsonl(base_data + new_data, dst)
 
-    def _merge_tasks(self, src: Path, dst: Path):
-        if not src.exists():
-            return
-        base_tasks = FileIO.read_jsonl(dst) if dst.exists() else []
-        new_tasks = FileIO.read_jsonl(src)
-        existing_task_names = {r['task']: r['task_index'] for r in base_tasks}
-        next_idx = max(existing_task_names.values()) + 1 if existing_task_names else 0
-        for r_new in new_tasks:
-            if r_new['task'] not in existing_task_names:
-                base_tasks.append({'task': r_new['task'], 'task_index': next_idx})
-                existing_task_names[r_new['task']] = next_idx
-                next_idx += 1
-        FileIO.write_jsonl(sorted(base_tasks, key=lambda x: x['task_index']), dst)
-        self.total_task_num = len(base_tasks)
+    def _write_merged_tasks(self, dst: Path, task_name_to_index: dict[str, int]):
+        """Write tasks.jsonl using the globally computed task_name_to_index mapping."""
+        tasks_list = [
+            {'task': task_name, 'task_index': task_idx}
+            for task_name, task_idx in task_name_to_index.items()
+        ]
+        FileIO.write_jsonl(sorted(tasks_list, key=lambda x: x['task_index']), dst)
+        self.total_task_num = len(tasks_list)
 
     def _merge_info(self, src: Path, dst: Path):
         if not src.exists():
@@ -458,7 +461,8 @@ class DataEditor:
         for k, v in d_new.items():
             if (k not in self.MERGE_NUM_KEYS and k != 'splits') or (k == 'splits' and not d_base):
                 merged_info[k] = v
-        merged_info['total_tasks'] = self.total_task_num
+        if hasattr(self, 'total_task_num') and self.total_task_num > 0:
+            merged_info['total_tasks'] = self.total_task_num
         FileIO.write_json(dst, merged_info)
 
     @staticmethod
