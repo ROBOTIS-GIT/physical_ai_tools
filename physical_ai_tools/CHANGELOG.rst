@@ -2,6 +2,10 @@
 Changelog for package physical_ai_tools
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
+0.7.1 (2025-11-26)
+------------------
+* Fixed an issue where the task_index was being merged based on the first episode when merging episodes in the *.parquet data.
+
 0.7.0 (2025-11-21)
 ------------------
 * Added rosbag_recorder package
