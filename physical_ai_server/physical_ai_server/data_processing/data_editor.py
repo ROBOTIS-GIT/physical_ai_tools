@@ -171,8 +171,16 @@ class DataEditor:
             )
 
             total_parquets_processed_overall += processed_eps
-            actual_episode_counts_per_dataset.append(processed_eps)
-            cumulative_episode_offset_parquets += processed_eps
+            current_dataset_episodes = info_data.get('total_episodes', 0)
+            if not isinstance(current_dataset_episodes, int):
+                current_dataset_episodes = 0
+
+            episodes_offset_to_add = (
+                current_dataset_episodes if current_dataset_episodes > 0 else processed_eps
+            )
+
+            actual_episode_counts_per_dataset.append(episodes_offset_to_add)
+            cumulative_episode_offset_parquets += episodes_offset_to_add
             cumulative_frame_offset_parquets += current_dataset_frames
 
         self._log('--- Processing Metadata Files ---', logging.INFO)
@@ -210,29 +218,34 @@ class DataEditor:
         """
         Build task_index mapping for each dataset.
 
+        Uses episodes.jsonl to build episode_index -> task_instruction mapping,
+        which is more reliable than tasks.jsonl alone.
+
         Returns a dict where:
         - Key: dataset index (0, 1, 2, ...)
-        - Value: dict of {old_task_index: new_task_index}
+        - Value: dict of {episode_index: new_task_index}
         """
         merged_tasks = {}
         next_task_idx = 0
         dataset_mappings = {}
 
         for ds_idx, dataset_path in enumerate(dataset_paths):
-            src_tasks_path = dataset_path / 'meta' / 'tasks.jsonl'
-            if not src_tasks_path.exists():
+            src_episodes_path = dataset_path / 'meta' / 'episodes.jsonl'
+            if not src_episodes_path.exists():
                 dataset_mappings[ds_idx] = {}
                 continue
 
-            src_tasks = FileIO.read_jsonl(src_tasks_path)
-            old_to_new_map = {}
+            src_episodes = FileIO.read_jsonl(src_episodes_path)
+            episode_to_task_map = {}
 
-            for task_record in src_tasks:
-                task_name = task_record.get('task')
-                old_task_idx = task_record.get('task_index')
+            for episode_record in src_episodes:
+                episode_idx = episode_record.get('episode_index')
+                tasks_list = episode_record.get('tasks', [])
 
-                if task_name is None or old_task_idx is None:
+                if episode_idx is None or not tasks_list:
                     continue
+
+                task_name = tasks_list[0]
 
                 # Check if this task already exists in merged tasks
                 if task_name in merged_tasks:
@@ -243,9 +256,16 @@ class DataEditor:
                     merged_tasks[task_name] = new_task_idx
                     next_task_idx += 1
 
-                old_to_new_map[old_task_idx] = new_task_idx
+                # Map episode_index to new_task_index
+                episode_to_task_map[episode_idx] = new_task_idx
+                # Also handle type variations
+                try:
+                    episode_to_task_map[int(episode_idx)] = new_task_idx
+                    episode_to_task_map[str(episode_idx)] = new_task_idx
+                except (ValueError, TypeError):
+                    pass
 
-            dataset_mappings[ds_idx] = old_to_new_map
+            dataset_mappings[ds_idx] = episode_to_task_map
 
         return dataset_mappings
 
@@ -256,7 +276,7 @@ class DataEditor:
         chunk_name: str,
         episode_idx_offset: int,
         frame_idx_offset: int,
-        task_index_map: dict,
+        episode_to_task_map: dict,
         verbose: bool | None = None,
     ) -> int:
         src_chunk_dir = src_root / 'data' / chunk_name
@@ -287,14 +307,32 @@ class DataEditor:
                 if 'frame_index' in df.columns:
                     df['frame_index'] = df['frame_index'] + frame_idx_offset
 
-                # Update task_index using the mapping
-                if 'task_index' in df.columns and task_index_map:
-                    # Get unique task_index values in this parquet
-                    unique_old_tasks = df['task_index'].unique()
-                    for old_task_idx in unique_old_tasks:
-                        if old_task_idx in task_index_map:
-                            new_task_idx = task_index_map[old_task_idx]
-                            df.loc[df['task_index'] == old_task_idx, 'task_index'] = new_task_idx
+                # Update task_index using the episode-based mapping
+                if 'task_index' in df.columns and episode_to_task_map:
+                    # Look up the new task_index based on the original episode_index
+                    new_task_idx = None
+
+                    # Try exact match
+                    if original_episode_idx in episode_to_task_map:
+                        new_task_idx = episode_to_task_map[original_episode_idx]
+                    else:
+                        # Try type conversions
+                        try:
+                            if int(original_episode_idx) in episode_to_task_map:
+                                new_task_idx = episode_to_task_map[int(original_episode_idx)]
+                            elif str(original_episode_idx) in episode_to_task_map:
+                                new_task_idx = episode_to_task_map[str(original_episode_idx)]
+                        except (ValueError, TypeError):
+                            pass
+
+                    if new_task_idx is not None:
+                        df['task_index'] = new_task_idx
+                    elif verbose:
+                        self._log(
+                            f'Warning: No task mapping found for episode {original_episode_idx} '
+                            f'in {src_file_path.name}. task_index will remain unchanged.',
+                            logging.WARNING
+                        )
 
                 df.to_parquet(dst_file_path)
                 count_processed += 1
