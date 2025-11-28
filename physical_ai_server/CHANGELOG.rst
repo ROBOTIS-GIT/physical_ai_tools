@@ -2,6 +2,11 @@
 Changelog for package physical_ai_server
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
+0.7.1 (2025-11-28)
+------------------
+* Replaced rosbridge server launch inclusion with direct rosbridge websocket node instantiation in launch file
+* Contributors: Kiwoong Park
+
 0.7.0 (2025-11-21)
 ------------------
 * Added rosbag2 recording support when collecting LeRobot datasets

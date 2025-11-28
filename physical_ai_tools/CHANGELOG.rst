@@ -2,6 +2,11 @@
 Changelog for package physical_ai_tools
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
+0.7.1 (2025-11-28)
+------------------
+* Updated physical_ai_server launch file to use direct rosbridge websocket node instantiation
+* Contributors: Kiwoong Park
+
 0.7.0 (2025-11-21)
 ------------------
 * Added rosbag_recorder package
