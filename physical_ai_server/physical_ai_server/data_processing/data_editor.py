@@ -176,6 +176,23 @@ class DataEditor:
             if not isinstance(current_dataset_episodes, int):
                 current_dataset_episodes = 0
 
+            # We prioritize total_episodes from info.json over actual processed Parquet count
+            # to maintain consistency with metadata and
+            # avoid index collisions when files are missing.
+            # Log a warning if the difference is significant,
+            # as it may indicate data inconsistency.
+            if (
+                current_dataset_episodes > 0
+                and abs(current_dataset_episodes - processed_eps) > 1
+            ):
+                self._log(
+                    f'Warning: total_episodes from info.json ({current_dataset_episodes}) '
+                    f'differs significantly from number '
+                    f'of processed Parquet files ({processed_eps}) '
+                    f'in dataset {dataset_path}. This may indicate missing or extra files.',
+                    logging.WARNING
+                )
+
             episodes_offset_to_add = (
                 current_dataset_episodes if current_dataset_episodes > 0 else processed_eps
             )
@@ -261,16 +278,17 @@ class DataEditor:
                     task_name_to_index[task_name] = new_task_idx
                     next_task_idx += 1
 
-                # Map episode_index to new_task_index
-                episode_to_task_map[episode_idx] = new_task_idx
-                # Also handle type variations (int/str) for robustness
+                # Map episode_index to new_task_index (normalize to int for consistency)
                 try:
-                    episode_to_task_map[int(episode_idx)] = new_task_idx
-                    episode_to_task_map[str(episode_idx)] = new_task_idx
+                    normalized_episode_idx = int(episode_idx)
+                    episode_to_task_map[normalized_episode_idx] = new_task_idx
                 except (ValueError, TypeError):
-                    # episode_idx may be a type that cannot be converted to int or str
-                    # In such cases, skip adding those type variations
-                    pass
+                    # If episode_idx cannot be converted to int, skip this episode
+                    self._log(
+                        f'Warning: Cannot convert episode_index'
+                        f' {episode_idx} to int in {dataset_path}',
+                        logging.WARNING
+                    )
 
             dataset_mappings[ds_idx] = episode_to_task_map
 
@@ -319,25 +337,10 @@ class DataEditor:
 
                 # Update task_index using the episode-based mapping
                 if 'task_index' in df.columns and episode_to_task_map:
-                    # Look up the new task_index based on the original episode_index
-                    new_task_idx = None
-
-                    # Try exact match
+                    # Look up the new task_index (original_episode_idx
+                    # is already an int from _extract_idx_from_name)
                     if original_episode_idx in episode_to_task_map:
-                        new_task_idx = episode_to_task_map[original_episode_idx]
-                    else:
-                        # Try type conversions as fallback
-                        try:
-                            if int(original_episode_idx) in episode_to_task_map:
-                                new_task_idx = episode_to_task_map[int(original_episode_idx)]
-                            elif str(original_episode_idx) in episode_to_task_map:
-                                new_task_idx = episode_to_task_map[str(original_episode_idx)]
-                        except (ValueError, TypeError):
-                            # Ignore conversion errors; we're just trying alternative key types
-                            pass
-
-                    if new_task_idx is not None:
-                        df['task_index'] = new_task_idx
+                        df['task_index'] = episode_to_task_map[original_episode_idx]
                     elif use_verbose:
                         self._log(
                             f'Warning: No task mapping found for episode {original_episode_idx} '
