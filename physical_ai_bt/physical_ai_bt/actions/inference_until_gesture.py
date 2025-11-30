@@ -16,7 +16,7 @@
 #
 # Author: Seongwoo Kim
 
-"""Inference action using VLA model via AI Server."""
+"""Inference action that runs until gesture sequence is detected."""
 
 import time
 from enum import Enum
@@ -68,19 +68,27 @@ HOME_POSITIONS = {
 
 
 
-class Inference(BaseAction):
+class InferenceUntilGesture(BaseAction):
+    """
+    Action that runs inference until 3-stage gesture sequence is completed.
+
+    The gesture sequence consists of:
+    1. Both grippers close (≥ 0.8)
+    2. Both grippers open (≤ 0.2)
+    3. Arms return to home position and hold for 2 seconds
+    """
 
     def __init__(
         self,
         node: 'Node',
     ):
         """
-        Initialize inference action.
+        Initialize InferenceUntilGesture action.
 
         Args:
             node: ROS2 node reference
         """
-        super().__init__(node, name="Inference")
+        super().__init__(node, name="InferenceUntilGesture")
 
         qos_profile = QoSProfile(
             depth=10,

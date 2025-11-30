@@ -29,7 +29,7 @@ from rclpy.qos import QoSProfile, ReliabilityPolicy
 if TYPE_CHECKING:
     from rclpy.node import Node
 
-class RuleHeadLift(BaseAction):
+class MoveHeadLift(BaseAction):
     def __init__(
             self,
             node: 'Node',
@@ -37,7 +37,7 @@ class RuleHeadLift(BaseAction):
             lift_position: float = None,
             position_threshold: float = 0.01,
         ):
-        super().__init__(node, name="RuleHeadLift")
+        super().__init__(node, name="MoveHeadLift")
         self.head_joint_names = ["head_joint1", "head_joint2"]
 
         # Default positions (used as fallback)
@@ -161,7 +161,7 @@ class RuleHeadLift(BaseAction):
         """Update head and lift positions based on blackboard task_instruction."""
         task_obj = self.blackboard.get('task_instruction', '')
 
-        self.log_info(f'[DEBUG] ==== RuleHeadLift Position Update ====')
+        self.log_info(f'[DEBUG] ==== MoveHeadLift Position Update ====')
         self.log_info(f'[DEBUG] Blackboard task_instruction: "{task_obj}" (type: {type(task_obj)})')
         self.log_info(f'[DEBUG] Special objects list: {self.special_objects}')
         self.log_info(f'[DEBUG] Checking if "{task_obj}" in {self.special_objects}: {task_obj in self.special_objects}')
@@ -184,7 +184,7 @@ class RuleHeadLift(BaseAction):
     def tick(self) -> NodeStatus:
         """Check thread status - actual control runs in separate thread."""
         if self._thread is None:
-            self.log_info(f'[DEBUG] Starting RuleHeadLift - calling _update_positions_from_blackboard()')
+            self.log_info(f'[DEBUG] Starting MoveHeadLift - calling _update_positions_from_blackboard()')
 
             # Update positions from blackboard BEFORE starting thread
             self._update_positions_from_blackboard()
@@ -197,7 +197,7 @@ class RuleHeadLift(BaseAction):
 
             self._thread = threading.Thread(target=self._control_loop, daemon=True)
             self._thread.start()
-            self.log_info(f"HeadLift thread started with head={self.head_positions}, lift={self.lift_position}")
+            self.log_info(f"MoveHeadLift thread started with head={self.head_positions}, lift={self.lift_position}")
             return NodeStatus.RUNNING
 
         if self._thread_done:

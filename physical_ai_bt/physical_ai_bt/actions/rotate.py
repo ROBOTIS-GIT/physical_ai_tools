@@ -16,7 +16,7 @@
 #
 # Author: Seongwoo Kim
 
-"""Whole-body rule-based action for fixed position movement."""
+"""Action to rotate the robot to a target angle."""
 
 import math
 import threading
@@ -33,7 +33,7 @@ if TYPE_CHECKING:
     from rclpy.node import Node
 
 
-class RuleSwerve(BaseAction):
+class Rotate(BaseAction):
     @staticmethod
     def angle_diff_deg(a, b):
         """Return minimal difference between two angles in degrees (-180~180)."""
@@ -50,7 +50,7 @@ class RuleSwerve(BaseAction):
             angle_deg: float = 90.0,
             topic_config: dict = None
         ):
-        super().__init__(node, name="RuleSwerve")
+        super().__init__(node, name="Rotate")
         self.angle_deg = angle_deg
         self.topic_config = topic_config or {}
         if not isinstance(self.topic_config, dict):
@@ -164,7 +164,7 @@ class RuleSwerve(BaseAction):
 
             self._thread = threading.Thread(target=self._control_loop, daemon=True)
             self._thread.start()
-            self.log_info(f"Swerve thread started (target: {self.angle_deg} deg)")
+            self.log_info(f"Rotate thread started (target: {self.angle_deg} deg)")
             return NodeStatus.RUNNING
 
         # Subsequent ticks - just check thread status

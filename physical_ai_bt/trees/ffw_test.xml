@@ -4,42 +4,46 @@
     <Sequence name="RobotControlSequence">
       <UpdateTaskInstruction name="ChangeInstruction_1"
         instruction="Stay"/>
-      <RuleArms name="ArmsControl_1"
+      <MoveArms name="ArmsControl_1"
         left_positions="0.75, 0.0, 0.0, -2.3, 0.0, 0.0, 0.0, 0.0"
         right_positions="0.75, 0.0, 0.0, -2.3, 0.0, 0.0, 0.0, 0.0"/>
-      <RuleHeadLift name="HeadLiftControl_1"
+      <MoveHeadLift name="HeadLiftControl_1"
         head_positions="0.695,0.0"
         lift_position="-0.1"/>
       <ResumeInference name="Resume_Publishing_1"/>
       <TimedInference name="VLA_Inference_1" duration="30.0"/>
       <PauseInference name="Pause_Publishing_1"/>
-      <!-- <RuleArms name="ArmsControl_1"
+      <!-- <MoveArms name="ArmsControl_1"
         left_positions="0.75, 0.0, 0.0, -2.3, 0.0, 0.0, 0.0, 0.0"
         right_positions="0.75, 0.0, 0.0, -2.3, 0.0, 0.0, 0.0, 0.0"/>
-      <RuleHeadLift name="HeadLiftControl_1"
+      <MoveHeadLift name="HeadLiftControl_1"
         head_positions="0.695,0.0"
         lift_position="-0.1"/>
       <ResumeInference name="Resume_Publishing_1"/>
-      <Inference name="VLA_Inference_1"/>
+      <InferenceUntilGesture name="VLA_Inference_1"/>
       <PauseInference name="Pause_Publishing_2"/>
-      <RuleSwerve name="Rule_Based_Rotation_1" angle_deg="90.0"/>
+      <Rotate name="Rule_Based_Rotation_1" angle_deg="90.0"/>
       <UpdateTaskInstruction name="ChangeInstruction_1"
         instruction="stay"/>
-      <RuleSwerve name="Rule_Based_Rotation_2" angle_deg="-90"/>
-      <RuleArms name="ArmsControl_2"
+      <Rotate name="Rule_Based_Rotation_2" angle_deg="-90"/>
+      <MoveArms name="ArmsControl_2"
         left_positions="0.75, 0.0, 0.0, -2.3, 0.0, 0.0, 0.0, 0.0"
         right_positions="0.75, 0.0, 0.0, -2.3, 0.0, 0.0, 0.0, 0.0"/>
-      <RuleHeadLift name="HeadLiftControl_2"
+      <MoveHeadLift name="HeadLiftControl_2"
         head_positions="0.695,0.0"
         lift_position="-0.1"/>
       <ResumeInference name="Resume_Publishing_2"/>
-      <Inference name="VLA_Inference_2"/> -->
+      <InferenceUntilGesture name="VLA_Inference_2"/> -->
     </Sequence>
   </BehaviorTree>
 
   <!-- Description of Node Models (used by Groot) -->
   <TreeNodesModel>
-    <Action ID="Inference"/>
+    <Action ID="InferenceUntilGesture">
+      <description>
+        Runs inference until 3-stage gesture sequence is completed.
+      </description>
+    </Action>
     <Action ID="TimedInference">
       <input_port name="duration" default="20.0">
         Duration in seconds to run inference.
@@ -47,7 +51,7 @@
     </Action>
     <Action ID="PauseInference"/>
     <Action ID="ResumeInference"/>
-    <Action ID="RuleSwerve">
+    <Action ID="Rotate">
       <input_port name="angle_deg" default="90.0">
         Desired rotation angle in degrees.
         Positive for CCW, negative for CW.
@@ -58,7 +62,7 @@
         ROS topic for depth image (sensor_msgs/Image)
       </input_port>
     </Action>
-    <Action ID="RuleHeadLift">
+    <Action ID="MoveHeadLift">
       <input_port name="head_positions" default="0.0,0.0">
         Target positions for head joints (comma-separated).
       </input_port>
@@ -66,7 +70,7 @@
         Target position for lift joint.
       </input_port>
     </Action>
-    <Action ID="RuleArms">
+    <Action ID="MoveArms">
       <input_port name="left_positions" default="0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0">
         Target positions for left arm joints (comma-separated).
       </input_port>
@@ -79,7 +83,7 @@
         New task instruction to send to AI Server.
       </input_port>
     </Action>
-    <Action ID="RuleLift">
+    <Action ID="MoveLift">
       <input_port name="lift_position" default="0.0">
         Target position for lift joint.
       </input_port>
@@ -87,7 +91,7 @@
         Position tolerance for completion.
       </input_port>
     </Action>
-    <Action ID="RuleGripper">
+    <Action ID="OpenGrippers">
       <input_port name="closed_threshold" default="1.0">
         Threshold to detect closed gripper (>= this value).
       </input_port>

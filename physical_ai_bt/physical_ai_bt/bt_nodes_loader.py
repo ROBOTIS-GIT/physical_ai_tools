@@ -21,7 +21,7 @@
 import xml.etree.ElementTree as ET
 from typing import TYPE_CHECKING, Dict, Type
 
-from physical_ai_bt.actions import Inference, RuleSwerve
+from physical_ai_bt.actions import InferenceUntilGesture, Rotate
 from physical_ai_bt.actions.timed_inference import TimedInference
 from physical_ai_bt.actions.control_inference import (
     PauseInference,
@@ -64,22 +64,22 @@ class XMLTreeLoader:
         }
 
         from physical_ai_bt.actions.camera_depth import CameraDepth
-        from physical_ai_bt.actions.rule_head_lift import RuleHeadLift
-        from physical_ai_bt.actions.rule_arms import RuleArms
-        from physical_ai_bt.actions.rule_lift import RuleLift
-        from physical_ai_bt.actions.rule_gripper import RuleGripper
+        from physical_ai_bt.actions.move_head_lift import MoveHeadLift
+        from physical_ai_bt.actions.move_arms import MoveArms
+        from physical_ai_bt.actions.move_lift import MoveLift
+        from physical_ai_bt.actions.open_grippers import OpenGrippers
         self.action_types: Dict[str, Type[BaseAction]] = {
-            'Inference': Inference,
+            'InferenceUntilGesture': InferenceUntilGesture,
             'TimedInference': TimedInference,
-            'RuleSwerve': RuleSwerve,
+            'Rotate': Rotate,
             'PauseInference': PauseInference,
             'ResumeInference': ResumeInference,
             'UpdateTaskInstruction': UpdateTaskInstruction,
             'CameraDepth': CameraDepth,
-            'RuleHeadLift': RuleHeadLift,
-            'RuleArms': RuleArms,
-            'RuleLift': RuleLift,
-            'RuleGripper': RuleGripper,
+            'MoveHeadLift': MoveHeadLift,
+            'MoveArms': MoveArms,
+            'MoveLift': MoveLift,
+            'OpenGrippers': OpenGrippers,
         }
 
     def load_tree_from_file(self, xml_path: str, main_tree_id: str = None) -> BTNode:
@@ -199,13 +199,13 @@ class XMLTreeLoader:
             BaseAction: Created action instance
         """
         # Map XML parameters to constructor arguments
-        if action_class == Inference:
-            return Inference(
+        if action_class == InferenceUntilGesture:
+            return InferenceUntilGesture(
                 node=self.node,
             )
 
-        elif action_class == RuleSwerve:
-            return RuleSwerve(
+        elif action_class == Rotate:
+            return Rotate(
                 node=self.node,
                 angle_deg=params.get('angle_deg', 90.0),
                 topic_config=self.topic_config
@@ -235,13 +235,13 @@ class XMLTreeLoader:
                 node=self.node,
                 depth_topic=params.get('depth_topic', "/camera/depth/image_raw")
             )
-        elif action_class.__name__ == "RuleHeadLift":
+        elif action_class.__name__ == "MoveHeadLift":
             return action_class(
                 node=self.node,
                 head_positions=params.get('head_positions', [0.0, 0.0]),
                 lift_position=params.get('lift_position', 0.0),
             )
-        elif action_class.__name__ == "RuleArms":
+        elif action_class.__name__ == "MoveArms":
             return action_class(
                 node=self.node,
                 left_positions=params.get('left_positions', [0.0]*8),
@@ -252,13 +252,13 @@ class XMLTreeLoader:
                 node=self.node,
                 duration=params.get('duration', 20.0)
             )
-        elif action_class.__name__ == "RuleLift":
+        elif action_class.__name__ == "MoveLift":
             return action_class(
                 node=self.node,
                 lift_position=params.get('lift_position', 0.0),
                 position_threshold=params.get('position_threshold', 0.01)
             )
-        elif action_class.__name__ == "RuleGripper":
+        elif action_class.__name__ == "OpenGrippers":
             return action_class(
                 node=self.node,
                 closed_threshold=params.get('closed_threshold', 1.0),

@@ -23,7 +23,7 @@ from rclpy.qos import QoSProfile, ReliabilityPolicy
 if TYPE_CHECKING:
     from rclpy.node import Node
 
-class RuleArms(BaseAction):
+class MoveArms(BaseAction):
     def __init__(
             self,
             node: 'Node',
@@ -31,7 +31,7 @@ class RuleArms(BaseAction):
             right_positions: List[float],
             position_threshold: float = 0.01
         ):
-        super().__init__(node, name="RuleArms")
+        super().__init__(node, name="MoveArms")
         self.left_joint_names = [
             "arm_l_joint1", "arm_l_joint2", "arm_l_joint3", "arm_l_joint4",
             "arm_l_joint5", "arm_l_joint6", "arm_l_joint7", "gripper_l_joint1"

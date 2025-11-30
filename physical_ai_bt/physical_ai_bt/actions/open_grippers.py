@@ -30,8 +30,8 @@ if TYPE_CHECKING:
     from rclpy.node import Node
 
 
-class RuleGripper(BaseAction):
-    """Rule-based action to detect closed grippers and open them automatically."""
+class OpenGrippers(BaseAction):
+    """Action to detect and open closed grippers."""
 
     def __init__(
         self,
@@ -41,7 +41,7 @@ class RuleGripper(BaseAction):
         position_threshold: float = 0.01,
     ):
         """
-        Initialize RuleGripper action.
+        Initialize OpenGrippers action.
 
         Args:
             node: ROS2 node reference
@@ -49,7 +49,7 @@ class RuleGripper(BaseAction):
             open_position: Target open position for grippers
             position_threshold: Position tolerance for completion
         """
-        super().__init__(node, name="RuleGripper")
+        super().__init__(node, name="OpenGrippers")
         self.gripper_joint_names = ["gripper_l_joint1", "gripper_r_joint1"]
         self.closed_threshold = closed_threshold
         self.open_position = open_position
@@ -187,7 +187,7 @@ class RuleGripper(BaseAction):
             self._thread_done = True
 
     def tick(self) -> NodeStatus:
-        """Execute one tick of RuleGripper action."""
+        """Execute one tick of OpenGrippers action."""
         if self._thread is None:
             self.joint_state = None
             self._thread_done = False
@@ -196,7 +196,7 @@ class RuleGripper(BaseAction):
 
             self._thread = threading.Thread(target=self._control_loop, daemon=True)
             self._thread.start()
-            self.log_info("RuleGripper thread started")
+            self.log_info("OpenGrippers thread started")
             return NodeStatus.RUNNING
 
         if self._thread_done:

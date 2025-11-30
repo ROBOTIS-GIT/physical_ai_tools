@@ -30,8 +30,8 @@ if TYPE_CHECKING:
     from rclpy.node import Node
 
 
-class RuleLift(BaseAction):
-    """Rule-based action to control lift joint independently."""
+class MoveLift(BaseAction):
+    """Action to move lift joint to target position."""
 
     def __init__(
         self,
@@ -40,14 +40,14 @@ class RuleLift(BaseAction):
         position_threshold: float = 0.01,
     ):
         """
-        Initialize RuleLift action.
+        Initialize MoveLift action.
 
         Args:
             node: ROS2 node reference
             lift_position: Target position for lift joint
             position_threshold: Position tolerance for completion
         """
-        super().__init__(node, name="RuleLift")
+        super().__init__(node, name="MoveLift")
         self.lift_joint_name = "lift_joint"
         self.target_position = lift_position
         self.position_threshold = position_threshold
@@ -126,7 +126,7 @@ class RuleLift(BaseAction):
             self._thread_done = True
 
     def tick(self) -> NodeStatus:
-        """Execute one tick of RuleLift action."""
+        """Execute one tick of MoveLift action."""
         if self._thread is None:
             self.joint_state = None
             self._thread_done = False
@@ -134,7 +134,7 @@ class RuleLift(BaseAction):
 
             self._thread = threading.Thread(target=self._control_loop, daemon=True)
             self._thread.start()
-            self.log_info(f"RuleLift thread started: target={self.target_position}")
+            self.log_info(f"MoveLift thread started: target={self.target_position}")
             return NodeStatus.RUNNING
 
         if self._thread_done:

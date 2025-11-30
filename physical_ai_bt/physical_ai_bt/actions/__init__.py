@@ -19,26 +19,26 @@
 """Behavior Tree Actions for Physical AI."""
 
 from physical_ai_bt.actions.base_action import BaseAction
-from physical_ai_bt.actions.inference import Inference
+from physical_ai_bt.actions.inference_until_gesture import InferenceUntilGesture
 from physical_ai_bt.actions.timed_inference import TimedInference
-from physical_ai_bt.actions.rule_swerve import RuleSwerve
+from physical_ai_bt.actions.rotate import Rotate
 from physical_ai_bt.actions.control_inference import PauseInference, ResumeInference
 from physical_ai_bt.actions.camera_depth import CameraDepth
-from physical_ai_bt.actions.rule_head_lift import RuleHeadLift
-from physical_ai_bt.actions.rule_arms import RuleArms
-from physical_ai_bt.actions.rule_lift import RuleLift
-from physical_ai_bt.actions.rule_gripper import RuleGripper
+from physical_ai_bt.actions.move_head_lift import MoveHeadLift
+from physical_ai_bt.actions.move_arms import MoveArms
+from physical_ai_bt.actions.move_lift import MoveLift
+from physical_ai_bt.actions.open_grippers import OpenGrippers
 
 __all__ = [
     'BaseAction',
-    'Inference',
+    'InferenceUntilGesture',
     'TimedInference',
-    'RuleSwerve',
+    'Rotate',
     'PauseInference',
     'ResumeInference',
     'CameraDepth',
-    'RuleHeadLift',
-    'RuleArms',
-    'RuleLift',
-    'RuleGripper',
+    'MoveHeadLift',
+    'MoveArms',
+    'MoveLift',
+    'OpenGrippers',
 ]
