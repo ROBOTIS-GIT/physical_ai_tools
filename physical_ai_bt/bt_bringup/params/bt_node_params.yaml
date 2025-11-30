@@ -6,3 +6,6 @@ bt_node:
     # Behavior tree configuration
     tree_xml: 'ffw_test.xml'
     tick_rate: 30.0
+
+    # AI Server communication configuration
+    inference_fps: 5

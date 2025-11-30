@@ -51,6 +51,13 @@ class XMLTreeLoader:
         self.joint_names = joint_names or []
         self.topic_config = topic_config or {}
 
+        # Get inference_fps from node parameter
+        self.inference_fps = 5  # Default
+        try:
+            self.inference_fps = self.node.get_parameter('inference_fps').value
+        except:
+            self.node.get_logger().warn('inference_fps parameter not found, using default: 5')
+
         # Register available node types
         self.control_types: Dict[str, Type[BaseControl]] = {
             'Sequence': Sequence,
@@ -205,15 +212,22 @@ class XMLTreeLoader:
             )
 
         elif action_class == PauseInference:
-            return PauseInference(node=self.node)
+            return PauseInference(
+                node=self.node,
+                inference_fps=self.inference_fps
+            )
 
         elif action_class == ResumeInference:
-            return ResumeInference(node=self.node)
+            return ResumeInference(
+                node=self.node,
+                inference_fps=self.inference_fps
+            )
 
         elif action_class == UpdateTaskInstruction:
             return UpdateTaskInstruction(
                 node=self.node,
-                instruction=params.get('instruction', '')
+                instruction=params.get('instruction', ''),
+                inference_fps=self.inference_fps
             )
 
         elif action_class.__name__ == "CameraDepth":

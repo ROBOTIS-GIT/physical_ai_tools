@@ -70,12 +70,15 @@ class BehaviorTreeNode(Node):
         self.declare_parameter('robot_type', 'ffw_sg2_rev1')
         self.declare_parameter('tree_xml', 'ffw_test.xml')
         self.declare_parameter('tick_rate', 30.0)
+        self.declare_parameter('inference_fps', 5)
 
         # robot_type = self.get_parameter('robot_type').value
         robot_type = 'ffw_sg2_rev1'
         tree_xml = self.get_parameter('tree_xml').value
         tick_rate = self.get_parameter('tick_rate').value
+        self.inference_fps = self.get_parameter('inference_fps').value
 
+        self.get_logger().info(f'Inference FPS: {self.inference_fps}')
         self.robot_type = robot_type
         self.joint_names = self._load_joint_order(robot_type)
         self.topic_config = self._load_topic_config(robot_type)
@@ -275,6 +278,7 @@ class BehaviorTreeNode(Node):
             pause_request = SendCommand.Request()
             pause_request.command = SendCommand.Request.STOP
             pause_request.task_info = TaskInfo()
+            pause_request.task_info.fps = self.inference_fps
 
             # Send async (non-blocking)
             pause_future = self.ai_server_client.call_async(pause_request)

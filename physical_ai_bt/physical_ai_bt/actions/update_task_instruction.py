@@ -36,7 +36,8 @@ class UpdateTaskInstruction(BaseAction):
                  node: 'Node',
                  instruction: str = "",
                  prefix: str = "Pick up the ",
-                 suffix: str = " with the right gripper and place it into the box below."
+                 suffix: str = " with the right gripper and place it into the box below.",
+                 inference_fps: int = 5
     ):
         """
         Initialize update task instruction action.
@@ -45,12 +46,15 @@ class UpdateTaskInstruction(BaseAction):
             node: ROS2 node reference
             instruction: Fixed instruction (ignored if blackboard has task_instruction)
             prefix: Prefix to prepend to blackboard value (default: "Pick up the ")
+            suffix: Suffix to append to blackboard value
+            inference_fps: FPS for inference (default: 5)
         """
         super().__init__(node, name="UpdateTaskInstruction")
 
         self.instruction = instruction  # Fallback if blackboard empty
         self.prefix = prefix
         self.suffix = suffix
+        self.inference_fps = inference_fps
         self.blackboard = Blackboard()
 
         # Service client for sending command to AI Server
@@ -93,6 +97,7 @@ class UpdateTaskInstruction(BaseAction):
             request.command = SendCommand.Request.UPDATE_TASK_INSTRUCTION
             request.task_info = TaskInfo()
             request.task_info.task_instruction = [final_instruction]
+            request.task_info.fps = self.inference_fps
 
             try:
                 self.log_info(f"Updating task instruction: '{final_instruction}'")

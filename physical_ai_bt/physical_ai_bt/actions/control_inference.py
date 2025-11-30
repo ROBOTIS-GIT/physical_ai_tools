@@ -30,14 +30,16 @@ if TYPE_CHECKING:
 class PauseInference(BaseAction):
     """Action to pause inference and action publishing from AI Server."""
 
-    def __init__(self, node: 'Node'):
+    def __init__(self, node: 'Node', inference_fps: int = 5):
         """
         Initialize pause inference action.
 
         Args:
             node: ROS2 node reference
+            inference_fps: FPS for inference (default: 5)
         """
         super().__init__(node, name="PauseInference")
+        self.inference_fps = inference_fps
 
         # Service client for controlling action publish (direct to AI Server)
         self.control_client = self.node.create_client(
@@ -60,6 +62,7 @@ class PauseInference(BaseAction):
             request = SendCommand.Request()
             request.command = SendCommand.Request.STOP
             request.task_info = TaskInfo()
+            request.task_info.fps = self.inference_fps
 
             try:
                 self.future = self.control_client.call_async(request)
@@ -96,14 +99,16 @@ class PauseInference(BaseAction):
 class ResumeInference(BaseAction):
     """Action to resume inference and action publishing from AI Server."""
 
-    def __init__(self, node: 'Node'):
+    def __init__(self, node: 'Node', inference_fps: int = 5):
         """
         Initialize resume inference action.
 
         Args:
             node: ROS2 node reference
+            inference_fps: FPS for inference (default: 5)
         """
         super().__init__(node, name="ResumeInference")
+        self.inference_fps = inference_fps
 
         # Service client for controlling action publish (direct to AI Server)
         self.control_client = self.node.create_client(
@@ -126,6 +131,7 @@ class ResumeInference(BaseAction):
             request = SendCommand.Request()
             request.command = SendCommand.Request.START_INFERENCE
             request.task_info = TaskInfo()
+            request.task_info.fps = self.inference_fps
 
             try:
                 self.future = self.control_client.call_async(request)
