@@ -16,15 +16,12 @@
 
 import React, { useState, useMemo } from 'react';
 import PropTypes from 'prop-types';
-import {
-  MdArrowBack,
-  MdKitchen,
-  MdAttachFile,
-  MdUsb,
-  MdShoppingCart,
-  MdClose,
-} from 'react-icons/md';
-import { GiToothbrush } from 'react-icons/gi';
+import { MdArrowBack, MdShoppingCart, MdClose } from 'react-icons/md';
+import { GiPincers } from 'react-icons/gi';
+import { PiShovel } from 'react-icons/pi';
+import { FaPrescriptionBottle, FaPaintRoller } from 'react-icons/fa6';
+import { BsWrenchAdjustable } from 'react-icons/bs';
+import { HiScissors } from 'react-icons/hi2';
 import { LiaBrushSolid } from 'react-icons/lia';
 import { PiScrewdriverDuotone } from 'react-icons/pi';
 import { useRosServiceCaller } from '../hooks/useRosServiceCaller';
@@ -33,25 +30,39 @@ import clsx from 'clsx';
 
 const PRODUCT_CATALOG = [
   {
-    id: 'toothbrush',
-    name: 'Toothbrush',
-    description: 'Soft bristles for gentle daily care.',
+    id: 'tube',
+    name: 'Tube',
+    description: 'Tube for wrapping and sealing.',
     price: 3.5,
-    icon: GiToothbrush,
+    icon: FaPrescriptionBottle,
   },
   {
-    id: 'brush',
-    name: 'Brush',
-    description: 'Multi-purpose handheld cleaning brush.',
+    id: 'scissors',
+    name: 'Scissors',
+    description: 'Scissors for cutting and trimming.',
+    price: 3.5,
+    icon: HiScissors,
+  },
+  {
+    id: 'adjustable wrench',
+    name: 'Adjustable Wrench',
+    description: 'Adjustable wrench for tightening and loosening bolts.',
+    price: 2.0,
+    icon: BsWrenchAdjustable,
+  },
+  {
+    id: 'pliers',
+    name: 'Pliers',
+    description: 'Pliers for gripping and cutting.',
+    price: 6.0,
+    icon: GiPincers,
+  },
+  {
+    id: 'paintbrush',
+    name: 'Paintbrush',
+    description: 'Paintbrush for painting and wall covering.',
     price: 4.0,
     icon: LiaBrushSolid,
-  },
-  {
-    id: 'silicone',
-    name: 'Silicone Sealant',
-    description: 'Sealant for kitchen and bathroom countertops.',
-    price: 6.0,
-    icon: MdKitchen,
   },
   {
     id: 'screwdriver',
@@ -61,18 +72,18 @@ const PRODUCT_CATALOG = [
     icon: PiScrewdriverDuotone,
   },
   {
-    id: 'clip_set',
-    name: 'Clip Set',
-    description: 'Metal binder clips for handy storage.',
-    price: 2.0,
-    icon: MdAttachFile,
+    id: 'roller',
+    name: 'Roller',
+    description: 'Roller for painting and wall covering.',
+    price: 5.5,
+    icon: FaPaintRoller,
   },
   {
-    id: 'usb_cable',
-    name: 'USB Cable',
-    description: '1m USB-A to USB-C quick charge cable.',
+    id: 'shovel',
+    name: 'Shovel',
+    description: 'Shovel for digging and planting.',
     price: 5.5,
-    icon: MdUsb,
+    icon: PiShovel,
   },
 ];
 
@@ -83,6 +94,227 @@ function DemoPage({ onBackToHome }) {
   const selectedProducts = useMemo(() => {
     return PRODUCT_CATALOG.filter((product) => selectedProductIds.includes(product.id));
   }, [selectedProductIds]);
+
+  // Style classes
+  const classPageContainer = clsx('flex', 'flex-col', 'flex-1', 'h-full', 'bg-gray-50');
+
+  const classMainSection = clsx(
+    'relative',
+    'flex-1',
+    'w-full',
+    'px-6',
+    'sm:px-8',
+    'py-6',
+    'flex',
+    'flex-col',
+    'lg:flex-row',
+    'gap-6',
+    'overflow-x-hidden'
+  );
+
+  const classProductGridContainer = clsx('flex-[2]', 'min-w-0', 'flex', 'flex-col', 'gap-5');
+
+  const classProductGrid = clsx(
+    'grid',
+    'grid-cols-4',
+    'grid-rows-2',
+    'gap-4',
+    'w-full',
+    'min-w-0',
+    'max-w-8xl',
+    'mx-auto'
+  );
+
+  const classCartContainer = clsx(
+    'flex-1',
+    'bg-white',
+    'rounded-2xl',
+    'shadow-lg',
+    'p-6',
+    'flex',
+    'flex-col',
+    'max-h-[600px]'
+  );
+
+  const classCartHeader = clsx(
+    'flex',
+    'items-center',
+    'justify-between',
+    'pb-4',
+    'border-b',
+    'border-gray-200'
+  );
+
+  const classCartEmpty = clsx(
+    'flex-1',
+    'flex',
+    'flex-col',
+    'items-center',
+    'justify-center',
+    'text-center',
+    'py-8'
+  );
+
+  const classCartList = clsx('flex-1', 'overflow-y-auto', 'py-4', 'space-y-3', 'scrollbar-thin');
+
+  const classCartFooter = clsx('pt-4', 'border-t', 'border-gray-200', 'space-y-3');
+
+  const classBackButton = clsx(
+    'absolute',
+    'bottom-4',
+    'right-4',
+    'text-xs',
+    'px-3',
+    'py-1',
+    'rounded-full',
+    'border',
+    'border-gray-300',
+    'shadow-sm',
+    'hover:bg-gray-100',
+    'transition-colors',
+    'flex',
+    'items-center',
+    'gap-1'
+  );
+
+  const getProductCardClass = (isSelected) =>
+    clsx(
+      'absolute',
+      'inset-0',
+      'flex',
+      'flex-col',
+      'items-start',
+      'rounded-2xl',
+      'text-left',
+      'border',
+      'shadow-sm',
+      'transition-all',
+      'overflow-hidden',
+      {
+        'bg-blue-50': isSelected,
+        'border-blue-400': isSelected,
+        'shadow-lg': isSelected,
+        'bg-white': !isSelected,
+        'border-gray-200': !isSelected,
+        'hover:border-gray-300': !isSelected,
+      }
+    );
+
+  const classProductIconContainer = clsx(
+    'flex',
+    'items-center',
+    'justify-center',
+    'w-full',
+    'rounded-xl',
+    'bg-gray-100',
+    'mb-1',
+    'flex-shrink-0'
+  );
+
+  const classProductDetails = clsx(
+    'flex',
+    'flex-col',
+    'flex-1',
+    'w-full',
+    'overflow-hidden',
+    'min-h-0'
+  );
+
+  const classProductHeader = clsx(
+    'flex',
+    'w-full',
+    'justify-between',
+    'items-start',
+    'flex-shrink-0',
+    'min-w-0'
+  );
+
+  const classProductName = clsx(
+    'font-semibold',
+    'leading-tight',
+    'line-clamp-2',
+    'flex-1',
+    'min-w-0',
+    'overflow-hidden',
+    'break-words'
+  );
+
+  const getProductBadgeClass = (isSelected) =>
+    clsx(
+      'font-semibold',
+      'px-1.5',
+      'py-0.5',
+      'rounded-full',
+      'whitespace-nowrap',
+      'flex-shrink-0',
+      {
+        'bg-blue-500': isSelected,
+        'text-white': isSelected,
+        'bg-gray-100': !isSelected,
+        'text-gray-700': !isSelected,
+      }
+    );
+
+  const classProductDescription = clsx(
+    'text-gray-500',
+    'leading-snug',
+    'overflow-hidden',
+    'text-ellipsis',
+    'flex-shrink-0',
+    'w-full'
+  );
+
+  const classProductPrice = clsx('font-bold', 'mt-auto', 'flex-shrink-0', 'w-full', 'truncate');
+
+  const classCartItem = clsx(
+    'flex',
+    'items-center',
+    'gap-3',
+    'p-3',
+    'bg-gray-50',
+    'rounded-xl',
+    'hover:bg-gray-100',
+    'transition-colors'
+  );
+
+  const classCartItemIcon = clsx(
+    'flex',
+    'items-center',
+    'justify-center',
+    'w-14',
+    'h-14',
+    'rounded-lg',
+    'bg-white',
+    'shadow-sm',
+    'flex-shrink-0'
+  );
+
+  const classCartItemDetails = clsx('flex-1', 'min-w-0');
+
+  const classCartItemRemove = clsx(
+    'text-red-500',
+    'hover:text-red-600',
+    'hover:bg-red-50',
+    'p-2',
+    'rounded-lg',
+    'transition-colors',
+    'flex-shrink-0'
+  );
+
+  const classPlaceOrderButton = clsx(
+    'w-full',
+    'px-6',
+    'py-3',
+    'rounded-xl',
+    'bg-blue-600',
+    'text-white',
+    'font-semibold',
+    'shadow-lg',
+    'hover:bg-blue-700',
+    'disabled:opacity-50',
+    'disabled:cursor-not-allowed',
+    'transition-colors'
+  );
 
   const handleBackClick = () => {
     onBackToHome();
@@ -122,16 +354,16 @@ function DemoPage({ onBackToHome }) {
   };
 
   return (
-    <div className="flex flex-col flex-1 h-full bg-gray-50">
-      <section className="relative flex-1 w-full px-6 sm:px-8 py-6 flex flex-col lg:flex-row gap-6 overflow-x-hidden">
-        <div className="flex-[2] min-w-0 flex flex-col gap-5">
+    <div className={classPageContainer}>
+      <section className={classMainSection}>
+        <div className={classProductGridContainer}>
           <div className="space-y-2">
             <p className="text-3xl font-semibold">Select Products</p>
             <p className="text-gray-600 leading-relaxed">
               Tap the shelf cards to add them to the order. Selected products appear on the right.
             </p>
           </div>
-          <div className="grid grid-cols-3 grid-rows-2 gap-5 w-full min-w-0 max-w-6xl mx-auto">
+          <div className={classProductGrid}>
             {PRODUCT_CATALOG.map((product) => {
               const isSelected = selectedProductIds.includes(product.id);
               const IconComponent = product.icon;
@@ -141,48 +373,80 @@ function DemoPage({ onBackToHome }) {
                     <button
                       type="button"
                       onClick={() => handleToggleProduct(product.id)}
-                      className={clsx(
-                        'absolute inset-0 flex flex-col items-start gap-3 rounded-3xl px-5 py-6 text-left border shadow-sm transition-all overflow-hidden',
-                        isSelected
-                          ? 'bg-blue-50 border-blue-400 shadow-lg'
-                          : 'bg-white border-gray-200 hover:border-gray-300'
-                      )}
+                      className={getProductCardClass(isSelected)}
+                      style={{
+                        padding: 'clamp(0.375rem, 1.5vw, 1rem)',
+                        gap: 'clamp(0.125rem, 0.8vw, 0.5rem)',
+                      }}
                     >
                       <div
-                        className="flex items-center justify-center w-full rounded-2xl bg-gray-100 mb-2 flex-shrink-0"
-                        style={{ height: '50%' }}
+                        className={classProductIconContainer}
+                        style={{
+                          height: '52%',
+                          minHeight: '0',
+                          flexShrink: 0,
+                        }}
                       >
                         <IconComponent
-                          size={60}
                           className="text-gray-600"
-                          style={{ maxWidth: '80%', maxHeight: '80%' }}
+                          style={{
+                            width: 'clamp(24px, 4.5vw, 64px)',
+                            height: 'clamp(24px, 4.5vw, 64px)',
+                            maxWidth: '80%',
+                            maxHeight: '80%',
+                            flexShrink: 0,
+                          }}
                         />
                       </div>
-                      <div className="flex flex-col flex-1 w-full gap-2 overflow-hidden">
-                        <div className="flex w-full justify-between items-start gap-2 flex-shrink-0">
-                          <p className="text-xl md:text-2xl font-semibold leading-tight line-clamp-2 flex-1 min-w-0">
+                      <div
+                        className={classProductDetails}
+                        style={{
+                          gap: 'clamp(0.0625rem, 0.5vw, 0.5rem)',
+                        }}
+                      >
+                        <div
+                          className={classProductHeader}
+                          style={{
+                            gap: 'clamp(0.125rem, 0.6vw, 0.75rem)',
+                          }}
+                        >
+                          <p
+                            className={classProductName}
+                            style={{
+                              fontSize: 'clamp(0.625rem, 1.2vw, 1.5rem)',
+                            }}
+                          >
                             {product.name}
                           </p>
                           <span
-                            className={clsx(
-                              'text-xs font-semibold px-2 py-1 rounded-full whitespace-nowrap flex-shrink-0',
-                              isSelected ? 'bg-blue-500 text-white' : 'bg-gray-100 text-gray-700'
-                            )}
+                            className={getProductBadgeClass(isSelected)}
+                            style={{
+                              fontSize: 'clamp(0.4rem, 0.75vw, 0.875rem)',
+                              padding:
+                                'clamp(0.0625rem, 0.3vw, 0.375rem) clamp(0.125rem, 0.5vw, 0.5rem)',
+                            }}
                           >
-                            {isSelected ? 'Selected' : 'Tap to Add'}
+                            {isSelected ? 'Selected' : 'Add'}
                           </span>
                         </div>
                         <p
-                          className="text-gray-500 text-sm leading-snug overflow-hidden text-ellipsis flex-shrink-0"
+                          className={classProductDescription}
                           style={{
                             display: '-webkit-box',
                             WebkitLineClamp: 2,
                             WebkitBoxOrient: 'vertical',
+                            fontSize: 'clamp(0.4rem, 0.85vw, 1rem)',
+                            lineHeight: 'clamp(0.6rem, 1.1vw, 1.4rem)',
                           }}
                         >
                           {product.description}
                         </p>
-                        <p className="text-lg md:text-xl font-bold mt-auto flex-shrink-0">
+                        <p
+                          className={classProductPrice}
+                          style={{
+                            fontSize: 'clamp(0.5rem, 1.1vw, 1.375rem)',
+                          }}
+                        >
                           ${product.price.toFixed(2)}
                         </p>
                       </div>
@@ -193,8 +457,8 @@ function DemoPage({ onBackToHome }) {
             })}
           </div>
         </div>
-        <div className="flex-1 bg-white rounded-2xl shadow-lg p-6 flex flex-col max-h-[600px]">
-          <div className="flex items-center justify-between pb-4 border-b border-gray-200">
+        <div className={classCartContainer}>
+          <div className={classCartHeader}>
             <div className="flex items-center gap-2">
               <MdShoppingCart size={24} className="text-gray-700" />
               <p className="text-2xl font-bold">Cart</p>
@@ -204,7 +468,7 @@ function DemoPage({ onBackToHome }) {
             </span>
           </div>
           {selectedProducts.length === 0 ? (
-            <div className="flex-1 flex flex-col items-center justify-center text-center py-8">
+            <div className={classCartEmpty}>
               <MdShoppingCart size={64} className="text-gray-300 mb-4" />
               <p className="text-gray-500 text-lg">Your cart is empty</p>
               <p className="text-gray-400 text-sm mt-2">
@@ -213,18 +477,15 @@ function DemoPage({ onBackToHome }) {
             </div>
           ) : (
             <>
-              <div className="flex-1 overflow-y-auto py-4 space-y-3 scrollbar-thin">
+              <div className={classCartList}>
                 {selectedProducts.map((product) => {
                   const IconComponent = product.icon;
                   return (
-                    <div
-                      key={`selected-${product.id}`}
-                      className="flex items-center gap-3 p-3 bg-gray-50 rounded-xl hover:bg-gray-100 transition-colors"
-                    >
-                      <div className="flex items-center justify-center w-14 h-14 rounded-lg bg-white shadow-sm flex-shrink-0">
+                    <div key={`selected-${product.id}`} className={classCartItem}>
+                      <div className={classCartItemIcon}>
                         <IconComponent size={32} className="text-gray-600" />
                       </div>
-                      <div className="flex-1 min-w-0">
+                      <div className={classCartItemDetails}>
                         <p className="font-semibold text-gray-800 truncate">{product.name}</p>
                         <p className="text-lg font-bold text-blue-600">
                           ${product.price.toFixed(2)}
@@ -232,7 +493,7 @@ function DemoPage({ onBackToHome }) {
                       </div>
                       <button
                         type="button"
-                        className="text-red-500 hover:text-red-600 hover:bg-red-50 p-2 rounded-lg transition-colors flex-shrink-0"
+                        className={classCartItemRemove}
                         onClick={() => handleRemoveSelectedProduct(product.id)}
                         title="Remove from cart"
                       >
@@ -242,7 +503,7 @@ function DemoPage({ onBackToHome }) {
                   );
                 })}
               </div>
-              <div className="pt-4 border-t border-gray-200 space-y-3">
+              <div className={classCartFooter}>
                 <div className="flex justify-between items-center">
                   <p className="text-lg font-semibold text-gray-700">Total</p>
                   <p className="text-2xl font-bold text-gray-900">
@@ -251,8 +512,7 @@ function DemoPage({ onBackToHome }) {
                 </div>
                 <button
                   type="button"
-                  className="w-full px-6 py-3 rounded-xl bg-blue-600 text-white font-semibold shadow-lg
-                    hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                  className={classPlaceOrderButton}
                   onClick={handleStartDemo}
                   disabled={isSubmitting || selectedProducts.length === 0}
                 >
@@ -262,12 +522,7 @@ function DemoPage({ onBackToHome }) {
             </>
           )}
         </div>
-        <button
-          type="button"
-          onClick={handleBackClick}
-          className="absolute bottom-4 right-4 text-xs px-3 py-1 rounded-full border border-gray-300
-            shadow-sm hover:bg-gray-100 transition-colors flex items-center gap-1"
-        >
+        <button type="button" onClick={handleBackClick} className={classBackButton}>
           <MdArrowBack size={14} />
           <span>Back</span>
         </button>
