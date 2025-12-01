@@ -9,6 +9,7 @@
       <ResumeInference name="Resume_Publishing_1"/>
       <TimedInference name="VLA_Inference_1" duration="30.0"/>
       <PauseInference name="Pause_Publishing_1"/>
+      <SetTaskInstruction name="SetTaskInstruction_1" instruction="pick plasticbox"/>
       <MoveLift name="LiftControl_1" lift_position="0.0"/>
       <Rotate name="Rule_Based_Rotation_1" angle_deg="-90.0"/>
       <MoveLift name="LiftControl_1" lift_position="-0.1"/>
@@ -23,7 +24,7 @@
       <InferenceUntilGesture name="VLA_Inference_1"/>
       <PauseInference name="Pause_Publishing_2"/>
       <Rotate name="Rule_Based_Rotation_1" angle_deg="90.0"/>
-      <UpdateTaskInstruction name="ChangeInstruction_1"/>
+      <SetTaskInstruction name="ChangeInstruction_1" instruction="stay"/>
       <Rotate name="Rule_Based_Rotation_2" angle_deg="-90"/>
       <MoveArms name="ArmsControl_2"
         left_positions="0.75, 0.0, 0.0, -2.3, 0.0, 0.0, 0.0, 0.0"

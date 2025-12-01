@@ -28,6 +28,7 @@ from physical_ai_bt.actions.control_inference import (
     ResumeInference
 )
 from physical_ai_bt.actions.update_task_instruction import UpdateTaskInstruction
+from physical_ai_bt.actions.set_task_instruction import SetTaskInstruction
 from physical_ai_bt.actions.camera_depth import CameraDepth
 from physical_ai_bt.actions.move_head_lift import MoveHeadLift
 from physical_ai_bt.actions.move_arms import MoveArms
@@ -76,6 +77,7 @@ class XMLTreeLoader:
             'PauseInference': PauseInference,
             'ResumeInference': ResumeInference,
             'UpdateTaskInstruction': UpdateTaskInstruction,
+            'SetTaskInstruction': SetTaskInstruction,
             'CameraDepth': CameraDepth,
             'MoveHeadLift': MoveHeadLift,
             'MoveArms': MoveArms,
@@ -233,6 +235,13 @@ class XMLTreeLoader:
         elif action_class == UpdateTaskInstruction:
             return action_class(
                 node=self.node,
+                inference_fps=self.inference_fps
+            )
+
+        elif action_class == SetTaskInstruction:
+            return action_class(
+                node=self.node,
+                instruction=params.get('instruction', ''),
                 inference_fps=self.inference_fps
             )
 

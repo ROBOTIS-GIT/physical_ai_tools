@@ -28,6 +28,8 @@ from physical_ai_bt.actions.move_head_lift import MoveHeadLift
 from physical_ai_bt.actions.move_arms import MoveArms
 from physical_ai_bt.actions.move_lift import MoveLift
 from physical_ai_bt.actions.open_grippers import OpenGrippers
+from physical_ai_bt.actions.update_task_instruction import UpdateTaskInstruction
+from physical_ai_bt.actions.set_task_instruction import SetTaskInstruction
 
 __all__ = [
     'BaseAction',
@@ -41,4 +43,6 @@ __all__ = [
     'MoveArms',
     'MoveLift',
     'OpenGrippers',
+    'UpdateTaskInstruction',
+    'SetTaskInstruction',
 ]

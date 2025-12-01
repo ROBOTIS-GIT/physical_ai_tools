@@ -138,10 +138,21 @@
       </input_port>
     </Action>
 
+    <Action ID="SetTaskInstruction">
+      <input_port name="instruction" default="">
+        Static task instruction to send to AI Server.
+      </input_port>
+      <description>
+        Sets a static task instruction from XML parameter.
+        Sends instruction as-is without prefix/suffix.
+      </description>
+    </Action>
+
     <Action ID="UpdateTaskInstruction">
       <description>
         Updates task instruction from blackboard value.
         Requires 'task_instruction' to be set in blackboard.
+        Applies prefix/suffix to blackboard value.
       </description>
     </Action>
 
