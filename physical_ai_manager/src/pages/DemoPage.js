@@ -17,13 +17,6 @@
 import React, { useState, useMemo } from 'react';
 import PropTypes from 'prop-types';
 import { MdArrowBack, MdShoppingCart, MdClose } from 'react-icons/md';
-import { GiPincers } from 'react-icons/gi';
-import { PiShovel } from 'react-icons/pi';
-import { FaPrescriptionBottle, FaPaintRoller } from 'react-icons/fa6';
-import { BsWrenchAdjustable } from 'react-icons/bs';
-import { HiScissors } from 'react-icons/hi2';
-import { LiaBrushSolid } from 'react-icons/lia';
-import { PiScrewdriverDuotone } from 'react-icons/pi';
 import { useRosServiceCaller } from '../hooks/useRosServiceCaller';
 import toast from 'react-hot-toast';
 import clsx from 'clsx';
@@ -34,56 +27,56 @@ const PRODUCT_CATALOG = [
     name: 'Tube',
     description: 'Tube for wrapping and sealing.',
     price: 3.5,
-    icon: FaPrescriptionBottle,
+    image: '/image/tube.png',
   },
   {
     id: 'scissors',
     name: 'Scissors',
     description: 'Scissors for cutting and trimming.',
     price: 3.5,
-    icon: HiScissors,
+    image: '/image/scissors.png',
   },
   {
     id: 'adjustable wrench',
-    name: 'Adjustable Wrench',
+    name: 'Wrench',
     description: 'Adjustable wrench for tightening and loosening bolts.',
     price: 2.0,
-    icon: BsWrenchAdjustable,
+    image: '/image/wrench.png',
   },
   {
     id: 'pliers',
     name: 'Pliers',
     description: 'Pliers for gripping and cutting.',
     price: 6.0,
-    icon: GiPincers,
+    image: '/image/pliers.png',
   },
   {
     id: 'paintbrush',
     name: 'Paintbrush',
     description: 'Paintbrush for painting and wall covering.',
     price: 4.0,
-    icon: LiaBrushSolid,
+    image: '/image/paintbrush.png',
   },
   {
     id: 'screwdriver',
     name: 'Screwdriver',
     description: 'Compact flat/Phillips combo tool.',
     price: 4.2,
-    icon: PiScrewdriverDuotone,
+    image: '/image/screwdriver.png',
   },
   {
     id: 'roller',
     name: 'Roller',
     description: 'Roller for painting and wall covering.',
     price: 5.5,
-    icon: FaPaintRoller,
+    image: '/image/roller.png',
   },
   {
     id: 'shovel',
     name: 'Shovel',
     description: 'Shovel for digging and planting.',
     price: 5.5,
-    icon: PiShovel,
+    image: '/image/shovel.png',
   },
 ];
 
@@ -366,10 +359,9 @@ function DemoPage({ onBackToHome }) {
           <div className={classProductGrid}>
             {PRODUCT_CATALOG.map((product) => {
               const isSelected = selectedProductIds.includes(product.id);
-              const IconComponent = product.icon;
               return (
                 <div key={product.id} className="w-full">
-                  <div className="relative w-full" style={{ paddingBottom: '110%' }}>
+                  <div className="relative w-full" style={{ paddingBottom: '130%' }}>
                     <button
                       type="button"
                       onClick={() => handleToggleProduct(product.id)}
@@ -382,20 +374,15 @@ function DemoPage({ onBackToHome }) {
                       <div
                         className={classProductIconContainer}
                         style={{
-                          height: '52%',
+                          height: '58%',
                           minHeight: '0',
                           flexShrink: 0,
                         }}
                       >
-                        <IconComponent
-                          className="text-gray-600"
-                          style={{
-                            width: 'clamp(24px, 4.5vw, 64px)',
-                            height: 'clamp(24px, 4.5vw, 64px)',
-                            maxWidth: '80%',
-                            maxHeight: '80%',
-                            flexShrink: 0,
-                          }}
+                        <img
+                          src={product.image}
+                          alt={product.name}
+                          className="w-full h-full object-cover rounded-xl"
                         />
                       </div>
                       <div
@@ -479,11 +466,14 @@ function DemoPage({ onBackToHome }) {
             <>
               <div className={classCartList}>
                 {selectedProducts.map((product) => {
-                  const IconComponent = product.icon;
                   return (
                     <div key={`selected-${product.id}`} className={classCartItem}>
                       <div className={classCartItemIcon}>
-                        <IconComponent size={32} className="text-gray-600" />
+                        <img
+                          src={product.image}
+                          alt={product.name}
+                          className="w-full h-full object-cover rounded-lg"
+                        />
                       </div>
                       <div className={classCartItemDetails}>
                         <p className="font-semibold text-gray-800 truncate">{product.name}</p>
