@@ -23,12 +23,10 @@ from launch import LaunchDescription
 from launch.actions import IncludeLaunchDescription
 from launch.launch_description_sources import PythonLaunchDescriptionSource
 from launch_ros.actions import Node
-from launch_xml.launch_description_sources import XMLLaunchDescriptionSource
 
 
 def generate_launch_description():
     pkg_dir = get_package_share_directory('physical_ai_server')
-    rosbridge_pkg_dir = get_package_share_directory('rosbridge_server')
 
     # Include physical_ai_server.launch.py
     physical_ai_server_launch = IncludeLaunchDescription(
@@ -37,16 +35,21 @@ def generate_launch_description():
         )
     )
 
-    # Include rosbridge_websocket_launch.xml
-    rosbridge_server_launch = IncludeLaunchDescription(
-        XMLLaunchDescriptionSource(
-            os.path.join(
-                rosbridge_pkg_dir, 'launch', 'rosbridge_websocket_launch.xml'
-            )
-        ),
-        launch_arguments={
-            'service_timeout': '60'  # 60초 타임아웃 (모델 로딩 대기)
-        }.items()
+    # Rosbridge websocket node
+    rosbridge_websocket_node = Node(
+        package='rosbridge_server',
+        executable='rosbridge_websocket',
+        name='rosbridge_websocket',
+        output='screen',
+    )
+
+    # Include rosbag_recorder service_bag_recorder node
+    rosbag_recorder_node = Node(
+        package='rosbag_recorder',
+        executable='service_bag_recorder',
+        name='service_bag_recorder',
+        output='screen',
+        parameters=[{'service_timeout': 60}]
     )
 
     # web_video_server node
@@ -59,6 +62,7 @@ def generate_launch_description():
 
     return LaunchDescription([
         physical_ai_server_launch,
-        rosbridge_server_launch,
+        rosbridge_websocket_node,
+        rosbag_recorder_node,
         web_video_server_node
     ])

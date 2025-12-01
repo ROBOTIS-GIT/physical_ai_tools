@@ -808,7 +808,7 @@ const HuggingfaceSection = () => {
         onFileSelect={handleHfLocalDirSelect}
         title="Select Local Directory for Upload"
         selectButtonText="Select"
-        allowDirectorySelect={false}
+        allowDirectorySelect={true}
         targetFolderName={[
           TARGET_FOLDERS.DATASET_METADATA,
           TARGET_FOLDERS.DATASET_VIDEO,
