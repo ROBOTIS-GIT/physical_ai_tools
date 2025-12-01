@@ -29,7 +29,9 @@
           <ResumeInference name="ResumeAfterAlign"/>
 
           <!-- Step 4: Run inference until gesture sequence completes -->
-          <InferenceUntilGesture name="WaitForGestureCompletion"/>
+          <InferenceUntilGesture name="WaitForGestureCompletion"
+            left_positions="0.313, 0.095, -0.023, -1.613, 0.185, -0.291, -0.134, 0.128"
+            right_positions="0.413, -0.003, -0.108, -1.798, -0.121, -0.236, 0.238, 0.132"/>
 
           <!-- Step 5: Validate with depth camera -->
           <!-- If object is too far (>1.5m), this returns FAILURE and triggers retry -->
@@ -91,11 +93,15 @@
 
     <!-- Existing Actions -->
     <Action ID="InferenceUntilGesture">
+      <input_port name="left_positions" default="0.313,0.095,-0.023,-1.613,0.185,-0.291,-0.134,0.128">
+        Target positions for left arm joints (8 values: 7 arm joints + 1 gripper)
+      </input_port>
+      <input_port name="right_positions" default="0.413,-0.003,-0.108,-1.798,-0.121,-0.236,0.238,0.132">
+        Target positions for right arm joints (8 values: 7 arm joints + 1 gripper)
+      </input_port>
       <description>
-        Runs inference until 3-stage gesture sequence is completed:
-        1. Both grippers close (≥ 0.8)
-        2. Both grippers open (≤ 0.2)
-        3. Arms return to home position and hold for 2 seconds
+        Runs inference until arms return to target position.
+        Returns SUCCESS when all arm joints are at target position for 2 seconds.
       </description>
     </Action>
 

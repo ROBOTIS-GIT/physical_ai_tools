@@ -16,79 +16,77 @@
 #
 # Author: Seongwoo Kim
 
-"""Inference action that runs until gesture sequence is detected."""
+"""Inference action that runs until arms return to target position."""
 
 import time
-from enum import Enum
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, List
 
 from physical_ai_bt.actions.base_action import NodeStatus, BaseAction
-from physical_ai_interfaces.msg import TaskStatus
 from rclpy.qos import QoSProfile, ReliabilityPolicy
 
 if TYPE_CHECKING:
     from rclpy.node import Node
 
 
-class InferenceState(Enum):
-    """State machine states for inference action."""
-
-    WAITING_GRIPPER_CLOSE = 0  # Waiting for both grippers to close
-    WAITING_GRIPPER_OPEN = 1   # Waiting for both grippers to open
-    WAITING_HOME_POSITION = 2  # Waiting for home position hold
-
-
 # Threshold constants
-GRIPPER_CLOSE_THRESHOLD = 0.8
-GRIPPER_OPEN_THRESHOLD = 0.2
 POSITION_TOLERANCE = 0.1
 HOME_HOLD_DURATION = 2.0
 
-# Home position reference values for arms and grippers
-HOME_POSITIONS = {
-    # Left arm
-    'arm_l_joint1': 0.313,
-    'arm_l_joint2': 0.095,
-    'arm_l_joint3': -0.023,
-    'arm_l_joint4': -1.613,
-    'arm_l_joint5': 0.185,
-    'arm_l_joint6': -0.291,
-    'arm_l_joint7': -0.134,
-    'gripper_l_joint1': 0.128,
-    # Right arm
-    'arm_r_joint1': 0.413,
-    'arm_r_joint2': -0.003,
-    'arm_r_joint3': -0.108,
-    'arm_r_joint4': -1.798,
-    'arm_r_joint5': -0.121,
-    'arm_r_joint6': -0.236,
-    'arm_r_joint7': 0.238,
-    'gripper_r_joint1': 0.132,
-}
+# Default home position values for arms and grippers
+DEFAULT_LEFT_POSITIONS = [0.313, 0.095, -0.023, -1.613, 0.185, -0.291, -0.134, 0.128]
+DEFAULT_RIGHT_POSITIONS = [0.413, -0.003, -0.108, -1.798, -0.121, -0.236, 0.238, 0.132]
+
+# Joint names for left and right arms (including grippers)
+LEFT_JOINT_NAMES = [
+    'arm_l_joint1', 'arm_l_joint2', 'arm_l_joint3', 'arm_l_joint4',
+    'arm_l_joint5', 'arm_l_joint6', 'arm_l_joint7', 'gripper_l_joint1'
+]
+RIGHT_JOINT_NAMES = [
+    'arm_r_joint1', 'arm_r_joint2', 'arm_r_joint3', 'arm_r_joint4',
+    'arm_r_joint5', 'arm_r_joint6', 'arm_r_joint7', 'gripper_r_joint1'
+]
 
 
 
 class InferenceUntilGesture(BaseAction):
     """
-    Action that runs inference until 3-stage gesture sequence is completed.
+    Action that runs inference until arms return to target position.
 
-    The gesture sequence consists of:
-    1. Both grippers close (≥ 0.8)
-    2. Both grippers open (≤ 0.2)
-    3. Arms return to home position and hold for 2 seconds
+    Returns SUCCESS when all arm joints are at target position for 2 seconds.
     """
 
     def __init__(
         self,
         node: 'Node',
+        left_positions: List[float] = None,
+        right_positions: List[float] = None,
     ):
         """
         Initialize InferenceUntilGesture action.
 
         Args:
             node: ROS2 node reference
+            left_positions: Target positions for left arm joints (8 values: 7 arm joints + 1 gripper)
+            right_positions: Target positions for right arm joints (8 values: 7 arm joints + 1 gripper)
         """
         super().__init__(node, name="InferenceUntilGesture")
+
+        # Use provided positions or defaults
+        self.left_positions = left_positions if left_positions is not None else DEFAULT_LEFT_POSITIONS
+        self.right_positions = right_positions if right_positions is not None else DEFAULT_RIGHT_POSITIONS
+
+        # Validate position counts
+        if len(self.left_positions) != 8:
+            self.log_error(f"Left positions must have 8 values, got {len(self.left_positions)}")
+        if len(self.right_positions) != 8:
+            self.log_error(f"Right positions must have 8 values, got {len(self.right_positions)}")
+
+        # Build target position dictionary
+        self.target_positions = {}
+        for joint_name, position in zip(LEFT_JOINT_NAMES, self.left_positions):
+            self.target_positions[joint_name] = position
+        for joint_name, position in zip(RIGHT_JOINT_NAMES, self.right_positions):
+            self.target_positions[joint_name] = position
 
         qos_profile = QoSProfile(
             depth=10,
@@ -102,50 +100,27 @@ class InferenceUntilGesture(BaseAction):
             qos_profile
         )
 
-        self.state = InferenceState.WAITING_GRIPPER_CLOSE
         self.home_hold_start = None
         self.joint_positions = {}
 
     def tick(self) -> NodeStatus:
-        """Execute one tick of inference action with 3-stage success condition."""
-        if self.state == InferenceState.WAITING_GRIPPER_CLOSE:
-            if self._both_grippers_closed():
-                self.state = InferenceState.WAITING_GRIPPER_OPEN
-                self.log_info("Both grippers closed, waiting for open...")
-
-        elif self.state == InferenceState.WAITING_GRIPPER_OPEN:
-            if self._both_grippers_open():
-                self.state = InferenceState.WAITING_HOME_POSITION
-                self.log_info("Both grippers open, waiting for home position...")
-
-        elif self.state == InferenceState.WAITING_HOME_POSITION:
-            if self._is_at_home_position():
-                now = time.time()
-                if self.home_hold_start is None:
-                    self.home_hold_start = now
-                elif now - self.home_hold_start >= HOME_HOLD_DURATION:
-                    self.log_info("Home position held for 2s, ending inference.")
-                    return NodeStatus.SUCCESS
-            else:
-                self.home_hold_start = None
+        """Execute one tick of inference action with target position check."""
+        if self._is_at_target_position():
+            now = time.time()
+            if self.home_hold_start is None:
+                self.home_hold_start = now
+                self.log_info("At target position, holding...")
+            elif now - self.home_hold_start >= HOME_HOLD_DURATION:
+                self.log_info("Target position held for 2s, ending inference.")
+                return NodeStatus.SUCCESS
+        else:
+            self.home_hold_start = None
 
         return NodeStatus.RUNNING
 
-    def _both_grippers_closed(self) -> bool:
-        """Check if both grippers are closed (>= threshold)."""
-        l_val = self.joint_positions.get('gripper_l_joint1', 0.0)
-        r_val = self.joint_positions.get('gripper_r_joint1', 0.0)
-        return l_val >= GRIPPER_CLOSE_THRESHOLD and r_val >= GRIPPER_CLOSE_THRESHOLD
-
-    def _both_grippers_open(self) -> bool:
-        """Check if both grippers are open (<= threshold)."""
-        l_val = self.joint_positions.get('gripper_l_joint1', 1.0)
-        r_val = self.joint_positions.get('gripper_r_joint1', 1.0)
-        return l_val <= GRIPPER_OPEN_THRESHOLD and r_val <= GRIPPER_OPEN_THRESHOLD
-
-    def _is_at_home_position(self) -> bool:
-        """Check if all arm joints are within tolerance of home position."""
-        for joint, target in HOME_POSITIONS.items():
+    def _is_at_target_position(self) -> bool:
+        """Check if all arm joints are within tolerance of target position."""
+        for joint, target in self.target_positions.items():
             current = self.joint_positions.get(joint, float('inf'))
             if abs(current - target) > POSITION_TOLERANCE:
                 return False
@@ -161,6 +136,5 @@ class InferenceUntilGesture(BaseAction):
     def reset(self):
         """Reset action state for re-execution."""
         super().reset()
-        self.state = InferenceState.WAITING_GRIPPER_CLOSE
         self.home_hold_start = None
         self.joint_positions = {}

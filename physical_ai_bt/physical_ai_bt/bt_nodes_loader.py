@@ -211,6 +211,8 @@ class XMLTreeLoader:
         if action_class == InferenceUntilGesture:
             return action_class(
                 node=self.node,
+                left_positions=params.get('left_positions'),
+                right_positions=params.get('right_positions'),
             )
 
         elif action_class == Rotate:
