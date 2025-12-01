@@ -6,12 +6,13 @@
       <MoveArms name="ArmsControl_1"
         left_positions="0.75, 0.0, 0.0, -2.3, 0.0, 0.0, 0.0, 0.0"
         right_positions="0.75, 0.0, 0.0, -2.3, 0.0, 0.0, 0.0, 0.0"/>
-      <MoveHeadLift name="HeadLiftControl_1"
-        head_positions="0.695,0.0"
-        lift_position="-0.1"/>
       <ResumeInference name="Resume_Publishing_1"/>
       <TimedInference name="VLA_Inference_1" duration="30.0"/>
       <PauseInference name="Pause_Publishing_1"/>
+      <MoveLift name="LiftControl_1" lift_position="0.0"/>
+      <Rotate name="Rule_Based_Rotation_1" angle_deg="-90.0"/>
+      <MoveLift name="LiftControl_1" lift_position="-0.1"/>
+      <Rotate name="Rule_Based_Rotation_1" angle_deg="90.0"/>
       <!-- <MoveArms name="ArmsControl_1"
         left_positions="0.75, 0.0, 0.0, -2.3, 0.0, 0.0, 0.0, 0.0"
         right_positions="0.75, 0.0, 0.0, -2.3, 0.0, 0.0, 0.0, 0.0"/>
