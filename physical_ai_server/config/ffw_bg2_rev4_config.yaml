@@ -3,12 +3,14 @@ physical_ai_server:
     ffw_bg2_rev4:
       observation_list:
         - cam_head
+        - cam_head_right
         - cam_wrist_left
         - cam_wrist_right
         - state
 
-      camera_topic_list: 
+      camera_topic_list:
         - cam_head:/zed/zed_node/left/image_rect_color/compressed
+        - cam_head_right:/zed/zed_node/right/image_rect_color/compressed
         - cam_wrist_left:/camera_left/camera_left/color/image_rect_raw/compressed
         - cam_wrist_right:/camera_right/camera_right/color/image_rect_raw/compressed
 

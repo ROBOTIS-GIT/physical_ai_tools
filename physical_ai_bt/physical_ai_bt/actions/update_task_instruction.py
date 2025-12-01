@@ -35,7 +35,7 @@ class UpdateTaskInstruction(BaseAction):
     def __init__(self,
                  node: 'Node',
                  prefix: str = "Put the ",
-                 suffix: str = "into the crate.",
+                 suffix: str = " into the crate.",
                  inference_fps: int = 5
     ):
         """

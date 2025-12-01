@@ -8,12 +8,12 @@
         right_positions="0.75, 0.0, 0.0, -2.3, 0.0, 0.0, 0.0, 0.0"/>
       <ResumeInference name="Resume_Publishing_1"/>
       <InferenceUntilGesture name="VLA_Inference_1"
-        left_positions="0.313, 0.095, -0.023, -1.613, 0.185, -0.291, -0.134, 0.128"
-        right_positions="0.413, -0.003, -0.108, -1.798, -0.121, -0.236, 0.238, 0.132"/>
+        left_positions="0.364, 0.113, -0.020, -1.866, 0.062, -0.048, -0.133, 0.087"
+        right_positions="0.385, -0.088, 0.196, -1.761, -0.038, -0.134, -0.248, 0.132"/>
       <SetTaskInstruction name="SetTaskInstruction_1" instruction="Grasp the handle of the crate."/>
       <InferenceUntilGesture name="VLA_Inference_2"
-        left_positions="0.313, 0.095, -0.023, -1.613, 0.185, -0.291, -0.134, 0.128"
-        right_positions="0.413, -0.003, -0.108, -1.798, -0.121, -0.236, 0.238, 0.132"/>
+        left_positions="0.029, 0.248, -0.153, -1.707, 1.796, 0.815, -0.117, 1.141"
+        right_positions="0.281, -0.051, 0.172, -1.632, -0.035, -0.242, -0.126, 0.156"/>
       <PauseInference name="Pause_Publishing_1"/>
       <MoveLift name="LiftControl_1" lift_position="0.0"/>
       <Rotate name="Rule_Based_Rotation_1" angle_deg="-90.0"/>
