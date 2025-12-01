@@ -53,7 +53,7 @@ class BehaviorTreeNode(Node):
         # Service server for demo restart (no relay to AI Server)
         self.demo_service = self.create_service(
             SendCommand,
-            '/demo/start',
+            '/demo/command',
             self._demo_start_callback
         )
 

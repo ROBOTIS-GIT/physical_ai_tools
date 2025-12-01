@@ -34,7 +34,8 @@ class UpdateTaskInstruction(BaseAction):
 
     def __init__(self,
                  node: 'Node',
-                 prefix: str = "Pick ",
+                 prefix: str = "Put the ",
+                 suffix: str = "into the crate.",
                  inference_fps: int = 5
     ):
         """
@@ -49,6 +50,7 @@ class UpdateTaskInstruction(BaseAction):
         super().__init__(node, name="UpdateTaskInstruction")
 
         self.prefix = prefix
+        self.suffix = suffix
         self.inference_fps = inference_fps
         self.blackboard = Blackboard()
 
@@ -78,8 +80,23 @@ class UpdateTaskInstruction(BaseAction):
                 self.log_error("Blackboard 'task_instruction' is required but empty or missing")
                 return NodeStatus.FAILURE
 
-            # Build final instruction: prefix + blackboard value
-            final_instruction = self.prefix + task_obj
+            # Mapping dictionary for task objects to descriptive names
+            object_mapping = {
+                'Wrench': 'adjustable wrench',
+                'Paintbrush': 'yellow paint brush',
+                'Roller': 'yellow roller',
+                'Screwdriver': 'red screwdriver',
+                'Shovel': 'wooden handle',
+                'Tube': 'red glue tube',
+                'Pliers': 'yellow pliers',
+                'Scissors': 'blue scissors'
+            }
+
+            # Map task_obj to descriptive name, or use original if not found
+            mapped_obj = object_mapping.get(task_obj, task_obj)
+
+            # Build final instruction: prefix + mapped object + suffix
+            final_instruction = self.prefix + mapped_obj + self.suffix
             self.log_info(f"Built instruction from blackboard: '{final_instruction}'")
 
             # Create request

@@ -10,7 +10,7 @@
       <InferenceUntilGesture name="VLA_Inference_1"
         left_positions="0.313, 0.095, -0.023, -1.613, 0.185, -0.291, -0.134, 0.128"
         right_positions="0.413, -0.003, -0.108, -1.798, -0.121, -0.236, 0.238, 0.132"/>
-      <SetTaskInstruction name="SetTaskInstruction_1" instruction="pick plasticbox"/>
+      <SetTaskInstruction name="SetTaskInstruction_1" instruction="Grasp the handle of the crate."/>
       <InferenceUntilGesture name="VLA_Inference_2"
         left_positions="0.313, 0.095, -0.023, -1.613, 0.185, -0.291, -0.134, 0.128"
         right_positions="0.413, -0.003, -0.108, -1.798, -0.121, -0.236, 0.238, 0.132"/>
