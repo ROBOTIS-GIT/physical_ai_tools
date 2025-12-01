@@ -8,13 +8,10 @@
       <MoveArms name="InitialArmsPosition"
         left_positions="0.75, 0.0, 0.0, -2.3, 0.0, 0.0, 0.0, 0.0"
         right_positions="0.75, 0.0, 0.0, -2.3, 0.0, 0.0, 0.0, 0.0"/>
-      <MoveHeadLift name="InitialHeadLift"
-        head_positions="0.695,0.0"
-        lift_position="-0.1"/>
 
       <!-- Recovery Control with Retry Mechanism -->
       <!-- This will retry the recovery sequence up to 3 times if validation fails -->
-      <RetryUntilSuccessful name="RecoveryControl" max_retries="3">
+      <RetryUntilSuccessful name="RecoveryControl" max_retries="10">
         <Sequence name="RecoveryWorkflow">
 
           <!-- Step 1: Pause inference to prepare for recovery -->

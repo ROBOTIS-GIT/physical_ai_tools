@@ -82,7 +82,7 @@ class UpdateTaskInstruction(BaseAction):
 
             # Mapping dictionary for task objects to descriptive names
             object_mapping = {
-                'Wrench': 'adjustable wrench',
+                'Wrench': 'black wrench',
                 'Paintbrush': 'yellow paint brush',
                 'Roller': 'yellow roller',
                 'Screwdriver': 'red screwdriver',
