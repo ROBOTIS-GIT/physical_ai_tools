@@ -2,8 +2,7 @@
 <root BTCPP_format="3" main_tree_to_execute="RobotControlSequence">
   <BehaviorTree ID="RobotControlSequence">
     <Sequence name="RobotControlSequence">
-      <UpdateTaskInstruction name="ChangeInstruction_1"
-        instruction="Stay"/>
+      <UpdateTaskInstruction name="ChangeInstruction_1"/>
       <MoveArms name="ArmsControl_1"
         left_positions="0.75, 0.0, 0.0, -2.3, 0.0, 0.0, 0.0, 0.0"
         right_positions="0.75, 0.0, 0.0, -2.3, 0.0, 0.0, 0.0, 0.0"/>
@@ -23,8 +22,7 @@
       <InferenceUntilGesture name="VLA_Inference_1"/>
       <PauseInference name="Pause_Publishing_2"/>
       <Rotate name="Rule_Based_Rotation_1" angle_deg="90.0"/>
-      <UpdateTaskInstruction name="ChangeInstruction_1"
-        instruction="stay"/>
+      <UpdateTaskInstruction name="ChangeInstruction_1"/>
       <Rotate name="Rule_Based_Rotation_2" angle_deg="-90"/>
       <MoveArms name="ArmsControl_2"
         left_positions="0.75, 0.0, 0.0, -2.3, 0.0, 0.0, 0.0, 0.0"
@@ -79,9 +77,10 @@
       </input_port>
     </Action>
     <Action ID="UpdateTaskInstruction">
-      <input_port name="instruction" default="">
-        New task instruction to send to AI Server.
-      </input_port>
+      <description>
+        Updates task instruction from blackboard value.
+        Requires 'task_instruction' to be set in blackboard.
+      </description>
     </Action>
     <Action ID="MoveLift">
       <input_port name="lift_position" default="0.0">

@@ -233,7 +233,6 @@ class XMLTreeLoader:
         elif action_class == UpdateTaskInstruction:
             return action_class(
                 node=self.node,
-                instruction=params.get('instruction', ''),
                 inference_fps=self.inference_fps
             )
 

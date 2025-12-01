@@ -34,7 +34,6 @@ class UpdateTaskInstruction(BaseAction):
 
     def __init__(self,
                  node: 'Node',
-                 instruction: str = "",
                  prefix: str = "Pick up the ",
                  suffix: str = " with the right gripper and place it into the box below.",
                  inference_fps: int = 5
@@ -44,14 +43,12 @@ class UpdateTaskInstruction(BaseAction):
 
         Args:
             node: ROS2 node reference
-            instruction: Fixed instruction (ignored if blackboard has task_instruction)
             prefix: Prefix to prepend to blackboard value (default: "Pick up the ")
             suffix: Suffix to append to blackboard value
             inference_fps: FPS for inference (default: 5)
         """
         super().__init__(node, name="UpdateTaskInstruction")
 
-        self.instruction = instruction  # Fallback if blackboard empty
         self.prefix = prefix
         self.suffix = suffix
         self.inference_fps = inference_fps
@@ -75,22 +72,17 @@ class UpdateTaskInstruction(BaseAction):
                 self.log_error("AI Server command service not available")
                 return NodeStatus.FAILURE
 
-            # Build instruction from blackboard or use fallback
+            # Build instruction from blackboard (required)
             task_obj = self.blackboard.get('task_instruction', '')
 
-            if task_obj:
-                # Build instruction: prefix + blackboard value + suffix
-                final_instruction = self.prefix + task_obj + self.suffix
-                self.log_info(f"Built instruction from blackboard: '{final_instruction}'")
-            else:
-                # Use fallback instruction
-                final_instruction = self.instruction
-                self.log_info(f"Using fallback instruction: '{final_instruction}'")
-
-            # Validate instruction
-            if not final_instruction or final_instruction.strip() == "":
-                self.log_error("Instruction cannot be empty")
+            # Validate blackboard value
+            if not task_obj or task_obj.strip() == "":
+                self.log_error("Blackboard 'task_instruction' is required but empty or missing")
                 return NodeStatus.FAILURE
+
+            # Build final instruction: prefix + blackboard value + suffix
+            final_instruction = self.prefix + task_obj + self.suffix
+            self.log_info(f"Built instruction from blackboard: '{final_instruction}'")
 
             # Create request
             request = SendCommand.Request()
@@ -113,7 +105,7 @@ class UpdateTaskInstruction(BaseAction):
             try:
                 response = self.future.result()
                 if response.success:
-                    self.log_info(f"Task instruction updated successfully: '{self.instruction}'")
+                    self.log_info("Task instruction updated successfully")
                     return NodeStatus.SUCCESS
                 else:
                     self.log_error(f"Failed to update task instruction: {response.message}")

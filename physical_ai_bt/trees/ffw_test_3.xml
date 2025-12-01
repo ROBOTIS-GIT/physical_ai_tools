@@ -4,8 +4,7 @@
     <Sequence name="MainSequence">
 
       <!-- Initial setup -->
-      <UpdateTaskInstruction name="SetInitialTask"
-        instruction="Pick up the object"/>
+      <UpdateTaskInstruction name="SetInitialTask"/>
       <MoveArms name="InitialArmsPosition"
         left_positions="0.75, 0.0, 0.0, -2.3, 0.0, 0.0, 0.0, 0.0"
         right_positions="0.75, 0.0, 0.0, -2.3, 0.0, 0.0, 0.0, 0.0"/>
@@ -45,8 +44,7 @@
 
       <!-- Post-recovery actions (only executed if validation succeeded) -->
       <PauseInference name="FinalPause"/>
-      <UpdateTaskInstruction name="TaskComplete"
-        instruction="Task completed successfully"/>
+      <UpdateTaskInstruction name="TaskComplete"/>
 
     </Sequence>
   </BehaviorTree>
@@ -141,9 +139,10 @@
     </Action>
 
     <Action ID="UpdateTaskInstruction">
-      <input_port name="instruction" default="">
-        New task instruction to send to AI Server.
-      </input_port>
+      <description>
+        Updates task instruction from blackboard value.
+        Requires 'task_instruction' to be set in blackboard.
+      </description>
     </Action>
 
     <Action ID="MoveLift">
