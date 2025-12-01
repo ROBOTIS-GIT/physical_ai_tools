@@ -1,0 +1,172 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<root BTCPP_format="3" main_tree_to_execute="RecoveryControlDemo">
+  <BehaviorTree ID="RecoveryControlDemo">
+    <Sequence name="MainSequence">
+
+      <!-- Initial setup -->
+      <UpdateTaskInstruction name="SetInitialTask"
+        instruction="Pick up the object"/>
+      <MoveArms name="InitialArmsPosition"
+        left_positions="0.75, 0.0, 0.0, -2.3, 0.0, 0.0, 0.0, 0.0"
+        right_positions="0.75, 0.0, 0.0, -2.3, 0.0, 0.0, 0.0, 0.0"/>
+      <MoveHeadLift name="InitialHeadLift"
+        head_positions="0.695,0.0"
+        lift_position="-0.1"/>
+
+      <!-- Recovery Control with Retry Mechanism -->
+      <!-- This will retry the recovery sequence up to 3 times if validation fails -->
+      <RetryUntilSuccessful name="RecoveryControl" max_retries="3">
+        <Sequence name="RecoveryWorkflow">
+
+          <!-- Step 1: Pause inference to prepare for recovery -->
+          <PauseInference name="PauseForRecovery"/>
+
+          <!-- Step 2: Move arms to alignment position -->
+          <MoveArms name="AlignArms"
+            left_positions="0.75, 0.0, 0.0, -2.3, 0.0, 0.0, 0.0, 0.0"
+            right_positions="0.75, 0.0, 0.0, -2.3, 0.0, 0.0, 0.0, 0.0"/>
+
+          <!-- Step 3: Resume inference -->
+          <ResumeInference name="ResumeAfterAlign"/>
+
+          <!-- Step 4: Run inference until gesture sequence completes -->
+          <InferenceUntilGesture name="WaitForGestureCompletion"/>
+
+          <!-- Step 5: Validate with depth camera -->
+          <!-- If object is too far (>1.5m), this returns FAILURE and triggers retry -->
+          <!-- If object is close enough (<=0.1m), this returns SUCCESS -->
+          <CameraDepth name="ValidateObjectProximity"
+            depth_topic="/camera/cam_wrist_right/depth/image_rect_raw"
+            success_threshold="0.10"
+            failure_threshold="1.5"/>
+
+        </Sequence>
+      </RetryUntilSuccessful>
+
+      <!-- Post-recovery actions (only executed if validation succeeded) -->
+      <PauseInference name="FinalPause"/>
+      <UpdateTaskInstruction name="TaskComplete"
+        instruction="Task completed successfully"/>
+
+    </Sequence>
+  </BehaviorTree>
+
+  <!-- Description of Node Models (used by Groot) -->
+  <TreeNodesModel>
+
+    <!-- New: RetryUntilSuccessful Control Node -->
+    <Control ID="RetryUntilSuccessful">
+      <input_port name="max_retries" default="3">
+        Maximum number of retry attempts.
+        Set to 0 for single attempt with no retry.
+        Set to 1 for one retry (2 total attempts).
+      </input_port>
+      <description>
+        Retries child node on FAILURE up to max_retries times.
+        Returns SUCCESS if child succeeds within retry limit.
+        Returns FAILURE if max_retries exceeded.
+        Resets child state before each retry attempt.
+      </description>
+    </Control>
+
+    <!-- Enhanced: CameraDepth with threshold parameters -->
+    <Action ID="CameraDepth">
+      <input_port name="depth_topic" default="/camera/cam_wrist_right/depth/image_rect_raw">
+        ROS topic for depth image (sensor_msgs/Image)
+      </input_port>
+      <input_port name="success_threshold" default="0.10">
+        Maximum depth in meters for SUCCESS (object close enough).
+        Returns SUCCESS if avg_depth &lt;= this value.
+      </input_port>
+      <input_port name="failure_threshold" default="1.50">
+        Minimum depth in meters for FAILURE (object too far).
+        Returns FAILURE if avg_depth &gt;= this value.
+        Triggers retry in RetryUntilSuccessful parent.
+      </input_port>
+      <description>
+        Validates object proximity using depth camera.
+        Returns SUCCESS if depth &lt;= success_threshold.
+        Returns FAILURE if depth &gt;= failure_threshold.
+        Returns RUNNING if depth is in intermediate range.
+      </description>
+    </Action>
+
+    <!-- Existing Actions -->
+    <Action ID="InferenceUntilGesture">
+      <description>
+        Runs inference until 3-stage gesture sequence is completed:
+        1. Both grippers close (≥ 0.8)
+        2. Both grippers open (≤ 0.2)
+        3. Arms return to home position and hold for 2 seconds
+      </description>
+    </Action>
+
+    <Action ID="TimedInference">
+      <input_port name="duration" default="20.0">
+        Duration in seconds to run inference.
+      </input_port>
+    </Action>
+
+    <Action ID="PauseInference">
+      <description>Pauses inference publishing.</description>
+    </Action>
+
+    <Action ID="ResumeInference">
+      <description>Resumes inference publishing.</description>
+    </Action>
+
+    <Action ID="Rotate">
+      <input_port name="angle_deg" default="90.0">
+        Desired rotation angle in degrees.
+        Positive for CCW, negative for CW.
+      </input_port>
+    </Action>
+
+    <Action ID="MoveArms">
+      <input_port name="left_positions" default="0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0">
+        Target positions for left arm joints (comma-separated).
+      </input_port>
+      <input_port name="right_positions" default="0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0">
+        Target positions for right arm joints (comma-separated).
+      </input_port>
+    </Action>
+
+    <Action ID="MoveHeadLift">
+      <input_port name="head_positions" default="0.0,0.0">
+        Target positions for head joints (comma-separated).
+      </input_port>
+      <input_port name="lift_position" default="0.0">
+        Target position for lift joint.
+      </input_port>
+    </Action>
+
+    <Action ID="UpdateTaskInstruction">
+      <input_port name="instruction" default="">
+        New task instruction to send to AI Server.
+      </input_port>
+    </Action>
+
+    <Action ID="MoveLift">
+      <input_port name="lift_position" default="0.0">
+        Target position for lift joint.
+      </input_port>
+      <input_port name="position_threshold" default="0.01">
+        Position tolerance for completion.
+      </input_port>
+    </Action>
+
+    <Action ID="OpenGrippers">
+      <input_port name="closed_threshold" default="1.0">
+        Threshold to detect closed gripper (&gt;= this value).
+      </input_port>
+      <input_port name="open_position" default="0.0">
+        Target open position for grippers.
+      </input_port>
+      <input_port name="position_threshold" default="0.01">
+        Position tolerance for completion.
+      </input_port>
+    </Action>
+
+  </TreeNodesModel>
+
+</root>
