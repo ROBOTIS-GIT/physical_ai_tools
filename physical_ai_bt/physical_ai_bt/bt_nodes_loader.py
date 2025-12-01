@@ -286,8 +286,7 @@ class XMLTreeLoader:
             return action_class(
                 node=self.node,
                 closed_threshold=params.get('closed_threshold', 1.0),
-                open_position=params.get('open_position', 0.1),
-                position_threshold=params.get('position_threshold', 0.01)
+                open_threshold=params.get('open_threshold', 0.2)
             )
         else:
             raise ValueError(f"Unknown action class: {action_class}")

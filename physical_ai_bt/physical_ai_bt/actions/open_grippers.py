@@ -16,12 +16,11 @@
 #
 # Author: Seongwoo Kim
 
-"""Action to automatically detect and open closed grippers."""
+"""Action to detect bidirectional gripper state changes."""
 
 import threading
 import time
 from typing import TYPE_CHECKING
-from trajectory_msgs.msg import JointTrajectory, JointTrajectoryPoint
 from sensor_msgs.msg import JointState
 from physical_ai_bt.actions.base_action import NodeStatus, BaseAction
 from rclpy.qos import QoSProfile, ReliabilityPolicy
@@ -31,14 +30,13 @@ if TYPE_CHECKING:
 
 
 class OpenGrippers(BaseAction):
-    """Action to detect and open closed grippers."""
+    """Action to detect gripper state changes (closed→open or open→closed)."""
 
     def __init__(
         self,
         node: 'Node',
         closed_threshold: float = 1.0,
-        open_position: float = 0.1,
-        position_threshold: float = 0.01,
+        open_threshold: float = 0.2,
     ):
         """
         Initialize OpenGrippers action.
@@ -46,29 +44,14 @@ class OpenGrippers(BaseAction):
         Args:
             node: ROS2 node reference
             closed_threshold: Threshold to detect closed gripper (>= this value)
-            open_position: Target open position for grippers
-            position_threshold: Position tolerance for completion
+            open_threshold: Threshold to detect open gripper (< this value)
         """
         super().__init__(node, name="OpenGrippers")
         self.gripper_joint_names = ["gripper_l_joint1", "gripper_r_joint1"]
         self.closed_threshold = closed_threshold
-        self.open_position = open_position
-        self.position_threshold = position_threshold
+        self.open_threshold = open_threshold
 
         qos_profile = QoSProfile(depth=10, reliability=ReliabilityPolicy.RELIABLE)
-
-        # Publishers for left and right grippers
-        self.left_gripper_pub = self.node.create_publisher(
-            JointTrajectory,
-            "/leader/joystick_controller_left/joint_trajectory",
-            qos_profile
-        )
-
-        self.right_gripper_pub = self.node.create_publisher(
-            JointTrajectory,
-            "/leader/joystick_controller_right/joint_trajectory",
-            qos_profile
-        )
 
         # Joint state subscription
         self.joint_state = None
@@ -79,8 +62,9 @@ class OpenGrippers(BaseAction):
             qos_profile
         )
 
-        # Track which grippers need to be opened
-        self.grippers_to_open = {'left': False, 'right': False}
+        # Track initial state and changes
+        self.initial_state = {'left': None, 'right': None}  # 'open', 'closed', or None
+        self.state_changed = {'left': False, 'right': False}
 
         # Thread control
         self._thread = None
@@ -103,88 +87,118 @@ class OpenGrippers(BaseAction):
         except (ValueError, IndexError):
             return None
 
-    def _detect_closed_grippers(self):
-        """Detect which grippers are closed and need to be opened."""
+    def _get_gripper_state(self, position: float) -> str:
+        """
+        Determine gripper state from position.
+
+        Args:
+            position: Current gripper position
+
+        Returns:
+            'closed' if position >= closed_threshold
+            'open' if position < open_threshold
+            'intermediate' otherwise
+        """
+        if position >= self.closed_threshold:
+            return 'closed'
+        elif position < self.open_threshold:
+            return 'open'
+        else:
+            return 'intermediate'
+
+    def _record_initial_states(self):
+        """Record initial state of both grippers."""
         if not self.joint_state:
-            return
+            return False
+
+        left_pos = self._get_joint_position("gripper_l_joint1")
+        if left_pos is not None:
+            self.initial_state['left'] = self._get_gripper_state(left_pos)
+            self.log_info(f"Left gripper initial state: {self.initial_state['left']} ({left_pos:.3f})")
+
+        right_pos = self._get_joint_position("gripper_r_joint1")
+        if right_pos is not None:
+            self.initial_state['right'] = self._get_gripper_state(right_pos)
+            self.log_info(f"Right gripper initial state: {self.initial_state['right']} ({right_pos:.3f})")
+
+        return self.initial_state['left'] is not None or self.initial_state['right'] is not None
+
+    def _detect_state_changes(self) -> bool:
+        """
+        Detect if either gripper has changed state.
+
+        Returns:
+            True if any gripper changed from initial state
+        """
+        if not self.joint_state:
+            return False
+
+        any_change = False
 
         # Check left gripper
-        left_pos = self._get_joint_position("gripper_l_joint1")
-        if left_pos is not None and left_pos >= self.closed_threshold:
-            self.grippers_to_open['left'] = True
-            self.log_info(f"Left gripper closed detected: {left_pos:.3f}")
+        if self.initial_state['left'] is not None and not self.state_changed['left']:
+            left_pos = self._get_joint_position("gripper_l_joint1")
+            if left_pos is not None:
+                current_state = self._get_gripper_state(left_pos)
+
+                # Check for state transition
+                if current_state != self.initial_state['left'] and current_state != 'intermediate':
+                    self.state_changed['left'] = True
+                    self.log_info(
+                        f"Left gripper state changed: {self.initial_state['left']} → {current_state} "
+                        f"({left_pos:.3f})"
+                    )
+                    any_change = True
 
         # Check right gripper
-        right_pos = self._get_joint_position("gripper_r_joint1")
-        if right_pos is not None and right_pos >= self.closed_threshold:
-            self.grippers_to_open['right'] = True
-            self.log_info(f"Right gripper closed detected: {right_pos:.3f}")
+        if self.initial_state['right'] is not None and not self.state_changed['right']:
+            right_pos = self._get_joint_position("gripper_r_joint1")
+            if right_pos is not None:
+                current_state = self._get_gripper_state(right_pos)
+
+                # Check for state transition
+                if current_state != self.initial_state['right'] and current_state != 'intermediate':
+                    self.state_changed['right'] = True
+                    self.log_info(
+                        f"Right gripper state changed: {self.initial_state['right']} → {current_state} "
+                        f"({right_pos:.3f})"
+                    )
+                    any_change = True
+
+        return any_change
 
     def _control_loop(self):
-        """Independent control loop running in separate thread."""
+        """Independent monitoring loop running in separate thread."""
         rate_sleep = 1.0 / self._control_rate
 
-        # First, detect which grippers are closed
-        self._detect_closed_grippers()
+        # Step 1: Record initial states
+        timeout_count = 0
+        while not self._thread_done and timeout_count < 50:  # 0.5s timeout for initial state
+            if self._record_initial_states():
+                break
+            time.sleep(rate_sleep)
+            timeout_count += 1
 
-        if not self.grippers_to_open['left'] and not self.grippers_to_open['right']:
-            self.log_info("No closed grippers detected")
-            self._thread_success = True
+        if self.initial_state['left'] is None and self.initial_state['right'] is None:
+            self.log_error("Failed to read initial gripper states")
             self._thread_done = True
             return
 
-        # Open left gripper if closed
-        if self.grippers_to_open['left']:
-            left_traj = JointTrajectory()
-            left_traj.joint_names = ["gripper_l_joint1"]
-            left_point = JointTrajectoryPoint()
-            left_point.positions = [self.open_position]
-            left_point.time_from_start.sec = 5
-            left_traj.points.append(left_point)
-            self.left_gripper_pub.publish(left_traj)
-            self.log_info(f"Opening left gripper to {self.open_position}")
-
-        # Open right gripper if closed
-        if self.grippers_to_open['right']:
-            right_traj = JointTrajectory()
-            right_traj.joint_names = ["gripper_r_joint1"]
-            right_point = JointTrajectoryPoint()
-            right_point.positions = [self.open_position]
-            right_point.time_from_start.sec = 5
-            right_traj.points.append(right_point)
-            self.right_gripper_pub.publish(right_traj)
-            self.log_info(f"Opening right gripper to {self.open_position}")
-
-        # Wait for grippers to reach open position
+        # Step 2: Monitor for state changes
         timeout_count = 0
         while not self._thread_done and timeout_count < 2000:  # 20s timeout
-            if self.joint_state:
-                all_opened = True
-
-                # Check left gripper if it was being opened
-                if self.grippers_to_open['left']:
-                    left_pos = self._get_joint_position("gripper_l_joint1")
-                    if left_pos is None or abs(left_pos - self.open_position) > self.position_threshold:
-                        all_opened = False
-
-                # Check right gripper if it was being opened
-                if self.grippers_to_open['right']:
-                    right_pos = self._get_joint_position("gripper_r_joint1")
-                    if right_pos is None or abs(right_pos - self.open_position) > self.position_threshold:
-                        all_opened = False
-
-                if all_opened:
-                    self.log_info("All closed grippers opened successfully")
-                    self._thread_success = True
-                    self._thread_done = True
-                    break
+            if self._detect_state_changes():
+                self.log_info("Gripper state change detected - SUCCESS")
+                self._thread_success = True
+                self._thread_done = True
+                return
 
             time.sleep(rate_sleep)
             timeout_count += 1
 
-        if not self._thread_success:
-            self.log_error("Timeout waiting for grippers to open")
-            self._thread_done = True
+        # Timeout reached without state change
+        self.log_warn("Timeout waiting for gripper state change")
+        self._thread_done = True
 
     def tick(self) -> NodeStatus:
         """Execute one tick of OpenGrippers action."""
@@ -192,11 +206,12 @@ class OpenGrippers(BaseAction):
             self.joint_state = None
             self._thread_done = False
             self._thread_success = False
-            self.grippers_to_open = {'left': False, 'right': False}
+            self.initial_state = {'left': None, 'right': None}
+            self.state_changed = {'left': False, 'right': False}
 
             self._thread = threading.Thread(target=self._control_loop, daemon=True)
             self._thread.start()
-            self.log_info("OpenGrippers thread started")
+            self.log_info("OpenGrippers state change detection started")
             return NodeStatus.RUNNING
 
         if self._thread_done:
@@ -214,4 +229,5 @@ class OpenGrippers(BaseAction):
         self._thread_done = False
         self._thread_success = False
         self.joint_state = None
-        self.grippers_to_open = {'left': False, 'right': False}
+        self.initial_state = {'left': None, 'right': None}
+        self.state_changed = {'left': False, 'right': False}
