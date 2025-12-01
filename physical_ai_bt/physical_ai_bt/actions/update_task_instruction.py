@@ -34,8 +34,7 @@ class UpdateTaskInstruction(BaseAction):
 
     def __init__(self,
                  node: 'Node',
-                 prefix: str = "Pick up the ",
-                 suffix: str = " with the right gripper and place it into the box below.",
+                 prefix: str = "Pick ",
                  inference_fps: int = 5
     ):
         """
@@ -50,7 +49,6 @@ class UpdateTaskInstruction(BaseAction):
         super().__init__(node, name="UpdateTaskInstruction")
 
         self.prefix = prefix
-        self.suffix = suffix
         self.inference_fps = inference_fps
         self.blackboard = Blackboard()
 
@@ -80,8 +78,8 @@ class UpdateTaskInstruction(BaseAction):
                 self.log_error("Blackboard 'task_instruction' is required but empty or missing")
                 return NodeStatus.FAILURE
 
-            # Build final instruction: prefix + blackboard value + suffix
-            final_instruction = self.prefix + task_obj + self.suffix
+            # Build final instruction: prefix + blackboard value
+            final_instruction = self.prefix + task_obj
             self.log_info(f"Built instruction from blackboard: '{final_instruction}'")
 
             # Create request
