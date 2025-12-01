@@ -608,6 +608,58 @@ export function useRosServiceCaller() {
     [callService]
   );
 
+  const sendDemoCommand = useCallback(
+    async (command, item_list = []) => {
+      try {
+        let command_enum = TaskCommand.NONE;
+
+        if (command === 'start') {
+          command_enum = TaskCommand.NONE;
+        } else if (command === 'finish') {
+          command_enum = TaskCommand.FINISH;
+        }
+
+        const request = {
+          task_info: {
+            task_name: 'demo',
+            task_type: 'demo',
+            user_id: '',
+            task_instruction: item_list,
+            policy_path: '',
+            record_inference_mode: false,
+            fps: 0,
+            tags: [],
+            warmup_time_s: 0,
+            episode_time_s: 0,
+            reset_time_s: 0,
+            num_episodes: 0,
+            push_to_hub: false,
+            private_mode: false,
+            use_optimized_save_mode: false,
+            record_rosbag2: false,
+          },
+          command: Number(command_enum),
+        };
+
+        console.log('request:', request);
+
+        console.log('Sending command to service');
+        const result = await callService(
+          '/demo/command',
+          'physical_ai_interfaces/srv/SendCommand',
+          request
+        );
+
+        return result;
+      } catch (error) {
+        console.error('Error in sendDemoCommand:', error);
+        // Re-throw with more context
+        throw new Error(`${error.message || error}`);
+      }
+    },
+    [callService]
+  );
+
   return {
     callService,
     sendRecordCommand,
@@ -627,5 +679,6 @@ export function useRosServiceCaller() {
     controlHfServer,
     getTrainingInfo,
     setInferenceServerInfo,
+    sendDemoCommand,
   };
 }

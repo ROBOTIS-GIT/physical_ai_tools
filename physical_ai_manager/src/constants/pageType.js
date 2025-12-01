@@ -23,6 +23,7 @@ const PageType = {
   INFERENCE: 'inference',
   TRAINING: 'training',
   EDIT_DATASET: 'edit_dataset',
+  DEMO: 'demo',
 };
 
 export default PageType;
