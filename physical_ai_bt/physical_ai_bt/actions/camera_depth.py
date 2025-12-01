@@ -23,10 +23,17 @@ from sensor_msgs.msg import Image
 from physical_ai_bt.actions.base_action import NodeStatus, BTNode
 from rclpy.qos import QoSProfile, ReliabilityPolicy
 
+# Threshold constants
+DEFAULT_SUCCESS_THRESHOLD = 0.10  # meters - object close enough
+DEFAULT_FAILURE_THRESHOLD = 1.50  # meters - object too far, validation failed
+
 class CameraDepth(BTNode):
-    def __init__(self, node, depth_topic="/camera/cam_wrist_right/depth/image_rect_raw"):
+    def __init__(self, node, depth_topic="/camera/cam_wrist_right/depth/image_rect_raw",
+                 success_threshold=None, failure_threshold=None):
         super().__init__(node, name="CameraDepth")
         self.depth_topic = depth_topic
+        self.success_threshold = success_threshold if success_threshold is not None else DEFAULT_SUCCESS_THRESHOLD
+        self.failure_threshold = failure_threshold if failure_threshold is not None else DEFAULT_FAILURE_THRESHOLD
         self.depth_sub = None
         self.latest_depth = None
         self.status = NodeStatus.RUNNING
@@ -54,14 +61,39 @@ class CameraDepth(BTNode):
             self.latest_depth = None
 
     def tick(self):
+        # Wait for depth data
         if self.latest_depth is None:
             return NodeStatus.RUNNING
+
         arr = self.latest_depth
         avg_depth = np.nanmean(arr)
-        if avg_depth <= 0.10:
+
+        # Handle NaN/invalid data
+        if np.isnan(avg_depth):
+            self.node.get_logger().warn("[CameraDepth] Depth contains NaN values")
+            return NodeStatus.RUNNING
+
+        # SUCCESS: object close enough
+        if avg_depth <= self.success_threshold:
+            self.node.get_logger().info(
+                f"[CameraDepth] SUCCESS: depth={avg_depth:.3f}m <= {self.success_threshold}m"
+            )
             self.status = NodeStatus.SUCCESS
             return NodeStatus.SUCCESS
+
+        # FAILURE: object too far (validation failed)
+        elif avg_depth >= self.failure_threshold:
+            self.node.get_logger().error(
+                f"[CameraDepth] FAILURE: depth={avg_depth:.3f}m >= {self.failure_threshold}m"
+            )
+            self.status = NodeStatus.FAILURE
+            return NodeStatus.FAILURE
+
+        # RUNNING: intermediate range, keep waiting
         else:
+            self.node.get_logger().info(
+                f"[CameraDepth] Waiting: depth={avg_depth:.3f}m"
+            )
             self.status = NodeStatus.RUNNING
             return NodeStatus.RUNNING
 

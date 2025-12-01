@@ -28,8 +28,13 @@ from physical_ai_bt.actions.control_inference import (
     ResumeInference
 )
 from physical_ai_bt.actions.update_task_instruction import UpdateTaskInstruction
+from physical_ai_bt.actions.camera_depth import CameraDepth
+from physical_ai_bt.actions.move_head_lift import MoveHeadLift
+from physical_ai_bt.actions.move_arms import MoveArms
+from physical_ai_bt.actions.move_lift import MoveLift
+from physical_ai_bt.actions.open_grippers import OpenGrippers
 from physical_ai_bt.actions.base_action import BTNode, BaseAction, BaseControl
-from physical_ai_bt.controls import Sequence
+from physical_ai_bt.controls import Sequence, RetryUntilSuccessful
 
 if TYPE_CHECKING:
     from rclpy.node import Node
@@ -61,13 +66,9 @@ class XMLTreeLoader:
         # Register available node types
         self.control_types: Dict[str, Type[BaseControl]] = {
             'Sequence': Sequence,
+            'RetryUntilSuccessful': RetryUntilSuccessful,
         }
 
-        from physical_ai_bt.actions.camera_depth import CameraDepth
-        from physical_ai_bt.actions.move_head_lift import MoveHeadLift
-        from physical_ai_bt.actions.move_arms import MoveArms
-        from physical_ai_bt.actions.move_lift import MoveLift
-        from physical_ai_bt.actions.open_grippers import OpenGrippers
         self.action_types: Dict[str, Type[BaseAction]] = {
             'InferenceUntilGesture': InferenceUntilGesture,
             'TimedInference': TimedInference,
@@ -127,7 +128,13 @@ class XMLTreeLoader:
         # Load Control nodes
         if node_type in self.control_types:
             control_class = self.control_types[node_type]
-            control_node = control_class(self.node, name=node_name)
+
+            # Parse parameters for parameterized control nodes
+            if node_type == 'RetryUntilSuccessful':
+                max_retries = int(xml_node.get('max_retries', '3'))
+                control_node = control_class(self.node, name=node_name, max_retries=max_retries)
+            else:
+                control_node = control_class(self.node, name=node_name)
 
             # Load children
             for child_xml in xml_node:
@@ -200,65 +207,72 @@ class XMLTreeLoader:
         """
         # Map XML parameters to constructor arguments
         if action_class == InferenceUntilGesture:
-            return InferenceUntilGesture(
+            return action_class(
                 node=self.node,
             )
 
         elif action_class == Rotate:
-            return Rotate(
+            return action_class(
                 node=self.node,
                 angle_deg=params.get('angle_deg', 90.0),
                 topic_config=self.topic_config
             )
 
         elif action_class == PauseInference:
-            return PauseInference(
+            return action_class(
                 node=self.node,
                 inference_fps=self.inference_fps
             )
 
         elif action_class == ResumeInference:
-            return ResumeInference(
+            return action_class(
                 node=self.node,
                 inference_fps=self.inference_fps
             )
 
         elif action_class == UpdateTaskInstruction:
-            return UpdateTaskInstruction(
+            return action_class(
                 node=self.node,
                 instruction=params.get('instruction', ''),
                 inference_fps=self.inference_fps
             )
 
-        elif action_class.__name__ == "CameraDepth":
+        elif action_class == CameraDepth:
             return action_class(
                 node=self.node,
-                depth_topic=params.get('depth_topic', "/camera/depth/image_raw")
+                depth_topic=params.get('depth_topic', "/camera/depth/image_raw"),
+                success_threshold=params.get('success_threshold'),
+                failure_threshold=params.get('failure_threshold')
             )
-        elif action_class.__name__ == "MoveHeadLift":
+
+        elif action_class == MoveHeadLift:
             return action_class(
                 node=self.node,
                 head_positions=params.get('head_positions', [0.0, 0.0]),
                 lift_position=params.get('lift_position', 0.0),
             )
-        elif action_class.__name__ == "MoveArms":
+
+        elif action_class == MoveArms:
             return action_class(
                 node=self.node,
                 left_positions=params.get('left_positions', [0.0]*8),
                 right_positions=params.get('right_positions', [0.0]*8)
             )
+
         elif action_class == TimedInference:
-            return TimedInference(
+            return action_class(
                 node=self.node,
                 duration=params.get('duration', 20.0)
             )
-        elif action_class.__name__ == "MoveLift":
+
+        elif action_class == MoveLift:
             return action_class(
                 node=self.node,
                 lift_position=params.get('lift_position', 0.0),
                 position_threshold=params.get('position_threshold', 0.01)
             )
-        elif action_class.__name__ == "OpenGrippers":
+
+        elif action_class == OpenGrippers:
             return action_class(
                 node=self.node,
                 closed_threshold=params.get('closed_threshold', 1.0),
