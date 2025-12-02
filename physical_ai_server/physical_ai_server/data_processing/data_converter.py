@@ -180,7 +180,7 @@ class DataConverter:
                         positions=action_slice
                     )])
                 if slow_control:
-                    joint_pub_msgs[key].points[0].time_from_start = 2
+                    joint_pub_msgs[key].points[0].time_from_start.sec = 10
 
             elif leader_topic_types[key] == Twist:
                 tmp_twist = Twist()
