@@ -35,7 +35,7 @@ from physical_ai_bt.actions.move_arms import MoveArms
 from physical_ai_bt.actions.move_lift import MoveLift
 from physical_ai_bt.actions.open_grippers import OpenGrippers
 from physical_ai_bt.actions.base_action import BTNode, BaseAction, BaseControl
-from physical_ai_bt.controls import Sequence, RetryUntilSuccessful
+from physical_ai_bt.controls import Sequence, RetryUntilSuccessful, ForEach
 
 if TYPE_CHECKING:
     from rclpy.node import Node
@@ -68,6 +68,7 @@ class XMLTreeLoader:
         self.control_types: Dict[str, Type[BaseControl]] = {
             'Sequence': Sequence,
             'RetryUntilSuccessful': RetryUntilSuccessful,
+            'ForEach': ForEach,
         }
 
         self.action_types: Dict[str, Type[BaseAction]] = {
@@ -135,6 +136,9 @@ class XMLTreeLoader:
             if node_type == 'RetryUntilSuccessful':
                 max_retries = int(xml_node.get('max_retries', '3'))
                 control_node = control_class(self.node, name=node_name, max_retries=max_retries)
+            elif node_type == 'ForEach':
+                list_key = xml_node.get('list_key', 'task_instruction_list')
+                control_node = control_class(self.node, name=node_name, list_key=list_key)
             else:
                 control_node = control_class(self.node, name=node_name)
 

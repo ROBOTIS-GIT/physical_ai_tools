@@ -20,5 +20,6 @@
 
 from physical_ai_bt.controls.sequence import Sequence
 from physical_ai_bt.controls.retry_until_successful import RetryUntilSuccessful
+from physical_ai_bt.controls.for_each import ForEach
 
-__all__ = ['Sequence', 'RetryUntilSuccessful']
+__all__ = ['Sequence', 'RetryUntilSuccessful', 'ForEach']

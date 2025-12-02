@@ -73,7 +73,21 @@ class UpdateTaskInstruction(BaseAction):
                 return NodeStatus.FAILURE
 
             # Build instruction from blackboard (required)
-            task_obj = self.blackboard.get('task_instruction', '')
+            # Check if ForEach is controlling iteration
+            if self.blackboard.has('current_task_index'):
+                # Running under ForEach - use indexed access
+                task_list = self.blackboard.get('task_instruction_list', [])
+                index = self.blackboard.get('current_task_index', 0)
+
+                if index < len(task_list):
+                    task_obj = task_list[index]
+                    self.log_info(f"Using task from list[{index}]: {task_obj}")
+                else:
+                    self.log_error(f"Index {index} out of range for task_list (len={len(task_list)})")
+                    return NodeStatus.FAILURE
+            else:
+                # Legacy mode - single task_instruction
+                task_obj = self.blackboard.get('task_instruction', '')
 
             # Validate blackboard value
             if not task_obj or task_obj.strip() == "":

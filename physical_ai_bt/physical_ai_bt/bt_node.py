@@ -315,16 +315,14 @@ class BehaviorTreeNode(Node):
 
             # Store task_instruction to blackboard
             if request.task_info and request.task_info.task_instruction:
-                # Debug: Log raw task_instruction array
-                self.get_logger().info(f'[DEBUG] Raw task_instruction array: {request.task_info.task_instruction}')
-                self.get_logger().info(f'[DEBUG] Array length: {len(request.task_info.task_instruction)}')
+                # Store full task_instruction array to blackboard for ForEach support
+                task_list = request.task_info.task_instruction
+                self.blackboard.set('task_instruction_list', task_list)
+                self.get_logger().info(f'Stored task_instruction_list to blackboard: {task_list}')
 
-                # Use first element of task_instruction array
-                task_obj = request.task_info.task_instruction[0] if request.task_info.task_instruction else ""
-                self.get_logger().info(f'[DEBUG] Extracted task_obj: "{task_obj}" (type: {type(task_obj)}, len: {len(task_obj)})')
-
+                # Also store first item for backward compatibility (legacy mode)
+                task_obj = task_list[0] if task_list else ""
                 self.blackboard.set('task_instruction', task_obj)
-                self.get_logger().info(f'[DEBUG] Stored to blackboard - verify get: "{self.blackboard.get("task_instruction")}"')
                 self.get_logger().info(f'Stored task_instruction to blackboard: {task_obj}')
             else:
                 self.get_logger().warn('No task_instruction in request')
