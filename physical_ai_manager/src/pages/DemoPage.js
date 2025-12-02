@@ -319,8 +319,8 @@ function DemoPage({ onBackToHome }) {
         return prev.filter((id) => id !== productId);
       }
       // TEMPORARY: Allow only one item selection
-      return [productId];
-      // return [...prev, productId]; // Uncomment for multiple selection
+      //return [productId];  // Uncomment for single selection
+      return [...prev, productId]; // Uncomment for multiple selection
     });
   };
 
