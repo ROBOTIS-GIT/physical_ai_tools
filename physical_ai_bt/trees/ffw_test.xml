@@ -2,11 +2,11 @@
 <root BTCPP_format="3" main_tree_to_execute="RobotControlSequence">
   <BehaviorTree ID="RobotControlSequence">
     <Sequence name="RobotControlSequence">
-      <UpdateTaskInstruction name="ChangeInstruction_1"/>
       <MoveArms name="ArmsControl_1"
         left_positions="0.75, 0.0, 0.0, -2.3, 0.0, 0.0, 0.0, 0.0"
         right_positions="0.75, 0.0, 0.0, -2.3, 0.0, 0.0, 0.0, 0.0"/>
       <ResumeInference name="Resume_Publishing_1"/>
+      <UpdateTaskInstruction name="ChangeInstruction_1"/>
       <InferenceUntilGesture name="VLA_Inference_1"/>
       <SetTaskInstruction name="SetTaskInstruction_1" instruction="Grasp the handle of the crate."/>
       <InferenceUntilGesture name="VLA_Inference_2"/>
@@ -14,8 +14,11 @@
       <MoveLift name="LiftControl_1" lift_position="0.0"/>
       <Rotate name="Rule_Based_Rotation_1" angle_deg="-90.0"/>
       <MoveLift name="LiftControl_1" lift_position="-0.1"/>
+      <ResumeInference name="Resume_Publishing_2"/>
+      <SetTaskInstruction name="SetTaskInstruction_2" instruction="Place the crate ont the table."/>
+      <InferenceUntilGesture name="VLA_Inference_3"/>
+      <PauseInference name="Pause_Publishing_2"/>
       <Rotate name="Rule_Based_Rotation_1" angle_deg="90.0"/>
-      <OpenGrippers name="OpenGripper_1"/>
       <!-- <MoveArms name="ArmsControl_1"
         left_positions="0.75, 0.0, 0.0, -2.3, 0.0, 0.0, 0.0, 0.0"
         right_positions="0.75, 0.0, 0.0, -2.3, 0.0, 0.0, 0.0, 0.0"/>
