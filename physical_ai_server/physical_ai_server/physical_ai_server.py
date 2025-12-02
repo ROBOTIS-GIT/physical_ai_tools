@@ -114,6 +114,7 @@ class PhysicalAIServer(Node):
         self.stop_inference = False
         self.inference_check_time = time.time()
         self.init_robot_check = False
+        self.start_inference_once = False
 
         self._setup_timer_callbacks()
         self.previous_data_manager_status = None
@@ -621,7 +622,8 @@ class PhysicalAIServer(Node):
             action_pub_msgs = self.data_manager.data_converter.tensor_array2joint_msgs(
                 action,
                 self.joint_topic_types,
-                self.joint_order
+                self.joint_order,
+                self.start_inference_once
             )
 
             self.communicator.publish_action(
@@ -814,8 +816,10 @@ class PhysicalAIServer(Node):
             action_pub_msgs = self.data_manager.data_converter.tensor_array2joint_msgs(
                 action,
                 self.joint_topic_types,
-                self.joint_order
+                self.joint_order,
+                self.start_inference_once
             )
+            self.start_inference_once = False
             pub_time = time.time()
             self.get_logger().info(
                 f'Action Length: {len(self.remain_action)}, '
@@ -1107,6 +1111,7 @@ class PhysicalAIServer(Node):
                 self.stop_inference = False
                 self.communicator.action_publish_enabled = True
                 self.start_recording_time = time.perf_counter()
+                self.start_inference_once = True
 
                 response.success = True
                 response.message = 'Model loaded, inference ready'

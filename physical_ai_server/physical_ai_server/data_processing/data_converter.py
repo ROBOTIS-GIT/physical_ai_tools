@@ -161,7 +161,8 @@ class DataConverter:
             self,
             action,
             leader_topic_types: Dict[str, Any],
-            leader_joint_orders: Dict[str, List[str]]):
+            leader_joint_orders: Dict[str, List[str]],
+            slow_control: bool = False) -> Dict[str, Any]:
 
         start_idx = 0
         joint_pub_msgs = {}
@@ -178,6 +179,9 @@ class DataConverter:
                     points=[JointTrajectoryPoint(
                         positions=action_slice
                     )])
+                if slow_control:
+                    joint_pub_msgs[key].points[0].time_from_start = 2
+
             elif leader_topic_types[key] == Twist:
                 tmp_twist = Twist()
                 tmp_twist.linear.x = float(action_slice[0])
