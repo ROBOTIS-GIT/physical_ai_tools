@@ -165,12 +165,7 @@ class InferenceUntilGesture(BaseAction):
         if max_vel == float('inf'):
             return False  # Not enough data
 
-        is_static = max_vel < self.motion_threshold
-
-        if is_static:
-            self.log_debug(f"Static motion detected (max vel: {max_vel:.4f} rad/s)")
-
-        return is_static
+        return max_vel < self.motion_threshold
 
     def tick(self) -> NodeStatus:
         """Execute one tick of inference action with static motion detection."""
@@ -192,8 +187,6 @@ class InferenceUntilGesture(BaseAction):
                 return NodeStatus.SUCCESS
         else:
             # Movement detected, reset timer
-            if self.static_start_time is not None:
-                self.log_debug("Movement detected, resetting static timer")
             self.static_start_time = None
 
         return NodeStatus.RUNNING
