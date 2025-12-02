@@ -113,6 +113,7 @@ class PhysicalAIServer(Node):
         self.wait_inference = False
         self.stop_inference = False
         self.inference_check_time = time.time()
+        self.init_robot_check = False
 
         self._setup_timer_callbacks()
         self.previous_data_manager_status = None
@@ -296,7 +297,7 @@ class PhysicalAIServer(Node):
         self.timer_manager = TimerManager(node=self)
         self.timer_manager.set_timer(
             timer_name=self.operation_mode,
-            timer_frequency=15,
+            timer_frequency=task_info.fps,
             callback_function=self.timer_callback_dict[self.operation_mode]
         )
         self.timer_manager.start(timer_name=self.operation_mode)
@@ -1096,7 +1097,9 @@ class PhysicalAIServer(Node):
                         return response
 
                 # Initialize timer for inference
-                self.init_robot_control_parameters_from_user_task(task_info)
+                if not self.init_robot_check:
+                    self.init_robot_control_parameters_from_user_task(task_info)
+                    self.init_robot_check = True
 
                 if task_info.record_inference_mode:
                     self.on_recording = True
