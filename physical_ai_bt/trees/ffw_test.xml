@@ -46,19 +46,19 @@
   <!-- Description of Node Models (used by Groot) -->
   <TreeNodesModel>
     <Action ID="InferenceUntilGesture">
-      <input_port name="motion_threshold" default="0.02">
-        Maximum joint velocity (rad/s) to be considered static.
+      <input_port name="position_change_threshold" default="0.05">
+        Maximum position change (radians) over time window to be considered stable.
       </input_port>
       <input_port name="static_duration" default="3.0">
-        How long (seconds) to hold static state before ending inference.
+        How long (seconds) to hold stable state before ending inference.
       </input_port>
-      <input_port name="history_window" default="0.5">
-        Time window (seconds) for velocity calculation.
+      <input_port name="history_window" default="1.0">
+        Time window (seconds) for measuring position changes.
       </input_port>
       <description>
-        Runs inference until both arms enter static state (minimal movement).
-        Returns SUCCESS when all joints have velocity below threshold for specified duration.
-        No specific target positions required - detects natural end of motion.
+        Runs inference until both arms stabilize (position changes become minimal).
+        Returns SUCCESS when all joints change less than threshold for specified duration.
+        Works regardless of movement speed - only measures position change magnitude.
       </description>
     </Action>
     <Action ID="TimedInference">

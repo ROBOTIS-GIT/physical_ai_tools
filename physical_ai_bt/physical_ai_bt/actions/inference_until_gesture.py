@@ -28,10 +28,10 @@ if TYPE_CHECKING:
     from rclpy.node import Node
 
 
-# Static motion detection thresholds
-DEFAULT_MOTION_THRESHOLD = 0.1  # rad/s
-DEFAULT_STATIC_DURATION = 4.0    # seconds
-DEFAULT_HISTORY_WINDOW = 0.5     # seconds
+# Position change detection thresholds
+DEFAULT_POSITION_CHANGE_THRESHOLD = 0.05  # radians
+DEFAULT_STATIC_DURATION = 3.0              # seconds
+DEFAULT_HISTORY_WINDOW = 1.0               # seconds
 
 # Joint names for left and right arms (including grippers)
 LEFT_JOINT_NAMES = [
@@ -47,16 +47,16 @@ RIGHT_JOINT_NAMES = [
 
 class InferenceUntilGesture(BaseAction):
     """
-    Action that runs inference until both arms enter static state (minimal movement).
+    Action that runs inference until both arms stabilize (positions stop changing).
 
-    Returns SUCCESS when all arm joints have velocity below threshold for specified duration.
-    No specific target positions required - detects natural end of motion.
+    Returns SUCCESS when all arm joint positions change less than threshold over 1.0s window
+    for specified duration. No specific target positions required - detects when robot settles.
     """
 
     def __init__(
         self,
         node: 'Node',
-        motion_threshold: float = DEFAULT_MOTION_THRESHOLD,
+        position_change_threshold: float = DEFAULT_POSITION_CHANGE_THRESHOLD,
         static_duration: float = DEFAULT_STATIC_DURATION,
         history_window: float = DEFAULT_HISTORY_WINDOW,
     ):
@@ -65,13 +65,13 @@ class InferenceUntilGesture(BaseAction):
 
         Args:
             node: ROS2 node reference
-            motion_threshold: Maximum joint velocity (rad/s) to be considered static (default: 0.02)
-            static_duration: How long (seconds) to hold static state before ending inference (default: 3.0)
-            history_window: Time window (seconds) for velocity calculation (default: 0.5)
+            position_change_threshold: Maximum position change (radians) to be considered stable (default: 0.05)
+            static_duration: How long (seconds) to hold stable state before ending inference (default: 3.0)
+            history_window: Time window (seconds) for position change calculation (default: 1.0)
         """
         super().__init__(node, name="InferenceUntilGesture")
 
-        self.motion_threshold = motion_threshold
+        self.position_change_threshold = position_change_threshold
         self.static_duration = static_duration
         self.history_window = history_window
 
@@ -124,12 +124,15 @@ class InferenceUntilGesture(BaseAction):
                 if t >= cutoff_time
             ]
 
-    def _calculate_max_velocity(self) -> float:
+    def _calculate_max_position_change(self) -> float:
         """
-        Calculate maximum joint velocity across all monitored joints.
+        Calculate maximum position change across all monitored joints.
+
+        Measures how much each joint moved over the history window,
+        regardless of speed.
 
         Returns:
-            Maximum absolute velocity (rad/s) among all joints,
+            Maximum absolute position change (radians) among all joints,
             or float('inf') if insufficient data
         """
         if len(self.position_history) < 2:
@@ -139,33 +142,28 @@ class InferenceUntilGesture(BaseAction):
         oldest_time, oldest_pos = self.position_history[0]
         newest_time, newest_pos = self.position_history[-1]
 
-        time_delta = newest_time - oldest_time
-        if time_delta < 0.01:  # Too small time window
-            return float('inf')
-
-        # Calculate velocity for each joint
-        max_velocity = 0.0
+        # Calculate position change for each joint (NO time_delta division!)
+        max_change = 0.0
         for joint_name in self.monitored_joints:
             if joint_name in oldest_pos and joint_name in newest_pos:
                 position_change = abs(newest_pos[joint_name] - oldest_pos[joint_name])
-                velocity = position_change / time_delta
-                max_velocity = max(max_velocity, velocity)
+                max_change = max(max_change, position_change)
 
-        return max_velocity
+        return max_change
 
     def _is_static(self) -> bool:
         """
-        Check if all monitored joints are in static state (minimal movement).
+        Check if all monitored joints are in stable state (positions not changing).
 
         Returns:
-            True if maximum velocity is below threshold
+            True if maximum position change is below threshold
         """
-        max_vel = self._calculate_max_velocity()
+        max_change = self._calculate_max_position_change()
 
-        if max_vel == float('inf'):
+        if max_change == float('inf'):
             return False  # Not enough data
 
-        return max_vel < self.motion_threshold
+        return max_change < self.position_change_threshold
 
     def tick(self) -> NodeStatus:
         """Execute one tick of inference action with static motion detection."""
