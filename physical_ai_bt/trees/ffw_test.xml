@@ -7,13 +7,9 @@
         left_positions="0.75, 0.0, 0.0, -2.3, 0.0, 0.0, 0.0, 0.0"
         right_positions="0.75, 0.0, 0.0, -2.3, 0.0, 0.0, 0.0, 0.0"/>
       <ResumeInference name="Resume_Publishing_1"/>
-      <InferenceUntilGesture name="VLA_Inference_1"
-        left_positions="0.364, 0.113, -0.020, -1.866, 0.062, -0.048, -0.133, 0.087"
-        right_positions="0.385, -0.088, 0.196, -1.761, -0.038, -0.134, -0.248, 0.132"/>
+      <InferenceUntilGesture name="VLA_Inference_1"/>
       <SetTaskInstruction name="SetTaskInstruction_1" instruction="Grasp the handle of the crate."/>
-      <InferenceUntilGesture name="VLA_Inference_2"
-        left_positions="0.029, 0.248, -0.153, -1.707, 1.796, 0.815, -0.117, 1.141"
-        right_positions="0.281, -0.051, 0.172, -1.632, -0.035, -0.242, -0.126, 0.156"/>
+      <InferenceUntilGesture name="VLA_Inference_2"/>
       <PauseInference name="Pause_Publishing_1"/>
       <MoveLift name="LiftControl_1" lift_position="0.0"/>
       <Rotate name="Rule_Based_Rotation_1" angle_deg="-90.0"/>
@@ -50,15 +46,19 @@
   <!-- Description of Node Models (used by Groot) -->
   <TreeNodesModel>
     <Action ID="InferenceUntilGesture">
-      <input_port name="left_positions" default="0.313,0.095,-0.023,-1.613,0.185,-0.291,-0.134,0.128">
-        Target positions for left arm joints (8 values: 7 arm joints + 1 gripper)
+      <input_port name="motion_threshold" default="0.02">
+        Maximum joint velocity (rad/s) to be considered static.
       </input_port>
-      <input_port name="right_positions" default="0.413,-0.003,-0.108,-1.798,-0.121,-0.236,0.238,0.132">
-        Target positions for right arm joints (8 values: 7 arm joints + 1 gripper)
+      <input_port name="static_duration" default="3.0">
+        How long (seconds) to hold static state before ending inference.
+      </input_port>
+      <input_port name="history_window" default="0.5">
+        Time window (seconds) for velocity calculation.
       </input_port>
       <description>
-        Runs inference until arms return to target position.
-        Returns SUCCESS when all arm joints are at target position for 2 seconds.
+        Runs inference until both arms enter static state (minimal movement).
+        Returns SUCCESS when all joints have velocity below threshold for specified duration.
+        No specific target positions required - detects natural end of motion.
       </description>
     </Action>
     <Action ID="TimedInference">
@@ -113,12 +113,13 @@
       <input_port name="closed_threshold" default="1.0">
         Threshold to detect closed gripper (>= this value).
       </input_port>
-      <input_port name="open_position" default="0.0">
-        Target open position for grippers.
+      <input_port name="open_threshold" default="0.2">
+        Threshold to detect open gripper (&lt; this value).
       </input_port>
-      <input_port name="position_threshold" default="0.01">
-        Position tolerance for completion.
-      </input_port>
+      <description>
+        Detects bidirectional gripper state changes (closed→open or open→closed).
+        Records initial state and returns SUCCESS when either gripper changes state.
+      </description>
     </Action>
   </TreeNodesModel>
 

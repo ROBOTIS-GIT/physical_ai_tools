@@ -16,10 +16,10 @@
 #
 # Author: Seongwoo Kim
 
-"""Inference action that runs until arms return to target position."""
+"""Inference action that runs until arms enter static state (minimal movement)."""
 
 import time
-from typing import TYPE_CHECKING, List
+from typing import TYPE_CHECKING
 
 from physical_ai_bt.actions.base_action import NodeStatus, BaseAction
 from rclpy.qos import QoSProfile, ReliabilityPolicy
@@ -28,13 +28,10 @@ if TYPE_CHECKING:
     from rclpy.node import Node
 
 
-# Threshold constants
-POSITION_TOLERANCE = 0.1
-HOME_HOLD_DURATION = 2.0
-
-# Default home position values for arms and grippers
-DEFAULT_LEFT_POSITIONS = [0.313, 0.095, -0.023, -1.613, 0.185, -0.291, -0.134, 0.128]
-DEFAULT_RIGHT_POSITIONS = [0.413, -0.003, -0.108, -1.798, -0.121, -0.236, 0.238, 0.132]
+# Static motion detection thresholds
+DEFAULT_MOTION_THRESHOLD = 0.1  # rad/s
+DEFAULT_STATIC_DURATION = 4.0    # seconds
+DEFAULT_HISTORY_WINDOW = 0.5     # seconds
 
 # Joint names for left and right arms (including grippers)
 LEFT_JOINT_NAMES = [
@@ -50,43 +47,40 @@ RIGHT_JOINT_NAMES = [
 
 class InferenceUntilGesture(BaseAction):
     """
-    Action that runs inference until arms return to target position.
+    Action that runs inference until both arms enter static state (minimal movement).
 
-    Returns SUCCESS when all arm joints are at target position for 2 seconds.
+    Returns SUCCESS when all arm joints have velocity below threshold for specified duration.
+    No specific target positions required - detects natural end of motion.
     """
 
     def __init__(
         self,
         node: 'Node',
-        left_positions: List[float] = None,
-        right_positions: List[float] = None,
+        motion_threshold: float = DEFAULT_MOTION_THRESHOLD,
+        static_duration: float = DEFAULT_STATIC_DURATION,
+        history_window: float = DEFAULT_HISTORY_WINDOW,
     ):
         """
         Initialize InferenceUntilGesture action.
 
         Args:
             node: ROS2 node reference
-            left_positions: Target positions for left arm joints (8 values: 7 arm joints + 1 gripper)
-            right_positions: Target positions for right arm joints (8 values: 7 arm joints + 1 gripper)
+            motion_threshold: Maximum joint velocity (rad/s) to be considered static (default: 0.02)
+            static_duration: How long (seconds) to hold static state before ending inference (default: 3.0)
+            history_window: Time window (seconds) for velocity calculation (default: 0.5)
         """
         super().__init__(node, name="InferenceUntilGesture")
 
-        # Use provided positions or defaults
-        self.left_positions = left_positions if left_positions is not None else DEFAULT_LEFT_POSITIONS
-        self.right_positions = right_positions if right_positions is not None else DEFAULT_RIGHT_POSITIONS
+        self.motion_threshold = motion_threshold
+        self.static_duration = static_duration
+        self.history_window = history_window
 
-        # Validate position counts
-        if len(self.left_positions) != 8:
-            self.log_error(f"Left positions must have 8 values, got {len(self.left_positions)}")
-        if len(self.right_positions) != 8:
-            self.log_error(f"Right positions must have 8 values, got {len(self.right_positions)}")
+        # Position history tracking
+        self.position_history = []  # List of (timestamp, positions_dict) tuples
+        self.static_start_time = None
 
-        # Build target position dictionary
-        self.target_positions = {}
-        for joint_name, position in zip(LEFT_JOINT_NAMES, self.left_positions):
-            self.target_positions[joint_name] = position
-        for joint_name, position in zip(RIGHT_JOINT_NAMES, self.right_positions):
-            self.target_positions[joint_name] = position
+        # Joint names to monitor (both arms, all 8 joints each)
+        self.monitored_joints = LEFT_JOINT_NAMES + RIGHT_JOINT_NAMES
 
         qos_profile = QoSProfile(
             depth=10,
@@ -100,31 +94,109 @@ class InferenceUntilGesture(BaseAction):
             qos_profile
         )
 
-        self.home_hold_start = None
         self.joint_positions = {}
 
+    def _update_position_history(self):
+        """
+        Update position history with current joint states.
+
+        Maintains a rolling window of recent positions for velocity calculation.
+        """
+        if not self.joint_positions:
+            return
+
+        current_time = time.time()
+
+        # Extract positions for monitored joints
+        current_positions = {}
+        for joint_name in self.monitored_joints:
+            if joint_name in self.joint_positions:
+                current_positions[joint_name] = self.joint_positions[joint_name]
+
+        # Add to history
+        if len(current_positions) == len(self.monitored_joints):
+            self.position_history.append((current_time, current_positions))
+
+            # Remove old entries outside history window
+            cutoff_time = current_time - self.history_window
+            self.position_history = [
+                (t, pos) for t, pos in self.position_history
+                if t >= cutoff_time
+            ]
+
+    def _calculate_max_velocity(self) -> float:
+        """
+        Calculate maximum joint velocity across all monitored joints.
+
+        Returns:
+            Maximum absolute velocity (rad/s) among all joints,
+            or float('inf') if insufficient data
+        """
+        if len(self.position_history) < 2:
+            return float('inf')  # Not enough data yet
+
+        # Get oldest and newest positions in window
+        oldest_time, oldest_pos = self.position_history[0]
+        newest_time, newest_pos = self.position_history[-1]
+
+        time_delta = newest_time - oldest_time
+        if time_delta < 0.01:  # Too small time window
+            return float('inf')
+
+        # Calculate velocity for each joint
+        max_velocity = 0.0
+        for joint_name in self.monitored_joints:
+            if joint_name in oldest_pos and joint_name in newest_pos:
+                position_change = abs(newest_pos[joint_name] - oldest_pos[joint_name])
+                velocity = position_change / time_delta
+                max_velocity = max(max_velocity, velocity)
+
+        return max_velocity
+
+    def _is_static(self) -> bool:
+        """
+        Check if all monitored joints are in static state (minimal movement).
+
+        Returns:
+            True if maximum velocity is below threshold
+        """
+        max_vel = self._calculate_max_velocity()
+
+        if max_vel == float('inf'):
+            return False  # Not enough data
+
+        is_static = max_vel < self.motion_threshold
+
+        if is_static:
+            self.log_debug(f"Static motion detected (max vel: {max_vel:.4f} rad/s)")
+
+        return is_static
+
     def tick(self) -> NodeStatus:
-        """Execute one tick of inference action with target position check."""
-        if self._is_at_target_position():
+        """Execute one tick of inference action with static motion detection."""
+        # Update position history
+        self._update_position_history()
+
+        # Check if in static state
+        if self._is_static():
             now = time.time()
-            if self.home_hold_start is None:
-                self.home_hold_start = now
-                self.log_info("At target position, holding...")
-            elif now - self.home_hold_start >= HOME_HOLD_DURATION:
-                self.log_info("Target position held for 2s, ending inference.")
+
+            if self.static_start_time is None:
+                # First detection of static state
+                self.static_start_time = now
+                self.log_info(f"Static motion detected, holding for {self.static_duration}s...")
+
+            elif now - self.static_start_time >= self.static_duration:
+                # Static state held for required duration
+                self.log_info(f"Static state held for {self.static_duration}s, ending inference.")
                 return NodeStatus.SUCCESS
         else:
-            self.home_hold_start = None
+            # Movement detected, reset timer
+            if self.static_start_time is not None:
+                self.log_debug("Movement detected, resetting static timer")
+            self.static_start_time = None
 
         return NodeStatus.RUNNING
-
-    def _is_at_target_position(self) -> bool:
-        """Check if all arm joints are within tolerance of target position."""
-        for joint, target in self.target_positions.items():
-            current = self.joint_positions.get(joint, float('inf'))
-            if abs(current - target) > POSITION_TOLERANCE:
-                return False
-        return True
 
     def _joint_state_callback(self, msg):
         """Callback for /joint_states to store joint positions."""
@@ -136,5 +208,6 @@ class InferenceUntilGesture(BaseAction):
     def reset(self):
         """Reset action state for re-execution."""
         super().reset()
-        self.home_hold_start = None
+        self.static_start_time = None
+        self.position_history = []
         self.joint_positions = {}
