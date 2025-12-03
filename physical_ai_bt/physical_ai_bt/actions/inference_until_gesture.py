@@ -28,11 +28,6 @@ if TYPE_CHECKING:
     from rclpy.node import Node
 
 
-# Position change detection thresholds
-DEFAULT_POSITION_CHANGE_THRESHOLD = 0.05  # radians
-DEFAULT_STATIC_DURATION = 3.0              # seconds
-DEFAULT_HISTORY_WINDOW = 1.0               # seconds
-
 # Joint names for left and right arms (including grippers)
 LEFT_JOINT_NAMES = [
     'arm_l_joint1', 'arm_l_joint2', 'arm_l_joint3', 'arm_l_joint4',
@@ -56,9 +51,9 @@ class InferenceUntilGesture(BaseAction):
     def __init__(
         self,
         node: 'Node',
-        position_change_threshold: float = DEFAULT_POSITION_CHANGE_THRESHOLD,
-        static_duration: float = DEFAULT_STATIC_DURATION,
-        history_window: float = DEFAULT_HISTORY_WINDOW,
+        position_change_threshold: float = 0.05,
+        static_duration: float = 3.0,
+        history_window: float = 1.0,
     ):
         """
         Initialize InferenceUntilGesture action.

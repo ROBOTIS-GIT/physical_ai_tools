@@ -26,7 +26,10 @@
           <ResumeInference name="ResumeAfterAlign"/>
 
           <!-- Step 4: Run inference until gesture sequence completes -->
-          <InferenceUntilGesture name="WaitForGestureCompletion"/>
+          <InferenceUntilGesture name="WaitForGestureCompletion"
+            position_change_threshold="0.05"
+            static_duration="3.0"
+            history_window="1.0"/>
 
           <!-- Step 5: Validate with depth camera -->
           <!-- If object is too far (>1.5m), this returns FAILURE and triggers retry -->

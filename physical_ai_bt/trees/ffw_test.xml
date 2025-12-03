@@ -11,12 +11,18 @@
       <ForEach name="TaskIteration" list_key="task_instruction_list">
         <Sequence name="PerTaskSequence">
           <UpdateTaskInstruction name="UpdateTask"/>
-          <InferenceUntilGesture name="InferUntilStable"/>
+          <InferenceUntilGesture name="InferUntilStable"
+            position_change_threshold="0.05"
+            static_duration="3.0"
+            history_window="1.0"/>
         </Sequence>
       </ForEach>
 
       <SetTaskInstruction name="SetTaskInstruction_1" instruction="Grasp the handle of the crate."/>
-      <InferenceUntilGesture name="VLA_Inference_2"/>
+      <InferenceUntilGesture name="VLA_Inference_2"
+        position_change_threshold="0.05"
+        static_duration="3.0"
+        history_window="1.0"/>
       <PauseInference name="Pause_Publishing_1"/>
       <MoveLift name="LiftControl_1" lift_position="0.0"/>
       <Rotate name="Rule_Based_Rotation_1" angle_deg="-90.0"/>
