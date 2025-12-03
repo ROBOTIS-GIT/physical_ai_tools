@@ -124,13 +124,18 @@ class DataEditor:
                 'No dataset paths provided for merging.', logging.WARNING)
             return None
 
-        self._log(
-            f'Starting merge. Output directory: {output_dir}')
-        data_dst_dir = output_dir / 'data' / chunk_name
-        meta_dst_dir = output_dir / 'meta'
-        video_dst_chunk_root = output_dir / 'videos' / chunk_name
+        # Get chunks_size from first dataset's info.json
+        first_info_path = dataset_paths[0] / 'meta' / 'info.json'
+        first_info = FileIO.read_json(first_info_path, default={}) or {}
+        chunks_size = first_info.get('chunks_size', 1000)
 
-        for p in (data_dst_dir, meta_dst_dir, video_dst_chunk_root.parent, video_dst_chunk_root):
+        self._log(
+            f'Starting merge. Output directory: {output_dir}, chunks_size: {chunks_size}')
+        meta_dst_dir = output_dir / 'meta'
+        data_dst_root = output_dir / 'data'
+        video_dst_root = output_dir / 'videos'
+
+        for p in (data_dst_root, video_dst_root, meta_dst_dir):
             FileIO.safe_mkdir(p)
 
         cumulative_episode_offset_parquets = 0
@@ -159,11 +164,12 @@ class DataEditor:
 
             processed_eps = self._copy_parquet_and_update_indices_for_merge(
                 dataset_path,
-                data_dst_dir,
+                data_dst_root,
                 chunk_name,
                 cumulative_episode_offset_parquets,
                 cumulative_frame_offset_parquets,
                 task_index_map,
+                chunks_size,
             )
             self._log(
                 f'Processed {processed_eps} Parquet '
@@ -208,7 +214,7 @@ class DataEditor:
 
         self._log('--- Processing Video Files ---', logging.INFO)
         self._copy_all_videos_for_merge(
-            dataset_paths, video_dst_chunk_root, chunk_name, actual_episode_counts_per_dataset
+            dataset_paths, video_dst_root, chunk_name, actual_episode_counts_per_dataset, chunks_size
         )
 
         final_info_path = meta_dst_dir / 'info.json'
@@ -297,11 +303,12 @@ class DataEditor:
     def _copy_parquet_and_update_indices_for_merge(
         self,
         src_root: Path,
-        dst_data_dir: Path,
+        dst_data_root: Path,
         chunk_name: str,
         episode_idx_offset: int,
         frame_idx_offset: int,
         episode_to_task_map: dict[int, int],
+        chunks_size: int,
         verbose: bool | None = None,
     ) -> int:
         # Use provided verbose or fall back to instance verbose
@@ -325,8 +332,15 @@ class DataEditor:
             try:
                 original_episode_idx = self._extract_idx_from_name(src_file_path.name)
                 new_episode_idx = original_episode_idx + episode_idx_offset
+                
+                # Calculate which chunk this episode belongs to
+                chunk_idx = new_episode_idx // chunks_size
+                chunk_dir_name = f'chunk-{chunk_idx:03d}'
+                dst_chunk_dir = dst_data_root / chunk_dir_name
+                FileIO.safe_mkdir(dst_chunk_dir)
+                
                 parquet_name = f'episode_{new_episode_idx:0{self.EPISODE_INDEX_WIDTH}d}.parquet'
-                dst_file_path = dst_data_dir / parquet_name
+                dst_file_path = dst_chunk_dir / parquet_name
                 df = pd.read_parquet(src_file_path)
                 if 'episode_index' in df.columns:
                     df['episode_index'] = new_episode_idx
@@ -398,12 +412,18 @@ class DataEditor:
         # Generate tasks.jsonl from global task mapping (ensures consistency with parquet files)
         self._write_merged_tasks(tasks_out, task_name_to_index)
 
-        # Ensure train split correctness
+        # Ensure train split correctness and recalculate total_chunks
         info_data = FileIO.read_json(info_out, default={}) or {}
         total_eps = info_data.get('total_episodes', 0)
         if isinstance(total_eps, int):
             info_data.setdefault(
-                'splits', {})['train'] = f'0:{total_eps - 1 if total_eps > 0 else 0}'
+                'splits', {})['train'] = f'0:{total_eps}'
+            
+            # Recalculate total_chunks based on chunks_size
+            chunks_size = info_data.get('chunks_size', 1000)
+            if chunks_size > 0 and total_eps > 0:
+                info_data['total_chunks'] = (total_eps + chunks_size - 1) // chunks_size
+            
             FileIO.write_json(info_out, info_data)
 
     def _merge_episode_stats(self, src: Path, dst: Path, offset: int):
@@ -515,9 +535,10 @@ class DataEditor:
     def _copy_all_videos_for_merge(
         self,
         dataset_paths: List[Path],
-        video_dst_chunk_root: Path,
+        video_dst_root: Path,
         chunk_name: str,
         actual_episode_counts_per_dataset: List[int],
+        chunks_size: int,
     ) -> None:
         cumulative_offset = 0
         for ds_idx, ds_path in enumerate(dataset_paths):
@@ -531,15 +552,21 @@ class DataEditor:
 
             cam_dirs = [d for d in src_chunk_dir.iterdir() if d.is_dir()]
 
-            def _copy_set(video_files: List[Path], dst_dir: Path):
-                FileIO.safe_mkdir(dst_dir)
+            def _copy_set(video_files: List[Path], camera_name: str):
                 for vf in video_files:
                     try:
                         ep_idx = self._extract_idx_from_name(vf.name)
                         if ep_idx >= max_valid_ep:
                             continue  # skip videos beyond parquet count
                         new_idx = ep_idx + cumulative_offset
-                        dst_file = dst_dir / f'episode_{new_idx:0{self.EPISODE_INDEX_WIDTH}d}.mp4'
+                        
+                        # Calculate which chunk this episode belongs to
+                        chunk_idx = new_idx // chunks_size
+                        chunk_dir_name = f'chunk-{chunk_idx:03d}'
+                        dst_chunk_dir = video_dst_root / chunk_dir_name / camera_name
+                        FileIO.safe_mkdir(dst_chunk_dir)
+                        
+                        dst_file = dst_chunk_dir / f'episode_{new_idx:0{self.EPISODE_INDEX_WIDTH}d}.mp4'
                         if not dst_file.exists():
                             shutil.copy2(vf, dst_file)
                         else:
@@ -551,14 +578,14 @@ class DataEditor:
 
             if cam_dirs:
                 for cam_dir in cam_dirs:
-                    dst_cam_dir = video_dst_chunk_root / cam_dir.name
+                    camera_name = cam_dir.name
                     video_files = self._natural_sort_paths(
                         cam_dir.glob('episode_*.mp4'))
-                    _copy_set(video_files, dst_cam_dir)
+                    _copy_set(video_files, camera_name)
             else:
                 video_files = self._natural_sort_paths(
                     src_chunk_dir.glob('episode_*.mp4'))
-                _copy_set(video_files, video_dst_chunk_root)
+                _copy_set(video_files, 'default')
 
             cumulative_offset += actual_episode_counts_per_dataset[ds_idx]
 
@@ -616,6 +643,11 @@ class DataEditor:
             )
             raise FileNotFoundError(f'Dataset directory not found: {dataset_dir}')
 
+        # Get chunks_size from info.json
+        info_path = dataset_dir / 'meta' / 'info.json'
+        info_data = FileIO.read_json(info_path, default={}) or {}
+        chunks_size = info_data.get('chunks_size', 1000)
+
         # Sort and convert to set for fast lookup
         episodes_to_delete = set(episode_indices_to_delete)
         self._log(
@@ -625,15 +657,21 @@ class DataEditor:
         total_frames_removed = 0
         total_videos_removed = 0
 
-        data_chunk_dir = dataset_dir / 'data' / chunk_name
-        video_chunk_dir = dataset_dir / 'videos' / chunk_name
+        data_root_dir = dataset_dir / 'data'
+        video_root_dir = dataset_dir / 'videos'
         images_root_dir = dataset_dir / 'images'
         meta_dir = dataset_dir / 'meta'
 
         # Build episode index mapping (old_idx -> new_idx)
         # Count how many episodes before each index are being deleted
+        # Collect parquet files from all chunks
+        all_parquet_files = []
+        if data_root_dir.exists():
+            for chunk_dir in sorted(data_root_dir.glob('chunk-*')):
+                if chunk_dir.is_dir():
+                    all_parquet_files.extend(chunk_dir.glob('episode_*.parquet'))
         all_parquet_files = sorted(
-            data_chunk_dir.glob('episode_*.parquet'),
+            all_parquet_files,
             key=lambda p: self._extract_idx_from_name(p.name)
         )
 
@@ -651,9 +689,9 @@ class DataEditor:
         # 1. Delete parquet files and count frames
         self._log('Deleting parquet files...')
         for old_idx in episodes_to_delete:
-            parquet_file = data_chunk_dir / (
-                f'episode_{old_idx:0{self.EPISODE_INDEX_WIDTH}d}.parquet'
-            )
+            chunk_idx = old_idx // chunks_size
+            chunk_dir = data_root_dir / f'chunk-{chunk_idx:03d}'
+            parquet_file = chunk_dir / f'episode_{old_idx:0{self.EPISODE_INDEX_WIDTH}d}.parquet'
             if parquet_file.exists():
                 with suppress(Exception):
                     df = pd.read_parquet(parquet_file)
@@ -662,12 +700,16 @@ class DataEditor:
 
         # 2. Delete video files
         self._log('Deleting video files...')
-        camera_subdirs = [
-            d for d in video_chunk_dir.iterdir() if d.is_dir()
-        ] if video_chunk_dir.exists() else []
-
         for old_idx in episodes_to_delete:
+            chunk_idx = old_idx // chunks_size
+            video_chunk_dir = video_root_dir / f'chunk-{chunk_idx:03d}'
+            
+            if not video_chunk_dir.exists():
+                continue
+                
             video_name = f'episode_{old_idx:0{self.EPISODE_INDEX_WIDTH}d}.mp4'
+            camera_subdirs = [d for d in video_chunk_dir.iterdir() if d.is_dir()]
+            
             if camera_subdirs:
                 for cam_subdir in camera_subdirs:
                     video_file = cam_subdir / video_name
@@ -693,20 +735,28 @@ class DataEditor:
 
         # 4. Rename remaining files in batch
         self._log('Renaming remaining files...')
-        self._batch_rename_and_update_parquets(
-            data_chunk_dir, episode_mapping
-        )
+        if data_root_dir.exists():
+            for chunk_dir in sorted(data_root_dir.glob('chunk-*')):
+                if chunk_dir.is_dir():
+                    self._batch_rename_and_update_parquets(
+                        chunk_dir, episode_mapping, chunks_size
+                    )
 
         # 5. Rename video files
-        if camera_subdirs:
-            for cam_subdir in camera_subdirs:
-                self._batch_rename_files(
-                    cam_subdir, episode_mapping, '.mp4'
-                )
-        else:
-            self._batch_rename_files(
-                video_chunk_dir, episode_mapping, '.mp4'
-            )
+        if video_root_dir.exists():
+            for chunk_dir in sorted(video_root_dir.glob('chunk-*')):
+                if not chunk_dir.is_dir():
+                    continue
+                camera_subdirs = [d for d in chunk_dir.iterdir() if d.is_dir()]
+                if camera_subdirs:
+                    for cam_subdir in camera_subdirs:
+                        self._batch_rename_files(
+                            cam_subdir, episode_mapping, '.mp4', chunks_size
+                        )
+                else:
+                    self._batch_rename_files(
+                        chunk_dir, episode_mapping, '.mp4', chunks_size
+                    )
 
         # 6. Rename image folders
         if images_root_dir.exists():
@@ -770,9 +820,10 @@ class DataEditor:
     def _batch_rename_and_update_parquets(
         self,
         data_dir: Path,
-        episode_mapping: dict
+        episode_mapping: dict,
+        chunks_size: int
     ):
-        """Rename and update episode indices in parquet files."""
+        """Rename and update episode indices in parquet files, handling cross-chunk moves."""
         # Sort by old_idx ascending (small to large)
         # This works because deleted episodes are already gone
         sorted_items = sorted(
@@ -780,22 +831,27 @@ class DataEditor:
             key=lambda x: x[0]
         )
 
+        data_root = data_dir.parent  # Get root data directory
+
         for old_idx, new_idx in sorted_items:
             if old_idx == new_idx:  # No change
                 continue
 
-            old_file = data_dir / (
-                f'episode_{old_idx:0{self.EPISODE_INDEX_WIDTH}d}.parquet'
-            )
-            new_file = data_dir / (
-                f'episode_{new_idx:0{self.EPISODE_INDEX_WIDTH}d}.parquet'
-            )
+            old_chunk_idx = old_idx // chunks_size
+            new_chunk_idx = new_idx // chunks_size
+            
+            old_chunk_dir = data_root / f'chunk-{old_chunk_idx:03d}'
+            new_chunk_dir = data_root / f'chunk-{new_chunk_idx:03d}'
+            
+            old_file = old_chunk_dir / f'episode_{old_idx:0{self.EPISODE_INDEX_WIDTH}d}.parquet'
+            new_file = new_chunk_dir / f'episode_{new_idx:0{self.EPISODE_INDEX_WIDTH}d}.parquet'
 
             if old_file.exists():
-                # Read, update episode_index, and save with new name
+                # Read, update episode_index, and save with new name (possibly in different chunk)
                 df = pd.read_parquet(old_file)
                 if 'episode_index' in df.columns:
                     df['episode_index'] = new_idx
+                FileIO.safe_mkdir(new_chunk_dir)
                 df.to_parquet(new_file, index=False)
                 old_file.unlink()
 
@@ -803,9 +859,10 @@ class DataEditor:
         self,
         directory: Path,
         episode_mapping: dict,
-        extension: str
+        extension: str,
+        chunks_size: int
     ):
-        """Rename files based on episode mapping."""
+        """Rename files based on episode mapping, handling cross-chunk moves."""
         # Sort by old_idx ascending (small to large)
         # This works because deleted episodes are already gone
         sorted_items = sorted(
@@ -813,19 +870,28 @@ class DataEditor:
             key=lambda x: x[0]
         )
 
+        # Get camera name and video root from directory path
+        # directory is like: videos/chunk-000/observation.images.cam_head
+        camera_name = directory.name
+        video_chunk_dir = directory.parent
+        video_root = video_chunk_dir.parent
+
         for old_idx, new_idx in sorted_items:
             if old_idx == new_idx:
                 continue
 
-            old_file = directory / (
-                f'episode_{old_idx:0{self.EPISODE_INDEX_WIDTH}d}{extension}'
-            )
-            new_file = directory / (
-                f'episode_{new_idx:0{self.EPISODE_INDEX_WIDTH}d}{extension}'
-            )
+            old_chunk_idx = old_idx // chunks_size
+            new_chunk_idx = new_idx // chunks_size
+            
+            old_chunk_dir = video_root / f'chunk-{old_chunk_idx:03d}' / camera_name
+            new_chunk_dir = video_root / f'chunk-{new_chunk_idx:03d}' / camera_name
+            
+            old_file = old_chunk_dir / f'episode_{old_idx:0{self.EPISODE_INDEX_WIDTH}d}{extension}'
+            new_file = new_chunk_dir / f'episode_{new_idx:0{self.EPISODE_INDEX_WIDTH}d}{extension}'
 
             if old_file.exists():
-                old_file.rename(new_file)
+                FileIO.safe_mkdir(new_chunk_dir)
+                shutil.move(str(old_file), str(new_file))
 
     def _batch_rename_folders(
         self,
@@ -945,6 +1011,7 @@ class DataEditor:
         Delete a single episode.
 
         For deleting multiple episodes, use delete_episodes_batch for better performance.
+        Note: chunk_name parameter is deprecated, chunk is calculated from episode index.
         """
         if verbose is not None:
             self.verbose = verbose
@@ -954,6 +1021,15 @@ class DataEditor:
                 f'Dataset directory not found: {dataset_dir}', logging.ERROR
             )
             raise FileNotFoundError(f'Dataset directory not found: {dataset_dir}')
+
+        # Get chunks_size from info.json
+        info_path = dataset_dir / 'meta' / 'info.json'
+        info_data = FileIO.read_json(info_path, default={}) or {}
+        chunks_size = info_data.get('chunks_size', 1000)
+        
+        # Calculate chunk index
+        chunk_idx = episode_index_to_delete // chunks_size
+        chunk_name = f'chunk-{chunk_idx:03d}'
 
         self._log(
             f'Deleting episode {episode_index_to_delete} in {dataset_dir} (chunk={chunk_name})'
