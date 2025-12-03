@@ -149,6 +149,16 @@ class InferenceUntilGesture(BaseAction):
                 position_change = abs(newest_pos[joint_name] - oldest_pos[joint_name])
                 max_change = max(max_change, position_change)
 
+        # Diagnostic logging for parameter tuning
+        time_delta = newest_time - oldest_time
+        is_static = max_change < self.position_change_threshold
+        self.log_info(
+            f"[TUNE] Window: {time_delta:.2f}s | "
+            f"Max Δ: {max_change:.4f} rad | "
+            f"Threshold: {self.position_change_threshold:.4f} rad | "
+            f"Static: {is_static}"
+        )
+
         return max_change
 
     def _is_static(self) -> bool:
