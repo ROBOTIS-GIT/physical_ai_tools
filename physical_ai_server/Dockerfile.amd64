@@ -23,16 +23,19 @@ RUN cd ${COLCON_WS} && \
     rosdep install -i --from-path src --rosdistro $ROS_DISTRO -y && \
     rm -rf /var/lib/apt/lists/*
 
-RUN cd ${COLCON_WS}/src/physical_ai_tools/lerobot && \
+RUN cd ${COLCON_WS}/src/physical_ai_tools/third_party/lerobot && \
     sed -i '/"torch[^\"]*",/d' pyproject.toml && \
     sed -i '/"torchvision[^\"]*",/d' pyproject.toml && \
     pip install --ignore-installed -e .
 
-RUN cd ${COLCON_WS}/src/physical_ai_tools/lerobot && \
+RUN cd ${COLCON_WS}/src/physical_ai_tools/third_party/lerobot && \
     pip install -e ".[smolvla]"
 
 RUN pip install setuptools==68.1.2
 RUN pip install 'numpy<2'
+
+RUN echo 'export PYTHONPATH=${COLCON_WS}/src/physical_ai_tools/third_party/lerobot/src:$PYTHONPATH' >> /root/.bashrc && \
+    export PYTHONPATH=${COLCON_WS}/src/physical_ai_tools/third_party/lerobot/src:$PYTHONPATH;
 
 RUN bash -c "source /opt/ros/${ROS_DISTRO}/setup.bash && \
     cd ${COLCON_WS} && \

@@ -37,7 +37,7 @@ class TrainingManager:
     """
 
     # Path constants
-    DEFAULT_TRAINING_DIR = 'src/physical_ai_tools/lerobot/outputs/train/'
+    DEFAULT_TRAINING_DIR = 'src/physical_ai_tools/third_party/lerobot/outputs/train/'
 
     # Supported trainer mapping
     TRAINER_MAPPING = {

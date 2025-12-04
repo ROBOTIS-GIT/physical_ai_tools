@@ -134,7 +134,7 @@ class LerobotTrainer(Trainer):
     def _setup_working_directory(self):
         """Set up working directory for LeRobot relative path resolution."""
         import os
-        lerobot_dir = '/root/ros2_ws/src/physical_ai_tools/lerobot'
+        lerobot_dir = '/root/ros2_ws/src/physical_ai_tools/third_party/lerobot'
         if os.path.exists(lerobot_dir):
             os.chdir(lerobot_dir)
 

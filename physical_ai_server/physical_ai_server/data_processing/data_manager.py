@@ -762,7 +762,7 @@ class DataManager:
     ):
         download_path = {
             'dataset': Path.home() / '.cache/huggingface/lerobot',
-            'model': Path.home() / 'ros2_ws/src/physical_ai_tools/lerobot/outputs/train/'
+            'model': Path.home() / 'ros2_ws/src/physical_ai_tools/third_party/lerobot/outputs/train/'
         }
 
         save_path = download_path.get(repo_type)

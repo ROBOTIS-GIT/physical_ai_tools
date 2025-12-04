@@ -31,19 +31,19 @@ RUN cd ${COLCON_WS} && \
 ENV PIP_INDEX_URL=https://pypi.jetson-ai-lab.io/jp6/cu126/+simple
 ENV PIP_EXTRA_INDEX_URL=https://pypi.org/simple
 
-RUN cd ${COLCON_WS}/src/physical_ai_tools/lerobot && \
+RUN cd ${COLCON_WS}/src/physical_ai_tools/third_party/lerobot && \
     sed -i '/"torch[^\"]*",/d' pyproject.toml && \
     sed -i '/"torchvision[^\"]*",/d' pyproject.toml && \
     pip install --ignore-installed -e .
 
-RUN cd ${COLCON_WS}/src/physical_ai_tools/lerobot && \
+RUN cd ${COLCON_WS}/src/physical_ai_tools/third_party/lerobot && \
     pip install -e ".[smolvla]"
 
 RUN pip install setuptools==68.1.2
 RUN pip install 'numpy<2'
 
-RUN echo 'export PYTHONPATH=${COLCON_WS}/src/physical_ai_tools/lerobot/src:$PYTHONPATH' >> /root/.bashrc && \
-    export PYTHONPATH=${COLCON_WS}/src/physical_ai_tools/lerobot/src:$PYTHONPATH;
+RUN echo 'export PYTHONPATH=${COLCON_WS}/src/physical_ai_tools/third_party/lerobot/src:$PYTHONPATH' >> /root/.bashrc && \
+    export PYTHONPATH=${COLCON_WS}/src/physical_ai_tools/third_party/lerobot/src:$PYTHONPATH;
 
 RUN bash -c "source /opt/ros/${ROS_DISTRO}/setup.bash && \
     cd ${COLCON_WS} && \
