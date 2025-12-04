@@ -144,6 +144,7 @@ export function useRosServiceCaller() {
             push_to_hub: Boolean(taskInfo.pushToHub),
             private_mode: Boolean(taskInfo.privateMode),
             use_optimized_save_mode: Boolean(taskInfo.useOptimizedSave),
+            record_rosbag2: Boolean(taskInfo.recordRosBag2),
           },
           command: Number(command_enum),
         };

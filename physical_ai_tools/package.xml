@@ -2,7 +2,7 @@
 <?xml-model href="http://download.ros.org/schema/package_format3.xsd" schematypens="http://www.w3.org/2001/XMLSchema"?>
 <package format="3">
   <name>physical_ai_tools</name>
-  <version>0.6.13</version>
+  <version>0.7.2</version>
   <description>
     physical_ai_tools meta ROS 2 package
   </description>
@@ -19,6 +19,7 @@
   <buildtool_depend>ament_cmake</buildtool_depend>
   <exec_depend>physical_ai_server</exec_depend>
   <exec_depend>physical_ai_interfaces</exec_depend>
+  <exec_depend>rosbag_recorder</exec_depend>
   <export>
     <build_type>ament_cmake</build_type>
   </export>
