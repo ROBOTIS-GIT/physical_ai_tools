@@ -26,9 +26,6 @@ import traceback
 from typing import Optional
 
 from ament_index_python.packages import get_package_share_directory
-import cv2
-import numpy as np
-
 from physical_ai_interfaces.msg import (
     HFOperationStatus,
     TaskStatus,
@@ -44,7 +41,6 @@ from physical_ai_interfaces.srv import (
     GetSavedPolicyList,
     GetTrainingInfo,
     GetUserList,
-    InferenceServerInfo,
     SendCommand,
     SendTrainingCommand,
     SetHFUser,
@@ -54,9 +50,7 @@ from physical_ai_interfaces.srv import (
 from physical_ai_server.communication.communicator import Communicator
 from physical_ai_server.data_processing.data_manager import DataManager
 from physical_ai_server.data_processing.hf_api_worker import HfApiWorker
-from physical_ai_server.inference.client_inference import ZmqInferenceClient
 from physical_ai_server.inference.inference_manager import InferenceManager
-from physical_ai_server.inference.visualize_inference_result import InferenceResultVisualizer
 from physical_ai_server.timer.timer_manager import TimerManager
 from physical_ai_server.training.training_manager import TrainingManager
 from physical_ai_server.utils.parameter_utils import (
@@ -105,25 +99,8 @@ class PhysicalAIServer(Node):
         self._init_ros_publisher()
         self._init_ros_service()
 
-        # Initialize ZMQ inference variables BEFORE _setup_timer_callbacks
-        self.zmq_inference = False
-        self.zmq_client: Optional[ZmqInferenceClient] = None
-        self.inference_info = {}
-        self.remain_action = []
-        self.wait_inference = False
-        self.inference_check_time = time.time()
-
-        self._setup_timer_callbacks()
         self.previous_data_manager_status = None
 
-        self.visualizer = InferenceResultVisualizer(
-            logger=self.get_logger(),
-            enabled=False
-        )
-        self._used_action_count = 0
-        self._last_executed_action = []
-
-        self.previous_data_manager_status = None
         self.goal_repo_id = None
 
     def _init_core_components(self):
@@ -169,8 +146,7 @@ class PhysicalAIServer(Node):
                 self.get_model_weight_list_callback
             ),
             ('/huggingface/control', ControlHfServer, self.control_hf_server_callback),
-            ('/training/get_training_info', GetTrainingInfo, self.get_training_info_callback),
-            ('/inference/set_server_info', InferenceServerInfo, self.set_inference_server_info_callback),
+            ('/training/get_training_info', GetTrainingInfo, self.get_training_info_callback)
         ]
 
         for service_name, service_type, callback in service_definitions:
@@ -183,9 +159,6 @@ class PhysicalAIServer(Node):
             'collection': self._data_collection_timer_callback,
             'inference': self._inference_timer_callback
         }
-
-        if self.zmq_inference:
-            self.timer_callback_dict['inference'] = self._zmq_inference_timer_callback
 
     def init_ros_params(self, robot_type):
         self.get_logger().info(f'Initializing ROS parameters for robot type: {robot_type}')
@@ -301,8 +274,6 @@ class PhysicalAIServer(Node):
         self.get_logger().info(
             'Robot control parameters initialized successfully')
 
-        self._used_action_count = 0
-
     def clear_parameters(self):
         if self.communicator is not None:
             self.communicator.cleanup()
@@ -310,10 +281,6 @@ class PhysicalAIServer(Node):
 
         if self.timer_manager is not None:
             self.timer_manager = None
-
-        # Clear visualization data
-        if self.visualizer:
-            self.visualizer.clear_data()
 
         if self.heartbeat_timer is not None:
             self.heartbeat_timer.stop(timer_name='heartbeat')
@@ -533,13 +500,6 @@ class PhysicalAIServer(Node):
             self.timer_manager.stop(timer_name=self.operation_mode)
             return
 
-        # try:
-        #     self.process_rosbag_recording()
-        # except Exception as e:
-        #     error_msg = f'Error in rosbag recording: {str(e)}'
-        #     self.get_logger().error(traceback.format_exc())
-        #     self.get_logger().error(error_msg)
-
     def _inference_timer_callback(self):
         error_msg = ''
         current_status = TaskStatus()
@@ -582,22 +542,11 @@ class PhysicalAIServer(Node):
                 self.timer_manager.stop(timer_name=self.operation_mode)
                 return
 
-            try:
-                action = self.inference_manager.predict(
-                    images=camera_data,
-                    state=follower_data,
-                    task_instruction=self.task_instruction[0]
-                )
-            except Exception as e:
-                self.get_logger().error(f'Inference failed, please check : {str(e)}')
-                # Stop inference on error
-                self.on_inference = False
-                current_status = self.data_manager.get_current_record_status()
-                current_status.phase = TaskStatus.READY
-                self.communicator.publish_status(status=current_status)
-                self.inference_manager.clear_policy()
-                self.timer_manager.stop(timer_name=self.operation_mode)
-                return
+            action = self.inference_manager.predict(
+                images=camera_data,
+                state=follower_data,
+                task_instruction=self.task_instruction[0]
+            )
 
             self.get_logger().info(
                 f'Action data: {action}')
@@ -624,224 +573,6 @@ class PhysicalAIServer(Node):
             current_status.error = error_msg
             self.communicator.publish_status(status=current_status)
             self.inference_manager.clear_policy()
-            self.timer_manager.stop(timer_name=self.operation_mode)
-            return
-
-    def _reset_inference_state(self):
-        self.remain_action = []
-        self.wait_inference = False
-        self._used_action_count = 0
-        self._last_executed_action = []
-        self.get_logger().info('Inference state variables reset')
-
-    def find_best_chunk_start_index(
-        self,
-        new_action_chunk: np.ndarray,
-        last_executed_action: np.ndarray,
-        search_range: int = 5,
-        distance_metric: str = 'l2'
-    ) -> int:
-        search_actions = new_action_chunk[:search_range]
-        distances = []
-
-        for i, action in enumerate(search_actions):
-            distance = np.linalg.norm(action - last_executed_action)
-            distances.append(distance)
-        best_index = np.argmin(distances)
-        return best_index
-
-    def _zmq_inference_timer_callback(self):
-        error_msg = ''
-        current_status = TaskStatus()
-        camera_msgs, follower_msgs, _ = self.communicator.get_latest_data()
-        if (camera_msgs is None or
-                len(camera_msgs) != len(self.params['camera_topic_list'])):
-            self.get_logger().info('Waiting for camera data...')
-            return
-        elif follower_msgs is None:
-            self.get_logger().info('Waiting for follower data...')
-            return
-
-        try:
-            camera_data, follower_data, _ = self.data_manager.convert_msgs_to_raw_datas(
-                camera_msgs,
-                follower_msgs,
-                self.total_joint_order)
-        except Exception as e:
-            error_msg = f'Failed to convert messages: {str(e)}, please check the robot type again!'
-            self.on_inference = False
-            current_status.phase = TaskStatus.READY
-            current_status.error = error_msg
-            self.communicator.publish_status(status=current_status)
-            if self.zmq_client is not None:
-                self.zmq_client.stop_inference()
-                self.zmq_client = None
-            self.timer_manager.stop(timer_name=self.operation_mode)
-            return
-
-        # Check if inference_info is configured
-        if not hasattr(self, 'inference_info') or self.inference_info is None:
-            self.get_logger().warn('Inference server not configured. Please configure via UI first.')
-            return
-
-        if self.zmq_client is None:
-            self.zmq_client = ZmqInferenceClient(
-                host=self.inference_info['server_ip'],
-                port=self.inference_info['server_port'],
-                timeout_ms=self.inference_info['timeout_ms']
-            )
-            is_alive = self.zmq_client.ping()
-            if not is_alive:
-                self.get_logger().error('Failed opening ZMQ client')
-                return
-            self.get_logger().info('ZMQ client connected to server')
-            policy_info = {
-                'policy_type': self.inference_info['policy_type'],
-                'policy_path': self.inference_info['policy_path'],
-                'robot_type': self.inference_info['robot_type']
-            }
-            response = self.zmq_client.execute_command('load_policy', policy_info)
-            self.get_logger().info(f'ZMQ load_policy response: {response}')
-
-            # Initialize inference state variables
-            self._reset_inference_state()
-
-        try:
-            if not self.on_inference:
-                self.get_logger().info('Inference mode is not active')
-                current_status = self.data_manager.get_current_record_status()
-                current_status.phase = TaskStatus.READY
-                self.communicator.publish_status(status=current_status)
-                if self.zmq_client is not None:
-                    self.zmq_client.stop_inference()
-                    self.zmq_client = None
-                    # Reset inference state variables
-                    self._reset_inference_state()
-                self.timer_manager.stop(timer_name=self.operation_mode)
-                return
-
-            try:
-                re_inference_threshold = 4
-                # Check if we need to start a new inference
-                if len(self.remain_action) <= re_inference_threshold and not self.wait_inference:
-                    resized_cam_head = cv2.resize(camera_data['cam_head'], (224, 224))
-                    cam_head_obs = resized_cam_head[np.newaxis, ...]
-                    left_arm_obs = np.array(follower_data)[np.newaxis, :8]
-                    right_arm_obs = np.array(follower_data)[np.newaxis, 8:16]
-                    obs = {
-                        'video.cam_head': cam_head_obs,
-                        'state.left_arm': left_arm_obs,
-                        'state.right_arm': right_arm_obs,
-                        'annotation.human.action.task_description': [
-                            'Place bottles in color-matching boxes: red→top left, green→bottom left, white→top right, orange→bottom right'],
-                    }
-
-                    # Start async inference
-                    try:
-                        task_id = self.zmq_client.start_inference(obs)
-                        self.wait_inference = True
-                        self.get_logger().info(f'Started inference task: {task_id}')
-                    except Exception as e:
-                        self.get_logger().error(f'Failed to start inference: {str(e)}')
-
-                # Check if inference is ready
-                if self.wait_inference and self.zmq_client.has_pending_inference():
-                    if self.zmq_client.check_inference_ready():
-                        try:
-                            result = self.zmq_client.get_inference_result()
-                            left_action, right_action = result.values()
-                            new_action = np.hstack((left_action, right_action)).tolist()
-                            skip_action = 0
-                            if len(self.remain_action) > 0:
-                                skip_action = self.find_best_chunk_start_index(
-                                    new_action_chunk=new_action,
-                                    last_executed_action=np.array(self._last_executed_action),
-                                    search_range=10
-                                ) + 1
-                                self.get_logger().info(
-                                    f'Skipping {skip_action} actions '
-                                    f'to align with previous execution')
-                                self.remain_action = new_action[skip_action:]
-                            else:
-                                self.remain_action = new_action
-
-                            self.wait_inference = False
-                            if self.visualizer.is_enabled():
-                                self.visualizer.process_complete_inference_visualization(
-                                    self.remain_action, 0.1, self._used_action_count - skip_action,
-                                    new_action, self._used_action_count,
-                                    skip_action,
-                                    self.get_logger()
-                                )
-                        except Exception as e:
-                            self.get_logger().error(
-                                f'Failed to get inference result: {str(e)}')
-                            self.wait_inference = False
-
-                # Use action if available
-                if self.remain_action:
-                    action = self.remain_action.pop(0)
-                    self._last_executed_action = action.copy()
-                    if self.visualizer.is_enabled():
-                        self.visualizer.add_action_data(
-                            action_number=self._used_action_count,
-                            timestamp=time.time(),
-                            action_values=action,
-                            remaining_in_buffer=self.remain_action
-                        )
-                    self._used_action_count += 1
-                else:
-                    # No action available, skip this cycle
-                    self.get_logger().info('No action available, skipping this cycle')
-                    return
-
-            except Exception as e:
-                self.get_logger().error(f'Inference failed, please check : {str(e)}')
-                # Stop inference on error
-                self.on_inference = False
-                current_status = self.data_manager.get_current_record_status()
-                current_status.phase = TaskStatus.READY
-                self.communicator.publish_status(status=current_status)
-                if self.zmq_client is not None:
-                    self.zmq_client.kill_server()
-                    self.zmq_client = None
-                    # Reset inference state variables
-                    self._reset_inference_state()
-                self.timer_manager.stop(timer_name=self.operation_mode)
-                return
-
-            action_pub_msgs = self.data_manager.data_converter.tensor_array2joint_msgs(
-                action,
-                self.joint_topic_types,
-                self.joint_order
-            )
-            pub_time = time.time()
-            self.get_logger().info(
-                f'Action Length: {len(self.remain_action)}, '
-                f'time : {pub_time - self.inference_check_time}s')
-            self.inference_check_time = pub_time
-
-            self.communicator.publish_action(
-                joint_msg_datas=action_pub_msgs
-            )
-            current_status = self.data_manager.get_current_record_status()
-            current_status.phase = TaskStatus.INFERENCING
-            self.communicator.publish_status(status=current_status)
-
-        except Exception as e:
-            self.get_logger().error(f'Inference failed, please check : {str(e)}')
-            error_msg = f'Inference failed, please check : {str(e)}'
-            self.on_recording = False
-            self.on_inference = False
-            current_status = self.data_manager.get_current_record_status()
-            current_status.phase = TaskStatus.READY
-            current_status.error = error_msg
-            self.communicator.publish_status(status=current_status)
-            if self.zmq_client is not None:
-                self.zmq_client.kill_server()
-                self.zmq_client = None
-                # Reset inference state variables
-                self._reset_inference_state()
             self.timer_manager.stop(timer_name=self.operation_mode)
             return
 
@@ -1043,16 +774,6 @@ class PhysicalAIServer(Node):
                 task_info = request.task_info
                 self.task_instruction = task_info.task_instruction
 
-                if not self.zmq_inference:
-                    valid_result, result_message = self.inference_manager.validate_policy(
-                        policy_path=task_info.policy_path)
-
-                    if not valid_result:
-                        response.success = False
-                        response.message = result_message
-                        self.get_logger().error(response.message)
-                        return response
-
                 self.init_robot_control_parameters_from_user_task(
                     task_info
                 )
@@ -1219,17 +940,9 @@ class PhysicalAIServer(Node):
         return response
 
     def get_saved_policies_callback(self, request, response):
-        try:
-            saved_policy_path, saved_policy_type = InferenceManager.get_saved_policies()
-            if not saved_policy_path and not saved_policy_type:
-                self.get_logger().warning('No saved policies found')
-                response.saved_policy_path = []
-                response.saved_policy_type = []
-            else:
-                response.saved_policy_path = saved_policy_path
-                response.saved_policy_type = saved_policy_type
-        except Exception as e:
-            self.get_logger().error(f'Error getting saved policies: {str(e)}')
+        saved_policy_path, saved_policy_type = InferenceManager.get_saved_policies()
+        if not saved_policy_path and not saved_policy_type:
+            self.get_logger().warning('No saved policies found')
             response.saved_policy_path = []
             response.saved_policy_type = []
             response.success = False
@@ -1336,64 +1049,6 @@ class PhysicalAIServer(Node):
             self.get_logger().error(f'Failed to set robot type: {str(e)}')
             response.success = False
             response.message = f'Failed to set robot type: {str(e)}'
-            return response
-
-    def set_inference_server_info_callback(self, request, response):
-        try:
-            self.get_logger().info('Setting inference server configuration...')
-            self.get_logger().info(f'  Server IP: {request.server_ip}')
-            self.get_logger().info(f'  Server Port: {request.server_port}')
-            self.get_logger().info(f'  Policy Type: {request.policy_type}')
-            self.get_logger().info(f'  Policy Path: {request.policy_path}')
-            self.get_logger().info(f'  Robot Type: {request.robot_type}')
-
-            # Validate inputs
-            if not request.server_ip:
-                response.success = False
-                response.message = 'Server IP cannot be empty'
-                return response
-
-            if request.server_port < 1 or request.server_port > 65535:
-                response.success = False
-                response.message = 'Server port must be between 1 and 65535'
-                return response
-
-            if not request.policy_type:
-                response.success = False
-                response.message = 'Policy type cannot be empty'
-                return response
-
-            if not request.policy_path:
-                response.success = False
-                response.message = 'Policy path cannot be empty'
-                return response
-
-            if not request.robot_type:
-                response.success = False
-                response.message = 'Robot type cannot be empty'
-                return response
-
-            # Store inference server configuration
-            self.inference_info = {
-                'server_ip': request.server_ip,
-                'server_port': request.server_port,
-                'timeout_ms': 500000,  # Default timeout
-                'policy_type': request.policy_type,
-                'policy_path': request.policy_path,
-                'robot_type': request.robot_type
-            }
-
-            self.get_logger().info(
-                'Inference server configuration saved successfully')
-            response.success = True
-            response.message = 'Inference server configured successfully'
-            return response
-
-        except Exception as e:
-            self.get_logger().error(f'Failed to set inference server info: {str(e)}')
-            self.get_logger().error(traceback.format_exc())
-            response.success = False
-            response.message = f'Failed to configure inference server: {str(e)}'
             return response
 
     def _init_hf_api_worker(self):
