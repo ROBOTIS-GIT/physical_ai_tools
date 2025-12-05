@@ -1,16 +1,7 @@
 from glob import glob
-import os
-from pathlib import Path
-import sys
 
 from setuptools import find_packages
 from setuptools import setup
-
-# Add third_party/lerobot to Python path
-repo_root = Path(__file__).parent.parent
-lerobot_path = repo_root / 'third_party' / 'lerobot' / 'src'
-if lerobot_path.exists():
-    sys.path.insert(0, str(lerobot_path))
 
 
 package_name = 'physical_ai_server'

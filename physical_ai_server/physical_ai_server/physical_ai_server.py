@@ -99,6 +99,8 @@ class PhysicalAIServer(Node):
         self._init_ros_publisher()
         self._init_ros_service()
 
+        self._setup_timer_callbacks()
+
         self.previous_data_manager_status = None
 
         self.goal_repo_id = None
@@ -146,7 +148,7 @@ class PhysicalAIServer(Node):
                 self.get_model_weight_list_callback
             ),
             ('/huggingface/control', ControlHfServer, self.control_hf_server_callback),
-            ('/training/get_training_info', GetTrainingInfo, self.get_training_info_callback)
+            ('/training/get_training_info', GetTrainingInfo, self.get_training_info_callback),
         ]
 
         for service_name, service_type, callback in service_definitions:
@@ -773,6 +775,15 @@ class PhysicalAIServer(Node):
                 self.operation_mode = 'inference'
                 task_info = request.task_info
                 self.task_instruction = task_info.task_instruction
+
+                valid_result, result_message = self.inference_manager.validate_policy(
+                    policy_path=task_info.policy_path)
+
+                if not valid_result:
+                    response.success = False
+                    response.message = result_message
+                    self.get_logger().error(response.message)
+                    return response
 
                 self.init_robot_control_parameters_from_user_task(
                     task_info

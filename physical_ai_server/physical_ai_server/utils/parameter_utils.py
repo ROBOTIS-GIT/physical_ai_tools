@@ -40,9 +40,11 @@ def load_parameters(
     param_names: List[str]
 ) -> Dict[str, Any]:
     params = {}
+    print(f'Parameter names to load for robot type "{robot_type}": {param_names}')
     for name in param_names:
         param_path = f'{robot_type}.{name}'
         params[name] = node.get_parameter(param_path).value
+        print(f'Loaded parameter {param_path}: {params[name]}')
     return params
 
 
