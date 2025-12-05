@@ -231,7 +231,9 @@ class XMLTreeLoader:
         elif action_class == RotateLidar:
             return action_class(
                 node=self.node,
-                face_tape=params.get('face_tape', True)
+                face_tape=params.get('face_tape', True),
+                lift_position=params.get('lift_position', 0.0),
+                position_threshold=params.get('position_threshold', 0.01)
             )
 
         elif action_class == PauseInference:

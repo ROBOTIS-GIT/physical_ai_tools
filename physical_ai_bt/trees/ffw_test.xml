@@ -28,7 +28,7 @@
       <Rotate name="Rule_Based_Rotation_1" angle_deg="-90.0"/>
       <MoveLift name="LiftControl_1" lift_position="-0.1"/>
       <ResumeInference name="Resume_Publishing_2"/>
-      <SetTaskInstruction name="SetTaskInstruction_2" instruction="Place the crate ont the table."/>
+      <SetTaskInstruction name="SetTaskInstruction_2" instruction="Place the crate onto the table."/>
       <InferenceUntilGesture name="VLA_Inference_3"/>
       <PauseInference name="Pause_Publishing_2"/>
       <Rotate name="Rule_Based_Rotation_1" angle_deg="90.0"/>
@@ -104,10 +104,17 @@
       <input_port name="face_tape" default="true">
         Rotation mode: true = face reflective tape, false = rotate 90° left
       </input_port>
+      <input_port name="lift_position" default="0.0">
+        Target position for lift joint (executed simultaneously with rotation)
+      </input_port>
+      <input_port name="position_threshold" default="0.01">
+        Position tolerance for lift completion
+      </input_port>
       <description>
-        Coordinates LIDAR-based rotation with AI Worker node via services.
-        Sends trigger to /rotation_trigger and waits for /rotation_finish signal.
-        Does not perform rotation directly - relies on external LIDAR control.
+        Coordinates LIDAR-based rotation and lift movement simultaneously.
+        Rotation: Sends trigger to /rotation_trigger, waits for /rotation_finish signal.
+        Lift: Moves lift joint to target position via trajectory control.
+        Returns SUCCESS only when BOTH rotation and lift are complete.
       </description>
     </Action>
     <Action ID="CameraDepth">
