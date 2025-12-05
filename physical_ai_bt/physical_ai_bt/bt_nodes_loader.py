@@ -21,7 +21,7 @@
 import xml.etree.ElementTree as ET
 from typing import TYPE_CHECKING, Dict, Type
 
-from physical_ai_bt.actions import InferenceUntilGesture, Rotate, RotateLidar
+from physical_ai_bt.actions import InferenceUntilGesture, InferenceUntilPosition, Rotate, RotateLidar
 from physical_ai_bt.actions.timed_inference import TimedInference
 from physical_ai_bt.actions.control_inference import (
     PauseInference,
@@ -73,6 +73,7 @@ class XMLTreeLoader:
 
         self.action_types: Dict[str, Type[BaseAction]] = {
             'InferenceUntilGesture': InferenceUntilGesture,
+            'InferenceUntilPosition': InferenceUntilPosition,
             'TimedInference': TimedInference,
             'Rotate': Rotate,
             'RotateLidar': RotateLidar,
@@ -305,6 +306,14 @@ class XMLTreeLoader:
                 node=self.node,
                 closed_threshold=params.get('closed_threshold', 1.0),
                 open_threshold=params.get('open_threshold', 0.2)
+            )
+
+        elif action_class == InferenceUntilPosition:
+            return action_class(
+                node=self.node,
+                left_positions=params.get('left_positions', [0.0]*8),
+                right_positions=params.get('right_positions', [0.0]*8),
+                tolerance=params.get('tolerance', 0.1)
             )
         else:
             raise ValueError(f"Unknown action class: {action_class}")

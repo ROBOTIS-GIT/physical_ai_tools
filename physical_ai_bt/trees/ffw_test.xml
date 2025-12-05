@@ -164,6 +164,22 @@
         Records initial state and returns SUCCESS when either gripper changes state.
       </description>
     </Action>
+    <Action ID="InferenceUntilPosition">
+      <input_port name="left_positions" default="0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0">
+        Target positions for left arm (8 values: 7 arm joints + gripper).
+      </input_port>
+      <input_port name="right_positions" default="0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0">
+        Target positions for right arm (8 values: 7 arm joints + gripper).
+      </input_port>
+      <input_port name="tolerance" default="0.1">
+        Euclidean distance tolerance (radians) for position matching.
+      </input_port>
+      <description>
+        Runs inference until both arms reach target positions.
+        Returns SUCCESS when Euclidean distance across all 16 joints is within tolerance.
+        Does NOT pause inference - use PauseInference action after this node.
+      </description>
+    </Action>
   </TreeNodesModel>
 
 </root>
