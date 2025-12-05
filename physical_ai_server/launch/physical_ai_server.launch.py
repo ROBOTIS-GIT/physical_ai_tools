@@ -37,6 +37,7 @@ def generate_launch_description():
         executable='physical_ai_server',
         name='physical_ai_server',
         output='screen',
+        parameters=config_files
     )
 
     return LaunchDescription([
