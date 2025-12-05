@@ -100,6 +100,16 @@
         Positive for CCW, negative for CW.
       </input_port>
     </Action>
+    <Action ID="RotateLidar">
+      <input_port name="face_tape" default="true">
+        Rotation mode: true = face reflective tape, false = rotate 90° left
+      </input_port>
+      <description>
+        Coordinates LIDAR-based rotation with AI Worker node via services.
+        Sends trigger to /rotation_trigger and waits for /rotation_finish signal.
+        Does not perform rotation directly - relies on external LIDAR control.
+      </description>
+    </Action>
     <Action ID="CameraDepth">
       <input_port name="depth_topic" default="/camera/depth/image_raw">
         ROS topic for depth image (sensor_msgs/Image)

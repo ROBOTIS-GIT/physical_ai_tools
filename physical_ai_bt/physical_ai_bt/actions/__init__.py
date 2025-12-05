@@ -22,6 +22,7 @@ from physical_ai_bt.actions.base_action import BaseAction
 from physical_ai_bt.actions.inference_until_gesture import InferenceUntilGesture
 from physical_ai_bt.actions.timed_inference import TimedInference
 from physical_ai_bt.actions.rotate import Rotate
+from physical_ai_bt.actions.rotate_lidar import RotateLidar
 from physical_ai_bt.actions.control_inference import PauseInference, ResumeInference
 from physical_ai_bt.actions.camera_depth import CameraDepth
 from physical_ai_bt.actions.move_head_lift import MoveHeadLift
@@ -36,6 +37,7 @@ __all__ = [
     'InferenceUntilGesture',
     'TimedInference',
     'Rotate',
+    'RotateLidar',
     'PauseInference',
     'ResumeInference',
     'CameraDepth',

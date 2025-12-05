@@ -21,7 +21,7 @@
 import xml.etree.ElementTree as ET
 from typing import TYPE_CHECKING, Dict, Type
 
-from physical_ai_bt.actions import InferenceUntilGesture, Rotate
+from physical_ai_bt.actions import InferenceUntilGesture, Rotate, RotateLidar
 from physical_ai_bt.actions.timed_inference import TimedInference
 from physical_ai_bt.actions.control_inference import (
     PauseInference,
@@ -75,6 +75,7 @@ class XMLTreeLoader:
             'InferenceUntilGesture': InferenceUntilGesture,
             'TimedInference': TimedInference,
             'Rotate': Rotate,
+            'RotateLidar': RotateLidar,
             'PauseInference': PauseInference,
             'ResumeInference': ResumeInference,
             'UpdateTaskInstruction': UpdateTaskInstruction,
@@ -225,6 +226,12 @@ class XMLTreeLoader:
                 node=self.node,
                 angle_deg=params.get('angle_deg', 90.0),
                 topic_config=self.topic_config
+            )
+
+        elif action_class == RotateLidar:
+            return action_class(
+                node=self.node,
+                face_tape=params.get('face_tape', True)
             )
 
         elif action_class == PauseInference:
