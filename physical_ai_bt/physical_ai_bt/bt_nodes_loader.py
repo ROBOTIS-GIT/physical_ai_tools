@@ -180,7 +180,11 @@ class XMLTreeLoader:
 
     def _convert_value(self, value: str):
         """Convert string value to appropriate type."""
-        # Try float
+        # Try boolean
+        if value.lower() in ('true', 'false'):
+            return value.lower() == 'true'
+
+        # Try float/int
         try:
             if '.' in value:
                 return float(value)
