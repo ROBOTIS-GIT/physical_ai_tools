@@ -305,21 +305,6 @@ class DataManager:
     def record_next_episode(self):
         self._status = 'save'
 
-    @property
-    def status(self):
-        """Get the current status of the data manager."""
-        return self._status
-
-    def get_status(self):
-        """Get the current status of the data manager (legacy method)."""
-        return self._status
-
-    def get_save_rosbag_path(self):
-        """Get the rosbag save path from the LeRobot dataset."""
-        if self._lerobot_dataset is not None and hasattr(self._lerobot_dataset, 'root'):
-            return str(self._lerobot_dataset.root)
-        return None
-
     def get_current_record_status(self):
         current_status = TaskStatus()
         current_status.robot_type = self._robot_type
@@ -479,7 +464,7 @@ class DataManager:
                 if not os.path.exists(os.path.join(root, folder)):
                     print(f'Dataset {repo_id} is incomplete, missing {folder} folder.')
                     invalid_foler = True
-            
+
             if not invalid_foler:
                 # Check dataset compatibility
                 info_path = os.path.join(root, 'meta', 'info.json')
@@ -672,6 +657,9 @@ class DataManager:
                 for org_info in user_info['orgs']:
                     user_ids.append(org_info['name'])
                 return user_ids
+            except LocalTokenNotFoundError as e:
+                print(f'No registered HuggingFace token found: {e}')
+                raise Exception('No registered HuggingFace token found')
             except Exception as e:
                 print(f'Token validation failed: {e}')
                 # Return None instead of raising when token is not available

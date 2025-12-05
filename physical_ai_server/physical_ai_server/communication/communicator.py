@@ -365,20 +365,6 @@ class Communicator:
     def publish_status(self, status: TaskStatus):
         self.status_publisher.publish(status)
 
-    def get_all_topics(self):
-        """Get all configured topics (camera, follower, leader)."""
-        all_topics = {}
-        
-        # Add camera topics
-        for name, topic in self.camera_topics.items():
-            all_topics[name] = topic
-        
-        # Add joint topics (follower and leader)
-        for name, topic in self.joint_topics.items():
-            all_topics[name] = topic
-        
-        return all_topics
-
     def get_image_topic_list_callback(self, request, response):
         camera_topic_list = []
         for topic_name in self.camera_topics.values():

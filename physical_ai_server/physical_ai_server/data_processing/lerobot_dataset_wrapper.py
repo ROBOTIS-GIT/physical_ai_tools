@@ -159,7 +159,7 @@ class LeRobotDatasetWrapper(LeRobotDataset):
         self.episode_buffer['frame_index'].append(frame_index)
         self.episode_buffer['timestamp'].append(timestamp)
 
-        # Add frame features to episode_buffer (task is already in frame)
+        # Add frame features to episode_buffer
         for key in frame:
             if key not in self.episode_buffer:
                 self.episode_buffer[key] = [frame[key]]
