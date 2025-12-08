@@ -625,6 +625,7 @@ class PhysicalAIServer(Node):
                 self.joint_order,
                 self.start_inference_once
             )
+            self.start_inference_once = False  # Reset after first use
 
             self.communicator.publish_action(
                 joint_msg_datas=action_pub_msgs
@@ -653,6 +654,7 @@ class PhysicalAIServer(Node):
         self.wait_inference = False
         self._used_action_count = 0
         self._last_executed_action = []
+        self.start_inference_once = False
         self.get_logger().info('Inference state variables reset')
 
     def find_best_chunk_start_index(
@@ -1107,6 +1109,10 @@ class PhysicalAIServer(Node):
 
                 if task_info.record_inference_mode:
                     self.on_recording = True
+
+                # Always reset inference state before starting to ensure clean state
+                self._reset_inference_state()
+
                 self.on_inference = True
                 self.stop_inference = False
                 self.communicator.action_publish_enabled = True
