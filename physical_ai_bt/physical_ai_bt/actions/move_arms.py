@@ -83,7 +83,7 @@ class MoveArms(BaseAction):
         left_traj.joint_names = self.left_joint_names
         left_point = JointTrajectoryPoint()
         left_point.positions = self.left_positions
-        left_point.time_from_start.sec = 10
+        left_point.time_from_start.sec = 2
         left_traj.points.append(left_point)
         self.left_pub.publish(left_traj)
 
@@ -91,7 +91,7 @@ class MoveArms(BaseAction):
         right_traj.joint_names = self.right_joint_names
         right_point = JointTrajectoryPoint()
         right_point.positions = self.right_positions
-        right_point.time_from_start.sec = 5
+        right_point.time_from_start.sec = 2
         right_traj.points.append(right_point)
         self.right_pub.publish(right_traj)
 
