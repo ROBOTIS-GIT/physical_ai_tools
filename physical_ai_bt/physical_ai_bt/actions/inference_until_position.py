@@ -19,6 +19,7 @@
 """Inference action that runs until arms reach target positions."""
 
 import math
+import time
 from typing import TYPE_CHECKING, List
 
 from physical_ai_bt.actions.base_action import NodeStatus, BaseAction
@@ -78,6 +79,10 @@ class InferenceUntilPosition(BaseAction):
 
         # Joint state tracking
         self.joint_state = None
+
+        # Time tracking - start checking position after 5 seconds
+        self.start_time = None
+        self.check_delay = 5.0  # seconds
 
         # Subscribe to joint states
         qos_profile = QoSProfile(
@@ -150,17 +155,44 @@ class InferenceUntilPosition(BaseAction):
         """
         Execute one tick of inference action with position monitoring.
 
+        Position checking starts after 5 seconds delay to allow initial movement.
+
         Returns:
-            NodeStatus.SUCCESS if distance <= tolerance
+            NodeStatus.SUCCESS if distance <= tolerance (after 5 second delay)
             NodeStatus.RUNNING otherwise
         """
-        # Calculate distance
+        # Initialize start time on first tick
+        if self.start_time is None:
+            self.start_time = time.time()
+            self.log_info(f"Started position monitoring with {self.check_delay}s delay")
+
+        # Calculate elapsed time
+        elapsed_time = time.time() - self.start_time
+
+        # Wait for initial delay before checking position
+        if elapsed_time < self.check_delay:
+            # Log periodically during delay period (every 30 ticks)
+            if not hasattr(self, '_tick_count'):
+                self._tick_count = 0
+
+            self._tick_count += 1
+            if self._tick_count % 30 == 0:
+                remaining = self.check_delay - elapsed_time
+                self.log_info(
+                    f"Waiting {remaining:.1f}s before position check "
+                    f"(elapsed: {elapsed_time:.1f}s)"
+                )
+
+            return NodeStatus.RUNNING
+
+        # After delay, start checking position
         distance = self._calculate_euclidean_distance()
 
         # Check if within tolerance
         if distance <= self.tolerance:
             self.log_info(
-                f"Target positions reached! Distance: {distance:.4f} <= {self.tolerance:.4f}"
+                f"Target positions reached! Distance: {distance:.4f} <= {self.tolerance:.4f} "
+                f"(after {elapsed_time:.1f}s)"
             )
             return NodeStatus.SUCCESS
 
@@ -171,7 +203,10 @@ class InferenceUntilPosition(BaseAction):
 
         self._tick_count += 1
         if self._tick_count % 30 == 0:
-            self.log_info(f"Distance to target: {distance:.4f} (tolerance: {self.tolerance:.4f})")
+            self.log_info(
+                f"Distance to target: {distance:.4f} (tolerance: {self.tolerance:.4f}, "
+                f"elapsed: {elapsed_time:.1f}s)"
+            )
 
         return NodeStatus.RUNNING
 
@@ -179,5 +214,6 @@ class InferenceUntilPosition(BaseAction):
         """Reset action state for re-execution."""
         super().reset()
         self.joint_state = None
+        self.start_time = None
         if hasattr(self, '_tick_count'):
             self._tick_count = 0
