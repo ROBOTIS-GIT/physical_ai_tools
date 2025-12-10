@@ -16,7 +16,7 @@
 
 import React, { useState, useMemo } from 'react';
 import PropTypes from 'prop-types';
-import { MdArrowBack, MdShoppingCart, MdClose } from 'react-icons/md';
+import { MdArrowBack, MdShoppingCart, MdClose, MdAdd, MdRestartAlt, MdStop } from 'react-icons/md';
 import { useRosServiceCaller } from '../hooks/useRosServiceCaller';
 import toast from 'react-hot-toast';
 import clsx from 'clsx';
@@ -84,6 +84,7 @@ function DemoPage({ onBackToHome }) {
   const { sendDemoCommand } = useRosServiceCaller();
   const [selectedProductIds, setSelectedProductIds] = useState([]);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isFabOpen, setIsFabOpen] = useState(false);
   const selectedProducts = useMemo(() => {
     return PRODUCT_CATALOG.filter((product) => selectedProductIds.includes(product.id));
   }, [selectedProductIds]);
@@ -309,8 +310,94 @@ function DemoPage({ onBackToHome }) {
     'transition-colors'
   );
 
+  const classFabContainer = clsx(
+    'absolute',
+    'bottom-16',
+    'right-4',
+    'flex',
+    'flex-col',
+    'items-end',
+    'gap-3'
+  );
+
+  const getFabButtonClass = (isOpen) =>
+    clsx(
+      'w-14',
+      'h-14',
+      'rounded-full',
+      'text-white',
+      'shadow-lg',
+      'transition-all',
+      'duration-300',
+      'flex',
+      'items-center',
+      'justify-center',
+      {
+        'bg-blue-400': isOpen,
+        'hover:bg-blue-500': isOpen,
+        'bg-blue-600': !isOpen,
+        'hover:bg-blue-700': !isOpen,
+      }
+    );
+
+  const classFabSubButtonContainer = clsx(
+    'flex',
+    'items-center',
+    'gap-2',
+    'transition-all',
+    'duration-300'
+  );
+
+  const classFabSubButtonLabel = clsx(
+    'text-sm',
+    'font-semibold',
+    'text-gray-700',
+    'whitespace-nowrap',
+    'px-2',
+    'py-1'
+  );
+
+  const classFabSubButton = clsx(
+    'w-12',
+    'h-12',
+    'rounded-full',
+    'text-white',
+    'shadow-md',
+    'transition-all',
+    'duration-300',
+    'flex',
+    'items-center',
+    'justify-center',
+    'text-sm',
+    'font-semibold'
+  );
+
   const handleBackClick = () => {
     onBackToHome();
+  };
+
+  const handleFabToggle = () => {
+    setIsFabOpen((prev) => !prev);
+  };
+
+  const handleInitCommand = async () => {
+    try {
+      await sendDemoCommand('init', []);
+      toast.success('Init command sent successfully.');
+    } catch (error) {
+      toast.error(`Failed to send init command: ${error.message}`);
+    }
+    setIsFabOpen(false);
+  };
+
+  const handleStopCommand = async () => {
+    try {
+      await sendDemoCommand('stop', []);
+      toast.success('Stop command sent successfully.');
+    } catch (error) {
+      toast.error(`Failed to send stop command: ${error.message}`);
+    }
+    setIsFabOpen(false);
   };
 
   const handleToggleProduct = (productId) => {
@@ -516,6 +603,56 @@ function DemoPage({ onBackToHome }) {
           <MdArrowBack size={14} />
           <span>Back</span>
         </button>
+        <div className={classFabContainer}>
+          {isFabOpen && (
+            <>
+              <div
+                className={classFabSubButtonContainer}
+                style={{
+                  opacity: isFabOpen ? 1 : 0,
+                  transform: isFabOpen ? 'translateY(0)' : 'translateY(10px)',
+                }}
+              >
+                <span className={classFabSubButtonLabel}>STOP</span>
+                <button
+                  type="button"
+                  onClick={handleStopCommand}
+                  className={clsx(classFabSubButton, 'bg-red-500', 'hover:bg-red-600')}
+                  title="Stop"
+                >
+                  <MdStop size={24} />
+                </button>
+              </div>
+              <div
+                className={classFabSubButtonContainer}
+                style={{
+                  opacity: isFabOpen ? 1 : 0,
+                  transform: isFabOpen ? 'translateY(0)' : 'translateY(10px)',
+                }}
+              >
+                <span className={classFabSubButtonLabel}>INIT</span>
+                <button
+                  type="button"
+                  onClick={handleInitCommand}
+                  className={clsx(classFabSubButton, 'bg-green-500', 'hover:bg-green-600')}
+                  title="Init"
+                >
+                  <MdRestartAlt size={24} />
+                </button>
+              </div>
+            </>
+          )}
+          <button
+            type="button"
+            onClick={handleFabToggle}
+            className={getFabButtonClass(isFabOpen)}
+            style={{
+              transform: isFabOpen ? 'rotate(45deg)' : 'rotate(0deg)',
+            }}
+          >
+            <MdAdd size={28} />
+          </button>
+        </div>
       </section>
     </div>
   );
