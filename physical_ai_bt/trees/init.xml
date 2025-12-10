@@ -13,7 +13,8 @@
       <!-- Step 4: Rotate LIDAR and lower lift -->
       <RotateLidar name="RotateLidar_Init"
         face_tape="true"
-        lift_position="-0.1"/>
+        lift_position="-0.1"
+        position_threshold="0.01"/>
     </Sequence>
   </BehaviorTree>
 
