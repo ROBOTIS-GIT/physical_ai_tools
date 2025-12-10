@@ -114,7 +114,7 @@ class PhysicalAIServer(Node):
         self.stop_inference = False
         self.inference_check_time = time.time()
         self.init_robot_check = False
-        self.start_inference_once = False
+        self.slow_action_count = 0
 
         self._setup_timer_callbacks()
         self.previous_data_manager_status = None
@@ -623,9 +623,10 @@ class PhysicalAIServer(Node):
                 action,
                 self.joint_topic_types,
                 self.joint_order,
-                self.start_inference_once
+                self.slow_action_count > 0
             )
-            self.start_inference_once = False  # Reset after first use
+            if self.slow_action_count > 0:
+                self.slow_action_count -= 1
 
             self.communicator.publish_action(
                 joint_msg_datas=action_pub_msgs
@@ -654,7 +655,7 @@ class PhysicalAIServer(Node):
         self.wait_inference = False
         self._used_action_count = 0
         self._last_executed_action = []
-        self.start_inference_once = False
+        self.slow_action_count = 0
         self.get_logger().info('Inference state variables reset')
 
     def find_best_chunk_start_index(
@@ -819,9 +820,10 @@ class PhysicalAIServer(Node):
                 action,
                 self.joint_topic_types,
                 self.joint_order,
-                self.start_inference_once
+                self.slow_action_count > 0
             )
-            self.start_inference_once = False
+            if self.slow_action_count > 0:
+                self.slow_action_count -= 1
             pub_time = time.time()
             self.get_logger().info(
                 f'Action Length: {len(self.remain_action)}, '
@@ -1117,7 +1119,7 @@ class PhysicalAIServer(Node):
                 self.stop_inference = False
                 self.communicator.action_publish_enabled = True
                 self.start_recording_time = time.perf_counter()
-                self.start_inference_once = True
+                self.slow_action_count = 3
 
                 response.success = True
                 response.message = 'Model loaded, inference ready'
