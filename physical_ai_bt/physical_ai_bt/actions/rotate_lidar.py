@@ -78,7 +78,7 @@ class RotateLidar(BaseAction):
 
         # Service server to receive completion signal
         self.finish_service = self.node.create_service(
-            Trigger,
+            SetBool,
             '/rotation_finish',
             self._finish_callback
         )
@@ -103,6 +103,7 @@ class RotateLidar(BaseAction):
         self.trigger_sent = False
         self.trigger_future = None
         self.rotation_finished = False
+        self.rotation_success = False
 
         # Lift control thread
         self._lift_thread = None
@@ -114,13 +115,17 @@ class RotateLidar(BaseAction):
         """
         Service callback when AI Worker completes rotation.
 
-        Called by external node when LIDAR-based rotation finishes.
+        Args:
+            request.data: True if rotation succeeded, False if failed
         """
-        self.log_info("Rotation completion signal received from AI Worker")
         self.rotation_finished = True
+        self.rotation_success = request.data
+
+        status = "succeeded" if request.data else "failed"
+        self.log_info(f"Rotation {status} - signal from AI Worker")
 
         response.success = True
-        response.message = 'Rotation completion acknowledged by BT'
+        response.message = f'Rotation {status} acknowledged by BT'
         return response
 
     def _joint_state_callback(self, msg):
@@ -235,12 +240,18 @@ class RotateLidar(BaseAction):
         lift_done = self._lift_thread_done
 
         if rotation_done and lift_done:
-            # Check if both succeeded
-            if self._lift_thread_success:
-                self.log_info("LIDAR rotation and lift movement completed successfully")
+            # BOTH must succeed to return SUCCESS
+            if self.rotation_success and self._lift_thread_success:
+                self.log_info("LIDAR rotation and lift movement both completed successfully")
                 return NodeStatus.SUCCESS
             else:
-                self.log_error("Lift movement failed")
+                # Report which operation(s) failed
+                if not self.rotation_success and not self._lift_thread_success:
+                    self.log_error("Both rotation and lift failed")
+                elif not self.rotation_success:
+                    self.log_error("Rotation failed")
+                else:  # not self._lift_thread_success
+                    self.log_error("Lift movement failed")
                 return NodeStatus.FAILURE
 
         # Still waiting for completion (either rotation or lift or both)
@@ -254,6 +265,7 @@ class RotateLidar(BaseAction):
         self.trigger_sent = False
         self.trigger_future = None
         self.rotation_finished = False
+        self.rotation_success = False
 
         # Clean up lift thread
         if self._lift_thread is not None and self._lift_thread.is_alive():
