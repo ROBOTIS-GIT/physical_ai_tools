@@ -426,6 +426,9 @@ class BehaviorTreeNode(Node):
                 # Immediate halt (do NOT wait for current action to finish)
                 self._immediate_halt()
 
+                # Send STOP to AI Server to halt inference and robot movement
+                self._send_pause_inference()
+
                 response.success = True
                 response.message = 'BT execution halted'
 
