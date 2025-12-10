@@ -20,7 +20,6 @@
 
 import math
 import time
-from enum import Enum
 from typing import TYPE_CHECKING, List
 
 from physical_ai_bt.actions.base_action import NodeStatus, BaseAction
@@ -42,13 +41,6 @@ RIGHT_JOINT_NAMES = [
 ]
 
 
-class GestureStage(Enum):
-    """Stages for gripper gesture detection."""
-    WAITING_GRIPPER_CLOSE = 1
-    WAITING_GRIPPER_OPEN = 2
-    CHECKING_POSITION = 3
-
-
 class InferenceUntilPosition(BaseAction):
     """
     Action that runs inference until both arms reach target positions.
@@ -62,11 +54,7 @@ class InferenceUntilPosition(BaseAction):
         node: 'Node',
         left_positions: List[float],
         right_positions: List[float],
-        tolerance: float = 0.1,
-        gripper_close_threshold: float = 1.0,
-        gripper_open_threshold: float = 0.2,
-        enable_gesture: bool = True,
-        check_delay: float = 0.0
+        tolerance: float = 0.1
     ):
         """
         Initialize InferenceUntilPosition action.
@@ -92,17 +80,9 @@ class InferenceUntilPosition(BaseAction):
         # Joint state tracking
         self.joint_state = None
 
-        # Gripper gesture detection
-        self.gripper_close_threshold = gripper_close_threshold
-        self.gripper_open_threshold = gripper_open_threshold
-        self.enable_gesture = enable_gesture
-        self.current_stage = (GestureStage.WAITING_GRIPPER_CLOSE
-                             if enable_gesture
-                             else GestureStage.CHECKING_POSITION)
-
-        # Time tracking - configurable delay before position checking
+        # Time tracking - start checking position after 5 seconds
         self.start_time = None
-        self.check_delay = check_delay  # seconds
+        self.check_delay = 5.0  # seconds
 
         # Subscribe to joint states
         qos_profile = QoSProfile(
@@ -119,67 +99,12 @@ class InferenceUntilPosition(BaseAction):
 
         self.log_info(
             f"Initialized with tolerance={tolerance:.3f}, "
-            f"gesture_enabled={enable_gesture}, "
-            f"check_delay={check_delay}s, "
             f"monitoring {len(LEFT_JOINT_NAMES) + len(RIGHT_JOINT_NAMES)} joints"
         )
 
     def _joint_state_callback(self, msg):
         """Callback for /joint_states to store joint positions."""
         self.joint_state = msg
-
-    def _get_gripper_position(self, gripper_name: str) -> float:
-        """
-        Get current position of a gripper joint.
-
-        Args:
-            gripper_name: Name of gripper joint ('gripper_l_joint1' or 'gripper_r_joint1')
-
-        Returns:
-            float: Current gripper position, or -1.0 if unavailable
-        """
-        if self.joint_state is None:
-            return -1.0
-
-        name_to_idx = {name: i for i, name in enumerate(self.joint_state.name)}
-        idx = name_to_idx.get(gripper_name)
-
-        if idx is None:
-            return -1.0
-
-        return self.joint_state.position[idx]
-
-    def _check_both_grippers_closed(self) -> bool:
-        """
-        Check if both grippers are closed (>= close_threshold).
-
-        Returns:
-            bool: True if both grippers >= close_threshold
-        """
-        left_pos = self._get_gripper_position('gripper_l_joint1')
-        right_pos = self._get_gripper_position('gripper_r_joint1')
-
-        if left_pos < 0 or right_pos < 0:
-            return False
-
-        return (left_pos >= self.gripper_close_threshold and
-                right_pos >= self.gripper_close_threshold)
-
-    def _check_both_grippers_open(self) -> bool:
-        """
-        Check if both grippers are open (< open_threshold).
-
-        Returns:
-            bool: True if both grippers < open_threshold
-        """
-        left_pos = self._get_gripper_position('gripper_l_joint1')
-        right_pos = self._get_gripper_position('gripper_r_joint1')
-
-        if left_pos < 0 or right_pos < 0:
-            return False
-
-        return (left_pos < self.gripper_open_threshold and
-                right_pos < self.gripper_open_threshold)
 
     def _calculate_euclidean_distance(self) -> float:
         """
@@ -228,107 +153,67 @@ class InferenceUntilPosition(BaseAction):
 
     def tick(self) -> NodeStatus:
         """
-        Execute one tick with gesture detection and position monitoring.
+        Execute one tick of inference action with position monitoring.
 
-        State machine:
-        1. WAITING_GRIPPER_CLOSE: Wait for both grippers >= close_threshold
-        2. WAITING_GRIPPER_OPEN: Wait for both grippers < open_threshold
-        3. CHECKING_POSITION: Check Euclidean distance <= tolerance
+        Position checking starts after 5 seconds delay to allow initial movement.
 
         Returns:
-            NodeStatus.SUCCESS if gesture detected (if enabled) AND position reached
+            NodeStatus.SUCCESS if distance <= tolerance (after 5 second delay)
             NodeStatus.RUNNING otherwise
         """
         # Initialize start time on first tick
         if self.start_time is None:
             self.start_time = time.time()
-            if self.enable_gesture:
-                self.log_info("Started with gesture detection enabled")
-            else:
-                self.log_info(f"Started position monitoring with {self.check_delay}s delay")
+            self.log_info(f"Started position monitoring with {self.check_delay}s delay")
 
-        # STAGE 1: WAITING_GRIPPER_CLOSE
-        if self.current_stage == GestureStage.WAITING_GRIPPER_CLOSE:
-            if self._check_both_grippers_closed():
-                self.log_info(
-                    f"Stage 1 complete: Both grippers closed "
-                    f"(L:{self._get_gripper_position('gripper_l_joint1'):.3f}, "
-                    f"R:{self._get_gripper_position('gripper_r_joint1'):.3f})"
-                )
-                self.current_stage = GestureStage.WAITING_GRIPPER_OPEN
-            return NodeStatus.RUNNING
+        # Calculate elapsed time
+        elapsed_time = time.time() - self.start_time
 
-        # STAGE 2: WAITING_GRIPPER_OPEN
-        elif self.current_stage == GestureStage.WAITING_GRIPPER_OPEN:
-            if self._check_both_grippers_open():
-                self.log_info(
-                    f"Stage 2 complete: Both grippers opened "
-                    f"(L:{self._get_gripper_position('gripper_l_joint1'):.3f}, "
-                    f"R:{self._get_gripper_position('gripper_r_joint1'):.3f}) "
-                    "- Gesture detected!"
-                )
-                self.current_stage = GestureStage.CHECKING_POSITION
-
-                # Reset start time for delay period (if delay > 0)
-                if self.check_delay > 0:
-                    self.start_time = time.time()
-                    self.log_info(f"Starting {self.check_delay}s delay before position check")
-            return NodeStatus.RUNNING
-
-        # STAGE 3: CHECKING_POSITION
-        elif self.current_stage == GestureStage.CHECKING_POSITION:
-            elapsed_time = time.time() - self.start_time
-
-            # Wait for delay before checking position (if check_delay > 0)
-            if self.check_delay > 0 and elapsed_time < self.check_delay:
-                if not hasattr(self, '_tick_count'):
-                    self._tick_count = 0
-
-                self._tick_count += 1
-                if self._tick_count % 30 == 0:
-                    remaining = self.check_delay - elapsed_time
-                    self.log_info(
-                        f"Waiting {remaining:.1f}s before position check "
-                        f"(elapsed: {elapsed_time:.1f}s)"
-                    )
-                return NodeStatus.RUNNING
-
-            # Check position
-            distance = self._calculate_euclidean_distance()
-
-            if distance <= self.tolerance:
-                gesture_msg = "with gesture" if self.enable_gesture else "without gesture"
-                self.log_info(
-                    f"Target positions reached {gesture_msg}! "
-                    f"Distance: {distance:.4f} <= {self.tolerance:.4f} "
-                    f"(after {elapsed_time:.1f}s)"
-                )
-                return NodeStatus.SUCCESS
-
-            # Still moving toward target
+        # Wait for initial delay before checking position
+        if elapsed_time < self.check_delay:
+            # Log periodically during delay period (every 30 ticks)
             if not hasattr(self, '_tick_count'):
                 self._tick_count = 0
 
             self._tick_count += 1
             if self._tick_count % 30 == 0:
+                remaining = self.check_delay - elapsed_time
                 self.log_info(
-                    f"Distance to target: {distance:.4f} "
-                    f"(tolerance: {self.tolerance:.4f}, elapsed: {elapsed_time:.1f}s)"
+                    f"Waiting {remaining:.1f}s before position check "
+                    f"(elapsed: {elapsed_time:.1f}s)"
                 )
 
             return NodeStatus.RUNNING
 
-        # Should never reach here
-        self.log_error(f"Invalid stage: {self.current_stage}")
-        return NodeStatus.FAILURE
+        # After delay, start checking position
+        distance = self._calculate_euclidean_distance()
+
+        # Check if within tolerance
+        if distance <= self.tolerance:
+            self.log_info(
+                f"Target positions reached! Distance: {distance:.4f} <= {self.tolerance:.4f} "
+                f"(after {elapsed_time:.1f}s)"
+            )
+            return NodeStatus.SUCCESS
+
+        # Still moving toward target
+        # Log periodically for debugging (every 30 ticks)
+        if not hasattr(self, '_tick_count'):
+            self._tick_count = 0
+
+        self._tick_count += 1
+        if self._tick_count % 30 == 0:
+            self.log_info(
+                f"Distance to target: {distance:.4f} (tolerance: {self.tolerance:.4f}, "
+                f"elapsed: {elapsed_time:.1f}s)"
+            )
+
+        return NodeStatus.RUNNING
 
     def reset(self):
         """Reset action state for re-execution."""
         super().reset()
         self.joint_state = None
         self.start_time = None
-        self.current_stage = (GestureStage.WAITING_GRIPPER_CLOSE
-                             if self.enable_gesture
-                             else GestureStage.CHECKING_POSITION)
         if hasattr(self, '_tick_count'):
             self._tick_count = 0

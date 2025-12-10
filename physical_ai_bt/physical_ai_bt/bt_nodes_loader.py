@@ -313,11 +313,7 @@ class XMLTreeLoader:
                 node=self.node,
                 left_positions=params.get('left_positions', [0.0]*8),
                 right_positions=params.get('right_positions', [0.0]*8),
-                tolerance=params.get('tolerance', 0.1),
-                gripper_close_threshold=params.get('gripper_close_threshold', 1.0),
-                gripper_open_threshold=params.get('gripper_open_threshold', 0.2),
-                enable_gesture=params.get('enable_gesture', True),
-                check_delay=params.get('check_delay', 0.0)
+                tolerance=params.get('tolerance', 0.1)
             )
         else:
             raise ValueError(f"Unknown action class: {action_class}")
