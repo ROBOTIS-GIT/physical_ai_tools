@@ -78,7 +78,7 @@ class RotateLidar(BaseAction):
 
         # Service server to receive completion signal
         self.finish_service = self.node.create_service(
-            SetBool,
+            Trigger,
             '/rotation_finish',
             self._finish_callback
         )
@@ -113,19 +113,18 @@ class RotateLidar(BaseAction):
 
     def _finish_callback(self, request, response):
         """
-        Service callback when AI Worker completes rotation.
+        Service callback when AI Worker completes rotation successfully.
 
-        Args:
-            request.data: True if rotation succeeded, False if failed
+        This service being called indicates rotation SUCCESS.
+        If rotation fails, this service is never called.
         """
         self.rotation_finished = True
-        self.rotation_success = request.data
+        self.rotation_success = True
 
-        status = "succeeded" if request.data else "failed"
-        self.log_info(f"Rotation {status} - signal from AI Worker")
+        self.log_info("Rotation succeeded - signal from AI Worker")
 
         response.success = True
-        response.message = f'Rotation {status} acknowledged by BT'
+        response.message = 'Rotation success acknowledged by BT'
         return response
 
     def _joint_state_callback(self, msg):
