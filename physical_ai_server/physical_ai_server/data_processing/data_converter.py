@@ -174,13 +174,19 @@ class DataConverter:
             if key.startswith('joint_order.'):
                 key = key.replace('joint_order.', '')
             if leader_topic_types[key] == JointTrajectory:
+                # Create point following move_arms.py pattern
+                point = JointTrajectoryPoint()
+                point.positions = action_slice
+
+                # Set time_from_start for slow control (first action)
+                if slow_control:
+                    point.time_from_start.sec = 5
+
+                # Create trajectory with the configured point
                 joint_pub_msgs[key] = JointTrajectory(
                     joint_names=value,
-                    points=[JointTrajectoryPoint(
-                        positions=action_slice
-                    )])
-                if slow_control:
-                    joint_pub_msgs[key].points[0].time_from_start.sec = 5
+                    points=[point]
+                )
 
             elif leader_topic_types[key] == Twist:
                 tmp_twist = Twist()
