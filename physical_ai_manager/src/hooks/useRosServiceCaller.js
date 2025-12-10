@@ -576,8 +576,12 @@ export function useRosServiceCaller() {
       try {
         let command_enum = TaskCommand.NONE;
 
-        if (command === 'start') {
+        if (command === 'init') {
           command_enum = TaskCommand.NONE;
+        } else if (command === 'start') {
+          command_enum = TaskCommand.START_INFERENCE;
+        } else if (command === 'stop') {
+          command_enum = TaskCommand.STOP;
         } else if (command === 'finish') {
           command_enum = TaskCommand.FINISH;
         }
