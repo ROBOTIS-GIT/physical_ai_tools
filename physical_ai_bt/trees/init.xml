@@ -1,0 +1,46 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<root BTCPP_format="3" main_tree_to_execute="InitSequence">
+  <BehaviorTree ID="InitSequence">
+    <Sequence name="InitSequence">
+      <!-- Step 1: Pause inference to ensure robot is stopped -->
+      <PauseInference name="PauseInference_Init"/>
+
+      <!-- Step 2: Move arms to ready position -->
+      <MoveArms name="MoveArms_Init"
+        left_positions="0.75, 0.0, 0.0, -2.3, 0.0, 0.0, 0.0, 0.0"
+        right_positions="0.75, 0.0, 0.0, -2.3, 0.0, 0.0, 0.0, 0.0"/>
+
+      <!-- Step 4: Rotate LIDAR and lower lift -->
+      <RotateLidar name="RotateLidar_Init"
+        face_tape="true"
+        lift_position="-0.1"/>
+    </Sequence>
+  </BehaviorTree>
+
+  <!-- Description of Node Models (used by Groot) -->
+  <TreeNodesModel>
+    <Action ID="PauseInference"/>
+    <Action ID="MoveArms">
+      <input_port name="left_positions" default="0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0">
+        Target positions for left arm joints (comma-separated).
+      </input_port>
+      <input_port name="right_positions" default="0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0">
+        Target positions for right arm joints (comma-separated).
+      </input_port>
+    </Action>
+    <Action ID="RotateLidar">
+      <input_port name="face_tape" default="true">
+        Rotation mode: true = face reflective tape, false = rotate 90° left
+      </input_port>
+      <input_port name="lift_position" default="0.0">
+        Target position for lift joint (executed simultaneously with rotation)
+      </input_port>
+      <input_port name="position_threshold" default="0.01">
+        Position tolerance for lift completion
+      </input_port>
+      <description>
+        Coordinates LIDAR-based rotation and lift movement simultaneously.
+      </description>
+    </Action>
+  </TreeNodesModel>
+</root>

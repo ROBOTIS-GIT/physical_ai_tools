@@ -43,6 +43,12 @@ class BehaviorTreeNode(Node):
         self.inference_start_time = None
         self.waiting_for_inference = True
 
+        # --- Dual-tree architecture state ---
+        self.current_tree_type = None  # 'init' or 'main'
+        self.tree_execution_mode = 'stopped'  # 'stopped', 'running', 'stopping'
+        self.init_tree_path = None
+        self.main_tree_path = None
+
         # Service server to receive commands from Physical AI Manager
         self.command_service = self.create_service(
             SendCommand,
@@ -84,23 +90,38 @@ class BehaviorTreeNode(Node):
         self.topic_config = self._load_topic_config(robot_type)
 
         pkg_share = get_package_share_directory('physical_ai_bt')
-        xml_path = os.path.join(pkg_share, 'trees', tree_xml)
 
-        if not os.path.exists(xml_path):
+        # Store main tree path (don't load yet - wait for command)
+        self.main_tree_path = os.path.join(pkg_share, 'trees', tree_xml)
+        if not os.path.exists(self.main_tree_path):
             # Try relative path
-            xml_path = os.path.join(
+            self.main_tree_path = os.path.join(
                 os.path.dirname(os.path.dirname(__file__)),
                 'trees',
                 tree_xml
             )
 
-        # Load behavior tree from XML
+        # Store init tree path
+        self.init_tree_path = os.path.join(pkg_share, 'trees', 'init.xml')
+        if not os.path.exists(self.init_tree_path):
+            # Try relative path
+            self.init_tree_path = os.path.join(
+                os.path.dirname(os.path.dirname(__file__)),
+                'trees',
+                'init.xml'
+            )
+
+        # Initialize XML loader
         self.xml_loader = XMLTreeLoader(
             self,
             joint_names=self.joint_names,
             topic_config=self.topic_config
         )
-        self.root = self.xml_loader.load_tree_from_file(xml_path)
+
+        # Don't load tree yet - wait for command
+        self.root = None
+        self.current_tree_type = None
+        self.tree_execution_mode = 'stopped'
 
         # Create timer for BT tick
         self.timer = self.create_timer(1.0 / tick_rate, self.tick_callback)
@@ -108,8 +129,9 @@ class BehaviorTreeNode(Node):
         self.get_logger().info('Behavior Tree Node initialized')
         self.get_logger().info(f'  Robot type: {robot_type}')
         self.get_logger().info(f'  Joint names: {self.joint_names}')
-        self.get_logger().info(f'  Tree XML: {tree_xml}')
-        self.get_logger().info(f'  Tree: {self.root.name}')
+        self.get_logger().info(f'  Main tree XML: {tree_xml}')
+        self.get_logger().info(f'  Init tree: init.xml')
+        self.get_logger().info(f'  Tree will be loaded on command (IDLE or START_INFERENCE)')
         self.get_logger().info(f'  Tick rate: {tick_rate} Hz')
 
     def _load_joint_order(self, robot_type: str) -> list:
@@ -301,90 +323,207 @@ class BehaviorTreeNode(Node):
 
     def _demo_start_callback(self, request, response):
         """
-        Handle demo start command - triggers BT Tree.
-        Requires model to be loaded first.
+        Handle demo commands: IDLE, START_INFERENCE, STOP.
+
+        IDLE (0): Load and execute init.xml tree
+        START_INFERENCE (2): Load and execute main tree (requires model loaded)
+        STOP (3): Immediately halt current tree execution
         """
         try:
-            if not self.model_loaded:
-                self.get_logger().warn('Demo start requested but model not loaded yet')
-                response.success = False
-                response.message = 'Model not loaded - send /task/command first'
-                return response
+            command = request.command
 
-            self.get_logger().info('Demo start received - triggering BT Tree')
+            # ===== IDLE COMMAND =====
+            if command == SendCommand.Request.IDLE:
+                self.get_logger().info('IDLE command received - loading init tree')
 
-            # Store task_instruction to blackboard
-            if request.task_info and request.task_info.task_instruction:
-                # Store full task_instruction array to blackboard for ForEach support
-                task_list = request.task_info.task_instruction
-                self.blackboard.set('task_instruction_list', task_list)
-                self.get_logger().info(f'Stored task_instruction_list to blackboard: {task_list}')
+                # Check if init tree exists
+                if not os.path.exists(self.init_tree_path):
+                    self.get_logger().error(f'Init tree not found: {self.init_tree_path}')
+                    response.success = False
+                    response.message = 'init.xml not found'
+                    return response
 
-                # Also store first item for backward compatibility (legacy mode)
-                task_obj = task_list[0] if task_list else ""
-                self.blackboard.set('task_instruction', task_obj)
-                self.get_logger().info(f'Stored task_instruction to blackboard: {task_obj}')
+                # Stop current execution if running
+                if self.tree_execution_mode == 'running':
+                    self._immediate_halt()
+
+                # Load init tree
+                try:
+                    self.root = self.xml_loader.load_tree_from_file(self.init_tree_path)
+                    self.current_tree_type = 'init'
+                    self.get_logger().info(f'Init tree loaded: {self.root.name}')
+                except Exception as e:
+                    self.get_logger().error(f'Failed to load init tree: {str(e)}')
+                    response.success = False
+                    response.message = f'Failed to load init tree: {str(e)}'
+                    return response
+
+                # Trigger tree execution
+                self.inference_detected = True
+                self.inference_start_time = time.time()
+                self.waiting_for_inference = False
+                self.tree_execution_mode = 'running'
+
+                response.success = True
+                response.message = 'Init tree started'
+
+            # ===== START_INFERENCE COMMAND =====
+            elif command == SendCommand.Request.START_INFERENCE:
+                if not self.model_loaded:
+                    self.get_logger().warn('START_INFERENCE requested but model not loaded')
+                    response.success = False
+                    response.message = 'Model not loaded - send /task/command first'
+                    return response
+
+                self.get_logger().info('START_INFERENCE received - loading main tree')
+
+                # Stop current execution if running
+                if self.tree_execution_mode == 'running':
+                    self._immediate_halt()
+
+                # Load main tree
+                try:
+                    self.root = self.xml_loader.load_tree_from_file(self.main_tree_path)
+                    self.current_tree_type = 'main'
+                    self.get_logger().info(f'Main tree loaded: {self.root.name}')
+                except Exception as e:
+                    self.get_logger().error(f'Failed to load main tree: {str(e)}')
+                    response.success = False
+                    response.message = f'Failed to load main tree: {str(e)}'
+                    return response
+
+                # Store task_instruction to blackboard
+                if request.task_info and request.task_info.task_instruction:
+                    task_list = request.task_info.task_instruction
+                    self.blackboard.set('task_instruction_list', task_list)
+                    self.get_logger().info(f'Stored task_instruction_list: {task_list}')
+
+                    task_obj = task_list[0] if task_list else ""
+                    self.blackboard.set('task_instruction', task_obj)
+                    self.get_logger().info(f'Stored task_instruction: {task_obj}')
+                else:
+                    self.get_logger().warn('No task_instruction in request')
+
+                # Trigger tree execution
+                self.inference_detected = True
+                self.inference_start_time = time.time()
+                self.waiting_for_inference = False
+                self.tree_execution_mode = 'running'
+
+                response.success = True
+                response.message = 'Main tree started'
+
+            # ===== STOP COMMAND =====
+            elif command == SendCommand.Request.STOP:
+                self.get_logger().info('STOP command received - halting BT execution')
+
+                if self.tree_execution_mode != 'running':
+                    self.get_logger().warn('STOP requested but no tree is running')
+                    response.success = True
+                    response.message = 'No tree running'
+                    return response
+
+                # Immediate halt (do NOT wait for current action to finish)
+                self._immediate_halt()
+
+                response.success = True
+                response.message = 'BT execution halted'
+
             else:
-                self.get_logger().warn('No task_instruction in request')
-
-            # Trigger BT Tree
-            self.inference_detected = True
-            self.inference_start_time = time.time()
-            self.waiting_for_inference = False
-
-            response.success = True
-            response.message = 'BT Tree started'
+                self.get_logger().warn(f'Unknown command in /demo/command: {command}')
+                response.success = False
+                response.message = f'Unknown command: {command}'
 
         except Exception as e:
-            self.get_logger().error(f'Error in demo start callback: {str(e)}')
+            self.get_logger().error(f'Error in demo command callback: {str(e)}')
             response.success = False
             response.message = f'Error: {str(e)}'
 
         return response
 
+    def _immediate_halt(self):
+        """
+        Immediately halt BT execution without waiting for current action.
+        Called by STOP command and when switching trees.
+        Does NOT stop AI Server - only stops BT tree.
+        """
+        self.get_logger().info('Executing immediate halt of BT tree')
+
+        # Prevent tick from continuing
+        self.tree_execution_mode = 'stopping'
+
+        # Reset all nodes (calls reset() recursively)
+        if self.root is not None:
+            self.root.reset()
+            self.get_logger().info('All BT nodes reset')
+
+        # Reset gate variables
+        self.inference_detected = False
+        self.inference_start_time = None
+        self.waiting_for_inference = True
+        self.tree_execution_mode = 'stopped'
+
+        self.get_logger().info('BT execution halted - ready for next command')
+
     def tick_callback(self):
         """Timer callback for BT tick execution."""
+        # Skip if no tree loaded
+        if self.root is None:
+            return
+
+        # Skip if being stopped
+        if self.tree_execution_mode == 'stopping':
+            return
+
         # Wait for inference trigger from service callback
         if self.waiting_for_inference:
             if not self.inference_detected:
                 return  # Do not tick tree until trigger
             self.waiting_for_inference = False
 
+        # Only tick if running
+        if self.tree_execution_mode != 'running':
+            return
+
         # Tick the root node
         status = self.root.tick()
 
         # Handle tree completion
-        if status == NodeStatus.SUCCESS:
-            self.get_logger().info('Behavior Tree completed successfully')
-            self._reset_tree()
-            self.inference_detected = False
-            self.inference_start_time = None
-            self.waiting_for_inference = True
-            # model_loaded remains True - ready for next /demo/start
-        elif status == NodeStatus.FAILURE:
-            self.get_logger().error('Behavior Tree execution failed')
-            self._reset_tree()
-            self.inference_detected = False
-            self.inference_start_time = None
-            self.waiting_for_inference = True
-            # model_loaded remains True
+        if status in [NodeStatus.SUCCESS, NodeStatus.FAILURE]:
+            status_name = 'successfully' if status == NodeStatus.SUCCESS else 'with failure'
+            self.get_logger().info(f'Behavior Tree completed {status_name}')
+            self._handle_tree_completion(status)
+
+    def _handle_tree_completion(self, status: NodeStatus):
+        """
+        Handle tree completion (SUCCESS or FAILURE).
+        Resets state and prepares for next command.
+        """
+        # Reset tree
+        if self.root is not None:
+            self.root.reset()
+
+        # Reset execution state
+        self.inference_detected = False
+        self.inference_start_time = None
+        self.waiting_for_inference = True
+        self.tree_execution_mode = 'stopped'
+
+        # Log based on tree type
+        if self.current_tree_type == 'init':
+            self.get_logger().info('Init tree complete - ready for START_INFERENCE')
+        elif self.current_tree_type == 'main':
+            self.get_logger().info('Main tree complete - ready for next command')
+        else:
+            self.get_logger().info('Tree execution complete')
 
     def _reset_tree(self):
-        """Reset the behavior tree for next execution cycle."""
-        # Get XML path again
-        tree_xml = self.get_parameter('tree_xml').value
-        pkg_share = get_package_share_directory('physical_ai_bt')
-        xml_path = os.path.join(pkg_share, 'trees', tree_xml)
-
-        if not os.path.exists(xml_path):
-            xml_path = os.path.join(
-                os.path.dirname(os.path.dirname(__file__)),
-                'trees',
-                tree_xml
-            )
-
-        # Reload tree from XML
-        self.root = self.xml_loader.load_tree_from_file(xml_path)
+        """
+        DEPRECATED: Tree reset now handled by _handle_tree_completion().
+        Kept for backward compatibility only.
+        """
+        self.get_logger().warn('_reset_tree() is deprecated - use _handle_tree_completion()')
+        pass
 
 
 def main(args=None):
