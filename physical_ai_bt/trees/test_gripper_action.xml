@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<root BTCPP_format="3" main_tree_to_execute="TestGripperAction">
+  <BehaviorTree ID="TestGripperAction">
+    <Sequence name="TestSequence">
+      <InferenceUntilPositionWithGripper name="TestGripperMove"
+        left_positions="0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.8"
+        right_positions="0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.8"
+        tolerance="0.1"
+        gripper_closed_threshold="0.01"
+        gripper_open_threshold="0.7"/>
+    </Sequence>
+  </BehaviorTree>
+</root>
