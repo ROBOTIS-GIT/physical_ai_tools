@@ -1,0 +1,317 @@
+#!/usr/bin/env python3
+#
+# Copyright 2025 ROBOTIS CO., LTD.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+#
+# Author: Seongwoo Kim
+
+"""Inference action that runs until arms stabilize AND gripper state changes."""
+
+import time
+from typing import TYPE_CHECKING
+
+from physical_ai_bt.actions.base_action import NodeStatus, BaseAction
+from rclpy.qos import QoSProfile, ReliabilityPolicy
+
+if TYPE_CHECKING:
+    from rclpy.node import Node
+
+
+# Joint names for left and right arms (including grippers)
+LEFT_JOINT_NAMES = [
+    'arm_l_joint1', 'arm_l_joint2', 'arm_l_joint3', 'arm_l_joint4',
+    'arm_l_joint5', 'arm_l_joint6', 'arm_l_joint7', 'gripper_l_joint1'
+]
+RIGHT_JOINT_NAMES = [
+    'arm_r_joint1', 'arm_r_joint2', 'arm_r_joint3', 'arm_r_joint4',
+    'arm_r_joint5', 'arm_r_joint6', 'arm_r_joint7', 'gripper_r_joint1'
+]
+
+
+class InferenceUntilGestureWithGripper(BaseAction):
+    """
+    Action that runs inference until both arms stabilize AND gripper state changes.
+
+    Returns SUCCESS when:
+    1. All arm joint positions change less than threshold over window for specified duration
+    2. AND gripper state change is detected (closed -> open or open -> closed)
+
+    No specific target positions required - detects when robot settles and gripper acts.
+    """
+
+    def __init__(
+        self,
+        node: 'Node',
+        position_change_threshold: float = 0.05,
+        static_duration: float = 3.0,
+        history_window: float = 1.0,
+        gripper_closed_threshold: float = 0.01,
+        gripper_open_threshold: float = 0.7
+    ):
+        """
+        Initialize InferenceUntilGestureWithGripper action.
+
+        Args:
+            node: ROS2 node reference
+            position_change_threshold: Maximum position change (radians) to be considered stable (default: 0.05)
+            static_duration: How long (seconds) to hold stable state before ending inference (default: 3.0)
+            history_window: Time window (seconds) for position change calculation (default: 1.0)
+            gripper_closed_threshold: Position value below which gripper is considered closed (default: 0.01)
+            gripper_open_threshold: Position value above which gripper is considered open (default: 0.7)
+        """
+        super().__init__(node, name="InferenceUntilGestureWithGripper")
+
+        self.position_change_threshold = position_change_threshold
+        self.static_duration = static_duration
+        self.history_window = history_window
+        self.gripper_closed_threshold = gripper_closed_threshold
+        self.gripper_open_threshold = gripper_open_threshold
+
+        # Position history tracking
+        self.position_history = []  # List of (timestamp, positions_dict) tuples
+        self.static_start_time = None
+
+        # Gripper state tracking
+        self.gripper_state_changed = False
+        self.initial_gripper_state = None  # 'open' or 'closed' or None
+        self.previous_gripper_state = None
+
+        # Joint names to monitor (both arms, all 8 joints each)
+        self.monitored_joints = LEFT_JOINT_NAMES + RIGHT_JOINT_NAMES
+
+        qos_profile = QoSProfile(
+            depth=10,
+            reliability=ReliabilityPolicy.RELIABLE
+        )
+
+        self.joint_state_sub = self.node.create_subscription(
+            __import__('sensor_msgs.msg').msg.JointState,
+            '/joint_states',
+            self._joint_state_callback,
+            qos_profile
+        )
+
+        self.joint_positions = {}
+
+        self.log_info(
+            f"Initialized with position_threshold={position_change_threshold:.3f}, "
+            f"static_duration={static_duration:.1f}s, "
+            f"gripper_closed_threshold={gripper_closed_threshold:.3f}, "
+            f"gripper_open_threshold={gripper_open_threshold:.3f}"
+        )
+
+    def _get_gripper_state(self) -> str:
+        """
+        Determine current gripper state based on both grippers.
+
+        Returns:
+            'open' if either gripper is open
+            'closed' if both grippers are closed
+            'unknown' if state cannot be determined
+        """
+        if not self.joint_positions:
+            return 'unknown'
+
+        # Get left gripper position
+        left_gripper_pos = self.joint_positions.get('gripper_l_joint1')
+        if left_gripper_pos is None:
+            return 'unknown'
+
+        # Get right gripper position
+        right_gripper_pos = self.joint_positions.get('gripper_r_joint1')
+        if right_gripper_pos is None:
+            return 'unknown'
+
+        # Determine state for each gripper
+        left_is_open = left_gripper_pos > self.gripper_open_threshold
+        left_is_closed = left_gripper_pos < self.gripper_closed_threshold
+        right_is_open = right_gripper_pos > self.gripper_open_threshold
+        right_is_closed = right_gripper_pos < self.gripper_closed_threshold
+
+        # If either gripper is open, overall state is 'open'
+        if left_is_open or right_is_open:
+            return 'open'
+        # If both grippers are closed
+        elif left_is_closed and right_is_closed:
+            return 'closed'
+        else:
+            # In between - consider as previous state if available
+            return self.previous_gripper_state if self.previous_gripper_state else 'unknown'
+
+    def _check_gripper_state_change(self):
+        """Check if gripper state has changed from initial state."""
+        current_state = self._get_gripper_state()
+
+        # Skip if state is unknown
+        if current_state == 'unknown':
+            return
+
+        # Record initial state
+        if self.initial_gripper_state is None:
+            self.initial_gripper_state = current_state
+            self.previous_gripper_state = current_state
+            self.log_info(f"Initial gripper state: {current_state}")
+            return
+
+        # Check for state change
+        if self.previous_gripper_state != current_state:
+            self.log_info(
+                f"Gripper state changed: {self.previous_gripper_state} -> {current_state}"
+            )
+            self.previous_gripper_state = current_state
+
+            # Detect state change (open -> closed or closed -> open)
+            if (self.initial_gripper_state == 'open' and current_state == 'closed') or \
+               (self.initial_gripper_state == 'closed' and current_state == 'open'):
+                self.gripper_state_changed = True
+                self.log_info("Gripper state change detected!")
+
+    def _update_position_history(self):
+        """
+        Update position history with current joint states.
+
+        Maintains a rolling window of recent positions for velocity calculation.
+        """
+        if not self.joint_positions:
+            return
+
+        current_time = time.time()
+
+        # Extract positions for monitored joints
+        current_positions = {}
+        for joint_name in self.monitored_joints:
+            if joint_name in self.joint_positions:
+                current_positions[joint_name] = self.joint_positions[joint_name]
+
+        # Add to history
+        if len(current_positions) == len(self.monitored_joints):
+            self.position_history.append((current_time, current_positions))
+
+            # Remove old entries outside history window
+            cutoff_time = current_time - self.history_window
+            self.position_history = [
+                (t, pos) for t, pos in self.position_history
+                if t >= cutoff_time
+            ]
+
+    def _calculate_max_position_change(self) -> float:
+        """
+        Calculate maximum position change across all monitored joints.
+
+        Measures how much each joint moved over the history window,
+        regardless of speed.
+
+        Returns:
+            Maximum absolute position change (radians) among all joints,
+            or float('inf') if insufficient data
+        """
+        if len(self.position_history) < 2:
+            return float('inf')  # Not enough data yet
+
+        # Get oldest and newest positions in window
+        oldest_time, oldest_pos = self.position_history[0]
+        newest_time, newest_pos = self.position_history[-1]
+
+        # Calculate position change for each joint
+        max_change = 0.0
+        for joint_name in self.monitored_joints:
+            if joint_name in oldest_pos and joint_name in newest_pos:
+                position_change = abs(newest_pos[joint_name] - oldest_pos[joint_name])
+                max_change = max(max_change, position_change)
+
+        return max_change
+
+    def _is_static(self) -> bool:
+        """
+        Check if all monitored joints are in stable state (positions not changing).
+
+        Returns:
+            True if maximum position change is below threshold
+        """
+        max_change = self._calculate_max_position_change()
+
+        if max_change == float('inf'):
+            return False  # Not enough data
+
+        return max_change < self.position_change_threshold
+
+    def tick(self) -> NodeStatus:
+        """
+        Execute one tick of inference action with static motion and gripper state detection.
+
+        Returns:
+            NodeStatus.SUCCESS if arms are static for required duration AND gripper state changed
+            NodeStatus.RUNNING otherwise
+        """
+        # Always check gripper state
+        self._check_gripper_state_change()
+
+        # Update position history
+        self._update_position_history()
+
+        # Check if in static state
+        if self._is_static():
+            now = time.time()
+
+            if self.static_start_time is None:
+                # First detection of static state
+                self.static_start_time = now
+                self.log_info(
+                    f"Static motion detected, holding for {self.static_duration}s... "
+                    f"(gripper_changed: {self.gripper_state_changed})"
+                )
+
+            elif now - self.static_start_time >= self.static_duration:
+                # Static state held for required duration
+                # Check if gripper state also changed
+                if self.gripper_state_changed:
+                    self.log_info(
+                        f"Both conditions met! Static state held for {self.static_duration}s "
+                        f"and gripper state changed."
+                    )
+                    return NodeStatus.SUCCESS
+                else:
+                    # Static but gripper hasn't changed yet
+                    if not hasattr(self, '_tick_count'):
+                        self._tick_count = 0
+                    self._tick_count += 1
+                    if self._tick_count % 30 == 0:
+                        self.log_info(
+                            f"Arms static but waiting for gripper state change... "
+                            f"(static_time: {now - self.static_start_time:.1f}s)"
+                        )
+        else:
+            # Movement detected, reset timer
+            self.static_start_time = None
+
+        return NodeStatus.RUNNING
+
+    def _joint_state_callback(self, msg):
+        """Callback for /joint_states to store joint positions."""
+        try:
+            self.joint_positions = {name: pos for name, pos in zip(msg.name, msg.position)}
+        except Exception as e:
+            self.log_warn(f"Error in joint state callback: {e}")
+
+    def reset(self):
+        """Reset action state for re-execution."""
+        super().reset()
+        self.static_start_time = None
+        self.position_history = []
+        self.joint_positions = {}
+        self.gripper_state_changed = False
+        self.initial_gripper_state = None
+        self.previous_gripper_state = None
+        if hasattr(self, '_tick_count'):
+            self._tick_count = 0

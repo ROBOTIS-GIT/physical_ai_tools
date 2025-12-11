@@ -20,6 +20,7 @@
 
 from physical_ai_bt.actions.base_action import BaseAction
 from physical_ai_bt.actions.inference_until_gesture import InferenceUntilGesture
+from physical_ai_bt.actions.inference_until_gesture_with_gripper import InferenceUntilGestureWithGripper
 from physical_ai_bt.actions.inference_until_position import InferenceUntilPosition
 from physical_ai_bt.actions.inference_until_position_with_gripper import InferenceUntilPositionWithGripper
 from physical_ai_bt.actions.timed_inference import TimedInference
@@ -37,6 +38,7 @@ from physical_ai_bt.actions.set_task_instruction import SetTaskInstruction
 __all__ = [
     'BaseAction',
     'InferenceUntilGesture',
+    'InferenceUntilGestureWithGripper',
     'InferenceUntilPosition',
     'InferenceUntilPositionWithGripper',
     'TimedInference',

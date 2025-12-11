@@ -22,6 +22,7 @@ import xml.etree.ElementTree as ET
 from typing import TYPE_CHECKING, Dict, Type
 
 from physical_ai_bt.actions import InferenceUntilGesture, InferenceUntilPosition, Rotate, RotateLidar
+from physical_ai_bt.actions.inference_until_gesture_with_gripper import InferenceUntilGestureWithGripper
 from physical_ai_bt.actions.inference_until_position_with_gripper import InferenceUntilPositionWithGripper
 from physical_ai_bt.actions.timed_inference import TimedInference
 from physical_ai_bt.actions.control_inference import (
@@ -74,6 +75,7 @@ class XMLTreeLoader:
 
         self.action_types: Dict[str, Type[BaseAction]] = {
             'InferenceUntilGesture': InferenceUntilGesture,
+            'InferenceUntilGestureWithGripper': InferenceUntilGestureWithGripper,
             'InferenceUntilPosition': InferenceUntilPosition,
             'InferenceUntilPositionWithGripper': InferenceUntilPositionWithGripper,
             'TimedInference': TimedInference,
@@ -226,6 +228,16 @@ class XMLTreeLoader:
                 position_change_threshold=params.get('position_change_threshold', 0.05),
                 static_duration=params.get('static_duration', 3.0),
                 history_window=params.get('history_window', 1.0)
+            )
+
+        elif action_class == InferenceUntilGestureWithGripper:
+            return action_class(
+                node=self.node,
+                position_change_threshold=params.get('position_change_threshold', 0.05),
+                static_duration=params.get('static_duration', 3.0),
+                history_window=params.get('history_window', 1.0),
+                gripper_closed_threshold=params.get('gripper_closed_threshold', 0.01),
+                gripper_open_threshold=params.get('gripper_open_threshold', 0.7)
             )
 
         elif action_class == Rotate:
