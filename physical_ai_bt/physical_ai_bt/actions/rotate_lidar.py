@@ -111,6 +111,9 @@ class RotateLidar(BaseAction):
         self._lift_thread_success = False
         self._control_rate = 100  # Hz
 
+        # Debug: rotation trigger count
+        self._trigger_count = 0
+
     def _finish_callback(self, request, response):
         """
         Service callback when AI Worker completes rotation successfully.
@@ -198,7 +201,8 @@ class RotateLidar(BaseAction):
 
             try:
                 mode = "face reflective tape" if self.face_tape else "rotate 90° left"
-                self.log_info(f"Sending rotation trigger: {mode}")
+                self._trigger_count += 1
+                self.log_info(f"[DEBUG] '/rotation_trigger' 서비스 호출!!!!!!!!!!!!!! #{self._trigger_count} (mode: {mode})")
                 self.rotation_finished = False
                 self.rotation_success = False
 
@@ -270,7 +274,7 @@ class RotateLidar(BaseAction):
         """Reset action state for re-execution."""
         super().reset()
         
-        self.log_info("Resetting RotateLidar action state")
+        self.log_info(f"[DEBUG] Resetting RotateLidar action state (Total triggers sent: {self._trigger_count})")
 
         # Reset rotation state
         self.trigger_sent = False
