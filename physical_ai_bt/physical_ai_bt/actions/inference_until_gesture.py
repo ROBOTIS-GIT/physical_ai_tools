@@ -147,12 +147,12 @@ class InferenceUntilGesture(BaseAction):
         # Diagnostic logging for parameter tuning
         time_delta = newest_time - oldest_time
         is_static = max_change < self.position_change_threshold
-        self.log_info(
-            f"[TUNE] Window: {time_delta:.2f}s | "
-            f"Max Δ: {max_change:.4f} rad | "
-            f"Threshold: {self.position_change_threshold:.4f} rad | "
-            f"Static: {is_static}"
-        )
+        # self.log_info(
+        #     f"[TUNE] Window: {time_delta:.2f}s | "
+        #     f"Max Δ: {max_change:.4f} rad | "
+        #     f"Threshold: {self.position_change_threshold:.4f} rad | "
+        #     f"Static: {is_static}"
+        # )
 
         return max_change
 

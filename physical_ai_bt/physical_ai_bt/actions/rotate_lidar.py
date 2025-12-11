@@ -118,6 +118,12 @@ class RotateLidar(BaseAction):
         This service being called indicates rotation SUCCESS.
         If rotation fails, this service is never called.
         """
+        if not self.trigger_sent:
+            self.log_error("Received rotation finish signal without trigger sent")
+            response.success = True
+            response.message = 'Rotation finish received without trigger'
+            return response
+        
         self.rotation_finished = True
         self.rotation_success = True
 
@@ -151,7 +157,7 @@ class RotateLidar(BaseAction):
         lift_traj.joint_names = [self.lift_joint_name]
         lift_point = JointTrajectoryPoint()
         lift_point.positions = [self.target_lift_position]
-        lift_point.time_from_start.sec = 5
+        lift_point.time_from_start.sec = 2
         lift_traj.points.append(lift_point)
         self.lift_pub.publish(lift_traj)
 
@@ -193,6 +199,8 @@ class RotateLidar(BaseAction):
             try:
                 mode = "face reflective tape" if self.face_tape else "rotate 90° left"
                 self.log_info(f"Sending rotation trigger: {mode}")
+                self.rotation_finished = False
+                self.rotation_success = False
 
                 self.trigger_future = self.trigger_client.call_async(request)
                 self.trigger_sent = True
@@ -241,6 +249,7 @@ class RotateLidar(BaseAction):
         if rotation_done and lift_done:
             # BOTH must succeed to return SUCCESS
             if self.rotation_success and self._lift_thread_success:
+                self.reset()
                 self.log_info("LIDAR rotation and lift movement both completed successfully")
                 return NodeStatus.SUCCESS
             else:
@@ -251,6 +260,7 @@ class RotateLidar(BaseAction):
                     self.log_error("Rotation failed")
                 else:  # not self._lift_thread_success
                     self.log_error("Lift movement failed")
+                self.reset()
                 return NodeStatus.FAILURE
 
         # Still waiting for completion (either rotation or lift or both)
@@ -259,6 +269,8 @@ class RotateLidar(BaseAction):
     def reset(self):
         """Reset action state for re-execution."""
         super().reset()
+        
+        self.log_info("Resetting RotateLidar action state")
 
         # Reset rotation state
         self.trigger_sent = False

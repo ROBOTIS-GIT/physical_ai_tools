@@ -706,10 +706,33 @@ class PhysicalAIServer(Node):
             self.timer_manager.stop(timer_name=self.operation_mode)
             return
 
-        # ZMQ client should already be initialized in user_interaction_callback
-        if self.zmq_client is None:
-            self.get_logger().error('ZMQ client not initialized. Call START_INFERENCE first.')
+        # Check if inference_info is configured
+        if not hasattr(self, 'inference_info') or self.inference_info is None:
+            self.get_logger().warn('Inference server not configured. Please configure via UI first.')
             return
+
+        if self.zmq_client is None:
+            self.zmq_client = ZmqInferenceClient(
+                host=self.inference_info['server_ip'],
+                port=self.inference_info['server_port'],
+                timeout_ms=self.inference_info['timeout_ms']
+            )
+            is_alive = self.zmq_client.ping()
+            if not is_alive:
+                self.get_logger().error('Failed opening ZMQ client')
+                return
+            self.get_logger().info('ZMQ client connected to server')
+            policy_info = {
+                'policy_type': self.inference_info['policy_type'],
+                'policy_path': self.inference_info['policy_path'],
+                'robot_type': self.inference_info['robot_type']
+            }
+            response = self.zmq_client.execute_command('load_policy', policy_info)
+            self.stop_inference = True
+            self.get_logger().info(f'ZMQ load_policy response: {response}')
+
+            # Initialize inference state variables
+            self._reset_inference_state()
 
         try:
             if not self.on_inference:
@@ -726,15 +749,23 @@ class PhysicalAIServer(Node):
                 return
 
             try:
-                re_inference_threshold = 6
+                re_inference_threshold = 4
                 # Check if we need to start a new inference
                 if len(self.remain_action) <= re_inference_threshold and not self.wait_inference:
                     resized_cam_head = cv2.resize(camera_data['cam_head'], (224, 224))
+                    # resized_cam_wrist_left = cv2.resize(camera_data['cam_wrist_left'], (224, 224))
+                    # rotated_cam_wrist_left = cv2.rotate(resized_cam_wrist_left, cv2.ROTATE_90_COUNTERCLOCKWISE)
+                    # resized_cam_wrist_right = cv2.resize(camera_data['cam_wrist_right'], (224, 224))
+                    # rotated_cam_wrist_right = cv2.rotate(resized_cam_wrist_right, cv2.ROTATE_90_COUNTERCLOCKWISE)
                     cam_head_obs = resized_cam_head[np.newaxis, ...]
+                    # cam_wrist_left_obs = rotated_cam_wrist_left[np.newaxis, ...]
+                    # cam_wrist_right_obs = rotated_cam_wrist_right[np.newaxis, ...]
                     left_arm_obs = np.array(follower_data)[np.newaxis, :8]
                     right_arm_obs = np.array(follower_data)[np.newaxis, 8:16]
                     obs = {
                         'video.cam_head': cam_head_obs,
+                        # 'video.cam_wrist_left': cam_wrist_left_obs,
+                        # 'video.cam_wrist_right': cam_wrist_right_obs,
                         'state.left_arm': left_arm_obs,
                         'state.right_arm': right_arm_obs,
                         'annotation.human.action.task_description': [

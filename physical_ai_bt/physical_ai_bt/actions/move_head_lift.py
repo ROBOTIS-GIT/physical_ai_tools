@@ -102,7 +102,7 @@ class MoveHeadLift(BaseAction):
         head_traj.joint_names = self.head_joint_names
         head_point = JointTrajectoryPoint()
         head_point.positions = self.head_positions
-        head_point.time_from_start.sec = 5
+        head_point.time_from_start.sec = 1
         head_traj.points.append(head_point)
         self.head_pub.publish(head_traj)
 
@@ -110,7 +110,7 @@ class MoveHeadLift(BaseAction):
         lift_traj.joint_names = [self.lift_joint_name]
         lift_point = JointTrajectoryPoint()
         lift_point.positions = [self.lift_position]
-        lift_point.time_from_start.sec = 5
+        lift_point.time_from_start.sec = 1
         lift_traj.points.append(lift_point)
         self.lift_pub.publish(lift_traj)
 

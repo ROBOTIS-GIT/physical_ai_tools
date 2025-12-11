@@ -2,60 +2,75 @@
 <root BTCPP_format="3" main_tree_to_execute="RobotControlSequence">
   <BehaviorTree ID="RobotControlSequence">
     <Sequence name="RobotControlSequence">
+      <!-- <Rotate name="Rule_Based_Rotation_2" angle_deg="90.0"/> -->
       <MoveArms name="ArmsControl_1"
         left_positions="0.75, 0.0, 0.0, -2.3, 0.0, 0.0, 0.0, 0.0"
         right_positions="0.75, 0.0, 0.0, -2.3, 0.0, 0.0, 0.0, 0.0"/>
-      <ResumeInference name="Resume_Publishing_1"/>
 
-      <!-- Dynamic iteration over task_instruction_list -->
+      <RotateLidar name="LidarRotation_1"
+        face_tape="false"
+        lift_position="-0.02"
+        position_threshold="0.01"/>
+      <MoveHeadLift name="LiftControl_2"
+        head_positions= "0.55,0.0"
+        lift_position="-0.1"/>
+
+      <ResumeInference name="Resume_Publishing_2"/>
       <ForEach name="TaskIteration" list_key="task_instruction_list">
         <Sequence name="PerTaskSequence">
           <UpdateTaskInstruction name="UpdateTask"/>
-          <InferenceUntilGesture name="InferUntilStable"
+          <!-- <InferenceUntilGesture name="InferUntilStable"
             position_change_threshold="0.05"
-            static_duration="3.0"
-            history_window="1.0"/>
+            static_duration="1.0"
+            history_window="1.0"/> -->
+          <!-- <InferenceUntilPositionWithGripper name="TestGripperMove"
+            left_positions="0.3922316969274152, 0.10839731426895019, 0.0065074341236086184, -2.0080527566917366, 0.24381905569947945, 0.07638744954674279, 0.02586707235103892, 0.09050486648525283"
+            right_positions="0.3742194068946643, -0.14899986824829825, 0.18719359302166966, -2.0959690305974323, -0.07971906407043192, 0.17344768705522567, -0.2131939073858318, 0.17794177139473438"
+            tolerance="0.8"
+            gripper_closed_threshold="0.3"
+            gripper_open_threshold="0.7"/> -->
+          <InferenceUntilGestureWithGripper name="TestGestureGripper"
+            position_change_threshold="0.05"
+            static_duration="0.7"
+            history_window="0.5"
+            gripper_closed_threshold="0.3"
+            gripper_open_threshold="0.7"/>
         </Sequence>
       </ForEach>
 
       <SetTaskInstruction name="SetTaskInstruction_1" instruction="Grasp the handle of the crate."/>
       <InferenceUntilGesture name="VLA_Inference_2"
         position_change_threshold="0.05"
-        static_duration="3.0"
+        static_duration="1.0"
         history_window="1.0"/>
       <PauseInference name="Pause_Publishing_1"/>
-      <MoveLift name="LiftControl_1" lift_position="0.0"/>
-      <Rotate name="Rule_Based_Rotation_1" angle_deg="-90.0"/>
-      <MoveLift name="LiftControl_1" lift_position="-0.1"/>
+
+      <!-- <Rotate name="Rule_Based_Rotation_2" angle_deg="-90.0"/> -->
+      
+      
+      <RotateLidar name="LidarRotation_1"
+        face_tape="true"
+        lift_position="-0.02"
+        position_threshold="0.01"/>
+      <MoveLift name="LiftControl_2" lift_position="-0.1"/>
+      
       <ResumeInference name="Resume_Publishing_2"/>
       <SetTaskInstruction name="SetTaskInstruction_2" instruction="Place the crate onto the table."/>
-      <InferenceUntilGesture name="VLA_Inference_3"/>
+      <!-- <InferenceUntilGesture name="VLA_Inference_3"
+        position_change_threshold="0.1"
+        static_duration="2.5"
+        history_window="2.0"/> -->
+      <InferenceUntilPosition name="ArmsControl_1"
+        left_positions="0.3922316969274152, 0.10839731426895019, 0.0065074341236086184, -2.0080527566917366, 0.24381905569947945, 0.07638744954674279, 0.02586707235103892, 0.09050486648525283"
+        right_positions="0.3742194068946643, -0.14899986824829825, 0.18719359302166966, -2.0959690305974323, -0.07971906407043192, 0.17344768705522567, -0.2131939073858318, 0.17794177139473438"
+        tolerance="0.5"/>
       <PauseInference name="Pause_Publishing_2"/>
-      <Rotate name="Rule_Based_Rotation_1" angle_deg="90.0"/>
-      <!-- <MoveArms name="ArmsControl_1"
+      <MoveArms name="ArmsControl_1"
         left_positions="0.75, 0.0, 0.0, -2.3, 0.0, 0.0, 0.0, 0.0"
         right_positions="0.75, 0.0, 0.0, -2.3, 0.0, 0.0, 0.0, 0.0"/>
-      <MoveHeadLift name="HeadLiftControl_1"
-        head_positions="0.695,0.0"
+      <MoveHeadLift name="LiftControl_2"
+        head_positions= "0.0,0.0"
         lift_position="-0.1"/>
-      <ResumeInference name="Resume_Publishing_1"/>
-      <InferenceUntilGesture name="VLA_Inference_1"
-        left_positions="0.313, 0.095, -0.023, -1.613, 0.185, -0.291, -0.134, 0.128"
-        right_positions="0.413, -0.003, -0.108, -1.798, -0.121, -0.236, 0.238, 0.132"/>
-      <PauseInference name="Pause_Publishing_2"/>
-      <Rotate name="Rule_Based_Rotation_1" angle_deg="90.0"/>
-      <SetTaskInstruction name="ChangeInstruction_1" instruction="stay"/>
-      <Rotate name="Rule_Based_Rotation_2" angle_deg="-90"/>
-      <MoveArms name="ArmsControl_2"
-        left_positions="0.75, 0.0, 0.0, -2.3, 0.0, 0.0, 0.0, 0.0"
-        right_positions="0.75, 0.0, 0.0, -2.3, 0.0, 0.0, 0.0, 0.0"/>
-      <MoveHeadLift name="HeadLiftControl_2"
-        head_positions="0.695,0.0"
-        lift_position="-0.1"/>
-      <ResumeInference name="Resume_Publishing_2"/>
-      <InferenceUntilGesture name="VLA_Inference_2"
-        left_positions="0.313, 0.095, -0.023, -1.613, 0.185, -0.291, -0.134, 0.128"
-        right_positions="0.413, -0.003, -0.108, -1.798, -0.121, -0.236, 0.238, 0.132"/> -->
     </Sequence>
   </BehaviorTree>
 
@@ -162,22 +177,6 @@
       <description>
         Detects bidirectional gripper state changes (closed→open or open→closed).
         Records initial state and returns SUCCESS when either gripper changes state.
-      </description>
-    </Action>
-    <Action ID="InferenceUntilPosition">
-      <input_port name="left_positions" default="0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0">
-        Target positions for left arm (8 values: 7 arm joints + gripper).
-      </input_port>
-      <input_port name="right_positions" default="0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0">
-        Target positions for right arm (8 values: 7 arm joints + gripper).
-      </input_port>
-      <input_port name="tolerance" default="0.1">
-        Euclidean distance tolerance (radians) for position matching.
-      </input_port>
-      <description>
-        Runs inference until both arms reach target positions.
-        Returns SUCCESS when Euclidean distance across all 16 joints is within tolerance.
-        Does NOT pause inference - use PauseInference action after this node.
       </description>
     </Action>
   </TreeNodesModel>
