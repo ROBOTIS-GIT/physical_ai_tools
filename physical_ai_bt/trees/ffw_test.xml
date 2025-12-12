@@ -41,7 +41,7 @@
       <SetTaskInstruction name="SetTaskInstruction_1" instruction="Grasp the handle of the crate."/>
       <InferenceUntilGesture name="VLA_Inference_2"
         position_change_threshold="0.05"
-        static_duration="1.0"
+        static_duration="2.0"
         history_window="1.0"/>
       <PauseInference name="Pause_Publishing_1"/>
 
