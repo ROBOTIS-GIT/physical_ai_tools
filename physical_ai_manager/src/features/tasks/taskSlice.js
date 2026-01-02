@@ -37,6 +37,7 @@ const initialState = {
     pushToHub: true,
     privateMode: false,
     useOptimizedSave: true,
+    recordRosBag2: false,
   },
   taskStatus: {
     robotType: '',
@@ -107,6 +108,9 @@ const taskSlice = createSlice({
     removeTag: (state, action) => {
       state.taskInfo.tags = state.taskInfo.tags.filter((tag) => tag !== action.payload);
     },
+    removeAllTags: (state) => {
+      state.taskInfo.tags = [];
+    },
     setHeartbeatStatus: (state, action) => {
       state.heartbeatStatus = action.payload;
     },
@@ -134,6 +138,7 @@ export const {
   setRecordInferenceMode,
   addTag,
   removeTag,
+  removeAllTags,
   setHeartbeatStatus,
   setLastHeartbeatTime,
   setUseMultiTaskMode,

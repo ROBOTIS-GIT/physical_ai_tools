@@ -59,6 +59,18 @@ def log_parameters(node: Node, params: Dict[str, Any], log_level: str = 'info') 
 
 
 def parse_topic_list_with_names(topic_list: List[str]) -> Dict[str, str]:
+    """
+    Parse topic list in 'name:/topic/path' format into a dictionary.
+
+    Args
+    ----
+    topic_list: List of topics in 'name:/topic/path' format
+
+    Returns
+    -------
+    Dictionary mapping names to topic paths
+
+    """
     parsed_topics = {}
     if topic_list:
         for topic_entry in topic_list:
@@ -68,4 +80,38 @@ def parse_topic_list_with_names(topic_list: List[str]) -> Dict[str, str]:
             except ValueError:
                 # Skip entries that don't have the expected format
                 continue
+    return parsed_topics
+
+
+def parse_topic_list(topic_list: List[str]) -> List[str]:
+    """
+    Parse topic list and return only valid topic paths.
+
+    Supports two formats:
+    1. 'name:/topic/path' - extracts the topic path
+    2. '/topic/path' - uses as is
+
+    Args
+    ----
+    topic_list: List of topics in either format
+
+    Returns
+    -------
+    List of topic paths
+
+    """
+    parsed_topics = []
+    if topic_list:
+        for topic_entry in topic_list:
+            # Skip empty strings
+            if not topic_entry or topic_entry.strip() == '':
+                continue
+
+            # Check if it's in 'name:/topic/path' format
+            if ':' in topic_entry:
+                _, topic_path = topic_entry.split(':', 1)
+                parsed_topics.append(topic_path)
+            else:
+                # Direct topic path
+                parsed_topics.append(topic_entry)
     return parsed_topics

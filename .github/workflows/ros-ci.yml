@@ -74,3 +74,4 @@ jobs:
           package-name: |
             physical_ai_server
             physical_ai_interfaces
+            rosbag_recorder

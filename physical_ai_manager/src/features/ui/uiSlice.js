@@ -80,6 +80,9 @@ const uiSlice = createSlice({
     setIsFirstLoadFalse: (state, action) => {
       state.isFirstLoad[action.payload] = false;
     },
+    setIsFirstLoadTrue: (state, action) => {
+      state.isFirstLoad[action.payload] = true;
+    },
   },
 });
 
@@ -96,6 +99,7 @@ export const {
   clearNotifications,
   setRobotTypeList,
   setIsFirstLoadFalse,
+  setIsFirstLoadTrue,
 } = uiSlice.actions;
 
 export default uiSlice.reducer;

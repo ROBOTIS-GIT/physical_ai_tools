@@ -173,6 +173,10 @@ const InfoPanel = () => {
     if (useMultiTaskMode && !info.useOptimizedSave) {
       dispatch(setTaskInfo({ ...info, useOptimizedSave: true }));
     }
+
+    if (useMultiTaskMode && info.recordRosBag2) {
+      dispatch(setTaskInfo({ ...info, recordRosBag2: false }));
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [useMultiTaskMode, info.useOptimizedSave, dispatch]);
 
@@ -745,6 +749,29 @@ const InfoPanel = () => {
           </div>
           {useMultiTaskMode && (
             <span className="text-xs text-blue-600 ml-1">(Auto-enabled in Multi-Task mode)</span>
+          )}
+        </div>
+      </div>
+
+      <div className={clsx('flex', 'items-center', 'mb-2')}>
+        <span className={classLabel}>Record Rosbag2</span>
+        <div className="flex flex-col">
+          <div className={clsx('flex', 'items-center')}>
+            <input
+              className={clsx(classCheckbox, {
+                'cursor-not-allowed opacity-50': useMultiTaskMode,
+              })}
+              type="checkbox"
+              checked={!!info.recordRosBag2}
+              onChange={(e) => handleChange('recordRosBag2', e.target.checked)}
+              disabled={!isEditable || useMultiTaskMode}
+            />
+            <span className={clsx('ml-2', 'text-sm', 'text-gray-500')}>
+              {info.recordRosBag2 ? 'Enabled' : 'Disabled'}
+            </span>
+          </div>
+          {useMultiTaskMode && (
+            <span className="text-xs text-blue-600 ml-1">(Auto-disabled in Multi-Task mode)</span>
           )}
         </div>
       </div>

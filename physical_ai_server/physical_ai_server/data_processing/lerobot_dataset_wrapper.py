@@ -227,6 +227,11 @@ class LeRobotDatasetWrapper(LeRobotDataset):
         )
         self.append_episode_buffer(episode_buffer, episode_length)
 
+    def get_episode_index(self):
+        if self.episode_buffer is None or 'episode_index' not in self.episode_buffer:
+            return None
+        return self.episode_buffer['episode_index']
+
     def save_episode_without_write_image(self):
         episode_buffer = self.episode_buffer
         validate_episode_buffer(

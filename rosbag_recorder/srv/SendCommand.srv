@@ -1,0 +1,12 @@
+uint8 PREPARE = 0
+uint8 START = 1
+uint8 STOP = 2
+uint8 STOP_AND_DELETE = 3
+uint8 FINISH = 4
+
+string uri # only used for START command
+string[] topics # only used for PREPARE command
+uint8 command
+---
+bool success
+string message
