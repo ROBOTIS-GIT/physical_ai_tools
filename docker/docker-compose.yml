@@ -31,6 +31,7 @@ services:
       - ./huggingface:/root/.cache/huggingface
       - /etc/timezone:/etc/timezone:ro
       - /etc/localtime:/etc/localtime:ro
+      - /var/run/docker.sock:/var/run/docker.sock
     privileged: true
     command: bash
     runtime: nvidia
@@ -58,7 +59,7 @@ services:
       memlock: 8428281856
     network_mode: host
     environment:
-      - PYTHONPATH=.:$PYTHONPATH
+      - PYTHONPATH=/workspace:$PYTHONPATH
       - TERM=${TERM:-xterm-256color}
       - EDITOR=vi
     volumes:

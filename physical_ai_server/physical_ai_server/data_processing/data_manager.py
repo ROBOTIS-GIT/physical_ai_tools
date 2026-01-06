@@ -656,7 +656,8 @@ class DataManager:
     ):
         download_path = {
             'dataset': Path.home() / '.cache/huggingface/lerobot',
-            'model': Path.home() / 'ros2_ws/src/physical_ai_tools/lerobot/outputs/train/'
+            'model': Path.home() / 'ros2_ws/src/physical_ai_tools/lerobot/outputs/train/',
+            'policy': Path.home() / '.cache/huggingface'  # For Demo mode policy models
         }
 
         save_path = download_path.get(repo_type)
@@ -665,6 +666,9 @@ class DataManager:
             raise ValueError(f'Invalid repo type: {repo_type}')
 
         save_dir = save_path / repo_id
+        
+        # Map 'policy' to 'model' for HuggingFace API (HF only supports 'model', 'dataset', 'space')
+        hf_repo_type = 'model' if repo_type == 'policy' else repo_type
 
         try:
             print(f'Starting download of {repo_id} ({repo_type})...')
@@ -678,7 +682,7 @@ class DataManager:
 
             result = snapshot_download(
                 repo_id=repo_id,
-                repo_type=repo_type,
+                repo_type=hf_repo_type,  # Use mapped type for HuggingFace API
                 local_dir=save_dir,
                 tqdm_class=ProgressTqdmWrapper
             )

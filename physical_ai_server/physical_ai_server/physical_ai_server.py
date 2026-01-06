@@ -55,6 +55,7 @@ from physical_ai_server.communication.communicator import Communicator
 from physical_ai_server.data_processing.data_manager import DataManager
 from physical_ai_server.data_processing.hf_api_worker import HfApiWorker
 from physical_ai_server.inference.client_inference import ZmqInferenceClient
+from physical_ai_server.inference.isaac_groot_controller import IsaacGr00tServerController
 from physical_ai_server.inference.inference_manager import InferenceManager
 from physical_ai_server.inference.visualize_inference_result import InferenceResultVisualizer
 from physical_ai_server.timer.timer_manager import TimerManager
@@ -111,7 +112,11 @@ class PhysicalAIServer(Node):
         self.remain_action = []
         self.wait_inference = False
         self.stop_inference = False
+        self.inference_paused = False  # Track pause vs complete shutdown
         self.inference_check_time = time.time()
+        
+        # Initialize Isaac GR00T server controller
+        self.isaac_groot_controller = IsaacGr00tServerController(logger=self.get_logger())
 
         self._setup_timer_callbacks()
         self.previous_data_manager_status = None
@@ -687,7 +692,7 @@ class PhysicalAIServer(Node):
             current_status.error = error_msg
             self.communicator.publish_status(status=current_status)
             if self.zmq_client is not None:
-                self.zmq_client.stop_inference()
+                # Just close the client
                 self.zmq_client = None
             self.timer_manager.stop(timer_name=self.operation_mode)
             return
@@ -698,6 +703,24 @@ class PhysicalAIServer(Node):
             return
 
         if self.zmq_client is None:
+            # Clean up any existing server first to avoid "Policy already loaded" error
+            if self.isaac_groot_controller.is_server_running():
+                self.get_logger().info('Found existing isaac_groot server, stopping it first...')
+                self.isaac_groot_controller.stop_server()
+                time.sleep(2)  # Wait for cleanup
+            
+            # Start fresh isaac_groot server
+            self.get_logger().info('Starting isaac_groot inference server...')
+            success, msg = self.isaac_groot_controller.start_server(
+                host=self.inference_info.get('server_ip', 'localhost'),
+                port=self.inference_info.get('server_port', 5555)
+            )
+            if not success:
+                self.get_logger().error(f'Failed to start isaac_groot server: {msg}')
+                return
+            # Wait a bit for server to fully start
+            time.sleep(3)
+            
             self.zmq_client = ZmqInferenceClient(
                 host=self.inference_info['server_ip'],
                 port=self.inference_info['server_port'],
@@ -720,16 +743,25 @@ class PhysicalAIServer(Node):
             self._reset_inference_state()
 
         try:
+            # Handle pause state - keep server running, just skip action execution
+            if self.inference_paused:
+                self.get_logger().info('Inference is paused, skipping action execution')
+                return
+            
+            # Handle complete shutdown - cleanup everything including server
             if not self.on_inference:
                 self.get_logger().info('Inference mode is not active')
                 current_status = self.data_manager.get_current_record_status()
                 current_status.phase = TaskStatus.READY
                 self.communicator.publish_status(status=current_status)
                 if self.zmq_client is not None:
-                    self.zmq_client.stop_inference()
+                    # Just close the client, no need to call stop_inference
                     self.zmq_client = None
                     # Reset inference state variables
                     self._reset_inference_state()
+                    # Stop isaac_groot server only on complete shutdown (not pause)
+                    self.get_logger().info('Stopping isaac_groot inference server...')
+                    self.isaac_groot_controller.stop_server()
                 self.timer_manager.stop(timer_name=self.operation_mode)
                 return
 
@@ -820,6 +852,9 @@ class PhysicalAIServer(Node):
                     self.zmq_client = None
                     # Reset inference state variables
                     self._reset_inference_state()
+                    # Stop isaac_groot server
+                    self.get_logger().info('Stopping isaac_groot inference server...')
+                    self.isaac_groot_controller.stop_server()
                 self.timer_manager.stop(timer_name=self.operation_mode)
                 return
 
@@ -855,6 +890,9 @@ class PhysicalAIServer(Node):
                 self.zmq_client = None
                 # Reset inference state variables
                 self._reset_inference_state()
+                # Stop isaac_groot server
+                self.get_logger().info('Stopping isaac_groot inference server...')
+                self.isaac_groot_controller.stop_server()
             self.timer_manager.stop(timer_name=self.operation_mode)
             return
 
@@ -1051,9 +1089,19 @@ class PhysicalAIServer(Node):
                 response.message = 'Recording started'
 
             elif request.command == SendCommand.Request.START_INFERENCE:
-                # Always initialize all inference components for new session
-                self.get_logger().info('Starting new inference session')
                 task_info = request.task_info
+                
+                # Check if resuming from paused state
+                if self.inference_paused:
+                    self.get_logger().info('Resuming inference from paused state')
+                    self.stop_inference = False
+                    self.inference_paused = False
+                    response.success = True
+                    response.message = 'Inference resumed'
+                    return response
+                
+                # Starting new inference session
+                self.get_logger().info('Starting new inference session')
                 
                 self.joint_topic_types = self.communicator.get_publisher_msg_types()
                 self.operation_mode = 'inference'
@@ -1114,15 +1162,16 @@ class PhysicalAIServer(Node):
                     response.message = 'Not currently recording'
                 else:
                     if request.command == SendCommand.Request.STOP:
-                        self.get_logger().info('Stop')
+                        self.get_logger().info('Stop (pause inference)')
                         if self.on_recording:
                             self.data_manager.record_stop()
                             response.success = True
                             response.message = 'Recording stopped'
                         if self.on_inference:
                             self.stop_inference = True
+                            self.inference_paused = True  # Set pause state
                             response.success = True
-                            response.message = 'Inference stopped'
+                            response.message = 'Inference paused'
 
                     elif request.command == SendCommand.Request.MOVE_TO_NEXT:
                         self.get_logger().info('Moving to next episode')
@@ -1140,12 +1189,13 @@ class PhysicalAIServer(Node):
                         response.message = 'Re-recording current episode'
 
                     elif request.command == SendCommand.Request.FINISH:
-                        self.get_logger().info('Terminating all operations')
+                        self.get_logger().info('Finish (complete shutdown)')
                         if self.on_recording:
                             self.data_manager.record_finish()
                             self.on_recording = False
                         if self.on_inference:
                             self.on_inference = False
+                            self.inference_paused = False  # Clear pause state for complete shutdown
                         response.success = True
                         response.message = 'All operations terminated'
 

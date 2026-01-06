@@ -25,6 +25,8 @@ import ImageGrid from '../components/ImageGrid';
 import InferencePanel from '../components/InferencePanel';
 import { addTag } from '../features/tasks/taskSlice';
 import { setIsFirstLoadFalse } from '../features/ui/uiSlice';
+import { setTaskInfo } from '../features/tasks/taskSlice';
+import { useRosServiceCaller } from '../hooks/useRosServiceCaller';
 
 export default function InferencePage({ isActive = true }) {
   const dispatch = useDispatch();
@@ -37,8 +39,128 @@ export default function InferencePage({ isActive = true }) {
   const taskInfo = useSelector((state) => state.tasks.taskInfo);
 
   const [isRightPanelCollapsed, setIsRightPanelCollapsed] = useState(false);
+  const [isDemoLoading, setIsDemoLoading] = useState(false);
 
   const isFirstLoad = useSelector((state) => state.ui.isFirstLoad.inference);
+
+  // ROS service caller
+  const { controlHfServer, setInferenceServerInfo, sendRecordCommand, browseFile } = useRosServiceCaller();
+
+  // Demo mode handler
+  const handleDemoMode = async () => {
+    if (isDemoLoading) return;
+
+    try {
+      setIsDemoLoading(true);
+
+      const demoConfig = {
+        repoId: 'ROBOTIS/ffw_bg2_rev4_pick_coffee_bottle_env5_1_to_34_joint_fix_40k',
+        policyPath: '/root/.cache/huggingface/ROBOTIS/ffw_bg2_rev4_pick_coffee_bottle_env5_1_to_34_joint_fix_40k',
+        taskInstruction: 'Place bottles in color-matching boxes: red→top left, green→bottom left, white→top right, orange→bottom right',
+        fps: 15,
+        robotType: 'ffw_bg2_rev4'
+      };
+
+      // 1. Update UI values first
+      dispatch(setTaskInfo({
+        ...taskInfo,
+        taskInstruction: [demoConfig.taskInstruction],
+        policyPath: 'Gr00t_Demo',
+        fps: demoConfig.fps
+      }));
+
+      // 2. Check if model exists and download if needed
+      toast.loading('Checking demo model...', { id: 'demo-download' });
+
+      // Check if model directory exists
+      let modelExists = false;
+      try {
+        const checkResult = await browseFile('list', demoConfig.policyPath);
+        modelExists = checkResult && checkResult.success && checkResult.items && checkResult.items.length > 5;
+      } catch (e) {
+        console.log('Model check failed, will download:', e);
+      }
+
+      if (!modelExists) {
+        // Start download
+        toast.loading('Downloading demo model (this may take a few minutes)...', { id: 'demo-download' });
+        const downloadResult = await controlHfServer('download', demoConfig.repoId, 'policy');
+
+        if (!downloadResult || !downloadResult.success) {
+          toast.error(downloadResult?.message || 'Failed to start download', { id: 'demo-download' });
+          return;
+        }
+
+        // Poll for download completion
+        let downloadComplete = false;
+        let attempts = 0;
+        const maxAttempts = 60; // 5 minutes max
+
+        while (!downloadComplete && attempts < maxAttempts) {
+          await new Promise(resolve => setTimeout(resolve, 5000)); // Wait 5 seconds
+
+          try {
+            const checkAgain = await browseFile('list', demoConfig.policyPath);
+            if (checkAgain && checkAgain.success && checkAgain.items) {
+              const hasSafetensors = checkAgain.items.some(item =>
+                item.name && item.name.includes('.safetensors')
+              );
+              if (hasSafetensors && checkAgain.items.length > 5) {
+                downloadComplete = true;
+              }
+            }
+          } catch (e) {
+            // Continue polling
+          }
+
+          attempts++;
+          if (!downloadComplete && attempts < maxAttempts) {
+            toast.loading(`Downloading model... (${attempts * 5}s)`, { id: 'demo-download' });
+          }
+        }
+
+        if (!downloadComplete) {
+          toast.error('Model download timeout. Please try again later.', { id: 'demo-download' });
+          return;
+        }
+      }
+
+      toast.success('Model ready!', { id: 'demo-download' });
+
+      // 3. Configure inference server
+      toast.loading('Configuring server...', { id: 'demo-config' });
+      const configResult = await setInferenceServerInfo({
+        server_ip: '0.0.0.0',
+        server_port: 5555,
+        policy_type: 'GR00T_N1_5',
+        policy_path: demoConfig.policyPath,
+        robot_type: demoConfig.robotType
+      });
+
+      if (!configResult || !configResult.success) {
+        toast.error(configResult?.message || 'Failed to configure server', { id: 'demo-config' });
+        return;
+      }
+      toast.success('Server configured!', { id: 'demo-config' });
+
+      // 4. Start inference
+      toast.loading('Starting inference...', { id: 'demo-start' });
+      const startResult = await sendRecordCommand('start_inference');
+
+      if (!startResult || !startResult.success) {
+        toast.error(startResult?.message || 'Failed to start inference', { id: 'demo-start' });
+        return;
+      }
+
+      toast.success('🎮 Demo mode started!', { id: 'demo-start' });
+
+    } catch (error) {
+      console.error('Demo mode error:', error);
+      toast.error(`Demo mode failed: ${error.message}`);
+    } finally {
+      setIsDemoLoading(false);
+    }
+  };
 
   useEffect(() => {
     toasts
@@ -162,6 +284,38 @@ export default function InferencePage({ isActive = true }) {
           <div className={classRobotTypeContainer}>
             <div className={classRobotType}>Robot Type</div>
             <div className={classRobotTypeValue}>{taskStatus?.robotType}</div>
+            {taskStatus?.robotType === 'ffw_bg2_rev4' && (
+              <button
+                onClick={handleDemoMode}
+                disabled={isDemoLoading}
+                className={clsx(
+                  'ml-2',
+                  'px-3',
+                  'py-1',
+                  'text-sm',
+                  'font-medium',
+                  'bg-gradient-to-r',
+                  'from-purple-500',
+                  'to-indigo-600',
+                  'text-white',
+                  'rounded-full',
+                  'hover:from-purple-600',
+                  'hover:to-indigo-700',
+                  'transition-all',
+                  'duration-200',
+                  'shadow-md',
+                  'hover:shadow-lg',
+                  'transform',
+                  'hover:scale-105',
+                  'disabled:opacity-50',
+                  'disabled:cursor-not-allowed',
+                  'disabled:transform-none'
+                )}
+                title="Start Demo Mode"
+              >
+                {isDemoLoading ? '⏳ Loading...' : '🎮 Demo'}
+              </button>
+            )}
           </div>
           <div className={classHeartbeatStatus}>
             <HeartbeatStatus />

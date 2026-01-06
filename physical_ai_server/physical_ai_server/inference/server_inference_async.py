@@ -85,12 +85,21 @@ class ZmqInferenceServer:
             }
 
         try:
+            # Convert local cache path to HuggingFace repo format if needed
+            policy_path = data['policy_path']
+            if policy_path.startswith('/root/.cache/huggingface/'):
+                # Extract repo format from cache path
+                # e.g., '/root/.cache/huggingface/ROBOTIS/model_name' -> 'ROBOTIS/model_name'
+                parts = policy_path.replace('/root/.cache/huggingface/', '').split('/')
+                if len(parts) >= 2:
+                    policy_path = f'{parts[0]}/{parts[1]}'
+
             if data['policy_type'] == 'GR00T_N1_5':
                 from gr00t.experiment.data_config import load_data_config
                 from gr00t.model.policy import Gr00tPolicy
                 data_config = load_data_config(data['robot_type'])
                 self.policy = Gr00tPolicy(
-                    model_path=data['policy_path'],
+                    model_path=policy_path,
                     modality_config=data_config.modality_config(),
                     modality_transform=data_config.transform(),
                     embodiment_tag='new_embodiment',
@@ -107,7 +116,7 @@ class ZmqInferenceServer:
                 from trt_model_forward import setup_tensorrt_engines
                 data_config = load_data_config(data['robot_type'])
                 self.policy = Gr00tPolicy(
-                    model_path=data['policy_path'],
+                    model_path=policy_path,
                     modality_config=data_config.modality_config(),
                     modality_transform=data_config.transform(),
                     embodiment_tag='new_embodiment',
