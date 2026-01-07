@@ -47,6 +47,14 @@ const InferenceServerConfig = ({ disabled = false }) => {
     }
   }, [taskStatus?.robotType]);
 
+  // Sync policyPath from Redux taskInfo (e.g., when set by Demo mode)
+  const taskInfo = useSelector((state) => state.tasks.taskInfo);
+  useEffect(() => {
+    if (taskInfo?.policyPath && taskInfo.policyPath !== policyPath) {
+      setPolicyPath(taskInfo.policyPath);
+    }
+  }, [taskInfo?.policyPath, policyPath]);
+
   const handlePolicyPathSelect = useCallback((item) => {
     setPolicyPath(item.full_path);
     setShowPolicyPathModal(false);

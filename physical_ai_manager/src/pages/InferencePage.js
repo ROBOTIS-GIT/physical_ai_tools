@@ -14,7 +14,7 @@
 //
 // Author: Kiwoong Park
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useSelector, useDispatch } from 'react-redux';
 import clsx from 'clsx';
 import toast, { useToasterStore } from 'react-hot-toast';
@@ -27,6 +27,8 @@ import { addTag } from '../features/tasks/taskSlice';
 import { setIsFirstLoadFalse } from '../features/ui/uiSlice';
 import { setTaskInfo } from '../features/tasks/taskSlice';
 import { useRosServiceCaller } from '../hooks/useRosServiceCaller';
+import ROSLIB from 'roslib';
+import rosConnectionManager from '../utils/rosConnectionManager';
 
 export default function InferencePage({ isActive = true }) {
   const dispatch = useDispatch();
@@ -34,6 +36,40 @@ export default function InferencePage({ isActive = true }) {
   // Toast limit implementation using useToasterStore
   const { toasts } = useToasterStore();
   const TOAST_LIMIT = 3;
+
+  const downloadProgressRef = useRef({ current: 0, total: 0, percentage: 0 });
+  const rosbridgeUrl = useSelector((state) => state.ros.rosbridgeUrl);
+
+  useEffect(() => {
+    let topic = null;
+    const setupSubscription = async () => {
+      try {
+        const ros = await rosConnectionManager.getConnection(rosbridgeUrl);
+        if (ros && ros.isConnected) {
+          topic = new ROSLIB.Topic({
+            ros: ros,
+            name: '/huggingface/status',
+            messageType: 'physical_ai_interfaces/msg/HFOperationStatus'
+          });
+          topic.subscribe((message) => {
+            if (message.operation === 'download' && message.status === 'in_progress') {
+              downloadProgressRef.current = {
+                current: message.progress_current || 0,
+                total: message.progress_total || 0,
+                percentage: message.progress_percentage || 0
+              };
+            }
+          });
+        }
+      } catch (e) {
+        console.error('Failed to subscribe to HF status:', e);
+      }
+    };
+    setupSubscription();
+    return () => {
+      if (topic) topic.unsubscribe();
+    };
+  }, [rosbridgeUrl]);
 
   const taskStatus = useSelector((state) => state.tasks.taskStatus);
   const taskInfo = useSelector((state) => state.tasks.taskInfo);
@@ -54,8 +90,8 @@ export default function InferencePage({ isActive = true }) {
       setIsDemoLoading(true);
 
       const demoConfig = {
-        repoId: 'ROBOTIS/ffw_bg2_rev4_pick_coffee_bottle_env5_1_to_34_joint_fix_40k',
-        policyPath: '/root/.cache/huggingface/ROBOTIS/ffw_bg2_rev4_pick_coffee_bottle_env5_1_to_34_joint_fix_40k',
+        repoId: 'ROBOTIS/ffw_bg2_demo_model',
+        policyPath: '/root/.cache/huggingface/ROBOTIS/ffw_bg2_demo_model/ffw_bg2_rev4_pick_coffee_bottle_env5_1_to_31_joint_fix_20k',
         taskInstruction: 'Place bottles in color-matching boxes: red→top left, green→bottom left, white→top right, orange→bottom right',
         fps: 15,
         robotType: 'ffw_bg2_rev4'
@@ -65,7 +101,7 @@ export default function InferencePage({ isActive = true }) {
       dispatch(setTaskInfo({
         ...taskInfo,
         taskInstruction: [demoConfig.taskInstruction],
-        policyPath: 'Gr00t_Demo',
+        policyPath: demoConfig.policyPath,
         fps: demoConfig.fps
       }));
 
@@ -75,8 +111,17 @@ export default function InferencePage({ isActive = true }) {
       // Check if model directory exists
       let modelExists = false;
       try {
-        const checkResult = await browseFile('list', demoConfig.policyPath);
-        modelExists = checkResult && checkResult.success && checkResult.items && checkResult.items.length > 5;
+        const checkResult = await browseFile('browse', demoConfig.policyPath);
+        console.log('Initial check result:', checkResult);
+
+        if (checkResult && checkResult.success && checkResult.items) {
+          const names = checkResult.items.map(i => i.name).join(', ');
+          console.log('Items in folder:', names);
+          // Model exists if there are .safetensors files or config.json
+          modelExists = checkResult.items.some(item =>
+            item.name.endsWith('.safetensors') || item.name === 'config.json'
+          );
+        }
       } catch (e) {
         console.log('Model check failed, will download:', e);
       }
@@ -94,24 +139,83 @@ export default function InferencePage({ isActive = true }) {
         // Poll for download completion
         let downloadComplete = false;
         let attempts = 0;
-        const maxAttempts = 60; // 5 minutes max
+        // Removed maxAttempts limit as per user request to support long downloads
 
-        while (!downloadComplete && attempts < maxAttempts) {
+        while (!downloadComplete) {
           await new Promise(resolve => setTimeout(resolve, 5000)); // Wait 5 seconds
 
           try {
-            const checkAgain = await browseFile('list', demoConfig.policyPath);
+            const checkAgain = await browseFile('browse', demoConfig.policyPath);
             if (checkAgain && checkAgain.success && checkAgain.items) {
-              const hasSafetensors = checkAgain.items.some(item =>
-                item.name && item.name.includes('.safetensors')
+              // Check for .safetensors files or config.json
+              const hasModelFiles = checkAgain.items.some(item =>
+                item.name.endsWith('.safetensors') || item.name === 'config.json'
               );
-              if (hasSafetensors && checkAgain.items.length > 5) {
+
+              // Debug logging
+              const names = checkAgain.items.map(i => i.name).join(', ');
+              console.log('Polling check:', names);
+
+              if (hasModelFiles) {
                 downloadComplete = true;
+                toast.success('Model detected!', { id: 'demo-download' });
               }
             }
           } catch (e) {
+            console.log('Polling error:', e);
             // Continue polling
           }
+
+          if (!downloadComplete) {
+            if (downloadProgressRef.current.total > 0) {
+              const currentGB = (downloadProgressRef.current.current / (1024 * 1024 * 1024)).toFixed(2);
+              const totalGB = (downloadProgressRef.current.total / (1024 * 1024 * 1024)).toFixed(2);
+              const percent = (downloadProgressRef.current.percentage * 100).toFixed(1);
+              toast.loading(`Downloading: ${currentGB}/${totalGB} GB (${percent}%)`, { id: 'demo-download' });
+            } else {
+              attempts++;
+              toast.loading(`Downloading model... (${attempts * 5}s)`, { id: 'demo-download' });
+            }
+          }
+        }
+      }
+
+      toast.success('Model ready!', { id: 'demo-download' });
+
+      // 3. Configure inference server
+      toast.loading('Configuring server...', { id: 'demo-config' });
+      const configResult = await setInferenceServerInfo({
+        server_ip: '0.0.0.0',
+        server_port: 5555,
+        policy_type: 'GR00T_N1_5',
+        policy_path: demoConfig.policyPath,
+        robot_type: demoConfig.robotType
+      });
+
+      if (!configResult || !configResult.success) {
+        toast.error(configResult?.message || 'Failed to configure server', { id: 'demo-config' });
+        return;
+      }
+      toast.success('Server configured!', { id: 'demo-config' });
+
+      // 4. Start inference
+      toast.loading('Starting inference...', { id: 'demo-start' });
+      const startResult = await sendRecordCommand('start_inference');
+
+      if (!startResult || !startResult.success) {
+        toast.error(startResult?.message || 'Failed to start inference', { id: 'demo-start' });
+        return;
+      }
+
+      toast.success('🎮 Demo mode started!', { id: 'demo-start' });
+
+    } catch (error) {
+      console.error('Demo mode error:', error);
+      toast.error(`Demo mode failed: ${error.message}`);
+    } finally {
+      setIsDemoLoading(false);
+    }
+  };
 
           attempts++;
           if (!downloadComplete && attempts < maxAttempts) {
