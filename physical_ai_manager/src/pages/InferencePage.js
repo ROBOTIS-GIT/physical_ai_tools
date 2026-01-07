@@ -217,55 +217,6 @@ export default function InferencePage({ isActive = true }) {
     }
   };
 
-          attempts++;
-          if (!downloadComplete && attempts < maxAttempts) {
-            toast.loading(`Downloading model... (${attempts * 5}s)`, { id: 'demo-download' });
-          }
-        }
-
-        if (!downloadComplete) {
-          toast.error('Model download timeout. Please try again later.', { id: 'demo-download' });
-          return;
-        }
-      }
-
-      toast.success('Model ready!', { id: 'demo-download' });
-
-      // 3. Configure inference server
-      toast.loading('Configuring server...', { id: 'demo-config' });
-      const configResult = await setInferenceServerInfo({
-        server_ip: '0.0.0.0',
-        server_port: 5555,
-        policy_type: 'GR00T_N1_5',
-        policy_path: demoConfig.policyPath,
-        robot_type: demoConfig.robotType
-      });
-
-      if (!configResult || !configResult.success) {
-        toast.error(configResult?.message || 'Failed to configure server', { id: 'demo-config' });
-        return;
-      }
-      toast.success('Server configured!', { id: 'demo-config' });
-
-      // 4. Start inference
-      toast.loading('Starting inference...', { id: 'demo-start' });
-      const startResult = await sendRecordCommand('start_inference');
-
-      if (!startResult || !startResult.success) {
-        toast.error(startResult?.message || 'Failed to start inference', { id: 'demo-start' });
-        return;
-      }
-
-      toast.success('🎮 Demo mode started!', { id: 'demo-start' });
-
-    } catch (error) {
-      console.error('Demo mode error:', error);
-      toast.error(`Demo mode failed: ${error.message}`);
-    } finally {
-      setIsDemoLoading(false);
-    }
-  };
-
   useEffect(() => {
     toasts
       .filter((t) => t.visible) // Only consider visible toasts

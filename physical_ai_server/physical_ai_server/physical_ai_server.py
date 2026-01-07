@@ -698,7 +698,7 @@ class PhysicalAIServer(Node):
             return
 
         # Check if inference_info is configured
-        if not hasattr(self, 'inference_info') or self.inference_info is None:
+        if not hasattr(self, 'inference_info') or not self.inference_info or 'server_ip' not in self.inference_info:
             self.get_logger().warn('Inference server not configured. Please configure via UI first.')
             return
 
