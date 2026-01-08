@@ -108,7 +108,7 @@ export default function InferencePage({ isActive = true }) {
       // 2. Check if model exists and download if needed
       toast.loading('Checking demo model...', { id: 'demo-download' });
 
-      // Check if model directory exists
+      // Check if model directory exists and download is complete
       let modelExists = false;
       try {
         const checkResult = await browseFile('browse', demoConfig.policyPath);
@@ -117,10 +117,29 @@ export default function InferencePage({ isActive = true }) {
         if (checkResult && checkResult.success && checkResult.items) {
           const names = checkResult.items.map(i => i.name).join(', ');
           console.log('Items in folder:', names);
-          // Model exists if there are .safetensors files or config.json
-          modelExists = checkResult.items.some(item =>
-            item.name.endsWith('.safetensors') || item.name === 'config.json'
+
+          // Check for incomplete/temp files that indicate download in progress
+          const hasIncompleteFiles = checkResult.items.some(item =>
+            item.name.endsWith('.incomplete') ||
+            item.name.endsWith('.tmp') ||
+            item.name.endsWith('.lock') ||
+            item.name.startsWith('.') && item.name.includes('incomplete')
           );
+
+          if (hasIncompleteFiles) {
+            console.log('Download in progress: found incomplete/temp files');
+            modelExists = false;
+          } else {
+            // Model exists if there are .safetensors files AND config.json (both required)
+            const hasSafetensors = checkResult.items.some(item =>
+              item.name.endsWith('.safetensors')
+            );
+            const hasConfig = checkResult.items.some(item =>
+              item.name === 'config.json'
+            );
+            modelExists = hasSafetensors && hasConfig;
+            console.log(`Model check: safetensors=${hasSafetensors}, config=${hasConfig}, exists=${modelExists}`);
+          }
         }
       } catch (e) {
         console.log('Model check failed, will download:', e);
@@ -147,18 +166,36 @@ export default function InferencePage({ isActive = true }) {
           try {
             const checkAgain = await browseFile('browse', demoConfig.policyPath);
             if (checkAgain && checkAgain.success && checkAgain.items) {
-              // Check for .safetensors files or config.json
-              const hasModelFiles = checkAgain.items.some(item =>
-                item.name.endsWith('.safetensors') || item.name === 'config.json'
-              );
-
               // Debug logging
               const names = checkAgain.items.map(i => i.name).join(', ');
               console.log('Polling check:', names);
 
-              if (hasModelFiles) {
-                downloadComplete = true;
-                toast.success('Model detected!', { id: 'demo-download' });
+              // Check for incomplete/temp files that indicate download in progress
+              const hasIncompleteFiles = checkAgain.items.some(item =>
+                item.name.endsWith('.incomplete') ||
+                item.name.endsWith('.tmp') ||
+                item.name.endsWith('.lock') ||
+                item.name.startsWith('.') && item.name.includes('incomplete')
+              );
+
+              if (!hasIncompleteFiles) {
+                // Check for .safetensors files AND config.json (both required)
+                const hasSafetensors = checkAgain.items.some(item =>
+                  item.name.endsWith('.safetensors')
+                );
+                const hasConfig = checkAgain.items.some(item =>
+                  item.name === 'config.json'
+                );
+
+                if (hasSafetensors && hasConfig) {
+                  downloadComplete = true;
+                  console.log('Download complete: found safetensors and config.json');
+                  toast.success('Model download complete!', { id: 'demo-download' });
+                } else {
+                  console.log(`Waiting: safetensors=${hasSafetensors}, config=${hasConfig}`);
+                }
+              } else {
+                console.log('Download still in progress: incomplete files found');
               }
             }
           } catch (e) {

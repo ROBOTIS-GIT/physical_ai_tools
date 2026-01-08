@@ -300,7 +300,7 @@ class PhysicalAIServer(Node):
         self.timer_manager = TimerManager(node=self)
         self.timer_manager.set_timer(
             timer_name=self.operation_mode,
-            timer_frequency=15,
+            timer_frequency=10,
             callback_function=self.timer_callback_dict[self.operation_mode]
         )
         self.timer_manager.start(timer_name=self.operation_mode)
@@ -796,7 +796,7 @@ class PhysicalAIServer(Node):
                             result = self.zmq_client.get_inference_result()
                             left_action, right_action = result.values()
                             new_action = np.hstack((left_action, right_action)).tolist()
-                            skip_action = 0
+                            skip_action = 4
                             if len(self.remain_action) > 0:
                                 skip_action = self.find_best_chunk_start_index(
                                     new_action_chunk=new_action,
