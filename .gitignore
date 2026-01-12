@@ -734,3 +734,6 @@ doc/
 ## GurumDDS
 *.ar
 
+
+# Claude Code agents (managed separately)
+.claude/
