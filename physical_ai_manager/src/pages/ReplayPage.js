@@ -16,25 +16,14 @@
 
 import React, { useEffect, useRef, useState, useCallback, useMemo } from 'react';
 import { useDispatch, useSelector } from 'react-redux';
-import { MdFolder, MdPlayArrow, MdPause, MdRefresh, MdExpandMore, MdExpandLess, MdUnfoldMore, MdUnfoldLess, MdReplay, MdKeyboardArrowUp, MdKeyboardArrowDown, MdClose } from 'react-icons/md';
-import {
-  LineChart,
-  Line,
-  XAxis,
-  YAxis,
-  CartesianGrid,
-  Tooltip,
-  ResponsiveContainer,
-  ReferenceLine,
-  ReferenceDot,
-} from 'recharts';
+import { MdFolder, MdPlayArrow, MdPause, MdRefresh, MdUnfoldMore, MdUnfoldLess, MdReplay, MdKeyboardArrowUp, MdKeyboardArrowDown, MdClose } from 'react-icons/md';
 import toast from 'react-hot-toast';
 import clsx from 'clsx';
 import { useRosServiceCaller } from '../hooks/useRosServiceCaller';
 import FileBrowserModal from '../components/FileBrowserModal';
+import { JointChart } from '../components/replay';
 import {
   lttbDownsample,
-  prepareChartData,
   formatFileSize,
   formatDateTime,
   formatTime,
@@ -51,217 +40,8 @@ import {
   setVideoLoadProgress,
 } from '../features/replay/replaySlice';
 
-// Fixed colors for state and action
-const STATE_COLOR = '#dc2626';  // Red for state
-const ACTION_COLOR = '#2563eb'; // Blue for action
-
-// Utilities imported from ../utils/chartUtils.js:
-// - lttbDownsample, prepareChartData, formatFileSize, formatDateTime, formatTime
-
-// Individual Joint Chart Component showing both State and Action
-function JointChart({ name, stateData, actionData, currentTime, duration, isExpanded, onToggle, hasAction, onSeek }) {
-  // Get current state value at currentTime
-  const currentStateValue = useMemo(() => {
-    if (!stateData.length) return null;
-    const closest = stateData.reduce((prev, curr) =>
-      Math.abs(curr.time - currentTime) < Math.abs(prev.time - currentTime) ? curr : prev
-    );
-    const value = closest[`state_${name}`];
-    return typeof value === 'number' ? value : null;
-  }, [stateData, name, currentTime]);
-
-  // Get current action value at currentTime
-  const currentActionValue = useMemo(() => {
-    if (!actionData.length) return null;
-    const closest = actionData.reduce((prev, curr) =>
-      Math.abs(curr.time - currentTime) < Math.abs(prev.time - currentTime) ? curr : prev
-    );
-    const value = closest[`action_${name}`];
-    return typeof value === 'number' ? value : null;
-  }, [actionData, name, currentTime]);
-
-  // Merge state and action data for the chart
-  const mergedData = useMemo(() => {
-    const timeMap = new Map();
-
-    // Add state data
-    stateData.forEach((point) => {
-      const time = point.time;
-      if (!timeMap.has(time)) {
-        timeMap.set(time, { time });
-      }
-      timeMap.get(time)[`state_${name}`] = point[`state_${name}`];
-    });
-
-    // Add action data
-    actionData.forEach((point) => {
-      const time = point.time;
-      if (!timeMap.has(time)) {
-        timeMap.set(time, { time });
-      }
-      timeMap.get(time)[`action_${name}`] = point[`action_${name}`];
-    });
-
-    // Sort by time and return
-    return Array.from(timeMap.values()).sort((a, b) => a.time - b.time);
-  }, [stateData, actionData, name]);
-
-  // Calculate X-axis domain to include full duration
-  const xDomain = useMemo(() => {
-    const maxDataTime = mergedData.length > 0
-      ? Math.max(...mergedData.map(d => d.time))
-      : 0;
-    return [0, Math.max(maxDataTime, duration || 0)];
-  }, [mergedData, duration]);
-
-  return (
-    <div className="border border-gray-200 rounded-lg overflow-hidden bg-white">
-      {/* Header - always visible */}
-      <button
-        onClick={onToggle}
-        className="w-full flex items-center justify-between px-3 py-2 hover:bg-gray-50 transition-colors"
-      >
-        <div className="flex items-center gap-2">
-          <span className="font-medium text-sm text-gray-700">{name}</span>
-        </div>
-        <div className="flex items-center gap-3">
-          {/* State value */}
-          <div className="flex items-center gap-1">
-            <div className="w-2 h-2 rounded-full" style={{ backgroundColor: STATE_COLOR }} />
-            <span className="text-xs text-gray-500 font-mono">
-              {currentStateValue !== null && currentStateValue !== undefined
-                ? currentStateValue.toFixed(4)
-                : '-'}
-            </span>
-          </div>
-          {/* Action value */}
-          {hasAction && (
-            <div className="flex items-center gap-1">
-              <div className="w-2 h-2 rounded-full" style={{ backgroundColor: ACTION_COLOR }} />
-              <span className="text-xs text-gray-500 font-mono">
-                {currentActionValue !== null && currentActionValue !== undefined
-                  ? currentActionValue.toFixed(4)
-                  : '-'}
-              </span>
-            </div>
-          )}
-          {isExpanded ? (
-            <MdExpandLess className="text-gray-400" size={20} />
-          ) : (
-            <MdExpandMore className="text-gray-400" size={20} />
-          )}
-        </div>
-      </button>
-
-      {/* Chart - collapsible */}
-      {isExpanded && (
-        <div className="h-28 px-2 pb-2">
-          <ResponsiveContainer width="100%" height="100%">
-            <LineChart
-              data={mergedData}
-              margin={{ top: 5, right: 10, left: 0, bottom: 5 }}
-              onClick={(e) => {
-                if (e && e.activeLabel !== undefined && onSeek) {
-                  onSeek(e.activeLabel);
-                }
-              }}
-              style={{ cursor: 'crosshair' }}
-            >
-              <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
-              <XAxis
-                dataKey="time"
-                domain={xDomain}
-                type="number"
-                tickFormatter={(value) => `${value.toFixed(0)}s`}
-                stroke="#9ca3af"
-                fontSize={10}
-                tick={{ fill: '#9ca3af' }}
-                allowDataOverflow={true}
-              />
-              <YAxis
-                stroke="#9ca3af"
-                fontSize={10}
-                tick={{ fill: '#9ca3af' }}
-                width={45}
-                tickFormatter={(value) => value.toFixed(2)}
-              />
-              <Tooltip
-                formatter={(value, dataKey) => {
-                  const label = dataKey.startsWith('state_') ? 'State' : 'Action';
-                  return [value?.toFixed(4) ?? '-', label];
-                }}
-                labelFormatter={(label) => `Time: ${label?.toFixed(2) ?? '-'}s`}
-                contentStyle={{
-                  backgroundColor: 'rgba(255, 255, 255, 0.95)',
-                  border: '1px solid #e5e7eb',
-                  borderRadius: '6px',
-                  fontSize: '11px',
-                }}
-              />
-              {/* State line - Red */}
-              <Line
-                type="linear"
-                dataKey={`state_${name}`}
-                stroke={STATE_COLOR}
-                strokeWidth={1.5}
-                dot={false}
-                isAnimationActive={false}
-                name="State"
-                connectNulls
-              />
-              {/* Action line - Blue */}
-              {hasAction && (
-                <Line
-                  type="linear"
-                  dataKey={`action_${name}`}
-                  stroke={ACTION_COLOR}
-                  strokeWidth={1.5}
-                  dot={false}
-                  isAnimationActive={false}
-                  name="Action"
-                  connectNulls
-                />
-              )}
-              {/* Current time indicator line */}
-              <ReferenceLine
-                x={currentTime}
-                stroke="#22c55e"
-                strokeWidth={2}
-                strokeDasharray="none"
-              />
-              {/* Current position marker for State - rendered on top of lines */}
-              {currentStateValue !== null && (
-                <ReferenceDot
-                  x={currentTime}
-                  y={currentStateValue}
-                  r={6}
-                  fill={STATE_COLOR}
-                  stroke="#fff"
-                  strokeWidth={2}
-                  isAnimationActive={false}
-                  ifOverflow="extendDomain"
-                />
-              )}
-              {/* Current position marker for Action - rendered on top of lines */}
-              {hasAction && currentActionValue !== null && (
-                <ReferenceDot
-                  x={currentTime}
-                  y={currentActionValue}
-                  r={6}
-                  fill={ACTION_COLOR}
-                  stroke="#fff"
-                  strokeWidth={2}
-                  isAnimationActive={false}
-                  ifOverflow="extendDomain"
-                />
-              )}
-            </LineChart>
-          </ResponsiveContainer>
-        </div>
-      )}
-    </div>
-  );
-}
+const STATE_COLOR = '#dc2626';
+const ACTION_COLOR = '#2563eb';
 
 function ReplayPage({ isActive }) {
   const dispatch = useDispatch();
@@ -1285,7 +1065,7 @@ function ReplayPage({ isActive }) {
     toggleExcludeRegionRef.current = toggleExcludeRegion;
   }, [toggleExcludeRegion]);
 
-  // Keyboard shortcuts
+  // Keyboard shortcuts (using e.code for IME compatibility - works with Korean input)
   useEffect(() => {
     if (!isActive) return;
 
@@ -1293,61 +1073,61 @@ function ReplayPage({ isActive }) {
       // Ignore when focused on input fields
       if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
 
-      if (e.key === 'ArrowUp') {
+      if (e.code === 'ArrowUp') {
         e.preventDefault();
         navigateRosbagRef.current?.('prev');
-      } else if (e.key === 'ArrowDown') {
+      } else if (e.code === 'ArrowDown') {
         e.preventDefault();
         navigateRosbagRef.current?.('next');
-      } else if (e.key === 'ArrowLeft' && e.shiftKey) {
+      } else if (e.code === 'ArrowLeft' && e.shiftKey) {
         e.preventDefault();
         seekRelativeRef.current?.(-5);
-      } else if (e.key === 'ArrowRight' && e.shiftKey) {
+      } else if (e.code === 'ArrowRight' && e.shiftKey) {
         e.preventDefault();
         seekRelativeRef.current?.(5);
-      } else if (e.key === 'ArrowLeft') {
+      } else if (e.code === 'ArrowLeft') {
         e.preventDefault();
         stepFrameRef.current?.('backward');
-      } else if (e.key === 'ArrowRight') {
+      } else if (e.code === 'ArrowRight') {
         e.preventDefault();
         stepFrameRef.current?.('forward');
-      } else if (e.key === ' ' || e.code === 'Space') {
+      } else if (e.code === 'Space') {
         e.preventDefault();
         togglePlayPauseRef.current?.();
-      } else if (e.key === 'a' || e.key === 'A') {
+      } else if (e.code === 'KeyA') {
         e.preventDefault();
         toggleLoopPointRef.current?.();
-      } else if (e.key === 'Backspace') {
+      } else if (e.code === 'Backspace') {
         e.preventDefault();
         clearLoopRef.current?.();
-      } else if (e.key === 'm' || e.key === 'M') {
+      } else if (e.code === 'KeyM') {
         e.preventDefault();
         openMarkerDialogRef.current?.();
-      } else if (e.key === 'd' || e.key === 'D') {
+      } else if (e.code === 'KeyD') {
         e.preventDefault();
         deleteNearestMarkerRef.current?.();
-      } else if (e.key >= '1' && e.key <= '9') {
+      } else if (e.code >= 'Digit1' && e.code <= 'Digit9') {
         e.preventDefault();
-        jumpToMarkerRef.current?.(parseInt(e.key) - 1);
-      } else if (e.key === 's' || e.key === 'S') {
+        jumpToMarkerRef.current?.(parseInt(e.code.replace('Digit', '')) - 1);
+      } else if (e.code === 'KeyS') {
         e.preventDefault();
         setTrimStartRef.current?.();
-      } else if (e.key === 'e' || e.key === 'E') {
+      } else if (e.code === 'KeyE') {
         e.preventDefault();
         setTrimEndRef.current?.();
-      } else if (e.key === 'x' || e.key === 'X') {
+      } else if (e.code === 'KeyX') {
         e.preventDefault();
         toggleExcludeRegionRef.current?.();
-      } else if (e.key === 'Escape' && pendingExcludeStart) {
+      } else if (e.code === 'Escape' && pendingExcludeStart) {
         e.preventDefault();
         cancelExcludeRegion();
-      } else if (e.key === '?' || (e.shiftKey && e.key === '/')) {
+      } else if (e.code === 'Slash' && e.shiftKey) {
         e.preventDefault();
         setShowHelpModal((prev) => !prev);
-      } else if (e.key === 'Escape' && showHelpModal) {
+      } else if (e.code === 'Escape' && showHelpModal) {
         e.preventDefault();
         setShowHelpModal(false);
-      } else if (e.key === 'Escape' && showTrimStartDialog) {
+      } else if (e.code === 'Escape' && showTrimStartDialog) {
         e.preventDefault();
         setShowTrimStartDialog(false);
       }
