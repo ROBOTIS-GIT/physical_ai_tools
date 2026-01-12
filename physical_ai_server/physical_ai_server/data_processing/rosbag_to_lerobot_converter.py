@@ -756,10 +756,10 @@ class RosbagToLerobotConverter:
         self._log_info(f"Wrote parquet: {parquet_path}")
 
     def _compute_episode_stats(self, episode: EpisodeData) -> Dict[str, Dict]:
-        """Compute statistics for an episode."""
+        """Compute statistics for an episode (LeRobot v2.1 format)."""
         stats = {}
+        num_frames = episode.length
 
-        # Compute stats for observation.state
         if episode.observation_state:
             states = np.array(episode.observation_state)
             stats["observation.state"] = {
@@ -767,10 +767,9 @@ class RosbagToLerobotConverter:
                 "std": np.std(states, axis=0).tolist(),
                 "min": np.min(states, axis=0).tolist(),
                 "max": np.max(states, axis=0).tolist(),
-                "count": len(states),
+                "count": [num_frames],
             }
 
-        # Compute stats for action
         if episode.action:
             actions = np.array(episode.action)
             stats["action"] = {
@@ -778,10 +777,73 @@ class RosbagToLerobotConverter:
                 "std": np.std(actions, axis=0).tolist(),
                 "min": np.min(actions, axis=0).tolist(),
                 "max": np.max(actions, axis=0).tolist(),
-                "count": len(actions),
+                "count": [num_frames],
             }
 
+        for camera_name, video_path in episode.video_files.items():
+            feature_key = f"observation.images.{camera_name}"
+            video_stats = self._compute_video_stats(video_path)
+            if video_stats:
+                stats[feature_key] = video_stats
+
         return stats
+
+    def _compute_video_stats(
+        self, video_path: Path, max_samples: int = 100
+    ) -> Optional[Dict]:
+        """Compute video statistics (per-channel RGB, normalized to [0,1])."""
+        try:
+            import cv2
+
+            cap = cv2.VideoCapture(str(video_path))
+            if not cap.isOpened():
+                return None
+
+            total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
+            sample_indices = np.linspace(
+                0, total_frames - 1, min(max_samples, total_frames), dtype=int
+            )
+
+            samples = []
+            for idx in sample_indices:
+                cap.set(cv2.CAP_PROP_POS_FRAMES, idx)
+                ret, frame = cap.read()
+                if ret:
+                    frame_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+                    samples.append(frame_rgb)
+
+            cap.release()
+
+            if not samples:
+                return None
+
+            frames = np.array(samples, dtype=np.float32) / 255.0
+            r_channel = frames[:, :, :, 0]
+            g_channel = frames[:, :, :, 1]
+            b_channel = frames[:, :, :, 2]
+
+            def channel_stats(channel):
+                return {
+                    "mean": float(np.mean(channel)),
+                    "std": float(np.std(channel)),
+                    "min": float(np.min(channel)),
+                    "max": float(np.max(channel)),
+                }
+
+            r_stats = channel_stats(r_channel)
+            g_stats = channel_stats(g_channel)
+            b_stats = channel_stats(b_channel)
+
+            return {
+                "min": [[[r_stats["min"]]], [[g_stats["min"]]], [[b_stats["min"]]]],
+                "max": [[[r_stats["max"]]], [[g_stats["max"]]], [[b_stats["max"]]]],
+                "mean": [[[r_stats["mean"]]], [[g_stats["mean"]]], [[b_stats["mean"]]]],
+                "std": [[[r_stats["std"]]], [[g_stats["std"]]], [[b_stats["std"]]]],
+                "count": [len(samples)],
+            }
+        except Exception as e:
+            self._log_warning(f"Failed to compute video stats for {video_path}: {e}")
+            return None
 
     def _serialize_stats(self, stats: Dict) -> Dict:
         """Serialize stats dictionary for JSON."""
