@@ -176,6 +176,65 @@ def _find_previous_value(messages, target_time, feature_name, frame_index):
 병합 결과:           [left..., right..., head...]            (19 joints)
 ```
 
+### 4.5 FPS 다운샘플링
+
+사용자가 원본보다 낮은 FPS로 변환 가능:
+
+```
+원본 데이터:
+  camera_left:  30Hz
+  camera_right: 30Hz  
+  zed:          15Hz  ← 최저 Hz
+  
+허용 target_fps: 15Hz 이하 (1, 3, 5, 10, 15Hz 등)
+불가 target_fps: 16Hz 이상 (원본 최저 Hz 초과)
+```
+
+**FPS에 따른 MP4 처리 방식:**
+
+| 조건 | 처리 방식 | 속도 |
+|------|----------|------|
+| `target_fps == source_fps` | MP4 직접 복사 | ⚡ 빠름 |
+| `target_fps < source_fps` | ffmpeg 재인코딩 | 🐢 느림 |
+
+**CLI 출력 예시:**
+```bash
+$ python convert_rosbag_to_lerobot.py --input ... --fps 10
+
+[INFO] Source video FPS: 30Hz
+[INFO] Target FPS: 10Hz
+[WARN] FPS 변환이 필요합니다. 비디오 재인코딩으로 인해 변환 시간이 증가합니다.
+[INFO] Encoding camera_left... (30fps → 10fps)
+[INFO] Encoding camera_right... (30fps → 10fps)
+```
+
+### 4.6 LeRobot 의존성 분리
+
+**목표:** physical_ai_tools에서 LeRobot 의존성 제거
+
+```
+현재 구조:
+  physical_ai_server/
+  ├── rosbag_to_lerobot_converter.py  ← LeRobot 의존성 없음 ✅
+  ├── lerobot_dataset_wrapper.py      ← LeRobot 의존성 있음 (삭제 예정)
+  └── data_manager.py                 ← LeRobot import 있음 (제거 예정)
+
+목표 구조:
+  physical_ai_server/
+  └── data_processing/
+      ├── rosbag_to_lerobot_converter.py  ← pyarrow, numpy, cv2만 사용
+      └── quality_analyzer.py              ← 표준 라이브러리만 사용
+      
+  (LeRobot Docker - 분리됨)
+  └── Training, Inference 전용
+```
+
+**변환에 필요한 최소 의존성:**
+- `pyarrow` (Parquet 쓰기)
+- `numpy` (수치 연산)
+- `opencv-python` (video dimensions, 재인코딩)
+- `rosbags` (ROSbag 읽기)
+
 ---
 
 ## 5. 데이터 품질 기준
@@ -392,7 +451,9 @@ physical_ai_manager UI에서 변환 결과 시각화 확인
 
 - [ ] Causal Sync 구현
 - [ ] Quality Report 생성
+- [ ] FPS 다운샘플링 + ffmpeg 재인코딩
 - [ ] Timeline Visualizer (React)
+- [ ] LeRobot 의존성 제거 (lerobot_dataset_wrapper.py 삭제)
 
 ### 10.2 중기 (v1.0.0 이후)
 
@@ -415,6 +476,8 @@ physical_ai_manager UI에서 변환 결과 시각화 확인
 | 2026-01-12 | 문서 초기 작성 |
 | 2026-01-12 | 품질 기준 확정 (Warning: ×2, Error: ×4) |
 | 2026-01-12 | 기본 정책 확정 (permissive) |
+| 2026-01-12 | FPS 다운샘플링 정책 추가 (동일 FPS=복사, 다른 FPS=재인코딩) |
+| 2026-01-12 | LeRobot 의존성 분리 계획 추가 |
 
 ---
 
