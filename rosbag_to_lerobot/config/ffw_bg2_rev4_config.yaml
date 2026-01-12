@@ -1,0 +1,59 @@
+rosbag_to_lerobot_converter:
+  ros__parameters:
+    # Basic conversion parameters
+    # Support both single directory (string) and multiple directories (list)
+    rosbag_dir: '/workspace/physical_ai_server/test/ffw_sg2_rev1_pickcoffeepat9'
+    # rosbag_dir: ['/path/to/dir1', '/path/to/dir2']  # Example for multiple directories
+    output_repo_id: 'test/ffw_sg2_rev1_pickcoffeepat9_converted'
+    task_name: 'pick_coffee_pat9'
+    fps: 10
+    use_videos: true
+    robot_type: 'ffw_bg2_rev4'
+    use_optimized_save_mode: true
+    # Map from rosbag directory path to list of episode indices to skip
+    skip_episodes:
+      '/workspace/physical_ai_server/test/ffw_sg2_rev1_pickcoffeepat9': []
+
+    # Camera configuration
+    camera_topics:
+      cam_head: '/zed/zed_node/left/image_rect_color/compressed'
+      cam_wrist_left: '/camera_left/camera_left/color/image_rect_raw/compressed'
+      cam_wrist_right: '/camera_right/camera_right/color/image_rect_raw/compressed'
+
+    # Camera rotations (0, 90, 180, 270 degrees)
+    camera_rotations:
+      cam_wrist_left: 270
+      cam_wrist_right: 270
+
+    # Joint state topics
+    joint_state_topics:
+      joints: '/joint_states'
+
+    # Action topics
+    action_topics:
+      leader_joints_left: '/leader/joint_trajectory_command_broadcaster_left/joint_trajectory'
+      leader_joints_right: '/leader/joint_trajectory_command_broadcaster_right/joint_trajectory'
+      leader_head: '/leader/joystick_controller_left/joint_trajectory'
+      leader_lift: '/leader/joystick_controller_right/joint_trajectory'
+
+    # Joint names in order
+    joint_names:
+      - 'arm_l_joint1'
+      - 'arm_l_joint2'
+      - 'arm_l_joint3'
+      - 'arm_l_joint4'
+      - 'arm_l_joint5'
+      - 'arm_l_joint6'
+      - 'arm_l_joint7'
+      - 'gripper_l_joint1'
+      - 'arm_r_joint1'
+      - 'arm_r_joint2'
+      - 'arm_r_joint3'
+      - 'arm_r_joint4'
+      - 'arm_r_joint5'
+      - 'arm_r_joint6'
+      - 'arm_r_joint7'
+      - 'gripper_r_joint1'
+      - 'head_joint1'
+      - 'head_joint2'
+      - 'lift_joint'
