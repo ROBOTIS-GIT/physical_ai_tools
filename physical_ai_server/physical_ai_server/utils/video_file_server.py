@@ -388,7 +388,7 @@ class VideoFileServer:
 
     def __init__(
         self,
-        port: int = 8081,
+        port: int = 8082,
         allowed_paths: Optional[list] = None,
         replay_data_handler=None
     ):

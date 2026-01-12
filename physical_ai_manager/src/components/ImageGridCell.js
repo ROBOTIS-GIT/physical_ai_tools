@@ -128,7 +128,7 @@ export default function ImageGridCell({
 
       const img = document.createElement('img');
       const timestamp = Date.now();
-      img.src = `http://${rosHost}:8080/stream?quality=50&type=ros_compressed&default_transport=compressed&topic=${topic}&t=${timestamp}`;
+      img.src = `http://${rosHost}:8081/stream?quality=50&type=ros_compressed&default_transport=compressed&topic=${topic}&t=${timestamp}`;
       img.alt = topic;
       img.className = 'w-full h-full object-cover rounded-3xl bg-gray-100';
       img.onclick = (e) => e.stopPropagation();

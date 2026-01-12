@@ -32,7 +32,7 @@ const initialState = {
   videoTopics: [],
   videoNames: [],  // Human-readable camera names
   videoFps: [],
-  videoServerPort: 8081,
+  videoServerPort: 8082,
   bagPath: null,
 
   // Frame metadata

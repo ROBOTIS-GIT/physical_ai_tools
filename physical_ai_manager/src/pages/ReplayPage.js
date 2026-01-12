@@ -33,6 +33,13 @@ import clsx from 'clsx';
 import { useRosServiceCaller } from '../hooks/useRosServiceCaller';
 import FileBrowserModal from '../components/FileBrowserModal';
 import {
+  lttbDownsample,
+  prepareChartData,
+  formatFileSize,
+  formatDateTime,
+  formatTime,
+} from '../utils/chartUtils';
+import {
   setSelectedBagPath,
   setLoading,
   setReplayData,
@@ -48,104 +55,8 @@ import {
 const STATE_COLOR = '#dc2626';  // Red for state
 const ACTION_COLOR = '#2563eb'; // Blue for action
 
-// Format file size to human readable format
-function formatFileSize(bytes) {
-  if (bytes === 0 || !bytes) return '0 B';
-  const units = ['B', 'KB', 'MB', 'GB', 'TB'];
-  const i = Math.floor(Math.log(bytes) / Math.log(1024));
-  return `${(bytes / Math.pow(1024, i)).toFixed(1)} ${units[i]}`;
-}
-
-// Format datetime to locale string
-function formatDateTime(isoString) {
-  if (!isoString) return '-';
-  try {
-    const date = new Date(isoString);
-    return date.toLocaleString('ko-KR', {
-      year: 'numeric',
-      month: '2-digit',
-      day: '2-digit',
-      hour: '2-digit',
-      minute: '2-digit',
-      second: '2-digit',
-    });
-  } catch {
-    return isoString;
-  }
-}
-
-// LTTB (Largest Triangle Three Buckets) downsampling algorithm
-// Preserves visual shape while reducing data points
-function lttbDownsample(data, threshold, xKey, yKey) {
-  if (threshold >= data.length || threshold === 0) {
-    return data;
-  }
-
-  const sampled = [];
-  const dataLength = data.length;
-
-  // Always include first point
-  sampled.push(data[0]);
-
-  // Bucket size
-  const bucketSize = (dataLength - 2) / (threshold - 2);
-
-  let a = 0; // Previously selected point index
-
-  for (let i = 0; i < threshold - 2; i++) {
-    // Calculate bucket boundaries
-    const bucketStart = Math.floor((i + 1) * bucketSize) + 1;
-    const bucketEnd = Math.min(Math.floor((i + 2) * bucketSize) + 1, dataLength);
-
-    // Calculate average point in next bucket
-    const avgRangeStart = Math.floor((i + 2) * bucketSize) + 1;
-    const avgRangeEnd = Math.min(Math.floor((i + 3) * bucketSize) + 1, dataLength);
-
-    let avgX = 0;
-    let avgY = 0;
-    let avgCount = 0;
-
-    for (let j = avgRangeStart; j < avgRangeEnd; j++) {
-      if (j < dataLength) {
-        avgX += data[j][xKey];
-        avgY += data[j][yKey] || 0;
-        avgCount++;
-      }
-    }
-
-    if (avgCount > 0) {
-      avgX /= avgCount;
-      avgY /= avgCount;
-    }
-
-    // Find point in current bucket that creates largest triangle
-    let maxArea = -1;
-    let maxAreaIndex = bucketStart;
-
-    const pointA = data[a];
-
-    for (let j = bucketStart; j < bucketEnd && j < dataLength; j++) {
-      // Calculate triangle area using cross product
-      const area = Math.abs(
-        (pointA[xKey] - avgX) * ((data[j][yKey] || 0) - pointA[yKey]) -
-        (pointA[xKey] - data[j][xKey]) * (avgY - pointA[yKey])
-      );
-
-      if (area > maxArea) {
-        maxArea = area;
-        maxAreaIndex = j;
-      }
-    }
-
-    sampled.push(data[maxAreaIndex]);
-    a = maxAreaIndex;
-  }
-
-  // Always include last point
-  sampled.push(data[dataLength - 1]);
-
-  return sampled;
-}
+// Utilities imported from ../utils/chartUtils.js:
+// - lttbDownsample, prepareChartData, formatFileSize, formatDateTime, formatTime
 
 // Individual Joint Chart Component showing both State and Action
 function JointChart({ name, stateData, actionData, currentTime, duration, isExpanded, onToggle, hasAction, onSeek }) {
@@ -915,7 +826,7 @@ function ReplayPage({ isActive }) {
 
       // Play all videos
       videoRefs.current.forEach((video) => {
-        if (video) video.play().catch(() => {});
+        if (video) video.play().catch(() => { });
       });
       dispatch(setIsPlaying(true));
     }
@@ -931,7 +842,7 @@ function ReplayPage({ isActive }) {
     videoRefs.current.forEach((video) => {
       if (video) {
         video.currentTime = 0;
-        video.play().catch(() => {});
+        video.play().catch(() => { });
       }
     });
     dispatch(setCurrentTime(0));
@@ -1546,516 +1457,516 @@ function ReplayPage({ isActive }) {
         <div className="flex-1 flex flex-col gap-4 min-h-0">
           {/* Video panel */}
           <div className="flex-1 flex flex-col bg-white rounded-xl shadow-sm overflow-hidden min-h-0">
-          {isLoaded && videoFiles.length > 0 ? (
-            <>
-              {/* Video container - grid layout for multiple videos */}
-              <div className={clsx(
-                "flex-1 bg-gray-100 flex items-center justify-center min-h-0 relative",
-                expandedVideoIndex !== null ? "p-2" : "p-4"
-              )}>
-                {expandedVideoIndex !== null ? (
-                  /* Expanded single video view */
-                  <div
-                    className="relative bg-white rounded-lg overflow-hidden shadow cursor-pointer flex items-center justify-center"
-                    style={{ width: '100%', height: '100%' }}
-                    onClick={() => setExpandedVideoIndex(null)}
-                    title="Click to collapse"
-                  >
-                    {/* Video label */}
-                    <div className="absolute top-2 left-2 z-10 px-2 py-1 bg-black bg-opacity-60 text-white text-sm rounded font-medium">
-                      {videoNames[expandedVideoIndex] || getShortVideoName(videoFiles[expandedVideoIndex])}
-                    </div>
-                    {/* Collapse hint */}
-                    <div className="absolute top-2 right-2 z-10 px-2 py-1 bg-black bg-opacity-60 text-white text-xs rounded">
-                      Click to collapse
-                    </div>
-                    <video
-                      ref={(el) => (videoRefs.current[expandedVideoIndex] = el)}
-                      src={videoBlobUrls[expandedVideoIndex] || ''}
-                      className="max-w-full max-h-full object-contain"
-                      style={{ width: 'auto', height: '100%' }}
-                      playsInline
-                      muted={expandedVideoIndex > 0}
-                    />
-                  </div>
-                ) : (
-                  /* Grid view */
-                  <div
-                    className={clsx(
-                      'grid gap-4 w-full h-full',
-                      videoFiles.length === 1 && 'grid-cols-1',
-                      videoFiles.length === 2 && 'grid-cols-2',
-                      videoFiles.length >= 3 && 'grid-cols-2 lg:grid-cols-3'
-                    )}
-                  >
-                    {videoFiles.map((file, index) => (
-                      <div
-                        key={index}
-                        className="relative bg-white rounded-lg overflow-hidden shadow flex flex-col cursor-pointer hover:ring-2 hover:ring-blue-400 transition-all"
-                        onClick={() => setExpandedVideoIndex(index)}
-                        title="Click to expand"
-                      >
-                        {/* Video label - use videoNames from config, fallback to short name */}
-                        <div className="absolute top-2 left-2 z-10 px-2 py-1 bg-black bg-opacity-60 text-white text-xs rounded font-medium">
-                          {videoNames[index] || getShortVideoName(file)}
-                        </div>
-                        <video
-                          ref={(el) => (videoRefs.current[index] = el)}
-                          src={videoBlobUrls[index] || ''}
-                          className="w-full h-full object-contain bg-gray-50"
-                          playsInline
-                          muted={index > 0} // Mute all except first video
-                        />
+            {isLoaded && videoFiles.length > 0 ? (
+              <>
+                {/* Video container - grid layout for multiple videos */}
+                <div className={clsx(
+                  "flex-1 bg-gray-100 flex items-center justify-center min-h-0 relative",
+                  expandedVideoIndex !== null ? "p-2" : "p-4"
+                )}>
+                  {expandedVideoIndex !== null ? (
+                    /* Expanded single video view */
+                    <div
+                      className="relative bg-white rounded-lg overflow-hidden shadow cursor-pointer flex items-center justify-center"
+                      style={{ width: '100%', height: '100%' }}
+                      onClick={() => setExpandedVideoIndex(null)}
+                      title="Click to collapse"
+                    >
+                      {/* Video label */}
+                      <div className="absolute top-2 left-2 z-10 px-2 py-1 bg-black bg-opacity-60 text-white text-sm rounded font-medium">
+                        {videoNames[expandedVideoIndex] || getShortVideoName(videoFiles[expandedVideoIndex])}
                       </div>
-                    ))}
-                  </div>
-                )}
-                {isDownloading && (
-                  <div className="absolute inset-0 bg-white bg-opacity-90 flex flex-col items-center justify-center z-20">
-                    <MdRefresh className="animate-spin text-blue-500 mb-4" size={48} />
-                    <div className="text-gray-700 mb-4">
-                      Downloading videos... {downloadProgress}%
-                    </div>
-                    <div className="w-64 h-2 bg-gray-300 rounded-full overflow-hidden">
-                      <div
-                        className="h-full bg-blue-500 transition-all duration-300"
-                        style={{ width: `${downloadProgress}%` }}
+                      {/* Collapse hint */}
+                      <div className="absolute top-2 right-2 z-10 px-2 py-1 bg-black bg-opacity-60 text-white text-xs rounded">
+                        Click to collapse
+                      </div>
+                      <video
+                        ref={(el) => (videoRefs.current[expandedVideoIndex] = el)}
+                        src={videoBlobUrls[expandedVideoIndex] || ''}
+                        className="max-w-full max-h-full object-contain"
+                        style={{ width: 'auto', height: '100%' }}
+                        playsInline
+                        muted={expandedVideoIndex > 0}
                       />
                     </div>
-                    <div className="mt-2 text-xs text-gray-500">
-                      {Math.floor(downloadProgress / (100 / videoFiles.length))} / {videoFiles.length} videos
-                    </div>
-                  </div>
-                )}
-              </div>
-
-              {/* Video controls */}
-              <div className="p-4 bg-gray-100 border-t">
-                {/* Timeline */}
-                <div
-                  className={clsx(
-                    'h-2 bg-gray-300 rounded-full mb-4 cursor-pointer relative',
-                    { 'opacity-50 cursor-not-allowed': !isVideoLoaded }
-                  )}
-                  onClick={isVideoLoaded ? handleSeek : undefined}
-                >
-                  {/* Trim region highlight (valid range) */}
-                  {(trimStart || trimEnd) && duration > 0 && (
+                  ) : (
+                    /* Grid view */
                     <div
-                      className="absolute h-full bg-blue-100 rounded-full"
-                      style={{
-                        left: `${((trimStart?.time || 0) / duration) * 100}%`,
-                        width: `${(((trimEnd?.time || duration) - (trimStart?.time || 0)) / duration) * 100}%`,
-                      }}
-                    />
-                  )}
-                  {/* A-B Loop region highlight */}
-                  {loopStart !== null && loopEnd !== null && duration > 0 && (
-                    <div
-                      className="absolute h-full bg-yellow-300 opacity-40 rounded-full"
-                      style={{
-                        left: `${(loopStart / duration) * 100}%`,
-                        width: `${((loopEnd - loopStart) / duration) * 100}%`,
-                      }}
-                    />
-                  )}
-                  {/* Exclude regions (grayed out with stripes) */}
-                  {excludeRegions.map((region, idx) => (
-                    <div
-                      key={`exclude-${idx}`}
-                      className="absolute h-full bg-red-400 opacity-50 rounded-full"
-                      style={{
-                        left: `${(region.start.time / duration) * 100}%`,
-                        width: `${((region.end.time - region.start.time) / duration) * 100}%`,
-                        backgroundImage: 'repeating-linear-gradient(45deg, transparent, transparent 2px, rgba(0,0,0,0.1) 2px, rgba(0,0,0,0.1) 4px)',
-                      }}
-                      title={`Excluded: ${formatTime(region.start.time)} - ${formatTime(region.end.time)}`}
-                    />
-                  ))}
-                  {/* Pending exclude start marker */}
-                  {pendingExcludeStart && duration > 0 && (
-                    <div
-                      className="absolute top-1/2 -translate-y-1/2 w-1 h-5 bg-red-500 z-20 animate-pulse"
-                      style={{ left: `${(pendingExcludeStart.time / duration) * 100}%` }}
-                      title={`Exclude start: ${formatTime(pendingExcludeStart.time)} - press X to set end`}
-                    />
-                  )}
-                  {/* Progress bar */}
-                  <div
-                    className="h-full bg-blue-500 rounded-full relative z-10"
-                    style={{ width: `${(currentTime / duration) * 100}%` }}
-                  />
-                  {/* A marker */}
-                  {loopStart !== null && duration > 0 && (
-                    <div
-                      className="absolute top-1/2 -translate-y-1/2 w-1 h-4 bg-green-500 z-20"
-                      style={{ left: `${(loopStart / duration) * 100}%` }}
-                      title={`A: ${formatTime(loopStart)}`}
-                    />
-                  )}
-                  {/* B marker */}
-                  {loopEnd !== null && duration > 0 && (
-                    <div
-                      className="absolute top-1/2 -translate-y-1/2 w-1 h-4 bg-red-500 z-20"
-                      style={{ left: `${(loopEnd / duration) * 100}%` }}
-                      title={`B: ${formatTime(loopEnd)}`}
-                    />
-                  )}
-                  {/* Task Markers */}
-                  {taskMarkers.map((marker, idx) => (
-                    <div
-                      key={`marker-${idx}`}
-                      className="absolute top-1/2 -translate-y-1/2 z-15 cursor-pointer group"
-                      style={{ left: `${(marker.time / duration) * 100}%` }}
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        videoRefs.current.forEach((v) => {
-                          if (v) v.currentTime = marker.time;
-                        });
-                        dispatch(setCurrentTime(marker.time));
-                      }}
-                      title={`#${idx + 1}: ${marker.instruction}`}
+                      className={clsx(
+                        'grid gap-4 w-full h-full',
+                        videoFiles.length === 1 && 'grid-cols-1',
+                        videoFiles.length === 2 && 'grid-cols-2',
+                        videoFiles.length >= 3 && 'grid-cols-2 lg:grid-cols-3'
+                      )}
                     >
-                      {/* Marker line */}
-                      <div className="w-0.5 h-5 bg-purple-600 group-hover:bg-purple-400" />
-                      {/* Marker number */}
-                      <div className="absolute -top-4 left-1/2 -translate-x-1/2 text-xs font-bold text-purple-600 bg-white px-1 rounded shadow-sm opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap">
-                        {idx + 1}
+                      {videoFiles.map((file, index) => (
+                        <div
+                          key={index}
+                          className="relative bg-white rounded-lg overflow-hidden shadow flex flex-col cursor-pointer hover:ring-2 hover:ring-blue-400 transition-all"
+                          onClick={() => setExpandedVideoIndex(index)}
+                          title="Click to expand"
+                        >
+                          {/* Video label - use videoNames from config, fallback to short name */}
+                          <div className="absolute top-2 left-2 z-10 px-2 py-1 bg-black bg-opacity-60 text-white text-xs rounded font-medium">
+                            {videoNames[index] || getShortVideoName(file)}
+                          </div>
+                          <video
+                            ref={(el) => (videoRefs.current[index] = el)}
+                            src={videoBlobUrls[index] || ''}
+                            className="w-full h-full object-contain bg-gray-50"
+                            playsInline
+                            muted={index > 0} // Mute all except first video
+                          />
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                  {isDownloading && (
+                    <div className="absolute inset-0 bg-white bg-opacity-90 flex flex-col items-center justify-center z-20">
+                      <MdRefresh className="animate-spin text-blue-500 mb-4" size={48} />
+                      <div className="text-gray-700 mb-4">
+                        Downloading videos... {downloadProgress}%
                       </div>
-                    </div>
-                  ))}
-                  {/* Trim Start marker */}
-                  {trimStart && duration > 0 && (
-                    <div
-                      className="absolute top-1/2 -translate-y-1/2 z-18 cursor-pointer group"
-                      style={{ left: `${(trimStart.time / duration) * 100}%` }}
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        videoRefs.current.forEach((v) => {
-                          if (v) v.currentTime = trimStart.time;
-                        });
-                        dispatch(setCurrentTime(trimStart.time));
-                      }}
-                      title={`Start: ${formatTime(trimStart.time)} - ${trimStart.instruction}`}
-                    >
-                      {/* Triangle marker pointing right */}
-                      <div className="w-0 h-0 border-t-[6px] border-t-transparent border-b-[6px] border-b-transparent border-l-[8px] border-l-green-600 group-hover:border-l-green-400" />
-                      {/* Label */}
-                      <div className="absolute -top-5 left-0 text-xs font-bold text-green-600 bg-white px-1 rounded shadow-sm opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap">
-                        S
+                      <div className="w-64 h-2 bg-gray-300 rounded-full overflow-hidden">
+                        <div
+                          className="h-full bg-blue-500 transition-all duration-300"
+                          style={{ width: `${downloadProgress}%` }}
+                        />
+                      </div>
+                      <div className="mt-2 text-xs text-gray-500">
+                        {Math.floor(downloadProgress / (100 / videoFiles.length))} / {videoFiles.length} videos
                       </div>
                     </div>
                   )}
-                  {/* Trim End marker */}
-                  {trimEnd && duration > 0 && (
-                    <div
-                      className="absolute top-1/2 -translate-y-1/2 z-18 cursor-pointer group"
-                      style={{ left: `${(trimEnd.time / duration) * 100}%` }}
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        videoRefs.current.forEach((v) => {
-                          if (v) v.currentTime = trimEnd.time;
-                        });
-                        dispatch(setCurrentTime(trimEnd.time));
-                      }}
-                      title={`End: ${formatTime(trimEnd.time)}`}
-                    >
-                      {/* Triangle marker pointing left */}
-                      <div className="w-0 h-0 border-t-[6px] border-t-transparent border-b-[6px] border-b-transparent border-r-[8px] border-r-red-600 group-hover:border-r-red-400" />
-                      {/* Label */}
-                      <div className="absolute -top-5 right-0 text-xs font-bold text-red-600 bg-white px-1 rounded shadow-sm opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap">
-                        E
-                      </div>
-                    </div>
-                  )}
-                  {/* Playhead */}
-                  <div
-                    className="absolute top-1/2 -translate-y-1/2 w-4 h-4 bg-blue-600 rounded-full shadow z-30"
-                    style={{ left: `calc(${(currentTime / duration) * 100}% - 8px)` }}
-                  />
                 </div>
 
-                {/* Controls */}
-                <div className="flex items-center gap-4">
-                  {/* Restart button */}
-                  <button
-                    onClick={restartPlayback}
-                    disabled={!isVideoLoaded}
+                {/* Video controls */}
+                <div className="p-4 bg-gray-100 border-t">
+                  {/* Timeline */}
+                  <div
                     className={clsx(
-                      'p-2 rounded-full transition-colors',
-                      isVideoLoaded
-                        ? 'bg-gray-200 text-gray-700 hover:bg-gray-300'
-                        : 'bg-gray-100 text-gray-400 cursor-not-allowed'
+                      'h-2 bg-gray-300 rounded-full mb-4 cursor-pointer relative',
+                      { 'opacity-50 cursor-not-allowed': !isVideoLoaded }
                     )}
-                    title="Restart from beginning"
+                    onClick={isVideoLoaded ? handleSeek : undefined}
                   >
-                    <MdReplay size={20} />
-                  </button>
-                  {/* Play/Pause button */}
-                  <button
-                    onClick={togglePlayPause}
-                    disabled={!isVideoLoaded}
-                    className={clsx(
-                      'p-2 rounded-full transition-colors',
-                      isVideoLoaded
-                        ? 'bg-blue-600 text-white hover:bg-blue-700'
-                        : 'bg-gray-300 text-gray-500 cursor-not-allowed'
+                    {/* Trim region highlight (valid range) */}
+                    {(trimStart || trimEnd) && duration > 0 && (
+                      <div
+                        className="absolute h-full bg-blue-100 rounded-full"
+                        style={{
+                          left: `${((trimStart?.time || 0) / duration) * 100}%`,
+                          width: `${(((trimEnd?.time || duration) - (trimStart?.time || 0)) / duration) * 100}%`,
+                        }}
+                      />
                     )}
-                  >
-                    {isPlaying ? <MdPause size={24} /> : <MdPlayArrow size={24} />}
-                  </button>
-                  <span className="text-sm text-gray-600">
-                    {formatTime(currentTime)} / {formatTime(duration)}
-                  </span>
-                  <span className="text-sm text-gray-400">
-                    ({videoFiles.length} camera{videoFiles.length > 1 ? 's' : ''})
-                  </span>
-                  {/* A-B Loop status */}
-                  {(loopStart !== null || loopEnd !== null) && (
-                    <div className="flex items-center gap-2 px-2 py-1 bg-yellow-100 rounded text-xs">
-                      <span className="text-green-600 font-medium">
-                        A: {loopStart !== null ? formatTime(loopStart) : '--'}
-                      </span>
-                      <span className="text-gray-400">|</span>
-                      <span className="text-red-600 font-medium">
-                        B: {loopEnd !== null ? formatTime(loopEnd) : '--'}
-                      </span>
-                      <button
-                        onClick={clearLoop}
-                        className="ml-1 text-gray-500 hover:text-gray-700"
-                        title="Clear loop (Backspace)"
-                      >
-                        <MdClose size={14} />
-                      </button>
-                    </div>
-                  )}
-                  {/* Current active task - show from task markers or trimStart */}
-                  {/* Click to loop the task segment */}
-                  {(currentActiveTask || trimStart) && (
-                    <button
-                      className="flex items-center gap-2 px-2 py-1 bg-purple-100 hover:bg-purple-200 rounded text-xs max-w-xs cursor-pointer transition-colors"
-                      onClick={() => {
-                        // Determine start and end of current task segment
-                        let segmentStart, segmentEnd;
-                        if (currentActiveTask) {
-                          segmentStart = currentActiveTask.time;
-                          // Find next task marker to determine end
-                          const nextMarkerIdx = currentActiveTaskIndex + 1;
-                          segmentEnd = nextMarkerIdx < taskMarkers.length
-                            ? taskMarkers[nextMarkerIdx].time
-                            : (trimEnd?.time || duration);
-                        } else if (trimStart) {
-                          segmentStart = trimStart.time;
-                          segmentEnd = taskMarkers.length > 0
-                            ? taskMarkers[0].time
-                            : (trimEnd?.time || duration);
-                        }
-                        if (segmentStart !== undefined && segmentEnd !== undefined) {
-                          setLoopStart(segmentStart);
-                          setLoopEnd(segmentEnd);
-                          // Seek to segment start and start playback
+                    {/* A-B Loop region highlight */}
+                    {loopStart !== null && loopEnd !== null && duration > 0 && (
+                      <div
+                        className="absolute h-full bg-yellow-300 opacity-40 rounded-full"
+                        style={{
+                          left: `${(loopStart / duration) * 100}%`,
+                          width: `${((loopEnd - loopStart) / duration) * 100}%`,
+                        }}
+                      />
+                    )}
+                    {/* Exclude regions (grayed out with stripes) */}
+                    {excludeRegions.map((region, idx) => (
+                      <div
+                        key={`exclude-${idx}`}
+                        className="absolute h-full bg-red-400 opacity-50 rounded-full"
+                        style={{
+                          left: `${(region.start.time / duration) * 100}%`,
+                          width: `${((region.end.time - region.start.time) / duration) * 100}%`,
+                          backgroundImage: 'repeating-linear-gradient(45deg, transparent, transparent 2px, rgba(0,0,0,0.1) 2px, rgba(0,0,0,0.1) 4px)',
+                        }}
+                        title={`Excluded: ${formatTime(region.start.time)} - ${formatTime(region.end.time)}`}
+                      />
+                    ))}
+                    {/* Pending exclude start marker */}
+                    {pendingExcludeStart && duration > 0 && (
+                      <div
+                        className="absolute top-1/2 -translate-y-1/2 w-1 h-5 bg-red-500 z-20 animate-pulse"
+                        style={{ left: `${(pendingExcludeStart.time / duration) * 100}%` }}
+                        title={`Exclude start: ${formatTime(pendingExcludeStart.time)} - press X to set end`}
+                      />
+                    )}
+                    {/* Progress bar */}
+                    <div
+                      className="h-full bg-blue-500 rounded-full relative z-10"
+                      style={{ width: `${(currentTime / duration) * 100}%` }}
+                    />
+                    {/* A marker */}
+                    {loopStart !== null && duration > 0 && (
+                      <div
+                        className="absolute top-1/2 -translate-y-1/2 w-1 h-4 bg-green-500 z-20"
+                        style={{ left: `${(loopStart / duration) * 100}%` }}
+                        title={`A: ${formatTime(loopStart)}`}
+                      />
+                    )}
+                    {/* B marker */}
+                    {loopEnd !== null && duration > 0 && (
+                      <div
+                        className="absolute top-1/2 -translate-y-1/2 w-1 h-4 bg-red-500 z-20"
+                        style={{ left: `${(loopEnd / duration) * 100}%` }}
+                        title={`B: ${formatTime(loopEnd)}`}
+                      />
+                    )}
+                    {/* Task Markers */}
+                    {taskMarkers.map((marker, idx) => (
+                      <div
+                        key={`marker-${idx}`}
+                        className="absolute top-1/2 -translate-y-1/2 z-15 cursor-pointer group"
+                        style={{ left: `${(marker.time / duration) * 100}%` }}
+                        onClick={(e) => {
+                          e.stopPropagation();
                           videoRefs.current.forEach((v) => {
-                            if (v) {
-                              v.currentTime = segmentStart;
-                              v.play().catch(() => {});
-                            }
+                            if (v) v.currentTime = marker.time;
                           });
-                          dispatch(setCurrentTime(segmentStart));
-                          dispatch(setIsPlaying(true));
-                          toast(`Loop: ${formatTime(segmentStart)} - ${formatTime(segmentEnd)}`);
-                        }
-                      }}
-                      title="Click to loop this task segment"
-                    >
-                      <span className="text-purple-600 font-bold">Task:</span>
-                      <span className="text-purple-800 truncate" title={currentActiveTask?.instruction || trimStart?.instruction}>
-                        {currentActiveTask?.instruction || trimStart?.instruction}
-                      </span>
-                    </button>
-                  )}
-                  {/* Trim point buttons */}
-                  <div className="flex items-center gap-1">
-                    <button
-                      onClick={openTrimStartDialog}
-                      disabled={!isVideoLoaded}
-                      className={clsx(
-                        'px-2 py-1 text-xs rounded transition-colors flex items-center gap-1',
-                        trimStart
-                          ? 'bg-green-500 text-white'
-                          : isVideoLoaded
-                            ? 'bg-green-100 text-green-700 hover:bg-green-200'
-                            : 'bg-gray-100 text-gray-400 cursor-not-allowed'
-                      )}
-                      title={trimStart ? `Start: ${formatTime(trimStart.time)} - ${trimStart.instruction}` : 'Set Start Point (S)'}
-                    >
-                      S{trimStart && <span className="opacity-80">{formatTime(trimStart.time)}</span>}
-                    </button>
-                    <button
-                      onClick={applyTrimEnd}
-                      disabled={!isVideoLoaded}
-                      className={clsx(
-                        'px-2 py-1 text-xs rounded transition-colors flex items-center gap-1',
-                        trimEnd
-                          ? 'bg-red-500 text-white'
-                          : isVideoLoaded
-                            ? 'bg-red-100 text-red-700 hover:bg-red-200'
-                            : 'bg-gray-100 text-gray-400 cursor-not-allowed'
-                      )}
-                      title={trimEnd ? `End: ${formatTime(trimEnd.time)}` : 'Set End Point (E)'}
-                    >
-                      E{trimEnd && <span className="opacity-80">{formatTime(trimEnd.time)}</span>}
-                    </button>
-                    {(trimStart || trimEnd) && (
-                      <button
-                        onClick={clearTrimPoints}
-                        className="text-gray-400 hover:text-red-500 px-1"
-                        title="Clear trim points"
+                          dispatch(setCurrentTime(marker.time));
+                        }}
+                        title={`#${idx + 1}: ${marker.instruction}`}
                       >
-                        <MdClose size={14} />
+                        {/* Marker line */}
+                        <div className="w-0.5 h-5 bg-purple-600 group-hover:bg-purple-400" />
+                        {/* Marker number */}
+                        <div className="absolute -top-4 left-1/2 -translate-x-1/2 text-xs font-bold text-purple-600 bg-white px-1 rounded shadow-sm opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap">
+                          {idx + 1}
+                        </div>
+                      </div>
+                    ))}
+                    {/* Trim Start marker */}
+                    {trimStart && duration > 0 && (
+                      <div
+                        className="absolute top-1/2 -translate-y-1/2 z-18 cursor-pointer group"
+                        style={{ left: `${(trimStart.time / duration) * 100}%` }}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          videoRefs.current.forEach((v) => {
+                            if (v) v.currentTime = trimStart.time;
+                          });
+                          dispatch(setCurrentTime(trimStart.time));
+                        }}
+                        title={`Start: ${formatTime(trimStart.time)} - ${trimStart.instruction}`}
+                      >
+                        {/* Triangle marker pointing right */}
+                        <div className="w-0 h-0 border-t-[6px] border-t-transparent border-b-[6px] border-b-transparent border-l-[8px] border-l-green-600 group-hover:border-l-green-400" />
+                        {/* Label */}
+                        <div className="absolute -top-5 left-0 text-xs font-bold text-green-600 bg-white px-1 rounded shadow-sm opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap">
+                          S
+                        </div>
+                      </div>
+                    )}
+                    {/* Trim End marker */}
+                    {trimEnd && duration > 0 && (
+                      <div
+                        className="absolute top-1/2 -translate-y-1/2 z-18 cursor-pointer group"
+                        style={{ left: `${(trimEnd.time / duration) * 100}%` }}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          videoRefs.current.forEach((v) => {
+                            if (v) v.currentTime = trimEnd.time;
+                          });
+                          dispatch(setCurrentTime(trimEnd.time));
+                        }}
+                        title={`End: ${formatTime(trimEnd.time)}`}
+                      >
+                        {/* Triangle marker pointing left */}
+                        <div className="w-0 h-0 border-t-[6px] border-t-transparent border-b-[6px] border-b-transparent border-r-[8px] border-r-red-600 group-hover:border-r-red-400" />
+                        {/* Label */}
+                        <div className="absolute -top-5 right-0 text-xs font-bold text-red-600 bg-white px-1 rounded shadow-sm opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap">
+                          E
+                        </div>
+                      </div>
+                    )}
+                    {/* Playhead */}
+                    <div
+                      className="absolute top-1/2 -translate-y-1/2 w-4 h-4 bg-blue-600 rounded-full shadow z-30"
+                      style={{ left: `calc(${(currentTime / duration) * 100}% - 8px)` }}
+                    />
+                  </div>
+
+                  {/* Controls */}
+                  <div className="flex items-center gap-4">
+                    {/* Restart button */}
+                    <button
+                      onClick={restartPlayback}
+                      disabled={!isVideoLoaded}
+                      className={clsx(
+                        'p-2 rounded-full transition-colors',
+                        isVideoLoaded
+                          ? 'bg-gray-200 text-gray-700 hover:bg-gray-300'
+                          : 'bg-gray-100 text-gray-400 cursor-not-allowed'
+                      )}
+                      title="Restart from beginning"
+                    >
+                      <MdReplay size={20} />
+                    </button>
+                    {/* Play/Pause button */}
+                    <button
+                      onClick={togglePlayPause}
+                      disabled={!isVideoLoaded}
+                      className={clsx(
+                        'p-2 rounded-full transition-colors',
+                        isVideoLoaded
+                          ? 'bg-blue-600 text-white hover:bg-blue-700'
+                          : 'bg-gray-300 text-gray-500 cursor-not-allowed'
+                      )}
+                    >
+                      {isPlaying ? <MdPause size={24} /> : <MdPlayArrow size={24} />}
+                    </button>
+                    <span className="text-sm text-gray-600">
+                      {formatTime(currentTime)} / {formatTime(duration)}
+                    </span>
+                    <span className="text-sm text-gray-400">
+                      ({videoFiles.length} camera{videoFiles.length > 1 ? 's' : ''})
+                    </span>
+                    {/* A-B Loop status */}
+                    {(loopStart !== null || loopEnd !== null) && (
+                      <div className="flex items-center gap-2 px-2 py-1 bg-yellow-100 rounded text-xs">
+                        <span className="text-green-600 font-medium">
+                          A: {loopStart !== null ? formatTime(loopStart) : '--'}
+                        </span>
+                        <span className="text-gray-400">|</span>
+                        <span className="text-red-600 font-medium">
+                          B: {loopEnd !== null ? formatTime(loopEnd) : '--'}
+                        </span>
+                        <button
+                          onClick={clearLoop}
+                          className="ml-1 text-gray-500 hover:text-gray-700"
+                          title="Clear loop (Backspace)"
+                        >
+                          <MdClose size={14} />
+                        </button>
+                      </div>
+                    )}
+                    {/* Current active task - show from task markers or trimStart */}
+                    {/* Click to loop the task segment */}
+                    {(currentActiveTask || trimStart) && (
+                      <button
+                        className="flex items-center gap-2 px-2 py-1 bg-purple-100 hover:bg-purple-200 rounded text-xs max-w-xs cursor-pointer transition-colors"
+                        onClick={() => {
+                          // Determine start and end of current task segment
+                          let segmentStart, segmentEnd;
+                          if (currentActiveTask) {
+                            segmentStart = currentActiveTask.time;
+                            // Find next task marker to determine end
+                            const nextMarkerIdx = currentActiveTaskIndex + 1;
+                            segmentEnd = nextMarkerIdx < taskMarkers.length
+                              ? taskMarkers[nextMarkerIdx].time
+                              : (trimEnd?.time || duration);
+                          } else if (trimStart) {
+                            segmentStart = trimStart.time;
+                            segmentEnd = taskMarkers.length > 0
+                              ? taskMarkers[0].time
+                              : (trimEnd?.time || duration);
+                          }
+                          if (segmentStart !== undefined && segmentEnd !== undefined) {
+                            setLoopStart(segmentStart);
+                            setLoopEnd(segmentEnd);
+                            // Seek to segment start and start playback
+                            videoRefs.current.forEach((v) => {
+                              if (v) {
+                                v.currentTime = segmentStart;
+                                v.play().catch(() => { });
+                              }
+                            });
+                            dispatch(setCurrentTime(segmentStart));
+                            dispatch(setIsPlaying(true));
+                            toast(`Loop: ${formatTime(segmentStart)} - ${formatTime(segmentEnd)}`);
+                          }
+                        }}
+                        title="Click to loop this task segment"
+                      >
+                        <span className="text-purple-600 font-bold">Task:</span>
+                        <span className="text-purple-800 truncate" title={currentActiveTask?.instruction || trimStart?.instruction}>
+                          {currentActiveTask?.instruction || trimStart?.instruction}
+                        </span>
                       </button>
                     )}
-                  </div>
-                  {/* Add marker button */}
-                  <button
-                    onClick={openMarkerDialog}
-                    disabled={!isVideoLoaded}
-                    className={clsx(
-                      'px-2 py-1 text-xs rounded transition-colors',
-                      isVideoLoaded
-                        ? 'bg-purple-100 text-purple-700 hover:bg-purple-200'
-                        : 'bg-gray-100 text-gray-400 cursor-not-allowed'
-                    )}
-                    title="Add marker (m)"
-                  >
-                    + Marker
-                  </button>
-                  {/* Playback speed selector */}
-                  <div className="flex items-center gap-1 ml-auto">
-                    {PLAYBACK_SPEEDS.map((speed) => (
+                    {/* Trim point buttons */}
+                    <div className="flex items-center gap-1">
                       <button
-                        key={speed}
-                        onClick={() => changePlaybackSpeed(speed)}
+                        onClick={openTrimStartDialog}
                         disabled={!isVideoLoaded}
                         className={clsx(
-                          'px-2 py-1 text-xs rounded transition-colors',
-                          playbackSpeed === speed
-                            ? 'bg-blue-600 text-white'
+                          'px-2 py-1 text-xs rounded transition-colors flex items-center gap-1',
+                          trimStart
+                            ? 'bg-green-500 text-white'
                             : isVideoLoaded
-                              ? 'bg-gray-200 text-gray-700 hover:bg-gray-300'
+                              ? 'bg-green-100 text-green-700 hover:bg-green-200'
                               : 'bg-gray-100 text-gray-400 cursor-not-allowed'
                         )}
+                        title={trimStart ? `Start: ${formatTime(trimStart.time)} - ${trimStart.instruction}` : 'Set Start Point (S)'}
                       >
-                        {speed}x
+                        S{trimStart && <span className="opacity-80">{formatTime(trimStart.time)}</span>}
                       </button>
-                    ))}
-                    {/* Help button */}
+                      <button
+                        onClick={applyTrimEnd}
+                        disabled={!isVideoLoaded}
+                        className={clsx(
+                          'px-2 py-1 text-xs rounded transition-colors flex items-center gap-1',
+                          trimEnd
+                            ? 'bg-red-500 text-white'
+                            : isVideoLoaded
+                              ? 'bg-red-100 text-red-700 hover:bg-red-200'
+                              : 'bg-gray-100 text-gray-400 cursor-not-allowed'
+                        )}
+                        title={trimEnd ? `End: ${formatTime(trimEnd.time)}` : 'Set End Point (E)'}
+                      >
+                        E{trimEnd && <span className="opacity-80">{formatTime(trimEnd.time)}</span>}
+                      </button>
+                      {(trimStart || trimEnd) && (
+                        <button
+                          onClick={clearTrimPoints}
+                          className="text-gray-400 hover:text-red-500 px-1"
+                          title="Clear trim points"
+                        >
+                          <MdClose size={14} />
+                        </button>
+                      )}
+                    </div>
+                    {/* Add marker button */}
                     <button
-                      onClick={() => setShowHelpModal(true)}
-                      className="ml-2 w-6 h-6 flex items-center justify-center rounded-full bg-gray-200 text-gray-600 hover:bg-gray-300 text-sm font-bold"
-                      title="Keyboard shortcuts (?)"
+                      onClick={openMarkerDialog}
+                      disabled={!isVideoLoaded}
+                      className={clsx(
+                        'px-2 py-1 text-xs rounded transition-colors',
+                        isVideoLoaded
+                          ? 'bg-purple-100 text-purple-700 hover:bg-purple-200'
+                          : 'bg-gray-100 text-gray-400 cursor-not-allowed'
+                      )}
+                      title="Add marker (m)"
                     >
-                      ?
+                      + Marker
                     </button>
+                    {/* Playback speed selector */}
+                    <div className="flex items-center gap-1 ml-auto">
+                      {PLAYBACK_SPEEDS.map((speed) => (
+                        <button
+                          key={speed}
+                          onClick={() => changePlaybackSpeed(speed)}
+                          disabled={!isVideoLoaded}
+                          className={clsx(
+                            'px-2 py-1 text-xs rounded transition-colors',
+                            playbackSpeed === speed
+                              ? 'bg-blue-600 text-white'
+                              : isVideoLoaded
+                                ? 'bg-gray-200 text-gray-700 hover:bg-gray-300'
+                                : 'bg-gray-100 text-gray-400 cursor-not-allowed'
+                          )}
+                        >
+                          {speed}x
+                        </button>
+                      ))}
+                      {/* Help button */}
+                      <button
+                        onClick={() => setShowHelpModal(true)}
+                        className="ml-2 w-6 h-6 flex items-center justify-center rounded-full bg-gray-200 text-gray-600 hover:bg-gray-300 text-sm font-bold"
+                        title="Keyboard shortcuts (?)"
+                      >
+                        ?
+                      </button>
+                    </div>
                   </div>
                 </div>
-              </div>
-            </>
-          ) : (
-            <div className="flex-1 flex items-center justify-center text-gray-500 bg-gray-50">
-              {isLoading ? (
-                <div className="flex flex-col items-center gap-4">
-                  <MdRefresh className="animate-spin" size={48} />
-                  <span>Loading replay data...</span>
-                </div>
-              ) : error ? (
-                <div className="text-center text-red-500">
-                  <p className="font-semibold">Error loading data</p>
-                  <p className="text-sm">{error}</p>
-                </div>
-              ) : (
-                <div className="text-center">
-                  <MdFolder size={64} className="mx-auto mb-4 text-gray-400" />
-                  <p>Select a ROSbag to start viewing</p>
-                </div>
-              )}
-            </div>
-          )}
-        </div>
-
-        {/* Joint data chart panel - hidden when video is expanded */}
-        <div className={clsx(
-          "bg-white rounded-xl shadow-sm p-4 flex flex-col transition-all duration-200",
-          expandedVideoIndex !== null ? "h-0 overflow-hidden opacity-0 p-0" : "h-96"
-        )}>
-          {/* Header with legend and expand/collapse all buttons */}
-          <div className="flex items-center justify-between mb-3">
-            <div className="flex items-center gap-4">
-              <h2 className="text-lg font-semibold text-gray-800">Joint Data</h2>
-              {/* Legend */}
-              <div className="flex items-center gap-3 text-xs">
-                <div className="flex items-center gap-1">
-                  <div className="w-3 h-1 rounded" style={{ backgroundColor: STATE_COLOR }} />
-                  <span className="text-gray-600">State</span>
-                </div>
-                {hasActionData && (
-                  <div className="flex items-center gap-1">
-                    <div className="w-3 h-1 rounded" style={{ backgroundColor: ACTION_COLOR }} />
-                    <span className="text-gray-600">Action</span>
+              </>
+            ) : (
+              <div className="flex-1 flex items-center justify-center text-gray-500 bg-gray-50">
+                {isLoading ? (
+                  <div className="flex flex-col items-center gap-4">
+                    <MdRefresh className="animate-spin" size={48} />
+                    <span>Loading replay data...</span>
+                  </div>
+                ) : error ? (
+                  <div className="text-center text-red-500">
+                    <p className="font-semibold">Error loading data</p>
+                    <p className="text-sm">{error}</p>
+                  </div>
+                ) : (
+                  <div className="text-center">
+                    <MdFolder size={64} className="mx-auto mb-4 text-gray-400" />
+                    <p>Select a ROSbag to start viewing</p>
                   </div>
                 )}
-              </div>
-            </div>
-            {allJointNames.length > 0 && (
-              <div className="flex items-center gap-2">
-                <span className="text-xs text-gray-500">
-                  {expandedJoints.size} / {allJointNames.length} expanded
-                </span>
-                <button
-                  onClick={expandAllJoints}
-                  className="flex items-center gap-1 px-2 py-1 text-xs text-gray-600 hover:bg-gray-100 rounded transition-colors"
-                  title="Expand all"
-                >
-                  <MdUnfoldMore size={16} />
-                  All
-                </button>
-                <button
-                  onClick={collapseAllJoints}
-                  className="flex items-center gap-1 px-2 py-1 text-xs text-gray-600 hover:bg-gray-100 rounded transition-colors"
-                  title="Collapse all"
-                >
-                  <MdUnfoldLess size={16} />
-                  None
-                </button>
               </div>
             )}
           </div>
 
-          {/* Joint charts grid */}
-          {(stateChartData.length > 0 || actionChartData.length > 0) && allJointNames.length > 0 ? (
-            <div className="flex-1 overflow-y-auto">
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-2">
-                {allJointNames.map((name) => (
-                  <JointChart
-                    key={name}
-                    name={name}
-                    stateData={stateChartData}
-                    actionData={actionChartData}
-                    currentTime={currentTime}
-                    duration={duration}
-                    isExpanded={expandedJoints.has(name)}
-                    onToggle={() => toggleJoint(name)}
-                    hasAction={hasActionData && actionNames.includes(name)}
-                    onSeek={handleChartSeek}
-                  />
-                ))}
+          {/* Joint data chart panel - hidden when video is expanded */}
+          <div className={clsx(
+            "bg-white rounded-xl shadow-sm p-4 flex flex-col transition-all duration-200",
+            expandedVideoIndex !== null ? "h-0 overflow-hidden opacity-0 p-0" : "h-96"
+          )}>
+            {/* Header with legend and expand/collapse all buttons */}
+            <div className="flex items-center justify-between mb-3">
+              <div className="flex items-center gap-4">
+                <h2 className="text-lg font-semibold text-gray-800">Joint Data</h2>
+                {/* Legend */}
+                <div className="flex items-center gap-3 text-xs">
+                  <div className="flex items-center gap-1">
+                    <div className="w-3 h-1 rounded" style={{ backgroundColor: STATE_COLOR }} />
+                    <span className="text-gray-600">State</span>
+                  </div>
+                  {hasActionData && (
+                    <div className="flex items-center gap-1">
+                      <div className="w-3 h-1 rounded" style={{ backgroundColor: ACTION_COLOR }} />
+                      <span className="text-gray-600">Action</span>
+                    </div>
+                  )}
+                </div>
               </div>
+              {allJointNames.length > 0 && (
+                <div className="flex items-center gap-2">
+                  <span className="text-xs text-gray-500">
+                    {expandedJoints.size} / {allJointNames.length} expanded
+                  </span>
+                  <button
+                    onClick={expandAllJoints}
+                    className="flex items-center gap-1 px-2 py-1 text-xs text-gray-600 hover:bg-gray-100 rounded transition-colors"
+                    title="Expand all"
+                  >
+                    <MdUnfoldMore size={16} />
+                    All
+                  </button>
+                  <button
+                    onClick={collapseAllJoints}
+                    className="flex items-center gap-1 px-2 py-1 text-xs text-gray-600 hover:bg-gray-100 rounded transition-colors"
+                    title="Collapse all"
+                  >
+                    <MdUnfoldLess size={16} />
+                    None
+                  </button>
+                </div>
+              )}
             </div>
-          ) : (
-            <div className="flex-1 flex items-center justify-center text-gray-400">
-              No joint data available
-            </div>
-          )}
-        </div>
+
+            {/* Joint charts grid */}
+            {(stateChartData.length > 0 || actionChartData.length > 0) && allJointNames.length > 0 ? (
+              <div className="flex-1 overflow-y-auto">
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-2">
+                  {allJointNames.map((name) => (
+                    <JointChart
+                      key={name}
+                      name={name}
+                      stateData={stateChartData}
+                      actionData={actionChartData}
+                      currentTime={currentTime}
+                      duration={duration}
+                      isExpanded={expandedJoints.has(name)}
+                      onToggle={() => toggleJoint(name)}
+                      hasAction={hasActionData && actionNames.includes(name)}
+                      onSeek={handleChartSeek}
+                    />
+                  ))}
+                </div>
+              </div>
+            ) : (
+              <div className="flex-1 flex items-center justify-center text-gray-400">
+                No joint data available
+              </div>
+            )}
+          </div>
         </div>
 
         {/* Right panel - Metadata & ROSbag list sidebar */}
@@ -2143,7 +2054,7 @@ function ReplayPage({ isActive }) {
                           videoRefs.current.forEach((v) => {
                             if (v) {
                               v.currentTime = segmentStart;
-                              v.play().catch(() => {});
+                              v.play().catch(() => { });
                             }
                           });
                           dispatch(setCurrentTime(segmentStart));
@@ -2198,7 +2109,7 @@ function ReplayPage({ isActive }) {
                           videoRefs.current.forEach((v) => {
                             if (v) {
                               v.currentTime = segmentStart;
-                              v.play().catch(() => {});
+                              v.play().catch(() => { });
                             }
                           });
                           dispatch(setCurrentTime(segmentStart));

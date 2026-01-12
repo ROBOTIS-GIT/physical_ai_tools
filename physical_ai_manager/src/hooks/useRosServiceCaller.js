@@ -576,7 +576,7 @@ export function useRosServiceCaller() {
         // Extract host from rosbridgeUrl (ws://host:9090 -> host)
         const urlMatch = rosbridgeUrl.match(/ws:\/\/([^:]+):/);
         const host = urlMatch ? urlMatch[1] : 'localhost';
-        const videoServerPort = 8081;
+        const videoServerPort = 8082;
 
         const apiUrl = `http://${host}:${videoServerPort}/replay-data${bagPath}`;
         console.log('Fetching replay data from HTTP API:', apiUrl);
@@ -611,6 +611,14 @@ export function useRosServiceCaller() {
           duration: result.duration || 0,
           video_server_port: videoServerPort,
           bag_path: bagPath,
+          // Extended metadata
+          robot_type: result.robot_type || '',
+          recording_date: result.recording_date || null,
+          file_size_bytes: result.file_size_bytes || 0,
+          task_markers: result.task_markers || [],
+          trim_points: result.trim_points || null,
+          exclude_regions: result.exclude_regions || [],
+          frame_counts: result.frame_counts || {},
         };
       } catch (error) {
         console.error('Failed to get replay data:', error);
