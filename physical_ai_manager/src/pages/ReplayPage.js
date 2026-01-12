@@ -28,6 +28,7 @@ import {
   formatDateTime,
   formatTime,
 } from '../utils/chartUtils';
+import { useKeyboardShortcuts } from '../hooks/useKeyboardShortcuts';
 import {
   setSelectedBagPath,
   setLoading,
@@ -510,24 +511,7 @@ function ReplayPage({ isActive }) {
     [rosbagList, currentBagIndex, isDownloading, dispatch, getReplayData, bagPath, taskMarkers]
   );
 
-  // Ref to hold latest callback functions (avoids stale closures)
-  const navigateRosbagRef = useRef(null);
-  const togglePlayPauseRef = useRef(null);
-  const stepFrameRef = useRef(null);
-  const seekRelativeRef = useRef(null);
-  const toggleLoopPointRef = useRef(null);
-  const clearLoopRef = useRef(null);
-  const openMarkerDialogRef = useRef(null);
-  const deleteNearestMarkerRef = useRef(null);
-  const jumpToMarkerRef = useRef(null);
-  const setTrimStartRef = useRef(null);
-  const setTrimEndRef = useRef(null);
-  const toggleExcludeRegionRef = useRef(null);
 
-  // Update navigateRosbag ref when callback changes
-  useEffect(() => {
-    navigateRosbagRef.current = navigateRosbag;
-  }, [navigateRosbag]);
 
   // Handle video events (simplified - videos are pre-downloaded)
   useEffect(() => {
@@ -612,11 +596,6 @@ function ReplayPage({ isActive }) {
     }
   }, [isPlaying, dispatch]);
 
-  // Update togglePlayPause ref for keyboard handler
-  useEffect(() => {
-    togglePlayPauseRef.current = togglePlayPause;
-  }, [togglePlayPause]);
-
   // Restart playback from beginning
   const restartPlayback = useCallback(() => {
     videoRefs.current.forEach((video) => {
@@ -667,14 +646,6 @@ function ReplayPage({ isActive }) {
     [isVideoLoaded, duration, currentTime, dispatch]
   );
 
-  useEffect(() => {
-    stepFrameRef.current = stepFrame;
-  }, [stepFrame]);
-
-  useEffect(() => {
-    seekRelativeRef.current = seekRelative;
-  }, [seekRelative]);
-
   // Toggle A-B loop points (press 'a' to set A, then B, then clear)
   const toggleLoopPoint = useCallback(() => {
     if (!isVideoLoaded) return;
@@ -707,14 +678,6 @@ function ReplayPage({ isActive }) {
     setLoopEnd(null);
     toast('Loop cleared');
   }, []);
-
-  useEffect(() => {
-    toggleLoopPointRef.current = toggleLoopPoint;
-  }, [toggleLoopPoint]);
-
-  useEffect(() => {
-    clearLoopRef.current = clearLoop;
-  }, [clearLoop]);
 
   // ===== Task Marker Callbacks =====
 
@@ -1041,101 +1004,33 @@ function ReplayPage({ isActive }) {
     return { currentActiveTask: activeMarker, currentActiveTaskIndex: activeIndex };
   }, [taskMarkers, currentTime]);
 
-  useEffect(() => {
-    openMarkerDialogRef.current = openMarkerDialog;
-  }, [openMarkerDialog]);
-
-  useEffect(() => {
-    deleteNearestMarkerRef.current = deleteNearestMarker;
-  }, [deleteNearestMarker]);
-
-  useEffect(() => {
-    jumpToMarkerRef.current = jumpToMarker;
-  }, [jumpToMarker]);
-
-  useEffect(() => {
-    setTrimStartRef.current = openTrimStartDialog;
-  }, [openTrimStartDialog]);
-
-  useEffect(() => {
-    setTrimEndRef.current = applyTrimEnd;
-  }, [applyTrimEnd]);
-
-  useEffect(() => {
-    toggleExcludeRegionRef.current = toggleExcludeRegion;
-  }, [toggleExcludeRegion]);
-
-  // Keyboard shortcuts (using e.code for IME compatibility - works with Korean input)
-  useEffect(() => {
-    if (!isActive) return;
-
-    const handleKeyDown = (e) => {
-      // Ignore when focused on input fields
-      if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
-
-      if (e.code === 'ArrowUp') {
-        e.preventDefault();
-        navigateRosbagRef.current?.('prev');
-      } else if (e.code === 'ArrowDown') {
-        e.preventDefault();
-        navigateRosbagRef.current?.('next');
-      } else if (e.code === 'ArrowLeft' && e.shiftKey) {
-        e.preventDefault();
-        seekRelativeRef.current?.(-5);
-      } else if (e.code === 'ArrowRight' && e.shiftKey) {
-        e.preventDefault();
-        seekRelativeRef.current?.(5);
-      } else if (e.code === 'ArrowLeft') {
-        e.preventDefault();
-        stepFrameRef.current?.('backward');
-      } else if (e.code === 'ArrowRight') {
-        e.preventDefault();
-        stepFrameRef.current?.('forward');
-      } else if (e.code === 'Space') {
-        e.preventDefault();
-        togglePlayPauseRef.current?.();
-      } else if (e.code === 'KeyA') {
-        e.preventDefault();
-        toggleLoopPointRef.current?.();
-      } else if (e.code === 'Backspace') {
-        e.preventDefault();
-        clearLoopRef.current?.();
-      } else if (e.code === 'KeyM') {
-        e.preventDefault();
-        openMarkerDialogRef.current?.();
-      } else if (e.code === 'KeyD') {
-        e.preventDefault();
-        deleteNearestMarkerRef.current?.();
-      } else if (e.code >= 'Digit1' && e.code <= 'Digit9') {
-        e.preventDefault();
-        jumpToMarkerRef.current?.(parseInt(e.code.replace('Digit', '')) - 1);
-      } else if (e.code === 'KeyS') {
-        e.preventDefault();
-        setTrimStartRef.current?.();
-      } else if (e.code === 'KeyE') {
-        e.preventDefault();
-        setTrimEndRef.current?.();
-      } else if (e.code === 'KeyX') {
-        e.preventDefault();
-        toggleExcludeRegionRef.current?.();
-      } else if (e.code === 'Escape' && pendingExcludeStart) {
-        e.preventDefault();
-        cancelExcludeRegion();
-      } else if (e.code === 'Slash' && e.shiftKey) {
-        e.preventDefault();
-        setShowHelpModal((prev) => !prev);
-      } else if (e.code === 'Escape' && showHelpModal) {
-        e.preventDefault();
-        setShowHelpModal(false);
-      } else if (e.code === 'Escape' && showTrimStartDialog) {
-        e.preventDefault();
-        setShowTrimStartDialog(false);
-      }
-    };
-
-    window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [isActive, showHelpModal, showTrimStartDialog, pendingExcludeStart, cancelExcludeRegion]);
+  // Keyboard shortcuts via useKeyboardShortcuts hook
+  useKeyboardShortcuts({
+    isActive,
+    handlers: {
+      onNavigatePrev: () => navigateRosbag('prev'),
+      onNavigateNext: () => navigateRosbag('next'),
+      onStepBackward: () => stepFrame('backward'),
+      onStepForward: () => stepFrame('forward'),
+      onSeekRelative: seekRelative,
+      onTogglePlayPause: togglePlayPause,
+      onToggleLoopPoint: toggleLoopPoint,
+      onClearLoop: clearLoop,
+      onOpenMarkerDialog: openMarkerDialog,
+      onDeleteNearestMarker: deleteNearestMarker,
+      onJumpToMarker: jumpToMarker,
+      onSetTrimStart: openTrimStartDialog,
+      onSetTrimEnd: applyTrimEnd,
+      onToggleExcludeRegion: toggleExcludeRegion,
+      onCancelExclude: cancelExcludeRegion,
+      onToggleHelp: () => setShowHelpModal((prev) => !prev),
+      onCloseHelp: () => setShowHelpModal(false),
+      onCloseTrimDialog: () => setShowTrimStartDialog(false),
+      hasPendingExclude: pendingExcludeStart,
+      showHelpModal,
+      showTrimDialog: showTrimStartDialog,
+    },
+  });
 
   // Change playback speed
   const changePlaybackSpeed = useCallback((speed) => {
@@ -1180,13 +1075,6 @@ function ReplayPage({ isActive }) {
     });
     dispatch(setCurrentTime(clampedTime));
   }, [isVideoLoaded, duration, dispatch]);
-
-  // Format time as MM:SS
-  const formatTime = (seconds) => {
-    const mins = Math.floor(seconds / 60);
-    const secs = Math.floor(seconds % 60);
-    return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
-  };
 
   // Extract short name from video file path
   const getShortVideoName = (filePath) => {

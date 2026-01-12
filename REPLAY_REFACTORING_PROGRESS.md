@@ -5,6 +5,19 @@
 
 ---
 
+## ✅ Completed Work (2026-01-12 Session 4)
+
+### useKeyboardShortcuts Hook Integration
+
+- **ReplayPage.js**: 2490 → 2378 lines (-112 lines)
+- Integrated `useKeyboardShortcuts` hook for keyboard shortcut handling
+- Removed 12 function refs and their useEffect updaters
+- Removed inline keyboard event handler (~70 lines)
+- Removed duplicate `formatTime` function (using imported version from chartUtils)
+- Hook updated to use `e.code` for IME compatibility
+
+---
+
 ## ✅ Completed Work (2026-01-12 Session 3)
 
 ### Bug Fix - Korean IME Keyboard Shortcuts
@@ -92,11 +105,11 @@ Added missing fields to `getReplayData` return object:
 
 ### Custom Hooks
 
-| File | Description | Lines |
-|------|-------------|-------|
-| `hooks/useHybridVideoLoader.js` | Hybrid video loading strategy | ~260 |
-| `hooks/useVideoSync.js` | Multi-video synchronization | ~280 |
-| `hooks/useKeyboardShortcuts.js` | Keyboard shortcut management | ~190 |
+| File | Description | Status |
+|------|-------------|--------|
+| `hooks/useHybridVideoLoader.js` | Hybrid video loading strategy | Available |
+| `hooks/useVideoSync.js` | Multi-video synchronization | ⏸️ Deferred |
+| `hooks/useKeyboardShortcuts.js` | Keyboard shortcut management | ✅ Integrated |
 
 ### Replay Components
 
@@ -114,13 +127,12 @@ Added missing fields to `getReplayData` return object:
 
 ### Frontend Integration (Optional)
 
-1. **useKeyboardShortcuts Integration**
-   - Move keyboard shortcut logic to Hook
-   - Already using `e.code` for IME compatibility
+1. ~~**useKeyboardShortcuts Integration**~~ ✅ Done (Session 4)
 
-2. **useVideoSync Integration**
-   - Separate video synchronization logic
-   - Includes play/pause, seeking, A-B loop
+2. **useVideoSync Integration** ⏸️ Deferred
+   - High coupling with component state (27 usages of videoRefs)
+   - Would require significant restructuring
+   - Risk outweighs benefit for current scope
 
 ### Backend Tests
 
@@ -165,9 +177,10 @@ npm test -- --testPathPattern=chartUtils
 
 | Item | Before | After | Change |
 |------|--------|-------|--------|
-| ReplayPage.js | 2711 lines | ~2490 lines | -221 lines |
+| ReplayPage.js | 2711 lines | 2378 lines | -333 lines |
 | Backend (replay_data_handler) | 700 lines | 513 lines | -187 lines |
 | New Backend modules | 0 | 3 files (768 lines) | +768 lines |
 | New Frontend components | 0 | 5 files (~1000 lines) | Reusable |
 | Backend unit tests | 0 | 2 files | test_metadata_manager, test_video_metadata_extractor |
+| useKeyboardShortcuts | Inline (~70 lines) | Hook (188 lines) | ✅ Integrated |
 | Keyboard shortcuts | e.key (EN only) | e.code (IME compatible) | Korean input fix |

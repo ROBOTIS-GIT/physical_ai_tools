@@ -14,7 +14,7 @@
 //
 // Author: Dongyun Kim
 
-import { useEffect, useRef, useCallback } from 'react';
+import { useEffect, useRef } from 'react';
 
 /**
  * Hook for handling keyboard shortcuts in Replay Viewer.
@@ -45,7 +45,8 @@ export function useKeyboardShortcuts({
 
             const h = handlersRef.current;
 
-            switch (e.key) {
+            // Using e.code for IME compatibility (works with Korean/Japanese input mode)
+            switch (e.code) {
                 // Navigation
                 case 'ArrowUp':
                     e.preventDefault();
@@ -75,14 +76,13 @@ export function useKeyboardShortcuts({
                     break;
 
                 // Playback
-                case ' ':
+                case 'Space':
                     e.preventDefault();
                     h.onTogglePlayPause?.();
                     break;
 
                 // A-B Loop
-                case 'a':
-                case 'A':
+                case 'KeyA':
                     e.preventDefault();
                     h.onToggleLoopPoint?.();
                     break;
@@ -92,54 +92,51 @@ export function useKeyboardShortcuts({
                     break;
 
                 // Task Markers
-                case 'm':
-                case 'M':
+                case 'KeyM':
                     e.preventDefault();
                     h.onOpenMarkerDialog?.();
                     break;
-                case 'd':
-                case 'D':
+                case 'KeyD':
                     e.preventDefault();
                     h.onDeleteNearestMarker?.();
                     break;
 
-                // Jump to marker by number
-                case '1':
-                case '2':
-                case '3':
-                case '4':
-                case '5':
-                case '6':
-                case '7':
-                case '8':
-                case '9':
+                // Jump to marker by number (Digit1 through Digit9)
+                case 'Digit1':
+                case 'Digit2':
+                case 'Digit3':
+                case 'Digit4':
+                case 'Digit5':
+                case 'Digit6':
+                case 'Digit7':
+                case 'Digit8':
+                case 'Digit9':
                     e.preventDefault();
-                    h.onJumpToMarker?.(parseInt(e.key) - 1);
+                    h.onJumpToMarker?.(parseInt(e.code.replace('Digit', '')) - 1);
                     break;
 
                 // Trim points
-                case 's':
-                case 'S':
+                case 'KeyS':
                     e.preventDefault();
                     h.onSetTrimStart?.();
                     break;
-                case 'e':
-                case 'E':
+                case 'KeyE':
                     e.preventDefault();
                     h.onSetTrimEnd?.();
                     break;
 
                 // Exclude regions
-                case 'x':
-                case 'X':
+                case 'KeyX':
                     e.preventDefault();
                     h.onToggleExcludeRegion?.();
                     break;
 
-                // Help
-                case '?':
-                    e.preventDefault();
-                    h.onToggleHelp?.();
+                // Help (Shift + /)
+                case 'Slash':
+                    if (e.shiftKey) {
+                        e.preventDefault();
+                        h.onToggleHelp?.();
+                    }
                     break;
 
                 // Escape for various actions
