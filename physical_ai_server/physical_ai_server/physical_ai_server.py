@@ -78,7 +78,7 @@ class PhysicalAIServer(Node):
     DEFAULT_TOPIC_TIMEOUT = 5.0  # seconds
     PUB_QOS_SIZE = 10
     TRAINING_STATUS_TIMER_FREQUENCY = 0.5  # seconds
-    VIDEO_SERVER_PORT = 8081  # Port for video file server
+    VIDEO_SERVER_PORT = 8082  # Port for video file server
 
     class RosbagNotReadyException(Exception):
         """Exception raised when rosbag recording cannot start yet."""
