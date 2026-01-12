@@ -1,0 +1,32 @@
+# ROSbag Recorder Configuration
+
+# Topics to record (can be overridden by service call)
+topics_to_record:
+  - /camera/image_raw
+  - /camera/depth/image_raw
+  - /robot/joint_states
+  - /robot/pose
+  - /imu/data
+
+# Video compression settings for image topics
+video_compression:
+  # Frames per second for MP4 videos
+  fps: 30.0
+
+  # Video codec: "h264" (preferred) or "mp4v" (fallback)
+  codec: "h264"
+
+  # Video quality (0-100, higher is better)
+  # Only applicable for some codecs
+  quality: 85
+
+# Recording settings
+recording:
+  # Default output directory for bags
+  output_directory: "~/rosbag_recordings"
+
+  # Use timestamps in bag filenames
+  use_timestamp: true
+
+  # Buffer size for subscriptions
+  qos_depth: 100

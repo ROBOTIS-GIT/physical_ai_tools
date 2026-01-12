@@ -10,12 +10,17 @@
   <license>Apache 2.0</license>
   <author email="wwj@robotis.com">Woojin Wie</author>
   <author email="pkw@robotis.com">Kiwoong Park</author>
+  <author email="rdy@robotis.com">Dongyun Kim</author>
   <buildtool_depend>ament_cmake</buildtool_depend>
   <build_depend>rosidl_default_generators</build_depend>
   <depend>rclcpp</depend>
   <depend>rosbag2_cpp</depend>
   <depend>std_srvs</depend>
+  <depend>std_msgs</depend>
   <depend>sensor_msgs</depend>
+  <depend>cv_bridge</depend>
+  <depend>image_transport</depend>
+  <depend>OpenCV</depend>
   <exec_depend>rosidl_default_runtime</exec_depend>
   <member_of_group>rosidl_interface_packages</member_of_group>
   <export>
