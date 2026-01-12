@@ -506,17 +506,25 @@ class RosbagToLerobotConverter:
         """Find MP4 video files in the rosbag directory."""
         video_files = {}
 
-        # Look for compressed MP4 files
-        for mp4_file in bag_path.glob("*_compressed.mp4"):
-            camera_name = self._extract_camera_name(mp4_file.stem)
-            video_files[camera_name] = mp4_file
+        # Search patterns: root directory and videos/ subdirectory
+        search_paths = [bag_path, bag_path / "videos"]
 
-        # Also check for non-compressed MP4s
-        for mp4_file in bag_path.glob("*.mp4"):
-            if "_compressed" not in mp4_file.stem:
+        for search_path in search_paths:
+            if not search_path.exists():
+                continue
+
+            # Look for compressed MP4 files
+            for mp4_file in search_path.glob("*_compressed.mp4"):
                 camera_name = self._extract_camera_name(mp4_file.stem)
                 if camera_name not in video_files:
                     video_files[camera_name] = mp4_file
+
+            # Also check for non-compressed MP4s
+            for mp4_file in search_path.glob("*.mp4"):
+                if "_compressed" not in mp4_file.stem:
+                    camera_name = self._extract_camera_name(mp4_file.stem)
+                    if camera_name not in video_files:
+                        video_files[camera_name] = mp4_file
 
         return video_files
 
