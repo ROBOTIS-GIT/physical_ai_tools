@@ -30,10 +30,12 @@ from physical_ai_interfaces.srv import (
     BrowseFile,
     EditDataset,
     GetDatasetInfo,
-    GetImageTopicList
+    GetImageTopicList,
+    GetReplayData
 )
 from physical_ai_server.communication.multi_subscriber import MultiSubscriber
 from physical_ai_server.data_processing.data_editor import DataEditor
+from physical_ai_server.data_processing.replay_data_handler import ReplayDataHandler
 from physical_ai_server.utils.file_browse_utils import FileBrowseUtils
 from physical_ai_server.utils.parameter_utils import (
     parse_topic_list,
@@ -93,6 +95,9 @@ class Communicator:
 
         # Initialize DataEditor for dataset editing
         self.data_editor = DataEditor()
+
+        # Initialize ReplayDataHandler for replay viewer
+        self.replay_data_handler = ReplayDataHandler(logger=self.node.get_logger())
 
         # Initialize joint publishers
         self.joint_publishers = {}
@@ -255,6 +260,12 @@ class Communicator:
             GetDatasetInfo,
             '/dataset/get_info',
             self.get_dataset_info_callback
+        )
+
+        self.get_replay_data_service = self.node.create_service(
+            GetReplayData,
+            '/replay/get_data',
+            self.get_replay_data_callback
         )
 
         self._rosbag_send_command_client = self.node.create_client(
@@ -541,6 +552,38 @@ class Communicator:
             response.success = False
             response.message = f'Error: {str(e)}'
             response.dataset_info = DatasetInfo()
+            return response
+
+    def get_replay_data_callback(self, request, response):
+        """Handle replay data request for ROSbag visualization."""
+        try:
+            bag_path = request.bag_path
+            self.node.get_logger().info(f'Getting replay data from: {bag_path}')
+
+            result = self.replay_data_handler.get_replay_data(bag_path)
+
+            response.success = result['success']
+            response.message = result['message']
+            response.video_files = result['video_files']
+            response.video_topics = result['video_topics']
+            response.video_fps = result['video_fps']
+            response.frame_indices = result['frame_indices']
+            response.frame_timestamps = result['frame_timestamps']
+            response.joint_timestamps = result['joint_timestamps']
+            response.joint_names = result['joint_names']
+            response.joint_positions = result['joint_positions']
+            response.start_time = result['start_time']
+            response.end_time = result['end_time']
+            response.duration = result['duration']
+            response.video_server_port = 8765  # Default video server port
+            response.bag_path = bag_path
+
+            return response
+
+        except Exception as e:
+            self.node.get_logger().error(f'Error in get_replay_data_callback: {str(e)}')
+            response.success = False
+            response.message = f'Error: {str(e)}'
             return response
 
     def get_publisher_msg_types(self):

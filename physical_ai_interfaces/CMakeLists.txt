@@ -21,6 +21,7 @@ rosidl_generate_interfaces(${PROJECT_NAME}
   "srv/GetImageTopicList.srv"
   "srv/GetModelWeightList.srv"
   "srv/GetPolicyList.srv"
+  "srv/GetReplayData.srv"
   "srv/GetRobotTypeList.srv"
   "srv/GetSavedPolicyList.srv"
   "srv/GetTrainingInfo.srv"

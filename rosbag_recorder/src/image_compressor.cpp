@@ -74,6 +74,7 @@ std::string ImageCompressor::build_ffmpeg_command(
   // -preset fast: encoding speed/quality tradeoff
   // -crf 23: quality (0-51, lower is better, 23 is default)
   // -pix_fmt yuv420p: output pixel format for compatibility
+  // -movflags +faststart: move moov atom to beginning for web streaming
 
   cmd << "ffmpeg -y -f rawvideo -vcodec rawvideo "
       << "-s " << width << "x" << height << " "
@@ -84,6 +85,7 @@ std::string ImageCompressor::build_ffmpeg_command(
       << "-preset fast "
       << "-crf 23 "
       << "-pix_fmt yuv420p "
+      << "-movflags +faststart "
       << "-loglevel error "
       << "\"" << output_path << "\" 2>/dev/null";
 

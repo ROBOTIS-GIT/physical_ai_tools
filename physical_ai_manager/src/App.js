@@ -16,7 +16,7 @@
 
 import React, { useEffect, useRef } from 'react';
 import clsx from 'clsx';
-import { MdHome, MdVideocam, MdMemory, MdWidgets } from 'react-icons/md';
+import { MdHome, MdVideocam, MdMemory, MdWidgets, MdPlayCircle } from 'react-icons/md';
 import { GoGraph } from 'react-icons/go';
 import { Toaster } from 'react-hot-toast';
 import toast from 'react-hot-toast';
@@ -26,6 +26,7 @@ import RecordPage from './pages/RecordPage';
 import InferencePage from './pages/InferencePage';
 import TrainingPage from './pages/TrainingPage';
 import EditDatasetPage from './pages/EditDatasetPage';
+import ReplayPage from './pages/ReplayPage';
 import { useRosTopicSubscription } from './hooks/useRosTopicSubscription';
 import rosConnectionManager from './utils/rosConnectionManager';
 import { useDispatch, useSelector } from 'react-redux';
@@ -201,6 +202,11 @@ function App() {
     dispatch(moveToPage(PageType.EDIT_DATASET));
   };
 
+  const handleReplayPageNavigation = () => {
+    isFirstLoad.current = false;
+    dispatch(moveToPage(PageType.REPLAY));
+  };
+
   // Force cleanup of all image streams when page changes
   useEffect(() => {
     return () => {
@@ -299,6 +305,18 @@ function App() {
             <MdWidgets size={28} className="mb-2" />
             <span className="mt-1 text-sm whitespace-nowrap">Data Tools</span>
           </button>
+
+          {/* Replay page button */}
+          <button
+            className={clsx(classPageButton, {
+              'hover:bg-gray-200 active:bg-gray-400': page !== PageType.REPLAY,
+              'bg-gray-300': page === PageType.REPLAY,
+            })}
+            onClick={handleReplayPageNavigation}
+          >
+            <MdPlayCircle size={28} className="mb-2" />
+            <span className="mt-1 text-sm whitespace-nowrap">Replay</span>
+          </button>
         </div>
       </aside>
       <main className="flex-1 flex flex-col h-screen">
@@ -312,6 +330,8 @@ function App() {
           <TrainingPage isActive={page === PageType.TRAINING} />
         ) : page === PageType.EDIT_DATASET ? (
           <EditDatasetPage isActive={page === PageType.EDIT_DATASET} />
+        ) : page === PageType.REPLAY ? (
+          <ReplayPage isActive={page === PageType.REPLAY} />
         ) : (
           <HomePage />
         )}
