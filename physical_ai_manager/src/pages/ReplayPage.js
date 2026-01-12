@@ -26,6 +26,7 @@ import {
   Tooltip,
   ResponsiveContainer,
   ReferenceLine,
+  ReferenceDot,
 } from 'recharts';
 import toast from 'react-hot-toast';
 import clsx from 'clsx';
@@ -43,8 +44,8 @@ import {
 } from '../features/replay/replaySlice';
 
 // Fixed colors for state and action
-const STATE_COLOR = '#2563eb';  // Blue for state
-const ACTION_COLOR = '#dc2626'; // Red for action
+const STATE_COLOR = '#dc2626';  // Red for state
+const ACTION_COLOR = '#2563eb'; // Blue for action
 
 // Individual Joint Chart Component showing both State and Action
 function JointChart({ name, stateData, actionData, currentTime, isExpanded, onToggle, hasAction }) {
@@ -171,7 +172,29 @@ function JointChart({ name, stateData, actionData, currentTime, isExpanded, onTo
                 strokeDasharray="none"
                 label={{ value: '', position: 'top' }}
               />
-              {/* State line - Blue */}
+              {/* Current position marker for State */}
+              {currentStateValue !== null && currentStateValue !== undefined && (
+                <ReferenceDot
+                  x={currentTime}
+                  y={currentStateValue}
+                  r={6}
+                  fill={STATE_COLOR}
+                  stroke="#fff"
+                  strokeWidth={2}
+                />
+              )}
+              {/* Current position marker for Action */}
+              {hasAction && currentActionValue !== null && currentActionValue !== undefined && (
+                <ReferenceDot
+                  x={currentTime}
+                  y={currentActionValue}
+                  r={6}
+                  fill={ACTION_COLOR}
+                  stroke="#fff"
+                  strokeWidth={2}
+                />
+              )}
+              {/* State line - Red */}
               <Line
                 type="monotone"
                 dataKey={`state_${name}`}
@@ -182,7 +205,7 @@ function JointChart({ name, stateData, actionData, currentTime, isExpanded, onTo
                 name="State"
                 connectNulls
               />
-              {/* Action line - Red */}
+              {/* Action line - Blue */}
               {hasAction && (
                 <Line
                   type="monotone"
