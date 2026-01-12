@@ -50,6 +50,7 @@ import pyarrow.parquet as pq
 
 from .bag_reader import BagReader
 from .metadata_manager import MetadataManager
+from .quality_analyzer import QualityAnalyzer, QualityConfig, QualityReport
 from .video_metadata_extractor import VideoMetadataExtractor
 
 
@@ -76,6 +77,11 @@ class ConversionConfig:
     # Trim settings
     apply_trim: bool = True
     apply_exclude_regions: bool = True
+
+    # Quality analysis settings
+    enable_quality_report: bool = True
+    quality_warning_multiplier: float = 2.0
+    quality_error_multiplier: float = 4.0
 
 
 @dataclass
@@ -110,7 +116,12 @@ class RosbagToLerobotConverter:
         self._metadata_manager = MetadataManager(logger)
         self._video_extractor = VideoMetadataExtractor(logger)
 
-        # Dataset state
+        quality_config = QualityConfig(
+            warning_multiplier=config.quality_warning_multiplier,
+            error_multiplier=config.quality_error_multiplier,
+        )
+        self._quality_analyzer = QualityAnalyzer(quality_config, logger)
+
         self._features: Dict[str, Dict] = {}
         self._tasks: Dict[int, str] = {}
         self._task_to_index: Dict[str, int] = {}
@@ -118,8 +129,8 @@ class RosbagToLerobotConverter:
         self._episodes_stats: Dict[int, Dict] = {}
         self._total_frames = 0
         self._total_episodes = 0
+        self._quality_reports: Dict[int, QualityReport] = {}
 
-        # Joint name mappings (populated from first rosbag)
         self._state_joint_names: List[str] = []
         self._action_joint_names: List[str] = []
 
@@ -141,21 +152,35 @@ class RosbagToLerobotConverter:
         else:
             print(f"[WARNING] {msg}")
 
+    def _analyze_rosbag_quality(self, bag_path: Path) -> QualityReport:
+        reader = BagReader(bag_path, self.logger)
+        if not reader.open():
+            self._log_error(f"Failed to open rosbag for quality analysis: {bag_path}")
+            return QualityReport(
+                source_bag=str(bag_path),
+                duration_sec=0.0,
+                total_messages=0,
+            )
+
+        topic_timestamps: Dict[str, List[float]] = {}
+        topic_types = reader.get_topic_types()
+
+        for topic, msg, timestamp in reader.read_messages():
+            if topic not in topic_timestamps:
+                topic_timestamps[topic] = []
+            topic_timestamps[topic].append(timestamp)
+
+        return self._quality_analyzer.analyze_rosbag(
+            bag_path=bag_path,
+            topic_timestamps=topic_timestamps,
+            topic_types=topic_types,
+        )
+
     def convert_single_rosbag(
         self,
         bag_path: Path,
         episode_index: int,
     ) -> Optional[EpisodeData]:
-        """
-        Convert a single ROSbag recording to episode data.
-
-        Args:
-            bag_path: Path to the ROSbag directory
-            episode_index: Index for this episode in the dataset
-
-        Returns:
-            EpisodeData if successful, None otherwise
-        """
         bag_path = Path(bag_path)
         if not bag_path.exists():
             self._log_error(f"Bag path does not exist: {bag_path}")
@@ -163,12 +188,15 @@ class RosbagToLerobotConverter:
 
         self._log_info(f"Converting rosbag: {bag_path} (episode {episode_index})")
 
-        # Load robot_config.yaml for metadata
         robot_config = self._metadata_manager.load_robot_config(bag_path)
         if robot_config:
             self._update_config_from_robot_config(robot_config)
 
-        # Get trim points and exclude regions
+        if self.config.enable_quality_report:
+            quality_report = self._analyze_rosbag_quality(bag_path)
+            self._quality_reports[episode_index] = quality_report
+            self._quality_analyzer.print_summary(quality_report)
+
         trim_points = None
         exclude_regions = []
         if self.config.apply_trim:
@@ -176,18 +204,15 @@ class RosbagToLerobotConverter:
         if self.config.apply_exclude_regions:
             exclude_regions = self._metadata_manager.get_exclude_regions(bag_path)
 
-        # Extract joint data from rosbag
         episode_data = self._extract_joint_data(
             bag_path, episode_index, trim_points, exclude_regions
         )
         if episode_data is None:
             return None
 
-        # Find and process video files
         video_files = self._find_video_files(bag_path)
         episode_data.video_files = video_files
 
-        # Extract tasks from task markers
         task_markers = self._metadata_manager.get_task_markers(bag_path)
         if task_markers:
             episode_data.tasks = list(
@@ -591,14 +616,49 @@ class RosbagToLerobotConverter:
             self._log_error("No episodes were successfully converted")
             return False
 
-        # Build features from collected data
         self._build_features(episodes_data)
-
-        # Write dataset files
         self._write_dataset(episodes_data)
+
+        if self.config.enable_quality_report and self._quality_reports:
+            self._write_quality_reports(output_dir)
 
         self._log_info(f"Successfully converted {len(episodes_data)} episodes")
         return True
+
+    def _write_quality_reports(self, output_dir: Path):
+        meta_dir = output_dir / "meta"
+        meta_dir.mkdir(parents=True, exist_ok=True)
+
+        combined_report = {
+            "overall_status": "GOOD",
+            "total_warnings": 0,
+            "total_errors": 0,
+            "episodes": {},
+        }
+
+        has_error = False
+        has_warning = False
+
+        for episode_idx, report in self._quality_reports.items():
+            combined_report["episodes"][f"episode_{episode_idx:06d}"] = report.to_dict()
+            combined_report["total_warnings"] += report.total_warnings
+            combined_report["total_errors"] += report.total_errors
+
+            if report.overall_status == "ERROR":
+                has_error = True
+            elif report.overall_status == "WARNING":
+                has_warning = True
+
+        if has_error:
+            combined_report["overall_status"] = "ERROR"
+        elif has_warning:
+            combined_report["overall_status"] = "WARNING"
+
+        report_path = meta_dir / "quality_report.json"
+        with open(report_path, "w", encoding="utf-8") as f:
+            json.dump(combined_report, f, indent=2, ensure_ascii=False)
+
+        self._log_info(f"Wrote quality report: {report_path}")
 
     def _build_features(self, episodes_data: List[EpisodeData]):
         """Build feature definitions from episode data."""
