@@ -1,0 +1,39 @@
+# Get replay data from a ROSbag directory
+# Returns video metadata, frame timestamps, and sensor data for replay viewer
+
+# Request
+string bag_path              # Path to the ROSbag directory
+
+---
+
+# Response
+bool success                 # Success flag
+string message               # Error message if failed
+
+# Video information
+string[] video_files         # List of video file paths (relative to bag_path)
+string[] video_topics        # Corresponding topic names for each video
+float64[] video_fps          # FPS for each video
+
+# Frame metadata (for timestamp synchronization)
+uint32[] frame_indices       # Frame indices
+float64[] frame_timestamps   # Timestamps in seconds (relative to start)
+
+# Sensor data (joint states)
+float64[] joint_timestamps   # Timestamps for joint states
+string[] joint_names         # Joint names
+float64[] joint_positions    # Flattened joint positions (num_timestamps * num_joints)
+
+# Action data
+float64[] action_timestamps  # Timestamps for actions
+string[] action_names        # Action names (may match joint_names)
+float64[] action_values      # Flattened action values (num_timestamps * num_actions)
+
+# Duration info
+float64 start_time           # Start timestamp (seconds)
+float64 end_time             # End timestamp (seconds)
+float64 duration             # Total duration (seconds)
+
+# Video server info
+uint16 video_server_port     # Port for video file server
+string bag_path              # Bag path for constructing video URLs

@@ -22,6 +22,7 @@ import uiSlice from '../features/ui/uiSlice';
 import rosSlice from '../features/ros/rosSlice';
 import trainingSlice from '../features/training/trainingSlice';
 import editDatasetSlice from '../features/editDataset/editDatasetSlice';
+import replaySlice from '../features/replay/replaySlice';
 
 export const store = configureStore({
   reducer: {
@@ -30,6 +31,7 @@ export const store = configureStore({
     ui: uiSlice,
     training: trainingSlice,
     editDataset: editDatasetSlice,
+    replay: replaySlice,
   },
   middleware: (getDefaultMiddleware) =>
     getDefaultMiddleware({

@@ -405,26 +405,25 @@ export function useRosServiceCaller() {
   const browseFile = useCallback(
     async (action, currentPath = '', targetName = '', targetFiles = null, targetFolders = null) => {
       try {
+        // Ensure target_files is always an array
+        let filesArray = [];
+        if (targetFiles) {
+          filesArray = Array.isArray(targetFiles) ? targetFiles : [targetFiles];
+        }
+
+        // Ensure target_folders is always an array
+        let foldersArray = [];
+        if (targetFolders) {
+          foldersArray = Array.isArray(targetFolders) ? targetFolders : [targetFolders];
+        }
+
         const requestData = {
           action: action,
           current_path: currentPath,
           target_name: targetName,
-          target_folders: targetFolders,
+          target_files: filesArray,
+          target_folders: foldersArray,
         };
-
-        // Only add target_files if we actually have files to search for
-        if (targetFiles && targetFiles.length > 0) {
-          requestData.target_files = targetFiles;
-        } else {
-          requestData.target_files = [];
-        }
-
-        // Only add target_folders if we actually have folders to search for
-        if (targetFolders && targetFolders.length > 0) {
-          requestData.target_folders = targetFolders;
-        } else {
-          requestData.target_folders = [];
-        }
 
         const result = await callService(
           '/browse_file',
@@ -571,6 +570,28 @@ export function useRosServiceCaller() {
     [callService]
   );
 
+  const getReplayData = useCallback(
+    async (bagPath) => {
+      try {
+        console.log('Calling service /replay/get_data with request:', { bag_path: bagPath });
+
+        const result = await callService(
+          '/replay/get_data',
+          'physical_ai_interfaces/srv/GetReplayData',
+          { bag_path: bagPath },
+          30000 // 30 second timeout for potentially large bags
+        );
+
+        console.log('getReplayData service response:', result);
+        return result;
+      } catch (error) {
+        console.error('Failed to get replay data:', error);
+        throw new Error(`${error.message || error}`);
+      }
+    },
+    [callService]
+  );
+
   return {
     callService,
     sendRecordCommand,
@@ -589,5 +610,6 @@ export function useRosServiceCaller() {
     getDatasetInfo,
     controlHfServer,
     getTrainingInfo,
+    getReplayData,
   };
 }
