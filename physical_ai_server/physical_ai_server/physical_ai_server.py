@@ -25,6 +25,8 @@ import time
 import traceback
 from typing import Optional
 
+import yaml
+
 from ament_index_python.packages import get_package_share_directory
 from physical_ai_interfaces.msg import (
     BrowserItem,
@@ -76,7 +78,7 @@ class PhysicalAIServer(Node):
     DEFAULT_TOPIC_TIMEOUT = 5.0  # seconds
     PUB_QOS_SIZE = 10
     TRAINING_STATUS_TIMER_FREQUENCY = 0.5  # seconds
-    VIDEO_SERVER_PORT = 8765  # Port for video file server
+    VIDEO_SERVER_PORT = 8081  # Port for video file server
 
     class RosbagNotReadyException(Exception):
         """Exception raised when rosbag recording cannot start yet."""
@@ -148,11 +150,15 @@ class PhysicalAIServer(Node):
             ]
             self.video_server = VideoFileServer(
                 port=self.VIDEO_SERVER_PORT,
-                allowed_paths=allowed_paths
+                allowed_paths=allowed_paths,
+                replay_data_handler=self.replay_data_handler
             )
             self.video_server.start()
             self.get_logger().info(
                 f'Video file server started on port {self.VIDEO_SERVER_PORT}'
+            )
+            self.get_logger().info(
+                f'Replay data API available at http://0.0.0.0:{self.VIDEO_SERVER_PORT}/replay-data/'
             )
         except Exception as e:
             self.get_logger().error(f'Failed to start video server: {e}')
@@ -452,12 +458,22 @@ class PhysicalAIServer(Node):
     def _handle_save_transition(self, previous_status: str):
         self.get_logger().info('Stopping rosbag recording(save), '
                                f'previous status: {previous_status}')
+        # Get rosbag path before stopping (path may not be available after stop)
+        rosbag_path = self.data_manager.get_save_rosbag_path()
         self.communicator.stop_rosbag()
+        # Save metadata to rosbag directory
+        if rosbag_path:
+            self._save_rosbag_metadata(rosbag_path)
 
     def _handle_stop_transition(self, previous_status: str):
         self.get_logger().info('Stopping rosbag recording(stop), '
                                f'previous status: {previous_status}')
+        # Get rosbag path before stopping
+        rosbag_path = self.data_manager.get_save_rosbag_path()
         self.communicator.stop_rosbag()
+        # Save metadata to rosbag directory
+        if rosbag_path:
+            self._save_rosbag_metadata(rosbag_path)
 
     def _handle_finish_transition(self, previous_status: str):
         self.get_logger().info('Finishing rosbag recording, '
@@ -469,6 +485,79 @@ class PhysicalAIServer(Node):
                 'Stopping rosbag recording and delete recorded bag, '
                 f'previous status: {previous_status}')
         self.communicator.stop_and_delete_rosbag()
+
+    def _save_rosbag_metadata(self, rosbag_path: str):
+        """
+        Save metadata.yaml file to rosbag directory with robot config info.
+
+        The metadata includes robot type, joint topics (follower/leader),
+        joint order, and camera topics for proper replay visualization.
+        """
+        if not rosbag_path or not os.path.exists(rosbag_path):
+            self.get_logger().warning(
+                f'Cannot save metadata: rosbag path does not exist: {rosbag_path}')
+            return
+
+        if not self.params or not self.joint_order:
+            self.get_logger().warning(
+                'Cannot save metadata: robot parameters not initialized')
+            return
+
+        try:
+            # Build metadata structure
+            metadata = {
+                'robot_type': self.robot_type,
+                'created_at': time.strftime('%Y-%m-%d %H:%M:%S'),
+            }
+
+            # Camera topics
+            if 'camera_topic_list' in self.params:
+                camera_topics = {}
+                for item in self.params['camera_topic_list']:
+                    if ':' in item:
+                        name, topic = item.split(':', 1)
+                        camera_topics[name] = topic
+                metadata['camera_topics'] = camera_topics
+
+            # Joint topics with follow/leader distinction
+            if 'joint_topic_list' in self.params:
+                state_topics = {}
+                action_topics = {}
+                for item in self.params['joint_topic_list']:
+                    if ':' in item:
+                        name, topic = item.split(':', 1)
+                        if name.startswith('follower'):
+                            state_topics[name] = topic
+                        elif name.startswith('leader'):
+                            action_topics[name] = topic
+                        else:
+                            # Default to state if unclear
+                            state_topics[name] = topic
+                metadata['state_topics'] = state_topics
+                metadata['action_topics'] = action_topics
+
+            # Joint order for each topic
+            if self.joint_order:
+                joint_order = {}
+                for key, joints in self.joint_order.items():
+                    # Remove 'joint_order.' prefix if present
+                    clean_key = key.replace('joint_order.', '')
+                    joint_order[clean_key] = joints
+                metadata['joint_order'] = joint_order
+
+            # Total joint order (combined)
+            if self.total_joint_order:
+                metadata['total_joint_order'] = self.total_joint_order
+
+            # Write robot config metadata file (separate from rosbag2's metadata.yaml)
+            metadata_path = os.path.join(rosbag_path, 'robot_config.yaml')
+            with open(metadata_path, 'w', encoding='utf-8') as f:
+                yaml.dump(metadata, f, default_flow_style=False, allow_unicode=True)
+
+            self.get_logger().info(f'Saved robot config metadata to: {metadata_path}')
+
+        except Exception as e:
+            self.get_logger().error(f'Failed to save rosbag metadata: {e}')
 
     def _data_collection_timer_callback(self):
         error_msg = ''
@@ -1268,6 +1357,9 @@ class PhysicalAIServer(Node):
                 response.joint_timestamps = result.get('joint_timestamps', [])
                 response.joint_names = result.get('joint_names', [])
                 response.joint_positions = result.get('joint_positions', [])
+                response.action_timestamps = result.get('action_timestamps', [])
+                response.action_names = result.get('action_names', [])
+                response.action_values = result.get('action_values', [])
                 response.start_time = result.get('start_time', 0.0)
                 response.end_time = result.get('end_time', 0.0)
                 response.duration = result.get('duration', 0.0)

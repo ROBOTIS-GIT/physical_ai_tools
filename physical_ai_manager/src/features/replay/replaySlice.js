@@ -30,8 +30,9 @@ const initialState = {
   // Video information
   videoFiles: [],
   videoTopics: [],
+  videoNames: [],  // Human-readable camera names
   videoFps: [],
-  videoServerPort: 8765,
+  videoServerPort: 8081,
   bagPath: null,
 
   // Frame metadata
@@ -58,6 +59,13 @@ const initialState = {
   isPlaying: false,
   isVideoLoaded: false,
   videoLoadProgress: 0,
+
+  // Extended metadata
+  robotType: '',
+  recordingDate: null,
+  fileSizeBytes: 0,
+  taskMarkers: [],
+  frameCounts: {},
 };
 
 const replaySlice = createSlice({
@@ -77,8 +85,9 @@ const replaySlice = createSlice({
       const data = action.payload;
       state.videoFiles = data.video_files || [];
       state.videoTopics = data.video_topics || [];
+      state.videoNames = data.video_names || [];
       state.videoFps = data.video_fps || [];
-      state.videoServerPort = data.video_server_port || 8765;
+      state.videoServerPort = data.video_server_port || 8082;
       state.bagPath = data.bag_path || null;
       state.frameIndices = data.frame_indices || [];
       state.frameTimestamps = data.frame_timestamps || [];
@@ -91,9 +100,18 @@ const replaySlice = createSlice({
       state.startTime = data.start_time || 0;
       state.endTime = data.end_time || 0;
       state.duration = data.duration || 0;
+      // Extended metadata
+      state.robotType = data.robot_type || '';
+      state.recordingDate = data.recording_date || null;
+      state.fileSizeBytes = data.file_size_bytes || 0;
+      state.taskMarkers = data.task_markers || [];
+      state.frameCounts = data.frame_counts || {};
       state.isLoaded = true;
       state.isLoading = false;
       state.error = null;
+    },
+    setTaskMarkers: (state, action) => {
+      state.taskMarkers = action.payload;
     },
     setError: (state, action) => {
       state.error = action.payload;
@@ -122,6 +140,7 @@ export const {
   setSelectedBagPath,
   setLoading,
   setReplayData,
+  setTaskMarkers,
   setError,
   setCurrentTime,
   setIsPlaying,

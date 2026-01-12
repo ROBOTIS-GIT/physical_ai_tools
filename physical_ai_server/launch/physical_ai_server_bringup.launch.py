@@ -41,6 +41,11 @@ def generate_launch_description():
         executable='rosbridge_websocket',
         name='rosbridge_websocket',
         output='screen',
+        parameters=[{
+            'fragment_timeout': 600,
+            'max_message_size': 100000000,  # 100MB
+            'unregister_timeout': 10.0,
+        }],
     )
 
     # Include rosbag_recorder service_bag_recorder node
@@ -56,7 +61,8 @@ def generate_launch_description():
         package='web_video_server',
         executable='web_video_server',
         name='web_video_server',
-        output='screen'
+        output='screen',
+        parameters=[{'port': 8080}]
     )
 
     return LaunchDescription([

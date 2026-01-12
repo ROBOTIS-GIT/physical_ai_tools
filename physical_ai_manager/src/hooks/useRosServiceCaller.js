@@ -573,23 +573,80 @@ export function useRosServiceCaller() {
   const getReplayData = useCallback(
     async (bagPath) => {
       try {
-        console.log('Calling service /replay/get_data with request:', { bag_path: bagPath });
+        // Extract host from rosbridgeUrl (ws://host:9090 -> host)
+        const urlMatch = rosbridgeUrl.match(/ws:\/\/([^:]+):/);
+        const host = urlMatch ? urlMatch[1] : 'localhost';
+        const videoServerPort = 8081;
 
-        const result = await callService(
-          '/replay/get_data',
-          'physical_ai_interfaces/srv/GetReplayData',
-          { bag_path: bagPath },
-          30000 // 30 second timeout for potentially large bags
-        );
+        const apiUrl = `http://${host}:${videoServerPort}/replay-data${bagPath}`;
+        console.log('Fetching replay data from HTTP API:', apiUrl);
 
-        console.log('getReplayData service response:', result);
-        return result;
+        const response = await fetch(apiUrl);
+
+        if (!response.ok) {
+          throw new Error(`HTTP error: ${response.status} ${response.statusText}`);
+        }
+
+        const result = await response.json();
+        console.log('getReplayData HTTP response:', result);
+
+        // Transform to match the expected format from ROS service
+        return {
+          success: result.success,
+          message: result.message,
+          video_files: result.video_files || [],
+          video_topics: result.video_topics || [],
+          video_names: result.video_names || [],
+          video_fps: result.video_fps || [],
+          frame_indices: result.frame_indices || [],
+          frame_timestamps: result.frame_timestamps || [],
+          joint_timestamps: result.joint_timestamps || [],
+          joint_names: result.joint_names || [],
+          joint_positions: result.joint_positions || [],
+          action_timestamps: result.action_timestamps || [],
+          action_names: result.action_names || [],
+          action_values: result.action_values || [],
+          start_time: result.start_time || 0,
+          end_time: result.end_time || 0,
+          duration: result.duration || 0,
+          video_server_port: videoServerPort,
+          bag_path: bagPath,
+        };
       } catch (error) {
         console.error('Failed to get replay data:', error);
         throw new Error(`${error.message || error}`);
       }
     },
-    [callService]
+    [rosbridgeUrl]
+  );
+
+  const getRosbagList = useCallback(
+    async (folderPath) => {
+      try {
+        // Extract host from rosbridgeUrl (ws://host:9090 -> host)
+        const urlMatch = rosbridgeUrl.match(/ws:\/\/([^:]+):/);
+        const host = urlMatch ? urlMatch[1] : 'localhost';
+        const videoServerPort = 8082;
+
+        const apiUrl = `http://${host}:${videoServerPort}/rosbag-list${folderPath}`;
+        console.log('Fetching rosbag list from HTTP API:', apiUrl);
+
+        const response = await fetch(apiUrl);
+
+        if (!response.ok) {
+          throw new Error(`HTTP error: ${response.status} ${response.statusText}`);
+        }
+
+        const result = await response.json();
+        console.log('getRosbagList HTTP response:', result);
+
+        return result;
+      } catch (error) {
+        console.error('Failed to get rosbag list:', error);
+        throw new Error(`${error.message || error}`);
+      }
+    },
+    [rosbridgeUrl]
   );
 
   return {
@@ -611,5 +668,6 @@ export function useRosServiceCaller() {
     controlHfServer,
     getTrainingInfo,
     getReplayData,
+    getRosbagList,
   };
 }

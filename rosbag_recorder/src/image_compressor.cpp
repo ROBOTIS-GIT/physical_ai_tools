@@ -68,8 +68,9 @@ std::string ImageCompressor::build_ffmpeg_command(
   // -vcodec rawvideo: input codec is raw
   // -s WxH: input resolution
   // -pix_fmt bgr24: input pixel format (OpenCV default)
-  // -r FPS: input frame rate
+  // -r FPS (before -i): input frame rate
   // -i -: read from stdin
+  // -r FPS (after -i): output frame rate (IMPORTANT: must match input for correct playback)
   // -c:v libx264: use H.264 encoder
   // -preset fast: encoding speed/quality tradeoff
   // -crf 23: quality (0-51, lower is better, 23 is default)
@@ -81,6 +82,7 @@ std::string ImageCompressor::build_ffmpeg_command(
       << "-pix_fmt bgr24 "
       << "-r " << std::fixed << std::setprecision(2) << fps << " "
       << "-i - "
+      << "-r " << std::fixed << std::setprecision(2) << fps << " "
       << "-c:v libx264 "
       << "-preset fast "
       << "-crf 23 "
@@ -127,8 +129,9 @@ double ImageCompressor::calculate_fps_from_timestamps(
   // Convert interval to FPS
   double fps = 1.0 / median_interval;
 
-  // Clamp to reasonable range (1-120 FPS)
-  fps = std::max(1.0, std::min(120.0, fps));
+  // Clamp to reasonable range (10-120 FPS)
+  // Minimum 10 FPS to prevent extremely slow playback from timestamp issues
+  fps = std::max(10.0, std::min(120.0, fps));
 
   return fps;
 }
@@ -146,12 +149,19 @@ bool ImageCompressor::initialize_writer(
   std::string sanitized_name = sanitize_topic_name(topic_name);
   std::string output_path = output_dir_ + "/" + sanitized_name + ".mp4";
 
+  // Log the detected FPS for debugging
+  std::fprintf(
+    stderr,
+    "[ImageCompressor] Initializing writer for %s: %ux%u @ %.2f fps -> %s\n",
+    topic_name.c_str(), width, height, fps, output_path.c_str());
+
   // Build FFmpeg command
   std::string cmd = build_ffmpeg_command(output_path, width, height, fps);
 
   // Open pipe to FFmpeg process
   FILE * pipe = popen(cmd.c_str(), "w");
   if (!pipe) {
+    std::fprintf(stderr, "[ImageCompressor] Failed to open FFmpeg pipe for %s\n", topic_name.c_str());
     return false;
   }
 
@@ -374,6 +384,15 @@ void ImageCompressor::finalize_writer(const std::string & topic_name)
   // Close writer
   auto writer_it = writers_.find(topic_name);
   if (writer_it != writers_.end()) {
+    // Log finalization info
+    std::fprintf(
+      stderr,
+      "[ImageCompressor] Finalizing %s: %u frames @ %.2f fps -> %s\n",
+      topic_name.c_str(),
+      writer_it->second.frame_count,
+      writer_it->second.fps,
+      writer_it->second.output_path.c_str());
+
     if (writer_it->second.pipe) {
       pclose(writer_it->second.pipe);
       writer_it->second.pipe = nullptr;
