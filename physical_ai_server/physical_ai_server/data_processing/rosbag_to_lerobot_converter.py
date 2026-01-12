@@ -247,7 +247,9 @@ class RosbagToLerobotConverter:
 
         # Collect state and action messages
         state_messages: List[Tuple[float, np.ndarray]] = []
-        action_messages: List[Tuple[float, np.ndarray]] = []
+        # Group action messages by topic to handle multiple action sources
+        action_messages_by_topic: Dict[str, List[Tuple[float, np.ndarray]]] = {}
+        action_joint_names_by_topic: Dict[str, List[str]] = {}
 
         topic_types = reader.get_topic_types()
 
@@ -278,17 +280,24 @@ class RosbagToLerobotConverter:
             elif self._is_action_topic(topic, topic_types):
                 positions = self._extract_action_positions(msg)
                 if positions is not None:
-                    action_messages.append((timestamp, positions))
+                    if topic not in action_messages_by_topic:
+                        action_messages_by_topic[topic] = []
+                    action_messages_by_topic[topic].append((timestamp, positions))
 
-                    # Capture action joint names
-                    if not self._action_joint_names:
+                    # Capture action joint names per topic
+                    if topic not in action_joint_names_by_topic:
                         names = self._extract_joint_names(msg)
                         if names:
-                            self._action_joint_names = names
+                            action_joint_names_by_topic[topic] = names
 
         if not state_messages:
             self._log_warning(f"No state messages found in {bag_path}")
             return None
+
+        # Merge action messages from all topics (concat by timestamp)
+        action_messages = self._merge_action_messages(
+            action_messages_by_topic, action_joint_names_by_topic
+        )
 
         # Resample to target FPS
         episode = self._resample_to_fps(
@@ -357,6 +366,77 @@ class RosbagToLerobotConverter:
             if start <= timestamp <= end:
                 return True
         return False
+
+    def _merge_action_messages(
+        self,
+        action_messages_by_topic: Dict[str, List[Tuple[float, np.ndarray]]],
+        action_joint_names_by_topic: Dict[str, List[str]],
+    ) -> List[Tuple[float, np.ndarray]]:
+        """Merge action messages from multiple topics into a single action vector."""
+        if not action_messages_by_topic:
+            return []
+
+        # Sort topics for consistent ordering
+        sorted_topics = sorted(action_messages_by_topic.keys())
+
+        # Build combined joint names
+        combined_names = []
+        for topic in sorted_topics:
+            names = action_joint_names_by_topic.get(topic, [])
+            combined_names.extend(names)
+        self._action_joint_names = combined_names
+
+        # Get all unique timestamps
+        all_timestamps = set()
+        for msgs in action_messages_by_topic.values():
+            for t, _ in msgs:
+                all_timestamps.add(t)
+
+        # For each timestamp, concatenate actions from all topics
+        merged_messages: List[Tuple[float, np.ndarray]] = []
+
+        for timestamp in sorted(all_timestamps):
+            combined_action = []
+            for topic in sorted_topics:
+                msgs = action_messages_by_topic[topic]
+                nearest = self._find_nearest_value_in_list(
+                    msgs, timestamp, tolerance=0.05
+                )
+                if nearest is not None:
+                    combined_action.extend(nearest.tolist())
+                else:
+                    # Use zeros if no message found within tolerance
+                    sample_msg = msgs[0][1] if msgs else None
+                    if sample_msg is not None:
+                        combined_action.extend([0.0] * len(sample_msg))
+
+            if combined_action:
+                merged_messages.append(
+                    (timestamp, np.array(combined_action, dtype=np.float32))
+                )
+
+        return merged_messages
+
+    def _find_nearest_value_in_list(
+        self,
+        messages: List[Tuple[float, np.ndarray]],
+        target_time: float,
+        tolerance: float = float("inf"),
+    ) -> Optional[np.ndarray]:
+        """Find message value nearest to target time within tolerance."""
+        if not messages:
+            return None
+
+        min_diff = float("inf")
+        nearest_value = None
+
+        for msg_time, value in messages:
+            diff = abs(msg_time - target_time)
+            if diff < min_diff and diff <= tolerance:
+                min_diff = diff
+                nearest_value = value
+
+        return nearest_value
 
     def _resample_to_fps(
         self,
@@ -456,6 +536,22 @@ class RosbagToLerobotConverter:
         # Fallback: use sanitized filename
         return name.replace("/", "_").replace(".", "_")
 
+    def _get_video_dimensions(self, video_path: Path) -> Tuple[int, int]:
+        """Get video height and width using OpenCV."""
+        try:
+            import cv2
+
+            cap = cv2.VideoCapture(str(video_path))
+            if cap.isOpened():
+                width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
+                height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
+                cap.release()
+                if width > 0 and height > 0:
+                    return height, width
+        except Exception as e:
+            self._log_warning(f"Failed to get video dimensions: {e}")
+        return 480, 640
+
     def convert_multiple_rosbags(
         self,
         bag_paths: List[Path],
@@ -538,13 +634,7 @@ class RosbagToLerobotConverter:
             for camera_name, video_path in ep.video_files.items():
                 feature_key = f"observation.images.{camera_name}"
                 if feature_key not in self._features:
-                    # Get video dimensions
-                    video_info = self._video_extractor.get_video_info(video_path)
-                    if video_info:
-                        height = video_info.get("height", 480)
-                        width = video_info.get("width", 640)
-                    else:
-                        height, width = 480, 640
+                    height, width = self._get_video_dimensions(video_path)
 
                     self._features[feature_key] = {
                         "dtype": "video",
