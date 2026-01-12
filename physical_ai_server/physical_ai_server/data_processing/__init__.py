@@ -20,10 +20,20 @@ from .bag_reader import BagReader
 from .metadata_manager import MetadataManager
 from .video_metadata_extractor import VideoMetadataExtractor
 from .replay_data_handler import ReplayDataHandler
+from .rosbag_to_lerobot_converter import (
+    RosbagToLerobotConverter,
+    ConversionConfig,
+    EpisodeData,
+    convert_rosbags_to_lerobot,
+)
 
 __all__ = [
     "BagReader",
     "MetadataManager",
     "VideoMetadataExtractor",
     "ReplayDataHandler",
+    "RosbagToLerobotConverter",
+    "ConversionConfig",
+    "EpisodeData",
+    "convert_rosbags_to_lerobot",
 ]
