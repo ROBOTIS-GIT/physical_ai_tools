@@ -60,6 +60,55 @@ DEFAULT_FPS = 30
 
 
 @dataclass
+class StalenessMetrics:
+    """Metrics for tracking data staleness during causal sync resampling."""
+
+    topic: str
+    total_samples: int = 0
+    stale_warning_count: int = 0
+    stale_error_count: int = 0
+    max_staleness_ms: float = 0.0
+    mean_staleness_ms: float = 0.0
+    stale_samples: List[Dict[str, Any]] = field(default_factory=list)
+
+    @property
+    def warning_ratio(self) -> float:
+        if self.total_samples == 0:
+            return 0.0
+        return self.stale_warning_count / self.total_samples
+
+    @property
+    def error_ratio(self) -> float:
+        if self.total_samples == 0:
+            return 0.0
+        return self.stale_error_count / self.total_samples
+
+    @property
+    def status(self) -> str:
+        if self.stale_error_count > 0:
+            return "ERROR"
+        if self.stale_warning_count > 0:
+            return "WARNING"
+        return "GOOD"
+
+    def to_dict(self) -> Dict[str, Any]:
+        return {
+            "topic": self.topic,
+            "total_samples": self.total_samples,
+            "staleness": {
+                "warning_count": self.stale_warning_count,
+                "error_count": self.stale_error_count,
+                "warning_ratio": round(self.warning_ratio * 100, 2),
+                "error_ratio": round(self.error_ratio * 100, 2),
+                "max_ms": round(self.max_staleness_ms, 2),
+                "mean_ms": round(self.mean_staleness_ms, 2),
+            },
+            "status": self.status,
+            "stale_samples": self.stale_samples[:20],  # Limit to first 20
+        }
+
+
+@dataclass
 class ConversionConfig:
     """Configuration for ROSbag to LeRobot conversion."""
 
@@ -130,6 +179,7 @@ class RosbagToLerobotConverter:
         self._total_frames = 0
         self._total_episodes = 0
         self._quality_reports: Dict[int, QualityReport] = {}
+        self._staleness_reports: Dict[int, Dict[str, StalenessMetrics]] = {}
 
         self._state_joint_names: List[str] = []
         self._action_joint_names: List[str] = []
@@ -151,6 +201,16 @@ class RosbagToLerobotConverter:
             self.logger.warning(msg)
         else:
             print(f"[WARNING] {msg}")
+
+    def _log_staleness_summary(self, staleness_metrics: Dict[str, StalenessMetrics]):
+        for topic, metrics in staleness_metrics.items():
+            if metrics.status == "GOOD":
+                continue
+            self._log_warning(
+                f"Staleness {metrics.status} for {topic}: "
+                f"warnings={metrics.stale_warning_count}, errors={metrics.stale_error_count}, "
+                f"max={metrics.max_staleness_ms:.1f}ms, mean={metrics.mean_staleness_ms:.1f}ms"
+            )
 
     def _analyze_rosbag_quality(self, bag_path: Path) -> QualityReport:
         reader = BagReader(bag_path, self.logger)
@@ -319,15 +379,16 @@ class RosbagToLerobotConverter:
             self._log_warning(f"No state messages found in {bag_path}")
             return None
 
-        # Merge action messages from all topics (concat by timestamp)
         action_messages = self._merge_action_messages(
             action_messages_by_topic, action_joint_names_by_topic
         )
 
-        # Resample to target FPS
-        episode = self._resample_to_fps(
+        episode, staleness_metrics = self._resample_to_fps(
             episode, state_messages, action_messages, trim_start
         )
+
+        self._staleness_reports[episode_index] = staleness_metrics
+        self._log_staleness_summary(staleness_metrics)
 
         return episode
 
@@ -424,13 +485,12 @@ class RosbagToLerobotConverter:
             combined_action = []
             for topic in sorted_topics:
                 msgs = action_messages_by_topic[topic]
-                nearest = self._find_nearest_value_in_list(
+                prev_value, _ = self._find_previous_value_in_list(
                     msgs, timestamp, tolerance=0.05
                 )
-                if nearest is not None:
-                    combined_action.extend(nearest.tolist())
+                if prev_value is not None:
+                    combined_action.extend(prev_value.tolist())
                 else:
-                    # Use zeros if no message found within tolerance
                     sample_msg = msgs[0][1] if msgs else None
                     if sample_msg is not None:
                         combined_action.extend([0.0] * len(sample_msg))
@@ -442,26 +502,39 @@ class RosbagToLerobotConverter:
 
         return merged_messages
 
-    def _find_nearest_value_in_list(
+    def _find_previous_value_in_list(
         self,
         messages: List[Tuple[float, np.ndarray]],
         target_time: float,
         tolerance: float = float("inf"),
-    ) -> Optional[np.ndarray]:
-        """Find message value nearest to target time within tolerance."""
-        if not messages:
-            return None
+    ) -> Tuple[Optional[np.ndarray], float]:
+        """
+        Find the most recent message value at or before target time (causal sync).
 
-        min_diff = float("inf")
-        nearest_value = None
+        Returns:
+            Tuple of (value, staleness_ms) where staleness_ms is how old the value is.
+            Returns (None, 0.0) if no valid previous value exists.
+        """
+        if not messages:
+            return None, 0.0
+
+        best_time: Optional[float] = None
+        best_value: Optional[np.ndarray] = None
 
         for msg_time, value in messages:
-            diff = abs(msg_time - target_time)
-            if diff < min_diff and diff <= tolerance:
-                min_diff = diff
-                nearest_value = value
+            if msg_time <= target_time:
+                if best_time is None or msg_time > best_time:
+                    best_time = msg_time
+                    best_value = value
 
-        return nearest_value
+        if best_value is None or best_time is None:
+            return None, 0.0
+
+        staleness_ms = (target_time - best_time) * 1000.0
+        if staleness_ms > tolerance * 1000.0:
+            return None, staleness_ms
+
+        return best_value, staleness_ms
 
     def _resample_to_fps(
         self,
@@ -469,34 +542,70 @@ class RosbagToLerobotConverter:
         state_messages: List[Tuple[float, np.ndarray]],
         action_messages: List[Tuple[float, np.ndarray]],
         start_time: float,
-    ) -> EpisodeData:
-        """Resample messages to target FPS using nearest neighbor interpolation."""
-        if not state_messages:
-            return episode
+    ) -> Tuple[EpisodeData, Dict[str, StalenessMetrics]]:
+        """Resample messages to target FPS using causal sync (previous value only)."""
+        staleness_metrics: Dict[str, StalenessMetrics] = {
+            "observation.state": StalenessMetrics(topic="observation.state"),
+            "action": StalenessMetrics(topic="action"),
+        }
 
-        # Determine time range
+        if not state_messages:
+            return episode, staleness_metrics
+
         state_times = [t for t, _ in state_messages]
         min_time = min(state_times)
         max_time = max(state_times)
 
-        # Generate target timestamps at target FPS
         frame_duration = 1.0 / self.config.fps
         num_frames = int((max_time - min_time) * self.config.fps) + 1
+
+        state_staleness_values: List[float] = []
+        action_staleness_values: List[float] = []
+
+        warning_threshold_ms = (
+            1000.0 / self.config.fps
+        ) * self.config.quality_warning_multiplier
+        error_threshold_ms = (
+            1000.0 / self.config.fps
+        ) * self.config.quality_error_multiplier
 
         for frame_idx in range(num_frames):
             target_time = min_time + frame_idx * frame_duration
             relative_time = target_time - min_time
 
-            # Find nearest state
-            state = self._find_nearest_value(state_messages, target_time)
+            state, state_staleness_ms = self._find_previous_value(
+                state_messages, target_time, frame_duration
+            )
             if state is None:
                 continue
 
-            # Find nearest action (or use zeros if not available)
+            staleness_metrics["observation.state"].total_samples += 1
+            state_staleness_values.append(state_staleness_ms)
+            self._track_staleness(
+                staleness_metrics["observation.state"],
+                frame_idx,
+                state_staleness_ms,
+                warning_threshold_ms,
+                error_threshold_ms,
+            )
+
             if action_messages:
-                action = self._find_nearest_value(action_messages, target_time)
+                action, action_staleness_ms = self._find_previous_value(
+                    action_messages, target_time, frame_duration
+                )
                 if action is None:
                     action = np.zeros_like(state)
+                    action_staleness_ms = 0.0
+
+                staleness_metrics["action"].total_samples += 1
+                action_staleness_values.append(action_staleness_ms)
+                self._track_staleness(
+                    staleness_metrics["action"],
+                    frame_idx,
+                    action_staleness_ms,
+                    warning_threshold_ms,
+                    error_threshold_ms,
+                )
             else:
                 action = np.zeros_like(state)
 
@@ -505,27 +614,86 @@ class RosbagToLerobotConverter:
             episode.action.append(action)
 
         episode.length = len(episode.timestamps)
-        return episode
 
-    def _find_nearest_value(
+        if state_staleness_values:
+            staleness_metrics["observation.state"].mean_staleness_ms = float(
+                np.mean(state_staleness_values)
+            )
+            staleness_metrics["observation.state"].max_staleness_ms = float(
+                np.max(state_staleness_values)
+            )
+
+        if action_staleness_values:
+            staleness_metrics["action"].mean_staleness_ms = float(
+                np.mean(action_staleness_values)
+            )
+            staleness_metrics["action"].max_staleness_ms = float(
+                np.max(action_staleness_values)
+            )
+
+        return episode, staleness_metrics
+
+    def _track_staleness(
+        self,
+        metrics: StalenessMetrics,
+        frame_idx: int,
+        staleness_ms: float,
+        warning_threshold_ms: float,
+        error_threshold_ms: float,
+    ):
+        if staleness_ms > error_threshold_ms:
+            metrics.stale_error_count += 1
+            metrics.stale_samples.append(
+                {
+                    "frame_index": frame_idx,
+                    "staleness_ms": round(staleness_ms, 2),
+                    "severity": "error",
+                }
+            )
+        elif staleness_ms > warning_threshold_ms:
+            metrics.stale_warning_count += 1
+            metrics.stale_samples.append(
+                {
+                    "frame_index": frame_idx,
+                    "staleness_ms": round(staleness_ms, 2),
+                    "severity": "warning",
+                }
+            )
+
+    def _find_previous_value(
         self,
         messages: List[Tuple[float, np.ndarray]],
         target_time: float,
-    ) -> Optional[np.ndarray]:
-        """Find the message value nearest to target time."""
-        if not messages:
-            return None
+        expected_interval_sec: float,
+    ) -> Tuple[Optional[np.ndarray], float]:
+        """
+        Find the most recent message value at or before target time (causal sync).
 
-        min_diff = float("inf")
-        nearest_value = None
+        Args:
+            messages: List of (timestamp, value) tuples
+            target_time: Target time to find previous value for
+            expected_interval_sec: Expected interval between messages (for staleness calc)
+
+        Returns:
+            Tuple of (value, staleness_ms). Returns (None, 0.0) if no previous value.
+        """
+        if not messages:
+            return None, 0.0
+
+        best_time: Optional[float] = None
+        best_value: Optional[np.ndarray] = None
 
         for msg_time, value in messages:
-            diff = abs(msg_time - target_time)
-            if diff < min_diff:
-                min_diff = diff
-                nearest_value = value
+            if msg_time <= target_time:
+                if best_time is None or msg_time > best_time:
+                    best_time = msg_time
+                    best_value = value
 
-        return nearest_value
+        if best_value is None or best_time is None:
+            return None, 0.0
+
+        staleness_ms = (target_time - best_time) * 1000.0
+        return best_value, staleness_ms
 
     def _find_video_files(self, bag_path: Path) -> Dict[str, Path]:
         """Find MP4 video files in the rosbag directory."""
@@ -629,7 +797,7 @@ class RosbagToLerobotConverter:
         meta_dir = output_dir / "meta"
         meta_dir.mkdir(parents=True, exist_ok=True)
 
-        combined_report = {
+        combined_report: Dict[str, Any] = {
             "overall_status": "GOOD",
             "total_warnings": 0,
             "total_errors": 0,
@@ -640,7 +808,23 @@ class RosbagToLerobotConverter:
         has_warning = False
 
         for episode_idx, report in self._quality_reports.items():
-            combined_report["episodes"][f"episode_{episode_idx:06d}"] = report.to_dict()
+            episode_key = f"episode_{episode_idx:06d}"
+            episode_report = report.to_dict()
+
+            staleness = self._staleness_reports.get(episode_idx, {})
+            if staleness:
+                episode_report["staleness"] = {
+                    name: metrics.to_dict() for name, metrics in staleness.items()
+                }
+                for metrics in staleness.values():
+                    combined_report["total_warnings"] += metrics.stale_warning_count
+                    combined_report["total_errors"] += metrics.stale_error_count
+                    if metrics.status == "ERROR":
+                        has_error = True
+                    elif metrics.status == "WARNING":
+                        has_warning = True
+
+            combined_report["episodes"][episode_key] = episode_report
             combined_report["total_warnings"] += report.total_warnings
             combined_report["total_errors"] += report.total_errors
 

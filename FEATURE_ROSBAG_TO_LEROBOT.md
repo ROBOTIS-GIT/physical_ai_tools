@@ -49,9 +49,9 @@ Physical AI Tools에서 수집한 ROSbag 데이터를 LeRobot 학습 프레임�
 
 | 목표 | 설명 | 상태 |
 |------|------|------|
-| ROSbag → LeRobot v2.1 변환 | MCAP + MP4 → Parquet + Video | ✅ 기본 구현 완료 |
-| Causal Sync | 미래 데이터 사용 방지 | 🚧 구현 예정 |
-| Quality Report | 데이터 품질 분석 리포트 | 🚧 구현 예정 |
+| ROSbag → LeRobot v2.1 변환 | MCAP + MP4 → Parquet + Video | ✅ 완료 |
+| Causal Sync | 미래 데이터 사용 방지 | ✅ 완료 |
+| Quality Report | 데이터 품질 분석 리포트 | ✅ 완료 |
 | Timeline Visualizer | 동기화 상태 시각화 (React) | 📋 계획됨 |
 
 ### 2.2 비목표 (Scope 외)
@@ -330,9 +330,9 @@ class QualityPolicy:
 
 | Phase | 내용 | 예상 기간 | 상태 |
 |-------|------|----------|------|
-| Phase 1 | Quality Check (Gap/Drop 분석 + Report) | 1일 | 📋 예정 |
-| Phase 2 | Causal Sync + Staleness Detection | 1일 | 📋 예정 |
-| Phase 3 | 실제 데이터 분석 (현재 품질 상태 확인) | 0.5일 | 📋 예정 |
+| Phase 1 | Quality Check (Gap/Drop 분석 + Report) | 1일 | ✅ 완료 |
+| Phase 2 | Causal Sync + Staleness Detection | 1일 | ✅ 완료 |
+| Phase 3 | 실제 데이터 분석 (현재 품질 상태 확인) | 0.5일 | ✅ 완료 |
 | Phase 4 | Timeline Visualizer (React) | 2일 | 📋 예정 |
 | Phase 5 | Plugin Architecture Refactoring | 2일 | 📋 예정 |
 
@@ -449,8 +449,8 @@ physical_ai_manager UI에서 변환 결과 시각화 확인
 
 ### 10.1 단기 (이번 Feature)
 
-- [ ] Causal Sync 구현
-- [ ] Quality Report 생성
+- [x] Causal Sync 구현
+- [x] Quality Report 생성 (Gap/Drop 분석 + Staleness 리포트)
 - [ ] FPS 다운샘플링 + ffmpeg 재인코딩
 - [ ] Timeline Visualizer (React)
 - [ ] LeRobot 의존성 제거 (lerobot_dataset_wrapper.py 삭제)
@@ -478,6 +478,8 @@ physical_ai_manager UI에서 변환 결과 시각화 확인
 | 2026-01-12 | 기본 정책 확정 (permissive) |
 | 2026-01-12 | FPS 다운샘플링 정책 추가 (동일 FPS=복사, 다른 FPS=재인코딩) |
 | 2026-01-12 | LeRobot 의존성 분리 계획 추가 |
+| 2026-01-12 | Phase 1 완료: Quality Analyzer 구현 |
+| 2026-01-12 | Phase 2 완료: Causal Sync + Staleness Detection 구현 |
 
 ---
 
