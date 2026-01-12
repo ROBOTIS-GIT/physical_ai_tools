@@ -21,6 +21,8 @@
 #include <memory>
 #include <string>
 #include <unordered_map>
+#include <vector>
+#include <deque>
 
 #include "opencv2/opencv.hpp"
 #include "rclcpp/rclcpp.hpp"
@@ -39,20 +41,26 @@ struct ImageMetadata
   std::string encoding;
 };
 
+// Buffered frame for FPS detection
+struct BufferedFrame
+{
+  cv::Mat frame;
+  int64_t timestamp_ns;
+  uint32_t width;
+  uint32_t height;
+  std::string encoding;
+};
+
 class ImageCompressor
 {
 public:
-  explicit ImageCompressor(const std::string & output_dir);
+  explicit ImageCompressor(
+    const std::string & output_dir,
+    size_t fps_detection_frames = 10);
   ~ImageCompressor();
 
-  // Initialize FFmpeg writer for a specific topic
-  bool initialize_writer(
-    const std::string & topic_name,
-    uint32_t width,
-    uint32_t height,
-    double fps = 30.0);
-
   // Add image frame to MP4 and return metadata
+  // FPS is automatically detected from timestamp intervals
   ImageMetadata add_frame(
     const std::string & topic_name,
     const sensor_msgs::msg::Image::SharedPtr & image_msg);
@@ -63,8 +71,14 @@ public:
   // Finalize specific video writer
   void finalize_writer(const std::string & topic_name);
 
-  // Check if writer exists for topic
-  bool has_writer(const std::string & topic_name) const;
+  // Check if writer is active (initialized after FPS detection)
+  bool has_active_writer(const std::string & topic_name) const;
+
+  // Check if topic is being tracked (buffering or active)
+  bool is_tracking(const std::string & topic_name) const;
+
+  // Get detected FPS for a topic (0 if not yet detected)
+  double get_detected_fps(const std::string & topic_name) const;
 
 private:
   struct FFmpegWriterInfo
@@ -75,10 +89,21 @@ private:
     uint32_t width;
     uint32_t height;
     double fps;
+    bool is_initialized;
+  };
+
+  struct TopicBufferInfo
+  {
+    std::deque<BufferedFrame> frames;
+    std::vector<int64_t> timestamps;
+    double detected_fps;
+    bool fps_detected;
   };
 
   std::string output_dir_;
+  size_t fps_detection_frames_;
   std::unordered_map<std::string, FFmpegWriterInfo> writers_;
+  std::unordered_map<std::string, TopicBufferInfo> topic_buffers_;
 
   std::string sanitize_topic_name(const std::string & topic_name) const;
   cv::Mat convert_ros_image_to_bgr(const sensor_msgs::msg::Image::SharedPtr & image_msg);
@@ -87,6 +112,22 @@ private:
     uint32_t width,
     uint32_t height,
     double fps);
+
+  // Initialize FFmpeg writer after FPS detection
+  bool initialize_writer(
+    const std::string & topic_name,
+    uint32_t width,
+    uint32_t height,
+    double fps);
+
+  // Calculate FPS from collected timestamps
+  double calculate_fps_from_timestamps(const std::vector<int64_t> & timestamps) const;
+
+  // Write buffered frames to initialized writer
+  void flush_buffered_frames(const std::string & topic_name);
+
+  // Write single frame to FFmpeg pipe
+  void write_frame_to_pipe(FFmpegWriterInfo & writer_info, const cv::Mat & frame);
 };
 
 }  // namespace rosbag_recorder
