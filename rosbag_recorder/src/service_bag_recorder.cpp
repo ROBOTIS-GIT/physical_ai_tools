@@ -139,6 +139,7 @@ void ServiceBagRecorder::handle_prepare(
     non_image_topics_.clear();
     camera_mappings_.clear();
     action_topic_mappings_.clear();
+    joint_order_.clear();
 
     if (!robot_type.empty()) {
       load_robot_config(robot_type);
@@ -650,6 +651,28 @@ bool ServiceBagRecorder::load_robot_config(const std::string & robot_type)
         action_topic_mappings_.size());
     }
 
+    // Load joint_order from joint_list and joint_order map
+    auto joint_order_node =
+      config["physical_ai_server"]["ros__parameters"][robot_type]["joint_order"];
+    auto joint_list =
+      config["physical_ai_server"]["ros__parameters"][robot_type]["joint_list"];
+
+    joint_order_.clear();
+    if (joint_order_node && joint_order_node.IsMap() && joint_list && joint_list.IsSequence()) {
+      for (const auto & group_name : joint_list) {
+        std::string group = group_name.as<std::string>();
+        auto joints = joint_order_node[group];
+        if (joints && joints.IsSequence()) {
+          for (const auto & joint : joints) {
+            joint_order_.push_back(joint.as<std::string>());
+          }
+        }
+      }
+      RCLCPP_INFO(
+        this->get_logger(), "Loaded %zu joints from joint_order",
+        joint_order_.size());
+    }
+
     RCLCPP_INFO(
       this->get_logger(), "Loaded %zu camera mappings from config",
       camera_mappings_.size());
@@ -689,6 +712,14 @@ void ServiceBagRecorder::save_robot_config_yaml(const std::string & bag_uri)
         out << YAML::Key << mapping.name << YAML::Value << mapping.topic;
       }
       out << YAML::EndMap;
+    }
+
+    if (!joint_order_.empty()) {
+      out << YAML::Key << "joint_order" << YAML::Value << YAML::BeginSeq;
+      for (const auto & joint : joint_order_) {
+        out << joint;
+      }
+      out << YAML::EndSeq;
     }
 
     out << YAML::EndMap;

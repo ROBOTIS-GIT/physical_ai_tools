@@ -112,6 +112,7 @@ private:
   std::vector<std::string> topics_to_record_{};
   std::vector<CameraMapping> camera_mappings_;
   std::vector<JointMapping> action_topic_mappings_;
+  std::vector<std::string> joint_order_;
   std::mutex mutex_;
 };
 
