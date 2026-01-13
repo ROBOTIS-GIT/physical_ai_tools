@@ -14,6 +14,8 @@ find_package(std_msgs REQUIRED)
 find_package(cv_bridge REQUIRED)
 find_package(image_transport REQUIRED)
 find_package(OpenCV REQUIRED)
+find_package(yaml-cpp REQUIRED)
+find_package(ament_index_cpp REQUIRED)
 
 rosidl_generate_interfaces(${PROJECT_NAME}
   "srv/SendCommand.srv"
@@ -43,6 +45,7 @@ ament_target_dependencies(
   "std_msgs"
   "cv_bridge"
   "image_transport"
+  "ament_index_cpp"
 )
 
 # Link against the generated interfaces using the modern approach
@@ -53,6 +56,7 @@ rosidl_get_typesupport_target(cpp_typesupport_target
 target_link_libraries(service_bag_recorder
   "${cpp_typesupport_target}"
   ${OpenCV_LIBRARIES}
+  yaml-cpp
 )
 
 # Build image_bag_recorder with image compression

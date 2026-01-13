@@ -183,6 +183,7 @@ class RosbagToLerobotConverter:
 
         self._state_joint_names: List[str] = []
         self._action_joint_names: List[str] = []
+        self._camera_mapping: Dict[str, str] = {}  # topic -> camera_name
 
     def _log_info(self, msg: str):
         if self.logger:
@@ -304,6 +305,10 @@ class RosbagToLerobotConverter:
 
         if "fps" in robot_config:
             self.config.fps = robot_config["fps"]
+
+        if "camera_mapping" in robot_config:
+            self._camera_mapping = robot_config["camera_mapping"]
+            self._log_info(f"Loaded camera mapping: {self._camera_mapping}")
 
     def _extract_joint_data(
         self,
@@ -699,43 +704,49 @@ class RosbagToLerobotConverter:
         """Find MP4 video files in the rosbag directory."""
         video_files = {}
 
-        # Search patterns: root directory and videos/ subdirectory
         search_paths = [bag_path, bag_path / "videos"]
 
         for search_path in search_paths:
             if not search_path.exists():
                 continue
 
-            # Look for compressed MP4 files
             for mp4_file in search_path.glob("*_compressed.mp4"):
-                camera_name = self._extract_camera_name(mp4_file.stem)
+                camera_name = self._get_camera_name_for_video(mp4_file.stem)
                 if camera_name not in video_files:
                     video_files[camera_name] = mp4_file
 
-            # Also check for non-compressed MP4s
             for mp4_file in search_path.glob("*.mp4"):
                 if "_compressed" not in mp4_file.stem:
-                    camera_name = self._extract_camera_name(mp4_file.stem)
+                    camera_name = self._get_camera_name_for_video(mp4_file.stem)
                     if camera_name not in video_files:
                         video_files[camera_name] = mp4_file
 
         return video_files
 
-    def _extract_camera_name(self, filename: str) -> str:
-        """Extract camera name from video filename."""
-        # Remove common suffixes
+    def _get_camera_name_for_video(self, filename: str) -> str:
+        """Get camera name from video filename using camera_mapping if available."""
         name = filename.replace("_compressed", "")
 
-        # Try to extract meaningful camera name
-        # Example: "camera_head_image_raw" -> "head"
-        parts = name.split("_")
+        if self._camera_mapping:
+            for topic, camera_name in self._camera_mapping.items():
+                sanitized_topic = topic.replace("/", "_").lstrip("_")
+                if sanitized_topic in name or name in sanitized_topic:
+                    self._log_info(
+                        f"Mapped video '{filename}' to camera '{camera_name}'"
+                    )
+                    return camera_name
+
+        return self._extract_camera_name_fallback(name)
+
+    def _extract_camera_name_fallback(self, filename: str) -> str:
+        """Fallback: extract camera name from video filename heuristically."""
+        parts = filename.split("_")
         if "camera" in parts:
             idx = parts.index("camera")
             if idx + 1 < len(parts):
                 return parts[idx + 1]
 
-        # Fallback: use sanitized filename
-        return name.replace("/", "_").replace(".", "_")
+        return filename.replace("/", "_").replace(".", "_")
 
     def _get_video_dimensions(self, video_path: Path) -> Tuple[int, int]:
         """Get video height and width using OpenCV."""

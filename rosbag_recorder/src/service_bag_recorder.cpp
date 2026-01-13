@@ -22,6 +22,7 @@
 #include <unordered_map>
 #include <vector>
 #include <sstream>
+#include <fstream>
 #include <filesystem>
 
 #include "rclcpp/rclcpp.hpp"
@@ -31,6 +32,8 @@
 #include "rosbag2_storage/topic_metadata.hpp"
 #include "cv_bridge/cv_bridge.hpp"
 #include "opencv2/opencv.hpp"
+#include "ament_index_cpp/get_package_share_directory.hpp"
+#include "yaml-cpp/yaml.h"
 
 #include "rosbag_recorder/service_bag_recorder.hpp"
 
@@ -66,7 +69,7 @@ void ServiceBagRecorder::handle_send_command(
   try {
     switch (req->command) {
       case rosbag_recorder::srv::SendCommand::Request::PREPARE:
-        handle_prepare(req->topics);
+        handle_prepare(req->topics, req->robot_type);
         res->success = true;
         res->message = "Recording prepared";
         break;
@@ -114,7 +117,9 @@ bool ServiceBagRecorder::is_compressed_image_topic(const std::string & topic_typ
   return topic_type == "sensor_msgs/msg/CompressedImage";
 }
 
-void ServiceBagRecorder::handle_prepare(const std::vector<std::string> & topics)
+void ServiceBagRecorder::handle_prepare(
+  const std::vector<std::string> & topics,
+  const std::string & robot_type)
 {
   RCLCPP_INFO(this->get_logger(), "Prepare Rosbag recording");
 
@@ -128,9 +133,15 @@ void ServiceBagRecorder::handle_prepare(const std::vector<std::string> & topics)
 
   try {
     topics_to_record_ = topics;
+    current_robot_type_ = robot_type;
     image_topics_.clear();
     compressed_image_topics_.clear();
     non_image_topics_.clear();
+    camera_mappings_.clear();
+
+    if (!robot_type.empty()) {
+      load_robot_config(robot_type);
+    }
 
     auto names_and_types = this->get_topic_names_and_types();
 
@@ -156,11 +167,12 @@ void ServiceBagRecorder::handle_prepare(const std::vector<std::string> & topics)
 
     RCLCPP_INFO(
       this->get_logger(),
-      "Recording prepared: topics=%zu (image=%zu, compressed=%zu, other=%zu)",
+      "Recording prepared: topics=%zu (image=%zu, compressed=%zu, other=%zu), robot_type=%s",
       topics_to_record_.size(),
       image_topics_.size(),
       compressed_image_topics_.size(),
-      non_image_topics_.size());
+      non_image_topics_.size(),
+      robot_type.c_str());
   } catch (const std::exception & e) {
     writer_.reset();
     throw std::runtime_error(std::string("Failed to prepare recording: ") + e.what());
@@ -225,6 +237,8 @@ void ServiceBagRecorder::handle_start(const std::string & uri)
     }
 
     create_topics_in_bag(names_and_types);
+
+    save_robot_config_yaml(current_bag_uri_);
   } catch (const std::exception & e) {
     throw std::runtime_error(std::string("Failed to start recording: ") + e.what());
   }
@@ -565,6 +579,100 @@ void ServiceBagRecorder::handle_compressed_image_message(
       "Failed to process compressed image from topic %s: %s",
       topic.c_str(), e.what());
   }
+}
+
+bool ServiceBagRecorder::load_robot_config(const std::string & robot_type)
+{
+  try {
+    std::string package_share_dir =
+      ament_index_cpp::get_package_share_directory("physical_ai_server");
+    std::string config_path = package_share_dir + "/config/" + robot_type + "_config.yaml";
+
+    RCLCPP_INFO(this->get_logger(), "Loading robot config from: %s", config_path.c_str());
+
+    if (!std::filesystem::exists(config_path)) {
+      RCLCPP_WARN(this->get_logger(), "Robot config file not found: %s", config_path.c_str());
+      return false;
+    }
+
+    YAML::Node config = YAML::LoadFile(config_path);
+
+    auto camera_topic_list =
+      config["physical_ai_server"]["ros__parameters"][robot_type]["camera_topic_list"];
+
+    if (!camera_topic_list || !camera_topic_list.IsSequence()) {
+      RCLCPP_WARN(this->get_logger(), "No camera_topic_list found in config");
+      return false;
+    }
+
+    camera_mappings_.clear();
+    for (const auto & item : camera_topic_list) {
+      std::string entry = item.as<std::string>();
+      size_t colon_pos = entry.find(':');
+      if (colon_pos != std::string::npos) {
+        CameraMapping mapping;
+        mapping.name = entry.substr(0, colon_pos);
+        mapping.topic = entry.substr(colon_pos + 1);
+        camera_mappings_.push_back(mapping);
+        RCLCPP_INFO(
+          this->get_logger(), "Camera mapping: %s -> %s",
+          mapping.name.c_str(), mapping.topic.c_str());
+      }
+    }
+
+    RCLCPP_INFO(
+      this->get_logger(), "Loaded %zu camera mappings from config",
+      camera_mappings_.size());
+    return true;
+  } catch (const std::exception & e) {
+    RCLCPP_ERROR(this->get_logger(), "Failed to load robot config: %s", e.what());
+    return false;
+  }
+}
+
+void ServiceBagRecorder::save_robot_config_yaml(const std::string & bag_uri)
+{
+  if (current_robot_type_.empty() && camera_mappings_.empty()) {
+    return;
+  }
+
+  try {
+    std::string config_path = bag_uri + "/robot_config.yaml";
+    YAML::Emitter out;
+    out << YAML::BeginMap;
+
+    if (!current_robot_type_.empty()) {
+      out << YAML::Key << "robot_type" << YAML::Value << current_robot_type_;
+    }
+
+    if (!camera_mappings_.empty()) {
+      out << YAML::Key << "camera_mapping" << YAML::Value << YAML::BeginMap;
+      for (const auto & mapping : camera_mappings_) {
+        out << YAML::Key << mapping.topic << YAML::Value << mapping.name;
+      }
+      out << YAML::EndMap;
+    }
+
+    out << YAML::EndMap;
+
+    std::ofstream fout(config_path);
+    fout << out.c_str();
+    fout.close();
+
+    RCLCPP_INFO(this->get_logger(), "Saved robot config to: %s", config_path.c_str());
+  } catch (const std::exception & e) {
+    RCLCPP_ERROR(this->get_logger(), "Failed to save robot config: %s", e.what());
+  }
+}
+
+std::string ServiceBagRecorder::get_camera_name_for_topic(const std::string & topic) const
+{
+  for (const auto & mapping : camera_mappings_) {
+    if (mapping.topic == topic) {
+      return mapping.name;
+    }
+  }
+  return "";
 }
 
 int main(int argc, char ** argv)

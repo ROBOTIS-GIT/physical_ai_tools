@@ -36,6 +36,13 @@
 #include "rosbag_recorder/image_compressor.hpp"
 
 
+struct CameraMapping
+{
+  std::string name;
+  std::string topic;
+};
+
+
 class ServiceBagRecorder : public rclcpp::Node
 {
 public:
@@ -46,11 +53,15 @@ private:
     const std::shared_ptr<rosbag_recorder::srv::SendCommand::Request> req,
     std::shared_ptr<rosbag_recorder::srv::SendCommand::Response> res);
 
-  void handle_prepare(const std::vector<std::string> & topics);
+  void handle_prepare(const std::vector<std::string> & topics, const std::string & robot_type);
   void handle_start(const std::string & uri);
   void handle_stop();
   void handle_stop_and_delete();
   void handle_finish();
+
+  bool load_robot_config(const std::string & robot_type);
+  void save_robot_config_yaml(const std::string & bag_uri);
+  std::string get_camera_name_for_topic(const std::string & topic) const;
 
   void handle_serialized_message(
     const std::string & topic,
@@ -91,7 +102,9 @@ private:
   bool is_recording_{false};
   bool compress_images_{true};
   std::string current_bag_uri_;
+  std::string current_robot_type_;
   std::vector<std::string> topics_to_record_{};
+  std::vector<CameraMapping> camera_mappings_;
   std::mutex mutex_;
 };
 
