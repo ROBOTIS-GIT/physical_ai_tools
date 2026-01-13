@@ -538,10 +538,13 @@ class RosbagToLerobotConverter:
                 all_timestamps.add(t)
 
         # For each timestamp, concatenate actions from all topics
+        # Only include timestamps where ALL topics have valid previous values
         merged_messages: List[Tuple[float, np.ndarray]] = []
 
         for timestamp in sorted(all_timestamps):
             combined_action = []
+            all_topics_have_data = True
+
             for topic in sorted_topics:
                 msgs = action_messages_by_topic[topic]
                 prev_value, _ = self._find_previous_value_in_list(
@@ -550,11 +553,10 @@ class RosbagToLerobotConverter:
                 if prev_value is not None:
                     combined_action.extend(prev_value.tolist())
                 else:
-                    sample_msg = msgs[0][1] if msgs else None
-                    if sample_msg is not None:
-                        combined_action.extend([0.0] * len(sample_msg))
+                    all_topics_have_data = False
+                    break
 
-            if combined_action:
+            if all_topics_have_data and combined_action:
                 merged_messages.append(
                     (timestamp, np.array(combined_action, dtype=np.float32))
                 )
