@@ -184,6 +184,7 @@ class RosbagToLerobotConverter:
         self._state_joint_names: List[str] = []
         self._action_joint_names: List[str] = []
         self._camera_mapping: Dict[str, str] = {}  # topic -> camera_name
+        self._joint_order: List[str] = []  # Ordered list of joints to include
 
     def _log_info(self, msg: str):
         if self.logger:
@@ -310,6 +311,10 @@ class RosbagToLerobotConverter:
             self._camera_mapping = robot_config["camera_mapping"]
             self._log_info(f"Loaded camera mapping: {self._camera_mapping}")
 
+        if "joint_order" in robot_config:
+            self._joint_order = robot_config["joint_order"]
+            self._log_info(f"Loaded joint_order with {len(self._joint_order)} joints")
+
     def _extract_joint_data(
         self,
         bag_path: Path,
@@ -355,16 +360,26 @@ class RosbagToLerobotConverter:
             # Process state topics (JointState)
             if self._is_state_topic(topic, topic_types):
                 if hasattr(msg, "position") and msg.position:
+                    msg_names = (
+                        list(msg.name) if hasattr(msg, "name") and msg.name else []
+                    )
                     positions = np.array(msg.position, dtype=np.float32)
-                    state_messages.append((timestamp, positions))
 
-                    # Capture joint names on first message
-                    if (
-                        not self._state_joint_names
-                        and hasattr(msg, "name")
-                        and msg.name
-                    ):
-                        self._state_joint_names = list(msg.name)
+                    # Filter by joint_order if specified
+                    if self._joint_order and msg_names:
+                        filtered_positions = self._filter_positions_by_joint_order(
+                            positions, msg_names, self._joint_order
+                        )
+                        if filtered_positions is not None:
+                            state_messages.append((timestamp, filtered_positions))
+                            # Set state joint names from joint_order
+                            if not self._state_joint_names:
+                                self._state_joint_names = list(self._joint_order)
+                    else:
+                        state_messages.append((timestamp, positions))
+                        # Capture joint names on first message
+                        if not self._state_joint_names and msg_names:
+                            self._state_joint_names = msg_names
 
             # Process action topics (JointTrajectory or JointState)
             elif self._is_action_topic(topic, topic_types):
@@ -446,6 +461,45 @@ class RosbagToLerobotConverter:
         if hasattr(msg, "name") and msg.name:
             return list(msg.name)
         return []
+
+    def _filter_positions_by_joint_order(
+        self,
+        positions: np.ndarray,
+        msg_names: List[str],
+        joint_order: List[str],
+    ) -> Optional[np.ndarray]:
+        """
+        Filter positions array to only include joints in joint_order.
+
+        Args:
+            positions: Array of joint positions from message
+            msg_names: Joint names from message (same order as positions)
+            joint_order: Ordered list of joints to include in output
+
+        Returns:
+            Filtered positions array with only joints in joint_order,
+            or None if any joint in joint_order is missing from msg_names.
+        """
+        if len(positions) != len(msg_names):
+            self._log_warning(
+                f"Position/name length mismatch: {len(positions)} vs {len(msg_names)}"
+            )
+            return None
+
+        # Build name-to-index mapping
+        name_to_idx = {name: idx for idx, name in enumerate(msg_names)}
+
+        # Extract positions in joint_order
+        filtered = []
+        for joint_name in joint_order:
+            if joint_name not in name_to_idx:
+                self._log_warning(
+                    f"Joint '{joint_name}' from joint_order not found in message"
+                )
+                return None
+            filtered.append(positions[name_to_idx[joint_name]])
+
+        return np.array(filtered, dtype=np.float32)
 
     def _is_in_exclude_region(
         self, timestamp: float, exclude_regions: List[Dict]
@@ -561,15 +615,34 @@ class RosbagToLerobotConverter:
         min_time = min(state_times)
         max_time = max(state_times)
 
+        # Find the first valid start time where both state AND action have data
+        # This avoids zero-filled frames at the beginning
+        effective_min_time = min_time
+        if action_messages:
+            action_times = [t for t, _ in action_messages]
+            first_action_time = min(action_times)
+            # Start from the later of first state or first action
+            effective_min_time = max(min_time, first_action_time)
+            if effective_min_time > min_time:
+                self._log_info(
+                    f"Adjusted start time: state_start={min_time:.3f}, "
+                    f"action_start={first_action_time:.3f}, "
+                    f"effective_start={effective_min_time:.3f}"
+                )
+
         frame_duration = 1.0 / self.config.fps
-        num_frames = int((max_time - min_time) * self.config.fps) + 1
+        num_frames = int((max_time - effective_min_time) * self.config.fps) + 1
 
         state_staleness_values: List[float] = []
         action_staleness_values: List[float] = []
 
         action_dim = 0
         if action_messages:
-            action_dim = len(action_messages[0][1])
+            # Find first valid action message to get dimension
+            for _, action_arr in action_messages:
+                if len(action_arr) > 0:
+                    action_dim = len(action_arr)
+                    break
 
         warning_threshold_ms = (
             1000.0 / self.config.fps
@@ -579,8 +652,9 @@ class RosbagToLerobotConverter:
         ) * self.config.quality_error_multiplier
 
         for frame_idx in range(num_frames):
-            target_time = min_time + frame_idx * frame_duration
-            relative_time = target_time - min_time
+            target_time = effective_min_time + frame_idx * frame_duration
+            # Relative time is from effective start
+            relative_time = target_time - effective_min_time
 
             state, state_staleness_ms = self._find_previous_value(
                 state_messages, target_time, frame_duration
@@ -602,9 +676,12 @@ class RosbagToLerobotConverter:
                 action, action_staleness_ms = self._find_previous_value(
                     action_messages, target_time, frame_duration
                 )
+                # Skip this frame if no valid action data
                 if action is None:
-                    action = np.zeros(action_dim, dtype=np.float32)
-                    action_staleness_ms = 0.0
+                    self._log_warning(
+                        f"Frame {frame_idx}: No action data at t={target_time:.3f}"
+                    )
+                    continue
 
                 staleness_metrics["action"].total_samples += 1
                 action_staleness_values.append(action_staleness_ms)
