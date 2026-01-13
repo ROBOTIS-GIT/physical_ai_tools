@@ -42,6 +42,12 @@ struct CameraMapping
   std::string topic;
 };
 
+struct JointMapping
+{
+  std::string name;
+  std::string topic;
+};
+
 
 class ServiceBagRecorder : public rclcpp::Node
 {
@@ -105,6 +111,7 @@ private:
   std::string current_robot_type_;
   std::vector<std::string> topics_to_record_{};
   std::vector<CameraMapping> camera_mappings_;
+  std::vector<JointMapping> action_topic_mappings_;
   std::mutex mutex_;
 };
 

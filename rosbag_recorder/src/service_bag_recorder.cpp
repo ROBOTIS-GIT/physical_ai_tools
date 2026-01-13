@@ -138,6 +138,7 @@ void ServiceBagRecorder::handle_prepare(
     compressed_image_topics_.clear();
     non_image_topics_.clear();
     camera_mappings_.clear();
+    action_topic_mappings_.clear();
 
     if (!robot_type.empty()) {
       load_robot_config(robot_type);
@@ -620,6 +621,35 @@ bool ServiceBagRecorder::load_robot_config(const std::string & robot_type)
       }
     }
 
+    // Load joint_topic_list for action topics (leader topics)
+    auto joint_topic_list =
+      config["physical_ai_server"]["ros__parameters"][robot_type]["joint_topic_list"];
+
+    action_topic_mappings_.clear();
+    if (joint_topic_list && joint_topic_list.IsSequence()) {
+      for (const auto & item : joint_topic_list) {
+        std::string entry = item.as<std::string>();
+        size_t colon_pos = entry.find(':');
+        if (colon_pos != std::string::npos) {
+          std::string name = entry.substr(0, colon_pos);
+          std::string topic = entry.substr(colon_pos + 1);
+          // Only add leader topics as action topics
+          if (name.find("leader") != std::string::npos) {
+            JointMapping mapping;
+            mapping.name = name;
+            mapping.topic = topic;
+            action_topic_mappings_.push_back(mapping);
+            RCLCPP_INFO(
+              this->get_logger(), "Action topic mapping: %s -> %s",
+              mapping.name.c_str(), mapping.topic.c_str());
+          }
+        }
+      }
+      RCLCPP_INFO(
+        this->get_logger(), "Loaded %zu action topic mappings from config",
+        action_topic_mappings_.size());
+    }
+
     RCLCPP_INFO(
       this->get_logger(), "Loaded %zu camera mappings from config",
       camera_mappings_.size());
@@ -632,7 +662,7 @@ bool ServiceBagRecorder::load_robot_config(const std::string & robot_type)
 
 void ServiceBagRecorder::save_robot_config_yaml(const std::string & bag_uri)
 {
-  if (current_robot_type_.empty() && camera_mappings_.empty()) {
+  if (current_robot_type_.empty() && camera_mappings_.empty() && action_topic_mappings_.empty()) {
     return;
   }
 
@@ -649,6 +679,14 @@ void ServiceBagRecorder::save_robot_config_yaml(const std::string & bag_uri)
       out << YAML::Key << "camera_mapping" << YAML::Value << YAML::BeginMap;
       for (const auto & mapping : camera_mappings_) {
         out << YAML::Key << mapping.topic << YAML::Value << mapping.name;
+      }
+      out << YAML::EndMap;
+    }
+
+    if (!action_topic_mappings_.empty()) {
+      out << YAML::Key << "action_topics" << YAML::Value << YAML::BeginMap;
+      for (const auto & mapping : action_topic_mappings_) {
+        out << YAML::Key << mapping.name << YAML::Value << mapping.topic;
       }
       out << YAML::EndMap;
     }

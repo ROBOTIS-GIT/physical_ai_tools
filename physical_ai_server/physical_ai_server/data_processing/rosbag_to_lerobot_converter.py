@@ -567,6 +567,10 @@ class RosbagToLerobotConverter:
         state_staleness_values: List[float] = []
         action_staleness_values: List[float] = []
 
+        action_dim = 0
+        if action_messages:
+            action_dim = len(action_messages[0][1])
+
         warning_threshold_ms = (
             1000.0 / self.config.fps
         ) * self.config.quality_warning_multiplier
@@ -594,12 +598,12 @@ class RosbagToLerobotConverter:
                 error_threshold_ms,
             )
 
-            if action_messages:
+            if action_messages and action_dim > 0:
                 action, action_staleness_ms = self._find_previous_value(
                     action_messages, target_time, frame_duration
                 )
                 if action is None:
-                    action = np.zeros_like(state)
+                    action = np.zeros(action_dim, dtype=np.float32)
                     action_staleness_ms = 0.0
 
                 staleness_metrics["action"].total_samples += 1
@@ -612,7 +616,7 @@ class RosbagToLerobotConverter:
                     error_threshold_ms,
                 )
             else:
-                action = np.zeros_like(state)
+                action = np.zeros(len(state), dtype=np.float32)
 
             episode.timestamps.append(relative_time)
             episode.observation_state.append(state)
