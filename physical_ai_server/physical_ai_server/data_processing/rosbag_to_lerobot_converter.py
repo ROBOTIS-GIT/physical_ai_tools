@@ -311,9 +311,31 @@ class RosbagToLerobotConverter:
             self._camera_mapping = robot_config["camera_mapping"]
             self._log_info(f"Loaded camera mapping: {self._camera_mapping}")
 
-        if "joint_order" in robot_config:
-            self._joint_order = robot_config["joint_order"]
-            self._log_info(f"Loaded joint_order with {len(self._joint_order)} joints")
+        # Prefer total_joint_order (flat list) over joint_order (nested dict)
+        if "total_joint_order" in robot_config:
+            self._joint_order = robot_config["total_joint_order"]
+            self._log_info(
+                f"Loaded total_joint_order with {len(self._joint_order)} joints"
+            )
+        elif "joint_order" in robot_config:
+            joint_order = robot_config["joint_order"]
+            # Handle nested dict structure (flatten values)
+            if isinstance(joint_order, dict):
+                flattened = []
+                for key, joints in joint_order.items():
+                    if isinstance(joints, list):
+                        flattened.extend(joints)
+                    else:
+                        flattened.append(joints)
+                self._joint_order = flattened
+                self._log_info(
+                    f"Loaded joint_order (flattened from dict) with {len(self._joint_order)} joints"
+                )
+            else:
+                self._joint_order = joint_order
+                self._log_info(
+                    f"Loaded joint_order with {len(self._joint_order)} joints"
+                )
 
     def _extract_joint_data(
         self,

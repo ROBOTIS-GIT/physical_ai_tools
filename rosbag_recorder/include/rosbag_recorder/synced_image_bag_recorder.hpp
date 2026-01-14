@@ -12,65 +12,45 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 //
-// Author: Woojin Wie, Kiwoong Park, Dongyun Kim
+// Author: Sisyphus (AI Agent)
 
+#ifndef ROSBAG_RECORDER__SYNCED_IMAGE_BAG_RECORDER_HPP_
+#define ROSBAG_RECORDER__SYNCED_IMAGE_BAG_RECORDER_HPP_
 
-#ifndef ROSBAG_RECORDER__SERVICE_BAG_RECORDER_HPP_
-#define ROSBAG_RECORDER__SERVICE_BAG_RECORDER_HPP_
-
+#include <map>
 #include <memory>
 #include <mutex>
 #include <string>
 #include <unordered_map>
 #include <vector>
-#include <map>
 
 #include <rclcpp/rclcpp.hpp>
 #include <rclcpp/generic_subscription.hpp>
 #include <rosbag2_cpp/writer.hpp>
 #include <sensor_msgs/msg/image.hpp>
-#include <sensor_msgs/msg/compressed_image.hpp>
 
 #include "rosbag_recorder/srv/send_command.hpp"
 #include "rosbag_recorder/msg/image_metadata.hpp"
-#include "rosbag_recorder/image_compressor.hpp"
-#include "rosbag_recorder/topic_health_checker.hpp"
+#include "rosbag_recorder/synced_image_compressor.hpp"
 
-
-struct CameraMapping
+namespace rosbag_recorder
 {
-  std::string name;
-  std::string topic;
-};
 
-struct JointMapping
-{
-  std::string name;
-  std::string topic;
-};
-
-
-class ServiceBagRecorder : public rclcpp::Node
+class SyncedImageBagRecorder : public rclcpp::Node
 {
 public:
-  ServiceBagRecorder();
+  SyncedImageBagRecorder();
 
 private:
   void handle_send_command(
     const std::shared_ptr<rosbag_recorder::srv::SendCommand::Request> req,
     std::shared_ptr<rosbag_recorder::srv::SendCommand::Response> res);
 
-  void handle_prepare(const std::vector<std::string> & topics, const std::string & robot_type);
+  void handle_prepare(const std::vector<std::string> & topics);
   void handle_start(const std::string & uri);
   void handle_stop();
   void handle_stop_and_delete();
   void handle_finish();
-  void handle_check_ready(
-    std::shared_ptr<rosbag_recorder::srv::SendCommand::Response> res);
-
-  bool load_robot_config(const std::string & robot_type);
-  void save_robot_config_yaml(const std::string & bag_uri);
-  std::string get_camera_name_for_topic(const std::string & topic) const;
 
   void handle_serialized_message(
     const std::string & topic,
@@ -80,46 +60,39 @@ private:
     const std::string & topic,
     const sensor_msgs::msg::Image::SharedPtr & image_msg);
 
-  void handle_compressed_image_message(
-    const std::string & topic,
-    const sensor_msgs::msg::CompressedImage::SharedPtr & compressed_msg);
+  void on_synced_frame(const SyncedFrameOutput & output);
 
   std::vector<std::string> get_missing_topics(
     const std::map<std::string, std::vector<std::string>> & names_and_types);
+
   void create_topics_in_bag(
     const std::map<std::string, std::vector<std::string>> & names_and_types);
+
   void delete_bag_directory(const std::string & bag_uri);
   void create_subscriptions();
   bool is_image_topic(const std::string & topic_type) const;
-  bool is_compressed_image_topic(const std::string & topic_type) const;
+  void write_stats_report();
 
   rclcpp::Service<rosbag_recorder::srv::SendCommand>::SharedPtr send_command_srv_;
 
   std::vector<rclcpp::GenericSubscription::SharedPtr> generic_subscriptions_;
   std::vector<rclcpp::Subscription<sensor_msgs::msg::Image>::SharedPtr> image_subscriptions_;
-  std::vector<rclcpp::Subscription<sensor_msgs::msg::CompressedImage>::SharedPtr>
-    compressed_image_subscriptions_;
 
   std::unique_ptr<rosbag2_cpp::Writer> writer_;
-  std::unique_ptr<rosbag_recorder::ImageCompressor> image_compressor_;
+  std::unique_ptr<SyncedImageCompressor> synced_compressor_;
 
   std::unordered_map<std::string, std::string> type_for_topic_;
   std::vector<std::string> image_topics_;
-  std::vector<std::string> compressed_image_topics_;
   std::vector<std::string> non_image_topics_;
 
   bool is_recording_{false};
-  bool compress_images_{true};
   std::string current_bag_uri_;
-  std::string current_robot_type_;
   std::vector<std::string> topics_to_record_{};
-  std::vector<CameraMapping> camera_mappings_;
-  std::vector<JointMapping> action_topic_mappings_;
-  std::vector<std::string> joint_order_;
   std::mutex mutex_;
 
-  // Topic health checker for stability monitoring
-  rosbag_recorder::TopicHealthChecker topic_health_checker_;
+  std::unordered_map<std::string, uint32_t> frame_counts_;
 };
 
-#endif  // ROSBAG_RECORDER__SERVICE_BAG_RECORDER_HPP_
+}  // namespace rosbag_recorder
+
+#endif

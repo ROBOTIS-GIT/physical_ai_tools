@@ -275,6 +275,33 @@ class Communicator:
     def finish_rosbag(self):
         self._send_rosbag_command(command=SendCommand.Request.FINISH)
 
+    def check_rosbag_ready(self) -> bool:
+        if not self.rosbag_service_available:
+            return False
+
+        req = SendCommand.Request()
+        req.command = SendCommand.Request.CHECK_READY
+
+        future = self._rosbag_send_command_client.call_async(req)
+
+        try:
+            import rclpy
+
+            rclpy.spin_until_future_complete(self.node, future, timeout_sec=1.0)
+            if future.done():
+                result = future.result()
+                if result.success:
+                    if not result.ready:
+                        pending_count = len(result.pending_topics)
+                        self.node.get_logger().debug(
+                            f"Topics not ready: {pending_count} pending"
+                        )
+                    return result.ready
+            return False
+        except Exception as e:
+            self.node.get_logger().error(f"Failed to check rosbag ready: {e}")
+            return False
+
     def _send_rosbag_command(
         self,
         command: int,

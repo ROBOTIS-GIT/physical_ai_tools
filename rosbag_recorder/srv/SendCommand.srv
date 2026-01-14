@@ -3,6 +3,7 @@ uint8 START = 1
 uint8 STOP = 2
 uint8 STOP_AND_DELETE = 3
 uint8 FINISH = 4
+uint8 CHECK_READY = 5
 
 string uri # only used for START command
 string[] topics # only used for PREPARE command
@@ -11,3 +12,5 @@ uint8 command
 ---
 bool success
 string message
+bool ready # only used for CHECK_READY: true if all topics are stable
+string[] pending_topics # only used for CHECK_READY: topics not yet stable

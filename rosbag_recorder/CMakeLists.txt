@@ -27,6 +27,7 @@ rosidl_generate_interfaces(${PROJECT_NAME}
 add_executable(service_bag_recorder
   src/service_bag_recorder.cpp
   src/image_compressor.cpp
+  src/topic_health_checker.cpp
 )
 
 target_include_directories(service_bag_recorder PUBLIC
@@ -92,9 +93,42 @@ target_link_libraries(image_bag_recorder
   ${OpenCV_LIBRARIES}
 )
 
+add_executable(synced_image_bag_recorder
+  src/synced_image_bag_recorder.cpp
+  src/synced_image_compressor.cpp
+)
+
+target_include_directories(synced_image_bag_recorder PUBLIC
+  $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
+  $<INSTALL_INTERFACE:include/${PROJECT_NAME}>
+  ${OpenCV_INCLUDE_DIRS}
+)
+
+target_compile_features(synced_image_bag_recorder PUBLIC c_std_99 cxx_std_17)
+
+ament_target_dependencies(
+  synced_image_bag_recorder
+  "rclcpp"
+  "rosbag2_cpp"
+  "sensor_msgs"
+  "std_msgs"
+  "cv_bridge"
+  "image_transport"
+)
+
+rosidl_get_typesupport_target(cpp_typesupport_target_synced
+  ${PROJECT_NAME} "rosidl_typesupport_cpp"
+)
+
+target_link_libraries(synced_image_bag_recorder
+  "${cpp_typesupport_target_synced}"
+  ${OpenCV_LIBRARIES}
+)
+
 install(TARGETS
   service_bag_recorder
   image_bag_recorder
+  synced_image_bag_recorder
   DESTINATION lib/${PROJECT_NAME}
 )
 

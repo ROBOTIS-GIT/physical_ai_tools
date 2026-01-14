@@ -93,6 +93,9 @@ void ServiceBagRecorder::handle_send_command(
         res->success = true;
         res->message = "Recording finished";
         break;
+      case rosbag_recorder::srv::SendCommand::Request::CHECK_READY:
+        handle_check_ready(res);
+        break;
       default:
         res->success = false;
         res->message = "Invalid command";
@@ -166,6 +169,17 @@ void ServiceBagRecorder::handle_prepare(
     }
 
     create_subscriptions();
+
+    topic_health_checker_.clear();
+    for (const auto & topic : image_topics_) {
+      topic_health_checker_.register_topic_auto(topic, true);
+    }
+    for (const auto & topic : compressed_image_topics_) {
+      topic_health_checker_.register_topic_auto(topic, true);
+    }
+    for (const auto & topic : non_image_topics_) {
+      topic_health_checker_.register_topic_auto(topic, false);
+    }
 
     RCLCPP_INFO(
       this->get_logger(),
@@ -447,6 +461,8 @@ void ServiceBagRecorder::handle_serialized_message(
 {
   std::scoped_lock<std::mutex> lock(mutex_);
 
+  topic_health_checker_.record_message_now(topic);
+
   if (!is_recording_ || !writer_) {
     return;
   }
@@ -464,6 +480,8 @@ void ServiceBagRecorder::handle_image_message(
   const sensor_msgs::msg::Image::SharedPtr & image_msg)
 {
   std::scoped_lock<std::mutex> lock(mutex_);
+
+  topic_health_checker_.record_message_now(topic);
 
   if (!is_recording_ || !writer_ || !image_compressor_) {
     return;
@@ -516,6 +534,8 @@ void ServiceBagRecorder::handle_compressed_image_message(
   const sensor_msgs::msg::CompressedImage::SharedPtr & compressed_msg)
 {
   std::scoped_lock<std::mutex> lock(mutex_);
+
+  topic_health_checker_.record_message_now(topic);
 
   if (!is_recording_ || !writer_ || !image_compressor_) {
     return;
@@ -742,6 +762,27 @@ std::string ServiceBagRecorder::get_camera_name_for_topic(const std::string & to
     }
   }
   return "";
+}
+
+void ServiceBagRecorder::handle_check_ready(
+  std::shared_ptr<rosbag_recorder::srv::SendCommand::Response> res)
+{
+  bool is_ready = topic_health_checker_.is_all_stable();
+  auto pending = topic_health_checker_.get_pending_topics();
+
+  res->success = true;
+  res->ready = is_ready;
+  res->pending_topics = pending;
+
+  if (is_ready) {
+    res->message = "All topics are stable";
+    RCLCPP_INFO(this->get_logger(), "CHECK_READY: All topics stable");
+  } else {
+    res->message = "Waiting for topics to stabilize: " + std::to_string(pending.size()) + " pending";
+    RCLCPP_DEBUG(
+      this->get_logger(),
+      "CHECK_READY: %zu topics pending", pending.size());
+  }
 }
 
 int main(int argc, char ** argv)

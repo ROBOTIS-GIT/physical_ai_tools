@@ -585,8 +585,16 @@ class PhysicalAIServer(Node):
             self.get_logger().error(f"Failed to save rosbag metadata: {e}")
 
     def _data_collection_timer_callback(self):
+        """
+        Timer callback for data collection.
+
+        ROSbag2 handles actual data saving via rosbag_recorder.
+        This callback manages recording state machine and status updates.
+        """
         error_msg = ""
         current_status = TaskStatus()
+
+        # Check if topics are being received (for status reporting)
         camera_msgs, follower_msgs, leader_msgs = self.communicator.get_latest_data()
         if camera_msgs is None:
             if (
@@ -621,32 +629,6 @@ class PhysicalAIServer(Node):
                 self.get_logger().info("Waiting for leader data...")
                 return
 
-        try:
-            camera_data, follower_data, leader_data = (
-                self.data_manager.convert_msgs_to_raw_datas(
-                    camera_msgs,
-                    follower_msgs,
-                    self.total_joint_order,
-                    leader_msgs,
-                    self.joint_order,
-                )
-            )
-
-        except Exception as e:
-            error_msg = f"Failed to convert messages: {str(e)}, please check the robot type again!"
-            self.on_recording = False
-            current_status.phase = TaskStatus.READY
-            current_status.error = error_msg
-            self.communicator.publish_status(status=current_status)
-            self.timer_manager.stop(timer_name=self.operation_mode)
-            return
-
-        if not self.data_manager.check_lerobot_dataset(
-            camera_data, self.total_joint_order
-        ):
-            error_msg = "Invalid repository name, Please change the repository name"
-            self.get_logger().info(error_msg)
-
         if error_msg:
             self.on_recording = False
             current_status.phase = TaskStatus.READY
@@ -661,9 +643,11 @@ class PhysicalAIServer(Node):
             )
             self.communicator.joystick_state["updated"] = False
 
-        record_completed = self.data_manager.record(
-            images=camera_data, state=follower_data, action=leader_data
-        )
+        if self.data_manager.get_status() == "warmup":
+            is_ready = self.communicator.check_rosbag_ready()
+            self.data_manager.set_rosbag_ready(is_ready)
+
+        record_completed = self.data_manager.record()
 
         current_status = self.data_manager.get_current_record_status()
         self.communicator.publish_status(status=current_status)
