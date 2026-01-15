@@ -14,15 +14,19 @@ RUN apt-get update && apt-get install -y locales \
     && rm -rf /var/lib/apt/lists/*
 ENV LANG=en_US.UTF-8
 
-# Install system dependencies
+# Install system dependencies (cmake, ninja-build, pkg-config required for egl-probe)
 RUN apt-get update && apt-get install -y --no-install-recommends \
     build-essential \
     git \
     curl \
     wget \
     ca-certificates \
+    cmake \
+    pkg-config \
+    ninja-build \
     libglib2.0-0 \
     libegl1-mesa \
+    libegl1-mesa-dev \
     libgl1-mesa-glx \
     libgles2-mesa \
     ffmpeg \
@@ -56,13 +60,14 @@ ENV PATH="/lerobot/.venv/bin:$PATH"
 
 # Copy LeRobot source and install dependencies
 # Note: Build context is project root (physical_ai_tools)
-COPY third_party/lerobot/pyproject.toml third_party/lerobot/README.md ./
+# Must include setup.py and MANIFEST.in for dynamic readme resolution
+COPY third_party/lerobot/setup.py third_party/lerobot/pyproject.toml third_party/lerobot/README.md third_party/lerobot/MANIFEST.in ./
 COPY third_party/lerobot/src/ ./src/
 
 # Install LeRobot with all dependencies
 RUN uv pip install --no-cache ".[all]"
 
-# Copy the rest of LeRobot
+# Copy the rest of LeRobot (configs, tests, etc.)
 COPY third_party/lerobot/ ./
 
 # Zenoh dependencies (zenoh_ros2_sdk mounted as volume at /zenoh_sdk)
