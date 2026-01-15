@@ -737,3 +737,5 @@ doc/
 
 # Claude Code agents (managed separately)
 .claude/
+
+*.mp4
