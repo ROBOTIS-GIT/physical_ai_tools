@@ -1,4 +1,7 @@
 services:
+  # ============================================
+  # Physical AI Manager (React UI)
+  # ============================================
   physical_ai_manager:
     container_name: physical_ai_manager
     image: robotis/physical-ai-manager:latest
@@ -7,6 +10,10 @@ services:
       dockerfile: Dockerfile
     network_mode: host
     restart: unless-stopped
+
+  # ============================================
+  # Physical AI Server (ROS2 + Zenoh)
+  # ============================================
   physical_ai_server:
     container_name: physical_ai_server
     image: robotis/physical-ai-server:latest
@@ -19,9 +26,14 @@ services:
       rttime: -1
       memlock: 8428281856
     network_mode: host
+    # Shared Memory support for Zenoh communication with lerobot
+    ipc: host
     environment:
       - DISPLAY=${DISPLAY}
       - QT_X11_NO_MITSHM=1
+      # Zenoh configuration
+      - ZENOH_ROUTER_IP=127.0.0.1
+      - ZENOH_ROUTER_PORT=7447
     volumes:
       - /dev:/dev
       - ./workspace:/workspace
@@ -29,6 +41,8 @@ services:
       - /tmp/.docker.xauth:/tmp/.docker.xauth:rw
       - ../:/root/ros2_ws/src/physical_ai_tools/
       - ./huggingface:/root/.cache/huggingface
+      # Shared Memory
+      - /dev/shm:/dev/shm
       - /etc/timezone:/etc/timezone:ro
       - /etc/localtime:/etc/localtime:ro
     privileged: true
@@ -40,3 +54,74 @@ services:
           devices:
             - driver: nvidia
               capabilities: [gpu]
+
+  # ============================================
+  # LeRobot Server (Isolated Docker Container)
+  # Communicates with physical_ai_server via Zenoh
+  # ============================================
+  lerobot:
+    container_name: lerobot_server
+    image: robotis/lerobot-zenoh:latest
+    build:
+      context: ..
+      dockerfile: docker/lerobot/Dockerfile
+    
+    # Network: host mode for Zenoh communication
+    network_mode: host
+    
+    # Shared Memory support for high-performance Zenoh transport
+    ipc: host
+    
+    # GPU support for training and inference
+    runtime: nvidia
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              capabilities: [gpu]
+    
+    # Volume mappings
+    volumes:
+      # Shared Memory device
+      - /dev/shm:/dev/shm
+      
+      # LeRobot cache directory (datasets, models, outputs)
+      # Maps: host docker/workspace/lerobot <-> container ~/.cache/huggingface/lerobot
+      - ./workspace/lerobot:/root/.cache/huggingface/lerobot
+      
+      # HuggingFace cache (shared with physical_ai_server)
+      - ./huggingface:/root/.cache/huggingface
+      
+      # Zenoh SDK (for development - mount as volume)
+      # In production, this should be built into the image
+      - ../../zenoh_ros2_sdk:/zenoh_sdk:ro
+      
+      # Timezone
+      - /etc/timezone:/etc/timezone:ro
+      - /etc/localtime:/etc/localtime:ro
+    
+    # Environment variables
+    environment:
+      # Zenoh configuration
+      - ZENOH_ROUTER_IP=127.0.0.1
+      - ZENOH_ROUTER_PORT=7447
+      - ZENOH_SHM_ENABLED=true
+      - ZENOH_SDK_PATH=/zenoh_sdk
+      
+      # GPU
+      - NVIDIA_VISIBLE_DEVICES=all
+      - NVIDIA_DRIVER_CAPABILITIES=all
+      
+      # Python
+      - PYTHONUNBUFFERED=1
+    
+    # Auto restart
+    restart: unless-stopped
+    
+    # Default command: start Zenoh server
+    command: server
+    
+    # Dependencies
+    depends_on:
+      - physical_ai_server
