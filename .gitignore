@@ -738,6 +738,4 @@ doc/
 # Claude Code agents (managed separately)
 .claude/
 
-# Legacy lerobot folder (root permission files from Docker)
-# TODO: Remove this after `sudo rm -rf lerobot` is executed
-/lerobot/
+
