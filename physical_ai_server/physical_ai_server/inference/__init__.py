@@ -17,4 +17,4 @@
 # Author: Dongyun Kim
 
 
-# This file makes the directory a Python package
+from physical_ai_server.inference.zenoh_inference_manager import ZenohInferenceManager

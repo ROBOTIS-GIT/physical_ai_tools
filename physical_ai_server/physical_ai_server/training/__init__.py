@@ -17,4 +17,4 @@
 # Author: Seongwoo Kim
 
 
-# This file makes the directory a Python package
+from physical_ai_server.training.zenoh_training_manager import ZenohTrainingManager
