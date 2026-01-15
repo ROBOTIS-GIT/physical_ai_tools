@@ -43,13 +43,15 @@ ServiceBagRecorder::ServiceBagRecorder()
 {
   RCLCPP_INFO(this->get_logger(), "Starting rosbag recorder node with image compression");
 
-  // Declare parameter for image compression
   this->declare_parameter<bool>("compress_images", true);
+  this->declare_parameter<double>("video_fps", 15.0);
+
   compress_images_ = this->get_parameter("compress_images").as_bool();
+  video_fps_ = this->get_parameter("video_fps").as_double();
 
   RCLCPP_INFO(
-    this->get_logger(), "Image compression: %s",
-    compress_images_ ? "enabled" : "disabled");
+    this->get_logger(), "Image compression: %s, FPS: %.1f",
+    compress_images_ ? "enabled" : "disabled", video_fps_);
 
   send_command_srv_ = this->create_service<rosbag_recorder::srv::SendCommand>(
     "rosbag_recorder/send_command",
@@ -216,13 +218,13 @@ void ServiceBagRecorder::handle_start(const std::string & uri)
     writer_ = std::make_unique<rosbag2_cpp::Writer>();
     writer_->open(current_bag_uri_);
 
-    // Create image compressor for MP4 videos if image compression is enabled
     if (compress_images_ && (!image_topics_.empty() || !compressed_image_topics_.empty())) {
       std::string video_output_dir = current_bag_uri_ + "/videos";
-      image_compressor_ = std::make_unique<rosbag_recorder::ImageCompressor>(video_output_dir);
+      image_compressor_ = std::make_unique<rosbag_recorder::ImageCompressor>(
+        video_output_dir, video_fps_);
       RCLCPP_INFO(
-        this->get_logger(), "Image compressor initialized: %s",
-        video_output_dir.c_str());
+        this->get_logger(), "Image compressor initialized: %s (fps=%.1f)",
+        video_output_dir.c_str(), video_fps_);
     }
 
     auto names_and_types = this->get_topic_names_and_types();

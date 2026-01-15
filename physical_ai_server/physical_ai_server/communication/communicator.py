@@ -17,7 +17,7 @@
 # Author: Dongyun Kim, Seongwoo Kim, Kiwoong Park
 
 from functools import partial
-from typing import Any, Dict, List, Optional, Set, Tuple
+from typing import Any, Callable, Dict, List, Optional, Set, Tuple
 
 from geometry_msgs.msg import Twist
 from nav_msgs.msg import Odometry
@@ -39,6 +39,7 @@ from physical_ai_server.utils.parameter_utils import (
 )
 from rclpy.node import Node
 from rclpy.qos import DurabilityPolicy, HistoryPolicy, QoSProfile, ReliabilityPolicy
+from rosbag_recorder.msg import EncodingStatus
 from rosbag_recorder.srv import SendCommand
 from sensor_msgs.msg import CompressedImage, JointState
 from std_msgs.msg import Empty, String
@@ -110,6 +111,11 @@ class Communicator:
         )
 
         self.rosbag_service_available = False
+
+        # Callback to be set by physical_ai_server for encoding completion
+        self._encoding_status_callback: Optional[Callable[[EncodingStatus], None]] = (
+            None
+        )
 
         self.init_subscribers()
         self.init_publishers()
@@ -196,6 +202,14 @@ class Communicator:
             String,
             "/leader/joystick_controller/tact_trigger",
             self.joystick_trigger_callback,
+            10,
+        )
+
+        # Subscribe to encoding status from rosbag_recorder
+        self.encoding_status_subscriber = self.node.create_subscription(
+            EncodingStatus,
+            "rosbag_recorder/encoding_status",
+            self._encoding_status_topic_callback,
             10,
         )
 
@@ -670,6 +684,14 @@ class Communicator:
             self.node.destroy_subscription(self.joystick_trigger_subscriber)
             self.joystick_trigger_subscriber = None
 
+        # Clean up encoding status subscriber
+        if (
+            hasattr(self, "encoding_status_subscriber")
+            and self.encoding_status_subscriber is not None
+        ):
+            self.node.destroy_subscription(self.encoding_status_subscriber)
+            self.encoding_status_subscriber = None
+
     def _cleanup_services(self):
         service_names = [
             "image_topic_list_service",
@@ -693,3 +715,18 @@ class Communicator:
         self.node.get_logger().info(f"Received joystick trigger: {msg.data}")
         self.joystick_state["updated"] = True
         self.joystick_state["mode"] = msg.data
+
+    def set_encoding_status_callback(
+        self, callback: Callable[[EncodingStatus], None]
+    ) -> None:
+        """Set the callback to be invoked when encoding completes."""
+        self._encoding_status_callback = callback
+
+    def _encoding_status_topic_callback(self, msg: EncodingStatus) -> None:
+        """Internal callback for encoding status topic subscription."""
+        self.node.get_logger().info(
+            f"Received encoding status: success={msg.success}, "
+            f"bag_path={msg.bag_path}, message={msg.message}"
+        )
+        if self._encoding_status_callback is not None:
+            self._encoding_status_callback(msg)

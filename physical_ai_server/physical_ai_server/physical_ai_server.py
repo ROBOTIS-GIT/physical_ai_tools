@@ -53,6 +53,7 @@ from physical_ai_interfaces.srv import (
 )
 
 from physical_ai_server.communication.communicator import Communicator
+from rosbag_recorder.msg import EncodingStatus
 from physical_ai_server.data_processing.data_manager import DataManager
 from physical_ai_server.data_processing.hf_api_worker import HfApiWorker
 from physical_ai_server.data_processing.replay_data_handler import ReplayDataHandler
@@ -113,6 +114,9 @@ class PhysicalAIServer(Node):
         self.previous_data_manager_status = None
 
         self.goal_repo_id = None
+
+        # Track pending metadata path for deferred saving after encoding completes
+        self._pending_metadata_rosbag_path: Optional[str] = None
 
     def _init_core_components(self):
         self.communicator: Optional[Communicator] = None
@@ -278,6 +282,9 @@ class PhysicalAIServer(Node):
         self.communicator = Communicator(
             node=self, operation_mode=self.operation_mode, params=self.params
         )
+
+        # Register encoding complete callback for deferred metadata saving
+        self.communicator.set_encoding_status_callback(self._on_encoding_complete)
 
         if self.heartbeat_timer is None:
             self.heartbeat_timer = TimerManager(node=self)
@@ -481,9 +488,13 @@ class PhysicalAIServer(Node):
         # Get rosbag path before stopping (path may not be available after stop)
         rosbag_path = self.data_manager.get_save_rosbag_path()
         self.communicator.stop_rosbag()
-        # Save metadata to rosbag directory
+        # Defer metadata saving until encoding completes
+        # The encoding_status callback will trigger _save_rosbag_metadata
         if rosbag_path:
-            self._save_rosbag_metadata(rosbag_path)
+            self._pending_metadata_rosbag_path = rosbag_path
+            self.get_logger().info(
+                f"Deferred metadata saving for: {rosbag_path} (waiting for encoding)"
+            )
 
     def _handle_stop_transition(self, previous_status: str):
         self.get_logger().info(
@@ -492,9 +503,13 @@ class PhysicalAIServer(Node):
         # Get rosbag path before stopping
         rosbag_path = self.data_manager.get_save_rosbag_path()
         self.communicator.stop_rosbag()
-        # Save metadata to rosbag directory
+        # Defer metadata saving until encoding completes
+        # The encoding_status callback will trigger _save_rosbag_metadata
         if rosbag_path:
-            self._save_rosbag_metadata(rosbag_path)
+            self._pending_metadata_rosbag_path = rosbag_path
+            self.get_logger().info(
+                f"Deferred metadata saving for: {rosbag_path} (waiting for encoding)"
+            )
 
     def _handle_finish_transition(self, previous_status: str):
         self.get_logger().info(
@@ -583,6 +598,35 @@ class PhysicalAIServer(Node):
 
         except Exception as e:
             self.get_logger().error(f"Failed to save rosbag metadata: {e}")
+
+    def _on_encoding_complete(self, msg: EncodingStatus) -> None:
+        """
+        Callback invoked when rosbag_recorder finishes encoding videos.
+
+        Saves the deferred robot_config.yaml metadata after encoding completes.
+        """
+        if msg.success:
+            self.get_logger().info(
+                f"Encoding completed successfully for: {msg.bag_path}"
+            )
+        else:
+            self.get_logger().warning(
+                f"Encoding failed for {msg.bag_path}: {msg.message}"
+            )
+
+        # Save metadata if we have a pending path
+        # Use msg.bag_path if available, otherwise use pending path
+        rosbag_path = (
+            msg.bag_path if msg.bag_path else self._pending_metadata_rosbag_path
+        )
+
+        if rosbag_path:
+            self._save_rosbag_metadata(rosbag_path)
+            self._pending_metadata_rosbag_path = None
+        else:
+            self.get_logger().warning(
+                "Encoding complete but no rosbag path available for metadata saving"
+            )
 
     def _data_collection_timer_callback(self):
         """

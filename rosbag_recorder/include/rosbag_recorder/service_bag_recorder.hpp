@@ -110,6 +110,7 @@ private:
 
   bool is_recording_{false};
   bool compress_images_{true};
+  double video_fps_{15.0};
   std::string current_bag_uri_;
   std::string current_robot_type_;
   std::vector<std::string> topics_to_record_{};

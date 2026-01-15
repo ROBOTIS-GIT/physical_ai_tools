@@ -534,10 +534,361 @@ docker exec physical_ai_server rm -rf /workspace/lerobot_test_output
 
 ---
 
+---
+
+## LeRobot v3.0 데이터셋 변환 테스트
+
+LeRobot v3.0 형식은 v2.1과 달리 여러 에피소드를 하나의 파일로 집계합니다.
+
+### v2.1 vs v3.0 주요 차이점
+
+| 항목 | v2.1 | v3.0 |
+|------|------|------|
+| Data 파일 | `episode_000000.parquet` | `file-000.parquet` (다중 에피소드) |
+| Video 파일 | `episode_000000.mp4` | `file-000.mp4` (다중 에피소드 연결) |
+| Video 경로 | `videos/chunk-XXX/{camera}/` | `videos/{camera}/chunk-XXX/` |
+| Episodes 메타 | `meta/episodes.jsonl` | `meta/episodes/chunk-XXX/file-XXX.parquet` |
+| Tasks 메타 | `meta/tasks.jsonl` | `meta/tasks.parquet` |
+| Stats | `meta/episodes_stats.jsonl` | `meta/stats.json` (글로벌) |
+
+### 1. v3.0 변환 실행
+
+기존 테스트 녹화를 사용하여 v3.0으로 변환합니다:
+
+```bash
+docker exec physical_ai_server bash -c '
+source /opt/ros/jazzy/setup.bash
+source /root/ros2_ws/install/setup.bash
+cd /root/ros2_ws/src/physical_ai_tools/physical_ai_server/scripts
+python convert_rosbag_to_lerobot.py \
+  --input /workspace/test_recording \
+  --output /workspace/lerobot_v30_output \
+  --repo-id test/test_dataset_v30 \
+  --fps 30 \
+  --version v3.0 \
+  --verbose
+'
+```
+
+### 2. v3.0 디렉토리 구조 확인
+
+```bash
+docker exec physical_ai_server find /workspace/lerobot_v30_output -type f | sort
+```
+
+**올바른 v3.0 결과**:
+```
+/workspace/lerobot_v30_output/data/chunk-000/file-000.parquet
+/workspace/lerobot_v30_output/meta/info.json
+/workspace/lerobot_v30_output/meta/stats.json
+/workspace/lerobot_v30_output/meta/tasks.parquet
+/workspace/lerobot_v30_output/meta/episodes/chunk-000/file-000.parquet
+/workspace/lerobot_v30_output/videos/observation.images.cam_head/chunk-000/file-000.mp4
+/workspace/lerobot_v30_output/videos/observation.images.cam_wrist_left/chunk-000/file-000.mp4
+/workspace/lerobot_v30_output/videos/observation.images.cam_wrist_right/chunk-000/file-000.mp4
+```
+
+### 3. info.json 검증 (v3.0 필드 확인)
+
+```bash
+docker exec physical_ai_server python3 -c "
+import json
+with open('/workspace/lerobot_v30_output/meta/info.json') as f:
+    info = json.load(f)
+
+print('=== v3.0 info.json 검증 ===')
+print(f\"codebase_version: {info['codebase_version']}\")
+assert info['codebase_version'] == 'v3.0', 'Version should be v3.0'
+
+print(f\"data_path: {info['data_path']}\")
+assert 'file-{file_index:03d}' in info['data_path'], 'data_path should use file pattern'
+
+print(f\"video_path: {info['video_path']}\")
+assert '{video_key}/chunk' in info['video_path'], 'video_path should have video_key before chunk'
+
+print(f\"data_files_size_in_mb: {info.get('data_files_size_in_mb', 'N/A')}\")
+print(f\"video_files_size_in_mb: {info.get('video_files_size_in_mb', 'N/A')}\")
+
+print('✅ v3.0 info.json 검증 통과')
+"
+```
+
+### 4. stats.json 검증 (글로벌 통계)
+
+```bash
+docker exec physical_ai_server python3 -c "
+import json
+with open('/workspace/lerobot_v30_output/meta/stats.json') as f:
+    stats = json.load(f)
+
+print('=== stats.json 검증 ===')
+print(f'Features: {list(stats.keys())}')
+
+for feature, stat in stats.items():
+    print(f'{feature}:')
+    print(f'  mean shape: {len(stat[\"mean\"])}')
+    print(f'  std shape: {len(stat[\"std\"])}')
+    print(f'  min shape: {len(stat[\"min\"])}')
+    print(f'  max shape: {len(stat[\"max\"])}')
+
+print('✅ stats.json 검증 통과')
+"
+```
+
+### 5. episodes parquet 검증
+
+```bash
+docker exec physical_ai_server python3 -c "
+import pyarrow.parquet as pq
+
+table = pq.read_table('/workspace/lerobot_v30_output/meta/episodes/chunk-000/file-000.parquet')
+print('=== episodes parquet 검증 ===')
+print(f'Columns: {table.column_names}')
+print(f'Rows (episodes): {table.num_rows}')
+
+# 필수 컬럼 확인
+required_cols = ['episode_index', 'length', 'data/chunk_index', 'data/file_index', 
+                 'dataset_from_index', 'dataset_to_index']
+for col in required_cols:
+    assert col in table.column_names, f'Missing column: {col}'
+    
+print(f'Episode 0 length: {table[\"length\"][0].as_py()}')
+print(f'Episode 0 dataset_from_index: {table[\"dataset_from_index\"][0].as_py()}')
+print(f'Episode 0 dataset_to_index: {table[\"dataset_to_index\"][0].as_py()}')
+
+print('✅ episodes parquet 검증 통과')
+"
+```
+
+### 6. tasks parquet 검증
+
+```bash
+docker exec physical_ai_server python3 -c "
+import pyarrow.parquet as pq
+
+table = pq.read_table('/workspace/lerobot_v30_output/meta/tasks.parquet')
+print('=== tasks parquet 검증 ===')
+print(f'Columns: {table.column_names}')
+print(f'Rows (tasks): {table.num_rows}')
+
+assert 'task_index' in table.column_names, 'Missing task_index column'
+assert 'task' in table.column_names, 'Missing task column'
+
+for i in range(table.num_rows):
+    print(f'Task {table[\"task_index\"][i].as_py()}: {table[\"task\"][i].as_py()}')
+
+print('✅ tasks parquet 검증 통과')
+"
+```
+
+### 7. 데이터 parquet 검증
+
+```bash
+docker exec physical_ai_server python3 -c "
+import pyarrow.parquet as pq
+
+table = pq.read_table('/workspace/lerobot_v30_output/data/chunk-000/file-000.parquet')
+print('=== data parquet 검증 ===')
+print(f'Columns: {table.column_names}')
+print(f'Total frames: {table.num_rows}')
+
+# episode_index별 프레임 수 확인
+import pandas as pd
+df = table.to_pandas()
+episode_counts = df.groupby('episode_index').size()
+print(f'Frames per episode: {episode_counts.to_dict()}')
+
+print('✅ data parquet 검증 통과')
+"
+```
+
+### 8. v2.1 vs v3.0 비교 테스트
+
+같은 rosbag을 v2.1과 v3.0으로 각각 변환하여 비교합니다:
+
+```bash
+# v2.1 변환
+docker exec physical_ai_server bash -c '
+source /root/ros2_ws/install/setup.bash
+cd /root/ros2_ws/src/physical_ai_tools/physical_ai_server/scripts
+python convert_rosbag_to_lerobot.py \
+  --input /workspace/test_recording \
+  --output /workspace/lerobot_v21_output \
+  --repo-id test/test_dataset_v21 \
+  --fps 30 \
+  --version v2.1
+'
+
+# v3.0 변환
+docker exec physical_ai_server bash -c '
+source /root/ros2_ws/install/setup.bash
+cd /root/ros2_ws/src/physical_ai_tools/physical_ai_server/scripts
+python convert_rosbag_to_lerobot.py \
+  --input /workspace/test_recording \
+  --output /workspace/lerobot_v30_output \
+  --repo-id test/test_dataset_v30 \
+  --fps 30 \
+  --version v3.0
+'
+
+# 프레임 수 비교
+docker exec physical_ai_server python3 -c "
+import pyarrow.parquet as pq
+
+v21_table = pq.read_table('/workspace/lerobot_v21_output/data/chunk-000/episode_000000.parquet')
+v30_table = pq.read_table('/workspace/lerobot_v30_output/data/chunk-000/file-000.parquet')
+
+print('=== v2.1 vs v3.0 비교 ===')
+print(f'v2.1 frames: {v21_table.num_rows}')
+print(f'v3.0 frames: {v30_table.num_rows}')
+assert v21_table.num_rows == v30_table.num_rows, 'Frame count mismatch!'
+print('✅ 프레임 수 일치')
+"
+```
+
+### v3.0 Test Checklist
+
+- [ ] `--version v3.0` 옵션으로 변환 성공
+- [ ] `meta/info.json`에 `codebase_version: "v3.0"` 확인
+- [ ] `meta/info.json`에 `data_files_size_in_mb`, `video_files_size_in_mb` 필드 존재
+- [ ] `data_path` 패턴이 `file-{file_index:03d}` 형식
+- [ ] `video_path` 패턴이 `{video_key}/chunk-{chunk_index:03d}/file-{file_index:03d}` 형식
+- [ ] `meta/stats.json` 글로벌 통계 파일 생성됨
+- [ ] `meta/tasks.parquet` 파일 생성됨 (JSONL 아님)
+- [ ] `meta/episodes/chunk-000/file-000.parquet` 파일 생성됨
+- [ ] episodes parquet에 `dataset_from_index`, `dataset_to_index` 컬럼 존재
+- [ ] videos 경로가 `videos/{camera}/chunk-XXX/file-XXX.mp4` 형식
+- [ ] v2.1과 v3.0의 프레임 수가 일치
+
+---
+
+## HuggingFace 호환 Parquet 스키마 검증
+
+HuggingFace Dataset Viewer가 올바르게 동작하려면 Parquet 파일의 스키마가 특정 형식을 따라야 합니다.
+
+### 올바른 스키마 형식
+
+변환된 Parquet 파일은 다음 조건을 만족해야 합니다:
+
+1. **고정 크기 리스트 타입**: `observation.state`, `action` 등 배열 컬럼은 `fixed_size_list<element: float>[N]` 형식이어야 합니다.
+   - ❌ 잘못된 형식: `list<item: double>` (가변 길이, float64)
+   - ✅ 올바른 형식: `fixed_size_list<element: float>[19]` (고정 길이, float32)
+
+2. **HuggingFace 메타데이터**: Parquet 스키마에 HuggingFace 메타데이터가 포함되어야 합니다.
+
+3. **float32 타입**: timestamp 및 배열 요소는 `float32`여야 합니다.
+   - ❌ 잘못된 형식: `timestamp: double`
+   - ✅ 올바른 형식: `timestamp: float`
+
+### 스키마 검증 방법
+
+```bash
+docker exec physical_ai_server python3 -c "
+import pyarrow.parquet as pq
+import json
+
+# 변환된 데이터셋 경로
+table = pq.read_table('/workspace/lerobot_v30_output/data/chunk-000/file-000.parquet')
+
+print('=== Parquet Schema 검증 ===')
+for field in table.schema:
+    print(f'{field.name}: {field.type}')
+
+# HuggingFace 메타데이터 확인
+metadata = table.schema.metadata or {}
+has_hf = b'huggingface' in metadata
+print(f'\nHuggingFace 메타데이터: {\"있음\" if has_hf else \"없음\"}')"
+```
+
+### 올바른 출력 예시
+
+```
+=== Parquet Schema 검증 ===
+timestamp: float
+frame_index: int64
+episode_index: int64
+index: int64
+task_index: int64
+observation.state: fixed_size_list<element: float>[19]
+action: fixed_size_list<element: float>[19]
+
+HuggingFace 메타데이터: 있음
+```
+
+### 잘못된 출력 예시
+
+```
+=== Parquet Schema 검증 ===
+timestamp: double
+frame_index: int64
+episode_index: int64
+index: int64
+task_index: int64
+observation.state: list<item: double>
+action: list<item: double>
+
+HuggingFace 메타데이터: 없음
+```
+
+### 레퍼런스 데이터셋과 비교
+
+HuggingFace에서 정상 동작하는 레퍼런스 데이터셋과 스키마를 비교할 수 있습니다:
+
+```bash
+# 레퍼런스 데이터셋 다운로드
+docker exec physical_ai_server python3 -c "
+from huggingface_hub import snapshot_download
+snapshot_download(
+    repo_id='RobotisSW/ffw_sg2_rev1_test_hahaha',
+    repo_type='dataset',
+    local_dir='/workspace/reference_dataset'
+)"
+
+# 스키마 비교
+docker exec physical_ai_server python3 -c "
+import pyarrow.parquet as pq
+
+print('=== 레퍼런스 데이터셋 ===')
+ref = pq.read_table('/workspace/reference_dataset/data/chunk-000/episode_000000.parquet')
+for field in ref.schema:
+    print(f'{field.name}: {field.type}')
+print(f'HF metadata: {b\"huggingface\" in (ref.schema.metadata or {})}')
+
+print('\n=== 변환된 데이터셋 ===')
+converted = pq.read_table('/workspace/lerobot_v30_output/data/chunk-000/file-000.parquet')
+for field in converted.schema:
+    print(f'{field.name}: {field.type}')
+print(f'HF metadata: {b\"huggingface\" in (converted.schema.metadata or {})}')"
+```
+
+### HuggingFace 업로드 및 확인
+
+```bash
+# 데이터셋 업로드
+docker exec physical_ai_server huggingface-cli upload \
+    <your-username>/test_dataset \
+    /workspace/lerobot_v30_output \
+    --repo-type dataset
+
+# 업로드 후 HuggingFace 웹에서 확인:
+# https://huggingface.co/datasets/<your-username>/test_dataset
+# Dataset Viewer에서 observation.state, action 컬럼이 배열로 표시되어야 함
+```
+
+### 테스트 데이터셋 URL
+
+- **v2.1 수정된 데이터셋**: https://huggingface.co/datasets/Dongkkka/ffw_bg2_rev4_v21_fixed_test
+- **v3.0 수정된 데이터셋**: https://huggingface.co/datasets/Dongkkka/ffw_bg2_rev4_v30_fixed_test
+- **레퍼런스 데이터셋**: https://huggingface.co/datasets/RobotisSW/ffw_sg2_rev1_test_hahaha
+
+---
+
 ## 변경 이력
 
 | 날짜 | 변경 내용 |
 |------|----------|
+| 2026-01-14 | HuggingFace 호환 Parquet 스키마 검증 섹션 추가 |
+| 2026-01-14 | LeRobot v3.0 변환 테스트 섹션 추가 |
 | 2026-01-13 | rosbag play 중복 실행 방지 섹션 추가 |
 | 2026-01-13 | joint_order 처리 테스트 섹션 추가 |
 | 2026-01-13 | LeRobot 실시간 저장 제거 확인 테스트 추가 |

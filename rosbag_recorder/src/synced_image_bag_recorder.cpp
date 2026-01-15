@@ -44,6 +44,9 @@ SyncedImageBagRecorder::SyncedImageBagRecorder()
     std::bind(
       &SyncedImageBagRecorder::handle_send_command, this,
       std::placeholders::_1, std::placeholders::_2));
+
+  encoding_status_pub_ = this->create_publisher<rosbag_recorder::msg::EncodingStatus>(
+    "rosbag_recorder/encoding_status", 10);
 }
 
 void SyncedImageBagRecorder::handle_send_command(
@@ -69,7 +72,7 @@ void SyncedImageBagRecorder::handle_send_command(
       case rosbag_recorder::srv::SendCommand::Request::STOP:
         handle_stop();
         res->success = true;
-        res->message = "Recording stopped";
+        res->message = "Recording stopped, encoding started";
         break;
       case rosbag_recorder::srv::SendCommand::Request::STOP_AND_DELETE:
         handle_stop_and_delete();
@@ -105,6 +108,10 @@ void SyncedImageBagRecorder::handle_prepare(const std::vector<std::string> & top
 
   if (is_recording_) {
     throw std::runtime_error("Already recording");
+  }
+
+  if (image_compressor_ && image_compressor_->is_encoding()) {
+    throw std::runtime_error("Encoding in progress, please wait");
   }
 
   if (topics.empty()) {
@@ -155,6 +162,10 @@ void SyncedImageBagRecorder::handle_start(const std::string & uri)
     throw std::runtime_error("Already recording");
   }
 
+  if (image_compressor_ && image_compressor_->is_encoding()) {
+    throw std::runtime_error("Encoding in progress, cannot start new recording");
+  }
+
   if (uri.empty()) {
     throw std::runtime_error("Bag URI is required");
   }
@@ -168,24 +179,26 @@ void SyncedImageBagRecorder::handle_start(const std::string & uri)
 
     std::string video_output_dir = current_bag_uri_ + "/videos";
 
-    SyncedImageCompressor::Config config;
+    ImageCompressorRaw::Config config;
     config.target_fps = 30.0;
-    config.init_window_sec = 0.15;
-    config.chunk_duration_sec = 30.0;
-    config.enable_background_encoding = true;
 
-    synced_compressor_ = std::make_unique<SyncedImageCompressor>(
+    image_compressor_ = std::make_unique<ImageCompressorRaw>(
       video_output_dir, image_topics_, config);
 
-    synced_compressor_->set_synced_frame_callback(
-      std::bind(&SyncedImageBagRecorder::on_synced_frame, this, std::placeholders::_1));
+    image_compressor_->set_frame_callback(
+      std::bind(&SyncedImageBagRecorder::on_frame, this, std::placeholders::_1));
+
+    image_compressor_->set_encoding_complete_callback(
+      std::bind(
+        &SyncedImageBagRecorder::on_encoding_complete, this,
+        std::placeholders::_1, std::placeholders::_2));
 
     auto names_and_types = this->get_topic_names_and_types();
     auto missing_topics = get_missing_topics(names_and_types);
 
     if (!missing_topics.empty()) {
       writer_.reset();
-      synced_compressor_.reset();
+      image_compressor_.reset();
       type_for_topic_.clear();
 
       delete_bag_directory(current_bag_uri_);
@@ -208,7 +221,7 @@ void SyncedImageBagRecorder::handle_start(const std::string & uri)
       frame_counts_[topic] = 0;
     }
 
-    synced_compressor_->start_recording();
+    image_compressor_->start_recording();
 
   } catch (const std::exception & e) {
     throw std::runtime_error(
@@ -230,28 +243,17 @@ void SyncedImageBagRecorder::handle_stop()
     throw std::runtime_error("Not recording");
   }
 
-  try {
-    if (synced_compressor_) {
-      synced_compressor_->stop_recording();
+  is_recording_ = false;
 
-      RCLCPP_INFO(this->get_logger(), "Waiting for encoding to complete...");
-      synced_compressor_->wait_for_encoding_complete();
-
-      write_stats_report();
-
-      synced_compressor_.reset();
-    }
-
-    writer_.reset();
-    type_for_topic_.clear();
-    current_bag_uri_.clear();
-    is_recording_ = false;
-
-    RCLCPP_INFO(this->get_logger(), "Recording stopped");
-  } catch (const std::exception & e) {
-    throw std::runtime_error(
-            std::string("Failed to stop recording: ") + e.what());
+  if (image_compressor_) {
+    image_compressor_->stop_recording();
   }
+
+  if (writer_) {
+    writer_.reset();
+  }
+
+  RCLCPP_INFO(this->get_logger(), "Recording stopped, encoding in background");
 }
 
 void SyncedImageBagRecorder::handle_stop_and_delete()
@@ -262,26 +264,20 @@ void SyncedImageBagRecorder::handle_stop_and_delete()
     throw std::runtime_error("Not recording");
   }
 
-  try {
-    is_recording_ = false;
+  is_recording_ = false;
 
-    if (synced_compressor_) {
-      synced_compressor_->stop_recording();
-      synced_compressor_.reset();
-    }
-
-    writer_.reset();
-    type_for_topic_.clear();
-
-    delete_bag_directory(current_bag_uri_);
-
-    current_bag_uri_.clear();
-
-    RCLCPP_INFO(this->get_logger(), "Recording stopped and bag deleted");
-  } catch (const std::exception & e) {
-    throw std::runtime_error(
-            std::string("Failed to stop recording and delete bag: ") + e.what());
+  if (image_compressor_) {
+    image_compressor_.reset();
   }
+
+  writer_.reset();
+  type_for_topic_.clear();
+
+  delete_bag_directory(current_bag_uri_);
+
+  current_bag_uri_.clear();
+
+  RCLCPP_INFO(this->get_logger(), "Recording stopped and bag deleted");
 }
 
 void SyncedImageBagRecorder::handle_finish()
@@ -294,6 +290,26 @@ void SyncedImageBagRecorder::handle_finish()
   if (is_recording_) {
     handle_stop();
   }
+}
+
+void SyncedImageBagRecorder::on_encoding_complete(bool success, const std::string & message)
+{
+  RCLCPP_INFO(
+    this->get_logger(),
+    "Encoding complete: success=%d, message=%s, bag_path=%s",
+    success, message.c_str(), current_bag_uri_.c_str());
+
+  write_stats_report();
+
+  rosbag_recorder::msg::EncodingStatus status_msg;
+  status_msg.header.stamp = this->now();
+  status_msg.success = success;
+  status_msg.message = message;
+  status_msg.bag_path = current_bag_uri_;
+
+  encoding_status_pub_->publish(status_msg);
+
+  type_for_topic_.clear();
 }
 
 std::vector<std::string> SyncedImageBagRecorder::get_missing_topics(
@@ -418,14 +434,14 @@ void SyncedImageBagRecorder::handle_image_message(
   const std::string & topic,
   const sensor_msgs::msg::Image::SharedPtr & image_msg)
 {
-  if (!is_recording_ || !synced_compressor_) {
+  if (!is_recording_ || !image_compressor_) {
     return;
   }
 
-  synced_compressor_->add_incoming_frame(topic, image_msg);
+  image_compressor_->add_frame(topic, image_msg);
 }
 
-void SyncedImageBagRecorder::on_synced_frame(const SyncedFrameOutput & output)
+void SyncedImageBagRecorder::on_frame(const FrameOutput & output)
 {
   std::scoped_lock<std::mutex> lock(mutex_);
 
@@ -433,54 +449,52 @@ void SyncedImageBagRecorder::on_synced_frame(const SyncedFrameOutput & output)
     return;
   }
 
-  for (const auto & [topic, frame] : output.frames) {
-    rosbag_recorder::msg::ImageMetadata metadata_msg;
+  rosbag_recorder::msg::ImageMetadata metadata_msg;
 
-    rclcpp::Time timestamp(frame.timestamp_ns);
-    metadata_msg.header.stamp = timestamp;
-    metadata_msg.header.frame_id = topic;
+  rclcpp::Time timestamp(output.timestamp_ns);
+  metadata_msg.header.stamp = timestamp;
+  metadata_msg.header.frame_id = output.topic;
 
-    metadata_msg.frame_index = frame_counts_[topic]++;
-    metadata_msg.width = frame.width;
-    metadata_msg.height = frame.height;
-    metadata_msg.encoding = frame.encoding;
-    metadata_msg.source_topic = topic;
+  metadata_msg.frame_index = frame_counts_[output.topic]++;
+  metadata_msg.width = output.width;
+  metadata_msg.height = output.height;
+  metadata_msg.encoding = "";
+  metadata_msg.source_topic = output.topic;
 
-    std::string sanitized = topic;
-    std::replace(sanitized.begin(), sanitized.end(), '/', '_');
-    if (!sanitized.empty() && sanitized[0] == '_') {
-      sanitized = sanitized.substr(1);
-    }
-    metadata_msg.video_file_path = "videos/" + sanitized + ".mp4";
-
-    rclcpp::Serialization<rosbag_recorder::msg::ImageMetadata> serializer;
-    rclcpp::SerializedMessage serialized_msg;
-    serializer.serialize_message(&metadata_msg, &serialized_msg);
-
-    std::string metadata_topic = topic + "/metadata";
-    std::string metadata_type = "rosbag_recorder/msg/ImageMetadata";
-
-    writer_->write(
-      std::make_shared<rclcpp::SerializedMessage>(serialized_msg),
-      metadata_topic,
-      metadata_type,
-      timestamp);
+  std::string sanitized = output.topic;
+  std::replace(sanitized.begin(), sanitized.end(), '/', '_');
+  if (!sanitized.empty() && sanitized[0] == '_') {
+    sanitized = sanitized.substr(1);
   }
+  metadata_msg.video_file_path = "videos/" + sanitized + ".mp4";
+
+  rclcpp::Serialization<rosbag_recorder::msg::ImageMetadata> serializer;
+  rclcpp::SerializedMessage serialized_msg;
+  serializer.serialize_message(&metadata_msg, &serialized_msg);
+
+  std::string metadata_topic = output.topic + "/metadata";
+  std::string metadata_type = "rosbag_recorder/msg/ImageMetadata";
+
+  writer_->write(
+    std::make_shared<rclcpp::SerializedMessage>(serialized_msg),
+    metadata_topic,
+    metadata_type,
+    timestamp);
 }
 
 void SyncedImageBagRecorder::write_stats_report()
 {
-  if (!synced_compressor_ || current_bag_uri_.empty()) {
+  if (!image_compressor_ || current_bag_uri_.empty()) {
     return;
   }
 
-  auto stats = synced_compressor_->get_stats();
+  auto stats = image_compressor_->get_stats();
 
-  std::string report_path = current_bag_uri_ + "/sync_stats_report.json";
+  std::string report_path = current_bag_uri_ + "/stats_report.json";
   std::ofstream report(report_path);
 
   report << "{\n";
-  report << "  \"total_synced_frames\": " << stats.total_synced_frames << ",\n";
+  report << "  \"total_frames\": " << stats.total_frames << ",\n";
   report << "  \"recording_duration_sec\": "
          << (stats.recording_end_ns - stats.recording_start_ns) / 1e9 << ",\n";
   report << "  \"peak_ram_usage_mb\": "
@@ -494,21 +508,8 @@ void SyncedImageBagRecorder::write_stats_report()
     }
     first = false;
 
-    double avg_staleness_ms = topic_stats.synced_frames > 0 ?
-      (topic_stats.total_staleness_ns / static_cast<double>(topic_stats.synced_frames)) / 1e6 :
-      0.0;
-
     report << "    \"" << topic << "\": {\n";
-    report << "      \"received_frames\": " << topic_stats.received_frames << ",\n";
-    report << "      \"synced_frames\": " << topic_stats.synced_frames << ",\n";
-    report << "      \"dropped_frames\": " << topic_stats.dropped_frames << ",\n";
-    report << "      \"avg_staleness_ms\": " << std::fixed << std::setprecision(2)
-           << avg_staleness_ms << ",\n";
-    report << "      \"max_staleness_ms\": " << std::fixed << std::setprecision(2)
-           << topic_stats.max_staleness_ns / 1e6 << ",\n";
-    report << "      \"min_staleness_ms\": " << std::fixed << std::setprecision(2)
-           << (topic_stats.min_staleness_ns == INT64_MAX ? 0.0 :
-               topic_stats.min_staleness_ns / 1e6) << "\n";
+    report << "      \"received_frames\": " << topic_stats.received_frames << "\n";
     report << "    }";
   }
 
@@ -529,29 +530,6 @@ void SyncedImageBagRecorder::write_stats_report()
   report.close();
 
   RCLCPP_INFO(this->get_logger(), "Stats report written to: %s", report_path.c_str());
-
-  bool all_equal = true;
-  uint32_t first_count = 0;
-  for (const auto & [topic, count] : frame_counts_) {
-    if (first_count == 0) {
-      first_count = count;
-    } else if (count != first_count) {
-      all_equal = false;
-      break;
-    }
-  }
-
-  if (all_equal) {
-    RCLCPP_INFO(
-      this->get_logger(),
-      "Frame count verification PASSED: All cameras have %u frames",
-      first_count);
-  } else {
-    RCLCPP_WARN(this->get_logger(), "Frame count verification FAILED: Counts differ!");
-    for (const auto & [topic, count] : frame_counts_) {
-      RCLCPP_WARN(this->get_logger(), "  %s: %u frames", topic.c_str(), count);
-    }
-  }
 }
 
 }  // namespace rosbag_recorder

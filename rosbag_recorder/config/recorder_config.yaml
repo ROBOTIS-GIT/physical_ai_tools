@@ -11,7 +11,7 @@ topics_to_record:
 # Video compression settings for image topics
 video_compression:
   # Frames per second for MP4 videos
-  fps: 30.0
+  fps: 15.0
 
   # Video codec: "h264" (preferred) or "mp4v" (fallback)
   codec: "h264"

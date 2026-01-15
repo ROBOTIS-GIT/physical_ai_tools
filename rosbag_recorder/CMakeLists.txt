@@ -20,6 +20,7 @@ find_package(ament_index_cpp REQUIRED)
 rosidl_generate_interfaces(${PROJECT_NAME}
   "srv/SendCommand.srv"
   "msg/ImageMetadata.msg"
+  "msg/EncodingStatus.msg"
   DEPENDENCIES std_msgs sensor_msgs
 )
 

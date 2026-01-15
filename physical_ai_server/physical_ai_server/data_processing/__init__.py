@@ -26,6 +26,11 @@ from .rosbag_to_lerobot_converter import (
     EpisodeData,
     convert_rosbags_to_lerobot,
 )
+from .rosbag_to_lerobot_v30_converter import (
+    RosbagToLerobotV30Converter,
+    V30ConversionConfig,
+    convert_rosbags_to_lerobot_v30,
+)
 
 __all__ = [
     "BagReader",
@@ -36,4 +41,7 @@ __all__ = [
     "ConversionConfig",
     "EpisodeData",
     "convert_rosbags_to_lerobot",
+    "RosbagToLerobotV30Converter",
+    "V30ConversionConfig",
+    "convert_rosbags_to_lerobot_v30",
 ]

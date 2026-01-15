@@ -31,6 +31,7 @@
 
 #include "rosbag_recorder/srv/send_command.hpp"
 #include "rosbag_recorder/msg/image_metadata.hpp"
+#include "rosbag_recorder/msg/encoding_status.hpp"
 #include "rosbag_recorder/synced_image_compressor.hpp"
 
 namespace rosbag_recorder
@@ -60,7 +61,8 @@ private:
     const std::string & topic,
     const sensor_msgs::msg::Image::SharedPtr & image_msg);
 
-  void on_synced_frame(const SyncedFrameOutput & output);
+  void on_frame(const FrameOutput & output);
+  void on_encoding_complete(bool success, const std::string & message);
 
   std::vector<std::string> get_missing_topics(
     const std::map<std::string, std::vector<std::string>> & names_and_types);
@@ -74,12 +76,13 @@ private:
   void write_stats_report();
 
   rclcpp::Service<rosbag_recorder::srv::SendCommand>::SharedPtr send_command_srv_;
+  rclcpp::Publisher<rosbag_recorder::msg::EncodingStatus>::SharedPtr encoding_status_pub_;
 
   std::vector<rclcpp::GenericSubscription::SharedPtr> generic_subscriptions_;
   std::vector<rclcpp::Subscription<sensor_msgs::msg::Image>::SharedPtr> image_subscriptions_;
 
   std::unique_ptr<rosbag2_cpp::Writer> writer_;
-  std::unique_ptr<SyncedImageCompressor> synced_compressor_;
+  std::unique_ptr<ImageCompressorRaw> image_compressor_;
 
   std::unordered_map<std::string, std::string> type_for_topic_;
   std::vector<std::string> image_topics_;

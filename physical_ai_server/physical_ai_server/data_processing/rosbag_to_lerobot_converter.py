@@ -1084,34 +1084,99 @@ class RosbagToLerobotConverter:
         self._total_episodes += 1
 
     def _write_parquet(self, episode: EpisodeData, parquet_path: Path):
-        """Write episode data to parquet file."""
+        """Write episode data to parquet file with HuggingFace-compatible schema."""
         num_frames = episode.length
 
-        # Build data dictionary
-        data = {
-            "timestamp": [episode.timestamps[i] for i in range(num_frames)],
-            "frame_index": list(range(num_frames)),
-            "episode_index": [episode.episode_index] * num_frames,
-            "index": list(range(self._total_frames, self._total_frames + num_frames)),
-        }
+        # Determine dimensions
+        state_dim = (
+            len(episode.observation_state[0]) if episode.observation_state else 0
+        )
+        action_dim = len(episode.action[0]) if episode.action else 0
 
-        # Add task indices
+        # Build schema with fixed_size_list for HuggingFace compatibility
+        schema_fields = [
+            pa.field("timestamp", pa.float32()),
+            pa.field("frame_index", pa.int64()),
+            pa.field("episode_index", pa.int64()),
+            pa.field("index", pa.int64()),
+            pa.field("task_index", pa.int64()),
+        ]
+
+        if state_dim > 0:
+            schema_fields.append(
+                pa.field("observation.state", pa.list_(pa.float32(), state_dim))
+            )
+        if action_dim > 0:
+            schema_fields.append(pa.field("action", pa.list_(pa.float32(), action_dim)))
+
+        schema = pa.schema(schema_fields)
+
+        # Build data arrays with explicit types
+        arrays = [
+            pa.array(
+                [float(episode.timestamps[i]) for i in range(num_frames)],
+                type=pa.float32(),
+            ),
+            pa.array(list(range(num_frames)), type=pa.int64()),
+            pa.array([episode.episode_index] * num_frames, type=pa.int64()),
+            pa.array(
+                list(range(self._total_frames, self._total_frames + num_frames)),
+                type=pa.int64(),
+            ),
+        ]
+
+        # Task index
         default_task = episode.tasks[0] if episode.tasks else "default_task"
         task_idx = self._task_to_index.get(default_task, 0)
-        data["task_index"] = [task_idx] * num_frames
+        arrays.append(pa.array([task_idx] * num_frames, type=pa.int64()))
 
-        # Add observation.state
+        # Add observation.state as fixed_size_list
         if episode.observation_state:
-            data["observation.state"] = [
-                state.tolist() for state in episode.observation_state
+            state_values = [
+                [float(v) for v in state] for state in episode.observation_state
             ]
+            arrays.append(
+                pa.array(state_values, type=pa.list_(pa.float32(), state_dim))
+            )
 
-        # Add action
+        # Add action as fixed_size_list
         if episode.action:
-            data["action"] = [action.tolist() for action in episode.action]
+            action_values = [[float(v) for v in action] for action in episode.action]
+            arrays.append(
+                pa.array(action_values, type=pa.list_(pa.float32(), action_dim))
+            )
 
-        # Create PyArrow table
-        table = pa.table(data)
+        # Build HuggingFace metadata
+        hf_features = {
+            "timestamp": {"dtype": "float32", "_type": "Value"},
+            "frame_index": {"dtype": "int64", "_type": "Value"},
+            "episode_index": {"dtype": "int64", "_type": "Value"},
+            "index": {"dtype": "int64", "_type": "Value"},
+            "task_index": {"dtype": "int64", "_type": "Value"},
+        }
+
+        if state_dim > 0:
+            hf_features["observation.state"] = {
+                "feature": {"dtype": "float32", "_type": "Value"},
+                "length": state_dim,
+                "_type": "Sequence",
+            }
+        if action_dim > 0:
+            hf_features["action"] = {
+                "feature": {"dtype": "float32", "_type": "Value"},
+                "length": action_dim,
+                "_type": "Sequence",
+            }
+
+        hf_metadata = json.dumps({"info": {"features": hf_features}})
+
+        # Add metadata to schema
+        schema = schema.with_metadata({"huggingface": hf_metadata})
+
+        # Create table with schema
+        table = pa.table(
+            dict(zip([f.name for f in schema_fields], arrays)), schema=schema
+        )
         pq.write_table(table, parquet_path)
         self._log_info(f"Wrote parquet: {parquet_path}")
 
