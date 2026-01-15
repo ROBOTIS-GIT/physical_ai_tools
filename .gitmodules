@@ -1,4 +1,4 @@
-[submodule "lerobot"]
-	path = lerobot
+[submodule "third_party/lerobot"]
+	path = third_party/lerobot
 	url = https://github.com/huggingface/lerobot.git
-  branch = feature-robotis
+	branch = main
