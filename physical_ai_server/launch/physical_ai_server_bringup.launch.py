@@ -26,48 +26,52 @@ from launch_ros.actions import Node
 
 
 def generate_launch_description():
-    pkg_dir = get_package_share_directory('physical_ai_server')
+    pkg_dir = get_package_share_directory("physical_ai_server")
 
     # Include physical_ai_server.launch.py
     physical_ai_server_launch = IncludeLaunchDescription(
         PythonLaunchDescriptionSource(
-            os.path.join(pkg_dir, 'launch', 'physical_ai_server.launch.py')
+            os.path.join(pkg_dir, "launch", "physical_ai_server.launch.py")
         )
     )
 
     # Rosbridge websocket node
     rosbridge_websocket_node = Node(
-        package='rosbridge_server',
-        executable='rosbridge_websocket',
-        name='rosbridge_websocket',
-        output='screen',
-        parameters=[{
-            'fragment_timeout': 600,
-            'max_message_size': 100000000,  # 100MB
-            'unregister_timeout': 10.0,
-        }],
+        package="rosbridge_server",
+        executable="rosbridge_websocket",
+        name="rosbridge_websocket",
+        output="screen",
+        parameters=[
+            {
+                "fragment_timeout": 600,
+                "max_message_size": 100000000,  # 100MB
+                "unregister_timeout": 10.0,
+            }
+        ],
     )
 
     # Include rosbag_recorder service_bag_recorder node
     rosbag_recorder_node = Node(
-        package='rosbag_recorder',
-        executable='service_bag_recorder',
-        name='service_bag_recorder',
-        output='screen'
+        package="rosbag_recorder",
+        executable="service_bag_recorder",
+        name="service_bag_recorder",
+        output="screen",
     )
 
     # web_video_server node
     web_video_server_node = Node(
-        package='web_video_server',
-        executable='web_video_server',
-        name='web_video_server',
-        output='screen',
-        parameters=[{'port': 8085}]
+        package="web_video_server",
+        executable="web_video_server",
+        name="web_video_server",
+        output="screen",
+        parameters=[{"port": 8080}],
     )
 
-    return LaunchDescription([
-        physical_ai_server_launch,
-        rosbridge_websocket_node,
-        rosbag_recorder_node,
-        web_video_server_node
-    ])
+    return LaunchDescription(
+        [
+            physical_ai_server_launch,
+            rosbridge_websocket_node,
+            rosbag_recorder_node,
+            web_video_server_node,
+        ]
+    )
