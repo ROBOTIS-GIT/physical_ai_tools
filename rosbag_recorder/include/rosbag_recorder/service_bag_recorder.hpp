@@ -30,6 +30,8 @@
 #include <rosbag2_cpp/writer.hpp>
 #include <sensor_msgs/msg/image.hpp>
 #include <sensor_msgs/msg/compressed_image.hpp>
+#include <std_msgs/msg/string.hpp>
+#include <tf2_msgs/msg/tf_message.hpp>
 
 #include "rosbag_recorder/srv/send_command.hpp"
 #include "rosbag_recorder/msg/image_metadata.hpp"
@@ -92,6 +94,8 @@ private:
   void create_subscriptions();
   bool is_image_topic(const std::string & topic_type) const;
   bool is_compressed_image_topic(const std::string & topic_type) const;
+  void add_tf_topics();
+  void record_robot_description();
 
   rclcpp::Service<rosbag_recorder::srv::SendCommand>::SharedPtr send_command_srv_;
 
@@ -121,6 +125,10 @@ private:
 
   // Topic health checker for stability monitoring
   rosbag_recorder::TopicHealthChecker topic_health_checker_;
+
+  static constexpr const char* TF_TOPIC = "/tf";
+  static constexpr const char* TF_STATIC_TOPIC = "/tf_static";
+  static constexpr const char* ROBOT_DESCRIPTION_TOPIC = "/robot_description";
 };
 
 #endif  // ROSBAG_RECORDER__SERVICE_BAG_RECORDER_HPP_

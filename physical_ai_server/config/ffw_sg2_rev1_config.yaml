@@ -12,6 +12,11 @@ physical_ai_server:
         - cam_wrist_left:/camera_left/camera_left/color/image_rect_raw/compressed
         - cam_wrist_right:/camera_right/camera_right/color/image_rect_raw/compressed
 
+      camera_info_topic_list:
+        - cam_head:/zed/zed_node/left/camera_info
+        - cam_wrist_left:/camera_left/camera_left/color/camera_info
+        - cam_wrist_right:/camera_right/camera_right/color/camera_info
+
       joint_topic_list:
         - follower_upper_body:/joint_states
         - follower_mobile:/odom
@@ -56,3 +61,9 @@ physical_ai_server:
           - linear_x
           - linear_y
           - angular_z
+
+      # Navigation quality requirements (mobile robot only)
+      navigation:
+        odom_topic: /odom
+        cmd_vel_topic: /cmd_vel
+        min_odom_hz: 14.5

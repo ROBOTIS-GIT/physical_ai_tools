@@ -10,6 +10,10 @@ physical_ai_server:
         - camera1:/camera1/image_raw/compressed
         # - camera2:/camera2/image_raw/compressed #check your camera topic from 'ros2 topic list' command
 
+      camera_info_topic_list:
+        - camera1:/camera1/camera_info
+        # - camera2:/camera2/camera_info
+
       joint_topic_list:
         - follower:/joint_states
         - leader:/leader/joint_trajectory

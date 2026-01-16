@@ -16,6 +16,8 @@ find_package(image_transport REQUIRED)
 find_package(OpenCV REQUIRED)
 find_package(yaml-cpp REQUIRED)
 find_package(ament_index_cpp REQUIRED)
+find_package(rcl_interfaces REQUIRED)
+find_package(tf2_msgs REQUIRED)
 
 rosidl_generate_interfaces(${PROJECT_NAME}
   "srv/SendCommand.srv"
@@ -48,6 +50,8 @@ ament_target_dependencies(
   "cv_bridge"
   "image_transport"
   "ament_index_cpp"
+  "rcl_interfaces"
+  "tf2_msgs"
 )
 
 # Link against the generated interfaces using the modern approach

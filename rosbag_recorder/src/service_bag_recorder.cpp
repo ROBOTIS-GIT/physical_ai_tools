@@ -36,6 +36,10 @@
 #include "yaml-cpp/yaml.h"
 
 #include "rosbag_recorder/service_bag_recorder.hpp"
+#include "std_msgs/msg/string.hpp"
+#include "tf2_msgs/msg/tf_message.hpp"
+#include "rcl_interfaces/srv/get_parameters.hpp"
+#include "rcl_interfaces/msg/parameter_type.hpp"
 
 
 ServiceBagRecorder::ServiceBagRecorder()
@@ -170,6 +174,7 @@ void ServiceBagRecorder::handle_prepare(
       }
     }
 
+    add_tf_topics();
     create_subscriptions();
 
     topic_health_checker_.clear();
@@ -255,6 +260,8 @@ void ServiceBagRecorder::handle_start(const std::string & uri)
     }
 
     create_topics_in_bag(names_and_types);
+
+    record_robot_description();
 
     save_robot_config_yaml(current_bag_uri_);
   } catch (const std::exception & e) {
@@ -784,6 +791,82 @@ void ServiceBagRecorder::handle_check_ready(
     RCLCPP_DEBUG(
       this->get_logger(),
       "CHECK_READY: %zu topics pending", pending.size());
+  }
+}
+
+void ServiceBagRecorder::add_tf_topics()
+{
+  auto names_and_types = this->get_topic_names_and_types();
+
+  std::vector<std::string> tf_topics_to_add = {TF_TOPIC, TF_STATIC_TOPIC, ROBOT_DESCRIPTION_TOPIC};
+
+  for (const auto & topic : tf_topics_to_add) {
+    if (std::find(topics_to_record_.begin(), topics_to_record_.end(), topic) !=
+        topics_to_record_.end()) {
+      continue;
+    }
+
+    auto it = names_and_types.find(topic);
+    if (it != names_and_types.end() && !it->second.empty()) {
+      topics_to_record_.push_back(topic);
+      non_image_topics_.push_back(topic);
+      type_for_topic_[topic] = it->second.front();
+      RCLCPP_INFO(this->get_logger(), "Auto-added TF topic: %s", topic.c_str());
+    } else {
+      RCLCPP_WARN(this->get_logger(), "TF topic not available: %s", topic.c_str());
+    }
+  }
+}
+
+void ServiceBagRecorder::record_robot_description()
+{
+  if (!writer_) {
+    return;
+  }
+
+  try {
+    auto client = this->create_client<rcl_interfaces::srv::GetParameters>(
+      "/robot_state_publisher/get_parameters");
+
+    if (!client->wait_for_service(std::chrono::seconds(2))) {
+      RCLCPP_WARN(this->get_logger(), "robot_state_publisher service not available");
+      return;
+    }
+
+    auto request = std::make_shared<rcl_interfaces::srv::GetParameters::Request>();
+    request->names.push_back("robot_description");
+
+    auto future = client->async_send_request(request);
+    auto status = future.wait_for(std::chrono::seconds(5));
+
+    if (status != std::future_status::ready) {
+      RCLCPP_WARN(this->get_logger(), "Timeout getting robot_description parameter");
+      return;
+    }
+
+    auto response = future.get();
+    if (response->values.empty() ||
+        response->values[0].type != rcl_interfaces::msg::ParameterType::PARAMETER_STRING) {
+      RCLCPP_WARN(this->get_logger(), "robot_description parameter not found or wrong type");
+      return;
+    }
+
+    std_msgs::msg::String urdf_msg;
+    urdf_msg.data = response->values[0].string_value;
+
+    rclcpp::Serialization<std_msgs::msg::String> serializer;
+    rclcpp::SerializedMessage serialized_msg;
+    serializer.serialize_message(&urdf_msg, &serialized_msg);
+
+    writer_->write(
+      std::make_shared<rclcpp::SerializedMessage>(serialized_msg),
+      ROBOT_DESCRIPTION_TOPIC,
+      "std_msgs/msg/String",
+      this->now());
+
+    RCLCPP_INFO(this->get_logger(), "Recorded robot_description (URDF) to bag");
+  } catch (const std::exception & e) {
+    RCLCPP_ERROR(this->get_logger(), "Failed to record robot_description: %s", e.what());
   }
 }
 
