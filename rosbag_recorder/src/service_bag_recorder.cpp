@@ -809,7 +809,6 @@ void ServiceBagRecorder::add_tf_topics()
     auto it = names_and_types.find(topic);
     if (it != names_and_types.end() && !it->second.empty()) {
       topics_to_record_.push_back(topic);
-      non_image_topics_.push_back(topic);
       type_for_topic_[topic] = it->second.front();
       RCLCPP_INFO(this->get_logger(), "Auto-added TF topic: %s", topic.c_str());
     } else {
