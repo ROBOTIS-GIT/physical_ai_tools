@@ -57,10 +57,10 @@ public:
   /**
    * @brief Default configuration values
    */
-  static constexpr size_t DEFAULT_MIN_MESSAGES = 10;
-  static constexpr double DEFAULT_MAX_INTERVAL_RATIO = 2.0;
-  static constexpr double DEFAULT_IMAGE_HZ = 30.0;
-  static constexpr double DEFAULT_JOINT_HZ = 100.0;
+  static constexpr size_t DEFAULT_MIN_MESSAGES = 5;
+  static constexpr double DEFAULT_MAX_INTERVAL_RATIO = 5.0;
+  static constexpr double DEFAULT_IMAGE_HZ = 15.0;
+  static constexpr double DEFAULT_JOINT_HZ = 50.0;
 
   TopicHealthChecker() = default;
 
