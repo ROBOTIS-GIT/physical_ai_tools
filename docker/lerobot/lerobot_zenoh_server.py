@@ -291,9 +291,10 @@ class LeRobotZenohServer:
             
             # Build training command
             cmd = [
-                "python", "-m", "lerobot.scripts.train",
+                "python", "-m", "lerobot.scripts.lerobot_train",
                 f"--policy.type={policy_type}",
                 f"--dataset.repo_id={dataset_path}",
+                "--policy.device=cuda",
             ]
             
             # Add optional parameters
@@ -307,6 +308,10 @@ class LeRobotZenohServer:
                 cmd.append(f"--training.lr={params['learning_rate']}")
             if "wandb_project" in params:
                 cmd.append(f"--wandb.project={params['wandb_project']}")
+            
+            # Disable hub push by default (can be enabled via params)
+            if not params.get("push_to_hub", False):
+                cmd.append("--policy.push_to_hub=false")
             
             # Start training process
             try:
@@ -376,7 +381,7 @@ class LeRobotZenohServer:
             
             # Build inference command
             cmd = [
-                "python", "-m", "lerobot.scripts.eval",
+                "python", "-m", "lerobot.scripts.lerobot_eval",
                 f"--policy.path={model_path}",
             ]
             

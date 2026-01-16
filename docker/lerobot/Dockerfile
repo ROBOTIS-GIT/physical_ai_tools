@@ -71,7 +71,8 @@ RUN uv pip install --no-cache ".[all]"
 COPY third_party/lerobot/ ./
 
 # Zenoh dependencies (zenoh_ros2_sdk mounted as volume at /zenoh_sdk)
-RUN pip install eclipse-zenoh>=1.0.0 rosbags>=0.11.0 GitPython>=3.1.18 \
+# Use uv pip to install into virtual environment
+RUN uv pip install eclipse-zenoh>=1.0.0 rosbags>=0.11.0 GitPython>=3.1.18 \
     && mkdir -p /zenoh_sdk
 
 # Create application directory for Zenoh server
