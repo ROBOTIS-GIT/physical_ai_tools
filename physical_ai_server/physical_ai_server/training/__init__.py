@@ -18,3 +18,7 @@
 
 
 from physical_ai_server.training.zenoh_training_manager import ZenohTrainingManager
+from physical_ai_server.training.training_manager_adapter import (
+    TrainingManagerAdapter,
+    TrainingBackend,
+)

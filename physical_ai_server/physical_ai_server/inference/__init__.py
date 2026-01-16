@@ -18,3 +18,7 @@
 
 
 from physical_ai_server.inference.zenoh_inference_manager import ZenohInferenceManager
+from physical_ai_server.inference.inference_manager_adapter import (
+    InferenceManagerAdapter,
+    InferenceBackend,
+)
