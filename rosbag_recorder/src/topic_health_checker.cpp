@@ -148,7 +148,7 @@ bool TopicHealthChecker::is_all_stable() const
   std::scoped_lock<std::mutex> lock(mutex_);
 
   if (topics_.empty()) {
-    return false;  // No topics registered
+    return true;  // No topics to check, consider stable
   }
 
   for (const auto & [topic, data] : topics_) {
