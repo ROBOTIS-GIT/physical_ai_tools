@@ -9,7 +9,10 @@ services:
     restart: unless-stopped
   physical_ai_server:
     container_name: physical_ai_server
-    image: robotis/physical-ai-server:latest
+    image: robotis/physical-ai-server:system-manager-dev
+    build:
+      context: ..
+      dockerfile: physical_ai_server/Dockerfile.arm64
     tty: true
     restart: always
     cap_add:
@@ -31,8 +34,13 @@ services:
       - ./huggingface:/root/.cache/huggingface
       - /etc/timezone:/etc/timezone:ro
       - /etc/localtime:/etc/localtime:ro
+      - /var/run/robotis/agent_sockets/physical_ai_server:/var/run/agent
+      - ./s6-agent:/etc/s6-overlay/s6-rc.d/s6-agent
+      - ./s6-services/physical_ai_server:/etc/s6-overlay/s6-rc.d/physical_ai_server
+      - ./s6-services/physical_ai_server-log:/etc/s6-overlay/s6-rc.d/physical_ai_server-log
+      - ./s6-services/physical_ai_server-log-prepare:/etc/s6-overlay/s6-rc.d/physical_ai_server-log-prepare
+      - ./s6-services/common:/usr/local/lib/s6-services
     privileged: true
-    command: bash
     runtime: nvidia
     deploy:
       resources:

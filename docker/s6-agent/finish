@@ -1,0 +1,9 @@
+#!/usr/bin/with-contenv sh
+# Agent service finish script
+# Cleanup when service stops
+
+# Remove socket file if it exists
+[ -S /var/run/agent/s6_agent.sock ] && rm -f /var/run/agent/s6_agent.sock
+
+exit 0
+

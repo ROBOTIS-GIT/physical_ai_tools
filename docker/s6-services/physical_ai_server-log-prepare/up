@@ -1,0 +1,5 @@
+if { mkdir -p /var/log/physical_ai_server }
+if { chown nobody:nogroup /var/log/physical_ai_server }
+chmod 02755 /var/log/physical_ai_server
+
+

@@ -1,0 +1,7 @@
+#!/command/with-contenv sh
+# Logging service for physical_ai_server
+# Uses logutil-service which wraps s6-log with proper configuration
+
+exec logutil-service /var/log/physical_ai_server
+
+

@@ -1,5 +1,13 @@
 FROM robotis/ros:jazzy-ros-base-torch2.7.0-cuda12.8.0 AS physical-ai-tools
 
+ARG S6_OVERLAY_VERSION=3.2.1.0
+
+# Install s6-overlay
+ADD https://github.com/just-containers/s6-overlay/releases/download/v${S6_OVERLAY_VERSION}/s6-overlay-noarch.tar.xz /tmp
+RUN tar -C / -Jxpf /tmp/s6-overlay-noarch.tar.xz
+ADD https://github.com/just-containers/s6-overlay/releases/download/v${S6_OVERLAY_VERSION}/s6-overlay-aarch64.tar.xz /tmp
+RUN tar -C / -Jxpf /tmp/s6-overlay-aarch64.tar.xz
+
 RUN echo 'export PATH=/opt/venv/bin:$PATH' >> /root/.bashrc && \
     echo 'export PYTHONPATH=/opt/venv/lib/python3.12/site-packages:$PYTHONPATH' >> /root/.bashrc && \
     export PATH=/opt/venv/bin:$PATH && \
@@ -10,9 +18,11 @@ ENV DEBIAN_FRONTEND=noninteractive
 
 # Install realsense and physical_ai_tools dependencies
 RUN apt-get update && apt-get install -y \
+    xz-utils \
     ffmpeg \
     vim \
     nano \
+    python3-pip \
     && rm -rf /var/lib/apt/lists/*
 
 ENV COLCON_WS=/root/ros2_ws
@@ -31,6 +41,8 @@ RUN cd ${COLCON_WS} && \
 ENV PIP_INDEX_URL=https://pypi.jetson-ai-lab.io/jp6/cu126/+simple
 ENV PIP_EXTRA_INDEX_URL=https://pypi.org/simple
 
+RUN pip install --no-cache-dir setuptools==68.1.2
+
 RUN cd ${COLCON_WS}/src/physical_ai_tools/lerobot && \
     sed -i '/"torch[^\"]*",/d' pyproject.toml && \
     sed -i '/"torchvision[^\"]*",/d' pyproject.toml && \
@@ -39,8 +51,7 @@ RUN cd ${COLCON_WS}/src/physical_ai_tools/lerobot && \
 RUN cd ${COLCON_WS}/src/physical_ai_tools/lerobot && \
     pip install -e ".[smolvla]"
 
-RUN pip install setuptools==68.1.2
-RUN pip install 'numpy<2'
+RUN pip install --no-cache-dir 'numpy<2'
 
 RUN echo 'export PYTHONPATH=${COLCON_WS}/src/physical_ai_tools/lerobot/src:$PYTHONPATH' >> /root/.bashrc && \
     export PYTHONPATH=${COLCON_WS}/src/physical_ai_tools/lerobot/src:$PYTHONPATH;
@@ -54,3 +65,50 @@ RUN echo "source /opt/ros/${ROS_DISTRO}/setup.bash" >> ~/.bashrc  && \
     echo "alias cb='colcon build --symlink-install --cmake-args -DCMAKE_BUILD_TYPE=Release'" >> ~/.bashrc && \
     echo "alias ai_server='ros2 launch physical_ai_server physical_ai_server_bringup.launch.py'" >> ~/.bashrc && \
     echo "export ROS_DOMAIN_ID=30" >> ~/.bashrc
+
+# Create directory for agent Unix Domain Socket
+# The agent will create /var/run/agent/s6_agent.sock
+RUN mkdir -p /var/run/agent && \
+    chmod 777 /var/run/agent
+
+# Copy system_manager package (contains both system_manager and agent modules)
+COPY system_manager /opt/system_manager
+ENV PYTHONPATH=/opt/system_manager:${PYTHONPATH}
+
+RUN pip install --no-cache-dir -r /opt/system_manager/requirements.txt
+
+# ROS2 physical_ai_server service (longrun) with logging pipeline
+# Main service
+COPY docker/s6-services/physical_ai_server /etc/s6-overlay/s6-rc.d/physical_ai_server
+RUN chmod +x /etc/s6-overlay/s6-rc.d/physical_ai_server/run && \
+    chmod +x /etc/s6-overlay/s6-rc.d/physical_ai_server/finish
+
+# Log preparation oneshot service
+COPY docker/s6-services/physical_ai_server-log-prepare /etc/s6-overlay/s6-rc.d/physical_ai_server-log-prepare
+
+# Logging service (consumer)
+COPY docker/s6-services/physical_ai_server-log /etc/s6-overlay/s6-rc.d/physical_ai_server-log
+RUN chmod +x /etc/s6-overlay/s6-rc.d/physical_ai_server-log/run
+
+# Copy reusable ROS2 service scripts to a location outside s6-rc.d
+# This prevents s6-rc-compile from treating them as services
+RUN mkdir -p /usr/local/lib/s6-services
+COPY docker/s6-services/common/ros2_service_run.sh /usr/local/lib/s6-services/ros2_service_run.sh
+COPY docker/s6-services/common/ros2_service_finish.sh /usr/local/lib/s6-services/ros2_service_finish.sh
+RUN chmod +x /usr/local/lib/s6-services/ros2_service_run.sh && \
+    chmod +x /usr/local/lib/s6-services/ros2_service_finish.sh
+
+# Create log directory and set permissions
+RUN mkdir -p /var/log/physical_ai_server && \
+    chown nobody:nogroup /var/log/physical_ai_server && \
+    chmod 02755 /var/log/physical_ai_server
+
+# Note: s6-agent service will be mounted via docker-compose volume
+# Add s6-agent to user bundle so it starts at container boot
+# Note: physical_ai_server-pipeline is NOT in the user bundle - it must be started manually
+RUN mkdir -p /etc/s6-overlay/s6-rc.d/user/contents.d && \
+    touch /etc/s6-overlay/s6-rc.d/user/contents.d/s6-agent && \
+    touch /etc/s6-overlay/s6-rc.d/user/contents.d/physical_ai_server-pipeline
+
+# Set s6-overlay as entrypoint
+ENTRYPOINT ["/init"]
