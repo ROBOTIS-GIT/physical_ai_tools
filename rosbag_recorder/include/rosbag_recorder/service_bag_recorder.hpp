@@ -97,6 +97,14 @@ private:
   void add_tf_topics();
   void record_robot_description();
 
+  /**
+   * Extract timestamp from serialized ROS message.
+   * Uses message header if available, falls back to current time.
+   */
+  rclcpp::Time extract_timestamp_from_serialized(
+    const std::shared_ptr<rclcpp::SerializedMessage> & serialized_msg,
+    const std::string & topic);
+
   rclcpp::Service<rosbag_recorder::srv::SendCommand>::SharedPtr send_command_srv_;
 
   std::vector<rclcpp::GenericSubscription::SharedPtr> generic_subscriptions_;
@@ -113,6 +121,7 @@ private:
   std::vector<std::string> non_image_topics_;
 
   bool is_recording_{false};
+  bool is_buffering_{false};
   bool compress_images_{true};
   double video_fps_{15.0};
   std::string current_bag_uri_;
@@ -122,8 +131,29 @@ private:
   std::vector<JointMapping> action_topic_mappings_;
   std::vector<std::string> joint_order_;
   std::mutex mutex_;
+  std::mutex buffer_mutex_;
 
-  // Topic health checker for stability monitoring
+  struct BufferedSerializedMsg {
+    std::string topic;
+    std::shared_ptr<rclcpp::SerializedMessage> msg;
+    std::chrono::steady_clock::time_point receive_time;
+  };
+  std::vector<BufferedSerializedMsg> serialized_buffer_;
+
+  struct BufferedImageMsg {
+    std::string topic;
+    sensor_msgs::msg::Image::SharedPtr msg;
+    std::chrono::steady_clock::time_point receive_time;
+  };
+  std::vector<BufferedImageMsg> image_buffer_;
+
+  struct BufferedCompressedImageMsg {
+    std::string topic;
+    sensor_msgs::msg::CompressedImage::SharedPtr msg;
+    std::chrono::steady_clock::time_point receive_time;
+  };
+  std::vector<BufferedCompressedImageMsg> compressed_image_buffer_;
+
   rosbag_recorder::TopicHealthChecker topic_health_checker_;
 
   static constexpr const char* TF_TOPIC = "/tf";

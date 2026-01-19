@@ -1,3 +1,19 @@
+# SendCommand.srv - ROS2 Service for Bag Recorder Control
+#
+# Commands:
+#   PREPARE: Initialize subscriptions, bag writer, compressor
+#            Requires: topics[], uri
+#            Effect: All resources initialized, ready for START
+#
+#   START:   Begin recording immediately (no initialization)
+#            Requires: none (uri already provided in PREPARE)
+#            Effect: Sets is_recording_ = true
+#
+#   STOP:    Stop recording and finalize bag
+#   STOP_AND_DELETE: Stop recording and delete bag
+#   FINISH:  Cleanup all resources
+#   CHECK_READY: Check if all topics are receiving data
+
 uint8 PREPARE = 0
 uint8 START = 1
 uint8 STOP = 2
@@ -5,8 +21,8 @@ uint8 STOP_AND_DELETE = 3
 uint8 FINISH = 4
 uint8 CHECK_READY = 5
 
-string uri # only used for START command
-string[] topics # only used for PREPARE command
+string uri # used for PREPARE command (CHANGED from START!)
+string[] topics # used for PREPARE command
 string robot_type # robot type for config lookup (e.g., "ffw_bg2_rev4")
 uint8 command
 ---

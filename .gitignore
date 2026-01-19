@@ -738,4 +738,23 @@ doc/
 # Claude Code agents (managed separately)
 .claude/
 
+# AI System Workflow files (managed in ai_system_agents repo)
+*_PLAN.md
+*_SUMMARY.md
+*_REPORT.md
+*_TEST.md
+*_GUIDE.md
+SESSION_*.md
+data_acquisition_workflow.md
+AGENTS.md
+DELIVERABLES.md
+TASK_*_INDEX.md
+FEATURE_*.md
+DEBUG_*.md
+REPLAY_*.md
+VISUALIZATION_*.md
+
+# Test data (downloaded for testing)
+test_data/
+
 *.mp4

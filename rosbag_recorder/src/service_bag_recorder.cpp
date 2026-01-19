@@ -118,7 +118,8 @@ void ServiceBagRecorder::handle_send_command(
 
 bool ServiceBagRecorder::is_image_topic(const std::string & topic_type) const
 {
-  return topic_type == "sensor_msgs/msg/Image";
+  return topic_type == "sensor_msgs/msg/Image" ||
+         topic_type == "sensor_msgs/msg/CompressedImage";
 }
 
 bool ServiceBagRecorder::is_compressed_image_topic(const std::string & topic_type) const
@@ -150,6 +151,13 @@ void ServiceBagRecorder::handle_prepare(
     action_topic_mappings_.clear();
     joint_order_.clear();
 
+    {
+      std::scoped_lock<std::mutex> lock(buffer_mutex_);
+      serialized_buffer_.clear();
+      image_buffer_.clear();
+      compressed_image_buffer_.clear();
+    }
+
     if (!robot_type.empty()) {
       load_robot_config(robot_type);
     }
@@ -175,6 +183,8 @@ void ServiceBagRecorder::handle_prepare(
     }
 
     add_tf_topics();
+
+    is_buffering_ = true;
     create_subscriptions();
 
     topic_health_checker_.clear();
@@ -190,13 +200,14 @@ void ServiceBagRecorder::handle_prepare(
 
     RCLCPP_INFO(
       this->get_logger(),
-      "Recording prepared: topics=%zu (image=%zu, compressed=%zu, other=%zu), robot_type=%s",
+      "Recording prepared (buffering): topics=%zu (image=%zu, compressed=%zu, other=%zu), robot_type=%s",
       topics_to_record_.size(),
       image_topics_.size(),
       compressed_image_topics_.size(),
       non_image_topics_.size(),
       robot_type.c_str());
   } catch (const std::exception & e) {
+    is_buffering_ = false;
     writer_.reset();
     throw std::runtime_error(std::string("Failed to prepare recording: ") + e.what());
   }
@@ -217,7 +228,6 @@ void ServiceBagRecorder::handle_start(const std::string & uri)
   try {
     current_bag_uri_ = uri;
 
-    // Check if a bag already exists at the specified path and delete it
     delete_bag_directory(current_bag_uri_);
 
     writer_ = std::make_unique<rosbag2_cpp::Writer>();
@@ -240,7 +250,6 @@ void ServiceBagRecorder::handle_start(const std::string & uri)
       image_compressor_.reset();
       type_for_topic_.clear();
 
-      // Delete the bag folder since we can't record the requested topics
       RCLCPP_INFO(
         this->get_logger(),
         "Deleting bag directory due to missing topic types: %s",
@@ -261,14 +270,162 @@ void ServiceBagRecorder::handle_start(const std::string & uri)
 
     create_topics_in_bag(names_and_types);
 
-    record_robot_description();
+    is_recording_ = true;
+    is_buffering_ = false;
 
+    size_t flushed_serialized = 0;
+    size_t flushed_images = 0;
+    size_t flushed_compressed = 0;
+
+    {
+      std::scoped_lock<std::mutex> buffer_lock(buffer_mutex_);
+
+      std::chrono::steady_clock::time_point earliest_receive_time;
+      bool has_any_buffered = false;
+
+      for (const auto & buf : serialized_buffer_) {
+        if (!has_any_buffered || buf.receive_time < earliest_receive_time) {
+          earliest_receive_time = buf.receive_time;
+          has_any_buffered = true;
+        }
+      }
+      for (const auto & buf : image_buffer_) {
+        if (!has_any_buffered || buf.receive_time < earliest_receive_time) {
+          earliest_receive_time = buf.receive_time;
+          has_any_buffered = true;
+        }
+      }
+      for (const auto & buf : compressed_image_buffer_) {
+        if (!has_any_buffered || buf.receive_time < earliest_receive_time) {
+          earliest_receive_time = buf.receive_time;
+          has_any_buffered = true;
+        }
+      }
+
+      // Extract original timestamps from each buffered message
+      for (const auto & buffered : serialized_buffer_) {
+        const auto it = type_for_topic_.find(buffered.topic);
+        if (it != type_for_topic_.end()) {
+          // Use ORIGINAL message timestamp (not wall-clock!)
+          rclcpp::Time original_stamp = extract_timestamp_from_serialized(
+            buffered.msg, buffered.topic);
+
+          // Write with original timestamp
+          writer_->write(buffered.msg, buffered.topic, it->second, original_stamp);
+
+          RCLCPP_DEBUG(
+            this->get_logger(),
+            "Flushed buffered message on %s with original timestamp %ld.%09ld",
+            buffered.topic.c_str(),
+            original_stamp.seconds(),
+            original_stamp.nanoseconds() % 1000000000L);
+
+          flushed_serialized++;
+        }
+      }
+      serialized_buffer_.clear();
+
+      for (const auto & buffered : image_buffer_) {
+        if (image_compressor_) {
+          auto metadata_info = image_compressor_->add_frame(buffered.topic, buffered.msg);
+
+          rosbag_recorder::msg::ImageMetadata metadata_msg;
+          metadata_msg.header = buffered.msg->header;
+          metadata_msg.frame_index = metadata_info.frame_index;
+          metadata_msg.width = metadata_info.width;
+          metadata_msg.height = metadata_info.height;
+          metadata_msg.encoding = metadata_info.encoding;
+          metadata_msg.source_topic = buffered.topic;
+
+          std::string sanitized = buffered.topic;
+          std::replace(sanitized.begin(), sanitized.end(), '/', '_');
+          if (!sanitized.empty() && sanitized[0] == '_') {
+            sanitized = sanitized.substr(1);
+          }
+          metadata_msg.video_file_path = "videos/" + sanitized + ".mp4";
+
+          rclcpp::Serialization<rosbag_recorder::msg::ImageMetadata> serializer;
+          rclcpp::SerializedMessage serialized_msg;
+          serializer.serialize_message(&metadata_msg, &serialized_msg);
+
+          std::string metadata_topic = buffered.topic + "/metadata";
+
+          // Use original timestamp from image header
+          rclcpp::Time original_stamp(buffered.msg->header.stamp);
+
+          writer_->write(
+            std::make_shared<rclcpp::SerializedMessage>(serialized_msg),
+            metadata_topic,
+            "rosbag_recorder/msg/ImageMetadata",
+            original_stamp);
+          flushed_images++;
+        }
+      }
+      image_buffer_.clear();
+
+      for (const auto & buffered : compressed_image_buffer_) {
+        if (image_compressor_) {
+          cv::Mat frame = cv::imdecode(cv::Mat(buffered.msg->data), cv::IMREAD_COLOR);
+          if (!frame.empty()) {
+            auto image_msg = std::make_shared<sensor_msgs::msg::Image>();
+            image_msg->header = buffered.msg->header;
+            image_msg->width = frame.cols;
+            image_msg->height = frame.rows;
+            image_msg->encoding = "bgr8";
+            image_msg->step = frame.cols * 3;
+            image_msg->data.assign(frame.data, frame.data + frame.total() * frame.elemSize());
+
+            auto metadata_info = image_compressor_->add_frame(buffered.topic, image_msg);
+
+            rosbag_recorder::msg::ImageMetadata metadata_msg;
+            metadata_msg.header = buffered.msg->header;
+            metadata_msg.frame_index = metadata_info.frame_index;
+            metadata_msg.width = image_msg->width;
+            metadata_msg.height = image_msg->height;
+            metadata_msg.encoding = buffered.msg->format;
+            metadata_msg.source_topic = buffered.topic;
+
+            std::string sanitized = buffered.topic;
+            std::replace(sanitized.begin(), sanitized.end(), '/', '_');
+            if (!sanitized.empty() && sanitized[0] == '_') {
+              sanitized = sanitized.substr(1);
+            }
+            metadata_msg.video_file_path = "videos/" + sanitized + ".mp4";
+
+            rclcpp::Serialization<rosbag_recorder::msg::ImageMetadata> serializer;
+            rclcpp::SerializedMessage serialized_msg;
+            serializer.serialize_message(&metadata_msg, &serialized_msg);
+
+            std::string metadata_topic = buffered.topic + "/metadata";
+
+            // Use original timestamp from compressed image header
+            rclcpp::Time original_stamp(buffered.msg->header.stamp);
+
+            writer_->write(
+              std::make_shared<rclcpp::SerializedMessage>(serialized_msg),
+              metadata_topic,
+              "rosbag_recorder/msg/ImageMetadata",
+              original_stamp);
+            flushed_compressed++;
+          }
+        }
+      }
+      compressed_image_buffer_.clear();
+    }
+
+    RCLCPP_INFO(
+      this->get_logger(),
+      "Flushed buffered messages: serialized=%zu, images=%zu, compressed=%zu",
+      flushed_serialized, flushed_images, flushed_compressed);
+
+    record_robot_description();
     save_robot_config_yaml(current_bag_uri_);
+
   } catch (const std::exception & e) {
+    is_buffering_ = false;
+    is_recording_ = false;
     throw std::runtime_error(std::string("Failed to start recording: ") + e.what());
   }
-
-  is_recording_ = true;
 
   RCLCPP_INFO(
     this->get_logger(), "Recording started: uri=%s topics=%zu",
@@ -472,6 +629,12 @@ void ServiceBagRecorder::handle_serialized_message(
 
   topic_health_checker_.record_message_now(topic);
 
+  if (is_buffering_ && !is_recording_) {
+    std::scoped_lock<std::mutex> buffer_lock(buffer_mutex_);
+    serialized_buffer_.push_back({topic, serialized_msg, std::chrono::steady_clock::now()});
+    return;
+  }
+
   if (!is_recording_ || !writer_) {
     return;
   }
@@ -480,8 +643,12 @@ void ServiceBagRecorder::handle_serialized_message(
   if (it == type_for_topic_.end()) {
     return;
   }
+
+  // Use ORIGINAL message timestamp (not wall-clock!)
+  rclcpp::Time original_stamp = extract_timestamp_from_serialized(serialized_msg, topic);
+
   const std::string & type = it->second;
-  writer_->write(serialized_msg, topic, type, this->now());
+  writer_->write(serialized_msg, topic, type, original_stamp);
 }
 
 void ServiceBagRecorder::handle_image_message(
@@ -491,6 +658,12 @@ void ServiceBagRecorder::handle_image_message(
   std::scoped_lock<std::mutex> lock(mutex_);
 
   topic_health_checker_.record_message_now(topic);
+
+  if (is_buffering_ && !is_recording_) {
+    std::scoped_lock<std::mutex> buffer_lock(buffer_mutex_);
+    image_buffer_.push_back({topic, image_msg, std::chrono::steady_clock::now()});
+    return;
+  }
 
   if (!is_recording_ || !writer_ || !image_compressor_) {
     return;
@@ -525,11 +698,14 @@ void ServiceBagRecorder::handle_image_message(
     std::string metadata_topic = topic + "/metadata";
     std::string metadata_type = "rosbag_recorder/msg/ImageMetadata";
 
+    // Use original timestamp from image header
+    rclcpp::Time original_stamp(image_msg->header.stamp);
+
     writer_->write(
       std::make_shared<rclcpp::SerializedMessage>(serialized_msg),
       metadata_topic,
       metadata_type,
-      this->now());
+      original_stamp);
   } catch (const std::exception & e) {
     RCLCPP_ERROR(
       this->get_logger(),
@@ -545,6 +721,12 @@ void ServiceBagRecorder::handle_compressed_image_message(
   std::scoped_lock<std::mutex> lock(mutex_);
 
   topic_health_checker_.record_message_now(topic);
+
+  if (is_buffering_ && !is_recording_) {
+    std::scoped_lock<std::mutex> buffer_lock(buffer_mutex_);
+    compressed_image_buffer_.push_back({topic, compressed_msg, std::chrono::steady_clock::now()});
+    return;
+  }
 
   if (!is_recording_ || !writer_ || !image_compressor_) {
     return;
@@ -599,11 +781,14 @@ void ServiceBagRecorder::handle_compressed_image_message(
     std::string metadata_topic = topic + "/metadata";
     std::string metadata_type = "rosbag_recorder/msg/ImageMetadata";
 
+    // Use original timestamp from compressed image header
+    rclcpp::Time original_stamp(compressed_msg->header.stamp);
+
     writer_->write(
       std::make_shared<rclcpp::SerializedMessage>(serialized_msg),
       metadata_topic,
       metadata_type,
-      this->now());
+      original_stamp);
   } catch (const std::exception & e) {
     RCLCPP_ERROR(
       this->get_logger(),
@@ -867,6 +1052,76 @@ void ServiceBagRecorder::record_robot_description()
   } catch (const std::exception & e) {
     RCLCPP_ERROR(this->get_logger(), "Failed to record robot_description: %s", e.what());
   }
+}
+
+rclcpp::Time ServiceBagRecorder::extract_timestamp_from_serialized(
+  const std::shared_ptr<rclcpp::SerializedMessage> & serialized_msg,
+  const std::string & topic)
+{
+  // Try to extract timestamp from std_msgs/Header
+  // Most ROS2 messages (sensor_msgs, geometry_msgs) contain header.stamp
+
+  try {
+    // Get message type
+    const auto it = type_for_topic_.find(topic);
+    if (it == type_for_topic_.end()) {
+      return this->now();
+    }
+    const std::string & msg_type = it->second;
+
+    // Check if message type typically has a header
+    const std::vector<std::string> header_types = {
+      "sensor_msgs/msg/Image",
+      "sensor_msgs/msg/CompressedImage",
+      "sensor_msgs/msg/CameraInfo",
+      "sensor_msgs/msg/JointState",
+      "sensor_msgs/msg/LaserScan",
+      "sensor_msgs/msg/Imu",
+      "geometry_msgs/msg/TwistStamped",
+      "geometry_msgs/msg/PoseStamped",
+      "nav_msgs/msg/Odometry"
+    };
+
+    bool has_header = false;
+    for (const auto & type : header_types) {
+      if (msg_type.find(type) != std::string::npos) {
+        has_header = true;
+        break;
+      }
+    }
+
+    if (has_header) {
+      // Extract timestamp from CDR serialized data
+      // Header structure: frame_id (string) + stamp (time)
+      auto & buffer = serialized_msg->get_rcl_serialized_message();
+
+      if (buffer.buffer_length >= 16) {
+        // Skip frame_id string (4 bytes length + variable string)
+        size_t offset = 4;
+        uint32_t frame_id_len = 0;
+        memcpy(&frame_id_len, buffer.buffer + offset, sizeof(uint32_t));
+        offset += 4 + frame_id_len;
+
+        // Read timestamp (8 bytes: int32 sec + uint32 nanosec)
+        if (offset + 8 <= buffer.buffer_length) {
+          int32_t sec = 0;
+          uint32_t nanosec = 0;
+          memcpy(&sec, buffer.buffer + offset, sizeof(int32_t));
+          memcpy(&nanosec, buffer.buffer + offset + 4, sizeof(uint32_t));
+
+          return rclcpp::Time(sec, nanosec);
+        }
+      }
+    }
+  } catch (const std::exception & e) {
+    RCLCPP_WARN(
+      this->get_logger(),
+      "Failed to extract timestamp from %s: %s (using current time)",
+      topic.c_str(), e.what());
+  }
+
+  // Fallback: use current time
+  return this->now();
 }
 
 int main(int argc, char ** argv)

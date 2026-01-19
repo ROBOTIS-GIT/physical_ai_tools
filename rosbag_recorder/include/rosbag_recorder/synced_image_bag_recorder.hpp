@@ -47,8 +47,8 @@ private:
     const std::shared_ptr<rosbag_recorder::srv::SendCommand::Request> req,
     std::shared_ptr<rosbag_recorder::srv::SendCommand::Response> res);
 
-  void handle_prepare(const std::vector<std::string> & topics);
-  void handle_start(const std::string & uri);
+  void handle_prepare(const std::vector<std::string> & topics, const std::string & uri);
+  void handle_start();
   void handle_stop();
   void handle_stop_and_delete();
   void handle_finish();
@@ -60,6 +60,10 @@ private:
   void handle_image_message(
     const std::string & topic,
     const sensor_msgs::msg::Image::SharedPtr & image_msg);
+
+  void handle_compressed_image_message(
+    const std::string & topic,
+    const std::shared_ptr<rclcpp::SerializedMessage> & serialized_msg);
 
   void on_frame(const FrameOutput & output);
   void on_encoding_complete(bool success, const std::string & message);
@@ -74,6 +78,14 @@ private:
   void create_subscriptions();
   bool is_image_topic(const std::string & topic_type) const;
   void write_stats_report();
+
+  /**
+   * Extract timestamp from serialized ROS message.
+   * Uses message header if available, falls back to current time.
+   */
+  rclcpp::Time extract_timestamp_from_message(
+    const std::shared_ptr<rclcpp::SerializedMessage> & serialized_msg,
+    const std::string & topic);
 
   rclcpp::Service<rosbag_recorder::srv::SendCommand>::SharedPtr send_command_srv_;
   rclcpp::Publisher<rosbag_recorder::msg::EncodingStatus>::SharedPtr encoding_status_pub_;

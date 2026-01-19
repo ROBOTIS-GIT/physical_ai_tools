@@ -1,0 +1,189 @@
+# Timing Visualization Configuration File
+# Default settings for visualize_timing.py
+# Can be overridden via command-line arguments
+
+# Segment duration for timeline display (seconds)
+# Larger values: broader timeline view, less detail
+# Smaller values: finer detail, more segments
+segment_duration: 5.0
+
+# Gap detection threshold (milliseconds)
+# Messages with intervals > this will be flagged as anomalies
+# Red dashed lines drawn for these gaps
+# Typical values:
+#   50ms:   Strict mode (catch minor delays)
+#   100ms:  Standard mode (catch significant delays)
+#   200ms:  Relaxed mode (catch major failures)
+gap_threshold: 100.0
+
+# Color scheme for topic types
+# Maps message type keywords to colors
+# Used for automatic coloring of topics
+topic_colors:
+  image: "#1f77b4"           # Blue (CompressedImage, Image)
+  compressed: "#1f77b4"      # Blue (CompressedImage)
+  joint_state: "#2ca02c"     # Green (JointState)
+  tf: "#ff7f0e"              # Orange (Transform)
+  odometry: "#9467bd"        # Purple (Odometry)
+  laser_scan: "#d62728"      # Red (LaserScan)
+  camera_info: "#17becf"     # Cyan (CameraInfo)
+  imu: "#bcbd22"             # Yellow-green (IMU)
+  twist: "#8c564b"           # Brown (TwistStamped)
+  pose: "#e377c2"            # Pink (PoseStamped)
+  default: "#7f7f7f"         # Gray (Unknown types)
+
+# Figure rendering settings
+figure:
+  # DPI for PNG output (higher = larger file, better quality)
+  dpi: 150
+
+  # Width of figure in inches
+  width: 20
+
+  # Height per segment in inches
+  height_per_segment: 2.5
+
+  # Total height = height_per_segment * num_segments
+
+# Display settings for timeline elements
+display:
+  # Size of message markers (points on timeline)
+  marker_size: 30
+
+  # Transparency of message markers (0.0-1.0)
+  marker_alpha: 0.8
+
+  # Line width for markers
+  marker_linewidth: 2
+
+  # Gap indicator line settings
+  gap_line_style: "--"          # dashed
+  gap_line_alpha: 0.6           # transparency
+  gap_line_width: 2             # thickness
+  gap_line_color: "#d62728"     # red
+
+  # Text settings
+  font_size: 9                  # topic labels
+  gap_annotation_size: 7        # gap duration labels
+
+  # Grid settings
+  grid_alpha: 0.3               # grid transparency
+  grid_style: ":"               # dotted grid
+  grid_minor_interval_ms: 10    # 10ms minor grid
+  grid_major_interval_ms: 100   # 100ms major grid
+
+# Analysis settings
+analysis:
+  # Compute statistics for every topic
+  compute_statistics: true
+
+  # Generate text summary
+  print_summary: true
+
+  # Maximum number of anomalies to show per topic
+  max_anomalies_to_show: 5
+
+  # Statistical output precision
+  decimal_places: 3
+
+# Output settings
+output:
+  # PNG image quality
+  format: "png"
+  format_options:
+    bbox_inches: "tight"
+    facecolor: "white"
+    edgecolor: "none"
+
+  # Default output naming pattern
+  # Available variables: {bag_name}, {timestamp}, {num_topics}
+  png_name_pattern: "{bag_name}_timing.png"
+  json_name_pattern: "{bag_name}_timing_report.json"
+
+# Logging settings
+logging:
+  # Verbosity level: DEBUG, INFO, WARNING, ERROR
+  level: "INFO"
+
+  # Show progress indicators
+  show_progress: true
+
+  # Log analysis details
+  log_details: true
+
+# Performance settings
+performance:
+  # Limit message processing for very large bags
+  # 0 = unlimited
+  max_messages: 0
+
+  # Use caching for repeated analyses
+  enable_caching: false
+
+  # Memory limit in MB (0 = unlimited)
+  max_memory: 0
+
+# Advanced settings
+advanced:
+  # Normalize all timestamps to start at 0
+  normalize_timestamps: true
+
+  # Sort messages by timestamp
+  sort_by_timestamp: true
+
+  # Interpolate missing data points
+  interpolate: false
+
+  # Outlier detection
+  outlier_detection: false
+  outlier_threshold_sigma: 3.0
+
+# Topic filtering (advanced)
+# If specified, only these topics are visualized
+# Empty = all topics
+topic_filter:
+  enabled: false
+  topics: []
+  # Example:
+  # topics:
+  #   - "/camera/image"
+  #   - "/joint_states"
+  #   - "/odom"
+
+# Exclude topics matching these patterns (regex)
+exclude_patterns: []
+# Example:
+# exclude_patterns:
+#   - ".*debug.*"
+#   - ".*/tf_static"
+
+# Message type mapping for better detection
+# Maps full type names to shortened names for coloring
+type_mapping:
+  "sensor_msgs/msg/Image": "image"
+  "sensor_msgs/msg/CompressedImage": "compressed"
+  "sensor_msgs/msg/JointState": "joint_state"
+  "sensor_msgs/msg/CameraInfo": "camera_info"
+  "sensor_msgs/msg/LaserScan": "laser_scan"
+  "sensor_msgs/msg/Imu": "imu"
+  "nav_msgs/msg/Odometry": "odometry"
+  "geometry_msgs/msg/TwistStamped": "twist"
+  "geometry_msgs/msg/PoseStamped": "pose"
+  "tf2_msgs/msg/TFMessage": "tf"
+
+# Theme settings
+theme:
+  # Figure background color
+  figure_bg: "white"
+
+  # Axis background color
+  axis_bg: "white"
+
+  # Text color
+  text_color: "black"
+
+  # Grid color
+  grid_color: "gray"
+
+  # Anomaly highlight color
+  anomaly_color: "#d62728"  # red

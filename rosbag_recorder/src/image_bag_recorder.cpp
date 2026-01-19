@@ -94,7 +94,8 @@ void ImageBagRecorder::handle_send_command(
 
 bool ImageBagRecorder::is_image_topic(const std::string & topic_type) const
 {
-  return topic_type == "sensor_msgs/msg/Image";
+  return topic_type == "sensor_msgs/msg/Image" ||
+         topic_type == "sensor_msgs/msg/CompressedImage";
 }
 
 void ImageBagRecorder::handle_prepare(const std::vector<std::string> & topics)

@@ -81,6 +81,10 @@ class PhysicalAIServer(Node):
     TRAINING_STATUS_TIMER_FREQUENCY = 0.5  # seconds
     VIDEO_SERVER_PORT = 8082  # Port for video file server
 
+    # Topic stability checking parameters for rosbag warmup
+    MAX_TOPIC_STABILITY_WAIT_SEC = 3.0  # Maximum wait time for topic stability
+    TOPIC_STABILITY_POLL_INTERVAL_SEC = 0.05  # Poll interval (50ms)
+
     class RosbagNotReadyException(Exception):
         """Exception raised when rosbag recording cannot start yet."""
 
@@ -465,6 +469,28 @@ class PhysicalAIServer(Node):
         self.communicator.prepare_rosbag(
             topics=rosbag_topics, robot_type=self.robot_type
         )
+
+        # Wait for topic stability using CHECK_READY mechanism
+        self.get_logger().info("Waiting for topics to stabilize...")
+        start_time = time.time()
+        topics_ready = False
+
+        while time.time() - start_time < self.MAX_TOPIC_STABILITY_WAIT_SEC:
+            if self.communicator.check_rosbag_ready():
+                elapsed_ms = (time.time() - start_time) * 1000
+                self.get_logger().info(
+                    f"All topics stable after {elapsed_ms:.1f}ms, ready to start recording"
+                )
+                topics_ready = True
+                break
+            time.sleep(self.TOPIC_STABILITY_POLL_INTERVAL_SEC)
+
+        if not topics_ready:
+            elapsed_sec = time.time() - start_time
+            self.get_logger().warning(
+                f"Timeout waiting for topic stability after {elapsed_sec:.2f}s, "
+                "starting recording anyway (some initial data may be missing)"
+            )
 
     def _handle_run_transition(self, previous_status: str):
         self.get_logger().info(
