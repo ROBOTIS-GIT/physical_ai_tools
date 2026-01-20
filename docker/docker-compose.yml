@@ -1,5 +1,16 @@
 services:
   # ============================================
+  # Zenoh Router for RMW Zenoh
+  # ============================================
+  zenoh_router:
+    container_name: zenoh_router
+    image: eclipse/zenoh:latest
+    network_mode: host
+    restart: unless-stopped
+    entrypoint: ["/zenohd"]
+    command: []
+
+  # ============================================
   # Physical AI Manager (React UI)
   # ============================================
   physical_ai_manager:
@@ -31,6 +42,8 @@ services:
     environment:
       - DISPLAY=${DISPLAY}
       - QT_X11_NO_MITSHM=1
+      # ROS2 RMW configuration - use Zenoh instead of DDS
+      - RMW_IMPLEMENTATION=rmw_zenoh_cpp
       # Zenoh configuration
       - ZENOH_ROUTER_IP=127.0.0.1
       - ZENOH_ROUTER_PORT=7447
@@ -63,8 +76,9 @@ services:
     container_name: lerobot_server
     image: robotis/lerobot-zenoh:latest
     build:
-      context: ..
-      dockerfile: docker/lerobot/Dockerfile
+      # Build context is third_party/lerobot/ (new structure)
+      context: ../third_party/lerobot
+      dockerfile: Dockerfile
     
     # Network: host mode for Zenoh communication
     network_mode: host
@@ -86,16 +100,15 @@ services:
       # Shared Memory device
       - /dev/shm:/dev/shm
       
-      # LeRobot cache directory (datasets, models, outputs)
-      # Maps: host docker/workspace/lerobot <-> container ~/.cache/huggingface/lerobot
-      - ./workspace/lerobot:/root/.cache/huggingface/lerobot
+      # LeRobot workspace (datasets, models, outputs)
+      # Maps: host third_party/lerobot/workspace <-> container /workspace
+      - ../third_party/lerobot/workspace:/workspace
       
       # HuggingFace cache (shared with physical_ai_server)
       - ./huggingface:/root/.cache/huggingface
       
-      # Zenoh SDK (for development - mount as volume)
-      # In production, this should be built into the image
-      - ../../zenoh_ros2_sdk:/zenoh_sdk:ro
+      # Zenoh SDK (shared across all opensource integrations)
+      - ../third_party/zenoh_ros2_sdk:/zenoh_sdk:ro
       
       # Timezone
       - /etc/timezone:/etc/timezone:ro
@@ -115,6 +128,9 @@ services:
       
       # Python
       - PYTHONUNBUFFERED=1
+      
+      # Workspace path
+      - LEROBOT_WORKSPACE=/workspace
     
     # Auto restart
     restart: unless-stopped
@@ -124,4 +140,4 @@ services:
     
     # Dependencies
     depends_on:
-      - physical_ai_server
+      - zenoh_router

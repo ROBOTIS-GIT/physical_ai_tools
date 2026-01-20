@@ -1602,9 +1602,8 @@ def main(args=None):
     """
     rclpy.init(args=args)
 
-    # Get backend configuration from environment variable
-    import os
-    lerobot_backend = os.environ.get('LEROBOT_BACKEND', 'local')
+    # Always use Docker backend for LeRobot (training/inference)
+    lerobot_backend = 'docker'
 
     node = PhysicalAIServer(lerobot_backend=lerobot_backend)
     try:

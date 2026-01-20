@@ -19,15 +19,14 @@
 """
 Training Manager Adapter
 
-Provides a unified interface for training that can use either:
-- Local execution (direct lerobot import)
-- Docker execution (via Zenoh communication)
+Provides a unified interface for training via Docker execution (Zenoh communication).
+LeRobot runs inside Docker container, not on the host.
 
 Usage:
-    # Local mode (default, requires lerobot installed)
-    adapter = TrainingManagerAdapter(backend='local')
+    # Docker mode (default, requires LeRobot Docker container running)
+    adapter = TrainingManagerAdapter()
     
-    # Docker mode (requires LeRobot Docker container running)
+    # Or explicitly specify docker backend
     adapter = TrainingManagerAdapter(backend='docker')
 """
 
@@ -45,32 +44,17 @@ class TrainingBackend(Enum):
 
 
 class TrainingManagerAdapter:
-    """
-    Adapter that provides unified interface for both local and Docker-based training.
-    
-    This adapter allows seamless switching between:
-    - Local execution: Uses TrainingManager which imports lerobot directly
-    - Docker execution: Uses ZenohTrainingManager which communicates via Zenoh
-    
-    Attributes
-    ----------
-    backend : TrainingBackend
-        The execution backend (LOCAL or DOCKER)
-    training_info : TrainingInfo
-        Current training configuration
-    resume : bool
-        Whether to resume training
-    resume_model_path : str
-        Path to model for resume training
-    """
     
     SUPPORTED_POLICIES = [
-        'tdmpc', 'diffusion', 'act', 'vqbet', 'pi0', 'pi0fast', 'smolvla'
+        'tdmpc', 'diffusion', 'act', 'vqbet', 'pi0', 'pi0_fast', 'pi05',
+        'smolvla', 'groot', 'xvla', 'sac'
     ]
     
     SUPPORTED_DEVICES = ['cuda', 'cpu']
+    
+    _cached_policies: list = None
 
-    def __init__(self, backend: Union[str, TrainingBackend] = 'local'):
+    def __init__(self, backend: Union[str, TrainingBackend] = 'docker'):
         """
         Initialize training manager adapter.
         
@@ -167,18 +151,25 @@ class TrainingManagerAdapter:
 
     @staticmethod
     def get_available_list() -> tuple[list[str], list[str]]:
-        """
-        Get lists of available policy types and devices.
+        if TrainingManagerAdapter._cached_policies is None:
+            TrainingManagerAdapter._fetch_policies_from_container()
         
-        Returns
-        -------
-        tuple
-            (policy_list, device_list)
-        """
-        return (
-            TrainingManagerAdapter.SUPPORTED_POLICIES,
-            TrainingManagerAdapter.SUPPORTED_DEVICES
+        policy_list = (
+            TrainingManagerAdapter._cached_policies
+            if TrainingManagerAdapter._cached_policies
+            else TrainingManagerAdapter.SUPPORTED_POLICIES
         )
+        return (policy_list, TrainingManagerAdapter.SUPPORTED_DEVICES)
+    
+    @staticmethod
+    def _fetch_policies_from_container():
+        try:
+            from physical_ai_server.training.zenoh_training_manager import ZenohTrainingManager
+            policies, _ = ZenohTrainingManager.get_available_list()
+            if policies:
+                TrainingManagerAdapter._cached_policies = policies
+        except Exception:
+            pass
 
     @staticmethod
     def get_weight_save_root_path():

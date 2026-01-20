@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 //
-// Author: Kiwoong Park
+// Author: Physical AI Team
 
 import React, { useState, useCallback, useEffect } from 'react';
 import clsx from 'clsx';
@@ -21,6 +21,7 @@ import toast from 'react-hot-toast';
 import {
   MdOutlineFileDownload,
   MdClose,
+  MdDataset,
   MdKey,
   MdExpandMore,
   MdExpandLess,
@@ -28,7 +29,6 @@ import {
 import { useRosServiceCaller } from '../hooks/useRosServiceCaller';
 import TokenInputPopup from './TokenInputPopup';
 import HFStatus from '../constants/HFStatus';
-import { DEFAULT_PATHS } from '../constants/paths';
 
 // HuggingFace repository ID validation (includes username/repo format)
 const validateHfRepoId = (repoId) => {
@@ -40,7 +40,7 @@ const validateHfRepoId = (repoId) => {
   if (!trimmed.includes('/')) {
     return {
       isValid: false,
-      message: 'Format: username/model-name (e.g., ROBOTIS/act_ai_worker)',
+      message: 'Format: username/dataset-name (e.g., lerobot/pusht)',
     };
   }
 
@@ -48,7 +48,7 @@ const validateHfRepoId = (repoId) => {
   if (parts.length !== 2 || !parts[0] || !parts[1]) {
     return {
       isValid: false,
-      message: 'Format: username/model-name (e.g., ROBOTIS/act_ai_worker)',
+      message: 'Format: username/dataset-name (e.g., lerobot/pusht)',
     };
   }
 
@@ -95,6 +95,9 @@ const validateHfRepoId = (repoId) => {
   return { isValid: true, message: '' };
 };
 
+// Dataset save path
+const DATASET_SAVE_PATH = '/root/.cache/huggingface/lerobot';
+
 // Style Classes
 const STYLES = {
   textInput: clsx(
@@ -107,13 +110,13 @@ const STYLES = {
     'rounded-md',
     'focus:outline-none',
     'focus:ring-2',
-    'focus:ring-blue-500',
+    'focus:ring-green-500',
     'focus:border-transparent'
   ),
   cancelButton: clsx('px-6', 'py-2', 'text-sm', 'font-medium', 'rounded-lg', 'transition-colors'),
 };
 
-const PolicyDownloadModal = ({ isOpen, onClose, onDownloadComplete }) => {
+const DatasetDownloadModal = ({ isOpen, onClose, onDownloadComplete }) => {
   const hfStatus = useSelector((state) => state.editDataset.hfStatus);
 
   const { controlHfServer, registerHFUser } = useRosServiceCaller();
@@ -174,7 +177,7 @@ const PolicyDownloadModal = ({ isOpen, onClose, onDownloadComplete }) => {
   };
 
   // Download operation
-  const handleDownloadPolicy = async () => {
+  const handleDownloadDataset = async () => {
     if (!repoId || repoId.trim() === '') {
       toast.error('Please enter a Repository ID');
       return;
@@ -190,18 +193,20 @@ const PolicyDownloadModal = ({ isOpen, onClose, onDownloadComplete }) => {
     setIsDownloading(true);
     try {
       const trimmedRepoId = repoId.trim();
-      const result = await controlHfServer('download', trimmedRepoId, 'model');
-      console.log('Download policy result:', result);
+      // Use 'dataset' as repo_type for dataset download
+      const result = await controlHfServer('download', trimmedRepoId, 'dataset');
+      console.log('Download dataset result:', result);
 
-      toast.success(`Policy download started for ${trimmedRepoId}!`);
+      toast.success(`Dataset download started for ${trimmedRepoId}!`);
 
-      // Call the completion callback if provided
+      // Call the completion callback if provided with the full path
       if (onDownloadComplete) {
-        onDownloadComplete(trimmedRepoId);
+        const downloadedPath = `${DATASET_SAVE_PATH}/${trimmedRepoId}`;
+        onDownloadComplete(downloadedPath);
       }
     } catch (error) {
-      console.error('Error downloading policy:', error);
-      toast.error(`Failed to download policy: ${error.message}`);
+      console.error('Error downloading dataset:', error);
+      toast.error(`Failed to download dataset: ${error.message}`);
     } finally {
       setIsDownloading(false);
     }
@@ -209,7 +214,7 @@ const PolicyDownloadModal = ({ isOpen, onClose, onDownloadComplete }) => {
 
   const handleCancelDownload = async () => {
     try {
-      const result = await controlHfServer('cancel', repoId, 'model');
+      const result = await controlHfServer('cancel', repoId, 'dataset');
       console.log('Cancel download result:', result);
       toast.success(`Cancelling download...`);
     } catch (error) {
@@ -221,7 +226,9 @@ const PolicyDownloadModal = ({ isOpen, onClose, onDownloadComplete }) => {
   // Handle finish button click
   const handleFinish = () => {
     if (onDownloadComplete && finalStatus === HFStatus.SUCCESS) {
-      onDownloadComplete(repoId.trim());
+      const trimmedRepoId = repoId.trim();
+      const downloadedPath = `${DATASET_SAVE_PATH}/${trimmedRepoId}`;
+      onDownloadComplete(downloadedPath);
     }
     onClose();
   };
@@ -262,9 +269,9 @@ const PolicyDownloadModal = ({ isOpen, onClose, onDownloadComplete }) => {
             {/* Modal Header */}
             <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200">
               <div className="flex items-center gap-3">
-                <MdOutlineFileDownload className="text-2xl text-blue-600" />
+                <MdDataset className="text-2xl text-green-600" />
                 <h2 className="text-xl font-semibold text-gray-900">
-                  Download Policy from Hugging Face
+                  Download Dataset from Hugging Face
                 </h2>
               </div>
               <button
@@ -278,14 +285,14 @@ const PolicyDownloadModal = ({ isOpen, onClose, onDownloadComplete }) => {
 
             {/* Modal Content */}
             <div className="flex-1 p-6 overflow-y-auto">
-              {/* Download Policy Section */}
+              {/* Download Dataset Section */}
               <div className="space-y-4">
                 {/* Repository ID Input */}
                 <div className="w-full bg-white p-4 rounded-md flex flex-col gap-3 border border-gray-200">
                   <div className="flex flex-col gap-2">
-                    <span className="text-lg font-bold text-gray-800">Policy Repository ID</span>
+                    <span className="text-lg font-bold text-gray-800">Dataset Repository ID</span>
                     <p className="text-sm text-gray-500">
-                      Enter the full repository path (e.g., ROBOTIS/act_ai_worker)
+                      Enter the full repository path (e.g., lerobot/pusht, ROBOTIS/test1)
                     </p>
                   </div>
 
@@ -293,11 +300,11 @@ const PolicyDownloadModal = ({ isOpen, onClose, onDownloadComplete }) => {
                     <input
                       className={clsx(STYLES.textInput, {
                         'border-red-300 focus:ring-red-500': !repoValidation.isValid && repoId,
-                        'border-blue-300 focus:ring-blue-500': repoValidation.isValid,
+                        'border-green-300 focus:ring-green-500': repoValidation.isValid,
                         'bg-gray-100 cursor-not-allowed': isDownloading,
                       })}
                       type="text"
-                      placeholder="username/model-name"
+                      placeholder="username/dataset-name"
                       value={repoId}
                       onChange={(e) => handleRepoIdChange(e.target.value)}
                       disabled={isDownloading}
@@ -305,7 +312,7 @@ const PolicyDownloadModal = ({ isOpen, onClose, onDownloadComplete }) => {
                     {repoId && (
                       <div className="mt-1 text-xs">
                         {repoValidation.isValid ? (
-                          <span className="text-blue-600">✓ Valid repository ID</span>
+                          <span className="text-green-600">✓ Valid repository ID</span>
                         ) : (
                           <span className="text-red-500">{repoValidation.message}</span>
                         )}
@@ -316,11 +323,11 @@ const PolicyDownloadModal = ({ isOpen, onClose, onDownloadComplete }) => {
                   {/* Save path info */}
                   {repoValidation.isValid && (
                     <div className="flex items-center gap-2 text-xs text-gray-600 bg-gray-50 p-2 rounded">
-                      <MdOutlineFileDownload className="text-blue-600" />
+                      <MdOutlineFileDownload className="text-green-600" />
                       <span>
                         Will be saved to:{' '}
-                        <span className="font-mono text-blue-700">
-                          {DEFAULT_PATHS.POLICY_MODEL_PATH}
+                        <span className="font-mono text-green-700">
+                          {DATASET_SAVE_PATH}/{repoId.trim()}
                         </span>
                       </span>
                     </div>
@@ -340,11 +347,11 @@ const PolicyDownloadModal = ({ isOpen, onClose, onDownloadComplete }) => {
                         'items-center',
                         'gap-2',
                         {
-                          'bg-blue-500 text-white hover:bg-blue-600': downloadButtonEnabled,
+                          'bg-green-500 text-white hover:bg-green-600': downloadButtonEnabled,
                           'bg-gray-300 text-gray-500 cursor-not-allowed': !downloadButtonEnabled,
                         }
                       )}
-                      onClick={handleDownloadPolicy}
+                      onClick={handleDownloadDataset}
                       disabled={!downloadButtonEnabled}
                     >
                       <MdOutlineFileDownload className="w-5 h-5" />
@@ -367,7 +374,7 @@ const PolicyDownloadModal = ({ isOpen, onClose, onDownloadComplete }) => {
                     {/* Status */}
                     {isDownloading && (
                       <div className="flex items-center gap-2">
-                        <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-blue-600"></div>
+                        <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-green-600"></div>
                         <span className="text-sm text-gray-500">Downloading...</span>
                       </div>
                     )}
@@ -401,7 +408,8 @@ const PolicyDownloadModal = ({ isOpen, onClose, onDownloadComplete }) => {
                   {showTokenSection && (
                     <div className="px-4 py-3 bg-white border-t border-gray-200">
                       <p className="text-xs text-gray-500 mb-3">
-                        Required only for private models. Public models don't need a token.
+                        Required only for private datasets. Public datasets (like lerobot/pusht) don't
+                        need a token.
                       </p>
                       <button
                         className={clsx(
@@ -436,9 +444,9 @@ const PolicyDownloadModal = ({ isOpen, onClose, onDownloadComplete }) => {
               {finalStatus === HFStatus.SUCCESS && (
                 <button
                   onClick={handleFinish}
-                  className="px-4 py-2 text-sm font-medium rounded-md transition-colors bg-blue-500 text-white hover:bg-blue-600"
+                  className="px-4 py-2 text-sm font-medium rounded-md transition-colors bg-green-500 text-white hover:bg-green-600"
                 >
-                  Use This Policy
+                  Use This Dataset
                 </button>
               )}
               <button
@@ -464,4 +472,4 @@ const PolicyDownloadModal = ({ isOpen, onClose, onDownloadComplete }) => {
   );
 };
 
-export default PolicyDownloadModal;
+export default DatasetDownloadModal;

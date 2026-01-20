@@ -19,25 +19,31 @@
 from typing import Callable, Optional, List
 import numpy as np
 
-from physical_ai_server.communication import ZenohLeRobotClient, LeRobotResponse
+try:
+    from physical_ai_server.communication.zenoh_lerobot_client import ZenohLeRobotClient
+    ZENOH_CLIENT_AVAILABLE = True
+except ImportError:
+    ZENOH_CLIENT_AVAILABLE = False
+    ZenohLeRobotClient = None
+    
+from physical_ai_server.communication import LeRobotResponse
 
 
 class ZenohInferenceManager:
-    """
-    Inference manager that delegates to LeRobot Docker container via Zenoh.
-    
-    This manager does not import lerobot directly. Instead, it sends commands
-    to the isolated LeRobot Docker container through Zenoh communication.
-    
-    For real-time inference (Mode 1), the LeRobot container publishes actions
-    directly to the action topic which this manager subscribes to.
-    """
     
     SUPPORTED_POLICIES = [
-        'tdmpc', 'diffusion', 'act', 'vqbet', 'pi0', 'pi0fast', 'smolvla'
+        'tdmpc', 'diffusion', 'act', 'vqbet', 'pi0', 'pi0_fast', 'pi05',
+        'smolvla', 'groot', 'xvla', 'sac'
     ]
+    
+    _cached_policies: list = None
 
     def __init__(self):
+        if not ZENOH_CLIENT_AVAILABLE:
+            raise ImportError(
+                "Zenoh client is not available. This requires zenoh Python module. "
+                "Please use ROS2-based inference or install zenoh."
+            )
         self.client = ZenohLeRobotClient()
         self._connected = False
         self._action_callback: Optional[Callable] = None
@@ -168,4 +174,24 @@ class ZenohInferenceManager:
 
     @staticmethod
     def get_available_policies() -> List[str]:
-        return ZenohInferenceManager.SUPPORTED_POLICIES
+        if ZenohInferenceManager._cached_policies is None:
+            ZenohInferenceManager._fetch_policies_from_container()
+        
+        return (
+            ZenohInferenceManager._cached_policies
+            if ZenohInferenceManager._cached_policies
+            else ZenohInferenceManager.SUPPORTED_POLICIES
+        )
+    
+    @staticmethod
+    def _fetch_policies_from_container():
+        try:
+            client = ZenohLeRobotClient()
+            if client.connect():
+                response = client.get_policy_list()
+                client.disconnect()
+                
+                if response.success and response.data:
+                    ZenohInferenceManager._cached_policies = response.data.get('policy_names', [])
+        except Exception:
+            pass

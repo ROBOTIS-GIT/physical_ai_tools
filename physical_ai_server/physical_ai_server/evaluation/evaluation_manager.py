@@ -20,8 +20,15 @@ import argparse
 import os
 from typing import Dict, List, Tuple
 
-from lerobot.configs.default import DatasetConfig
-from lerobot.datasets.lerobot_dataset import LeRobotDataset
+try:
+    from lerobot.configs.default import DatasetConfig
+    from lerobot.datasets.lerobot_dataset import LeRobotDataset
+    LEROBOT_AVAILABLE = True
+except ImportError:
+    LEROBOT_AVAILABLE = False
+    DatasetConfig = None
+    LeRobotDataset = None
+    
 import numpy as np
 from physical_ai_server.evaluation.visualization_manager import VisualizationManager
 from physical_ai_server.inference.inference_manager import InferenceManager
@@ -30,6 +37,11 @@ from physical_ai_server.inference.inference_manager import InferenceManager
 class EvaluationManager:
 
     def __init__(self):
+        if not LEROBOT_AVAILABLE:
+            raise ImportError(
+                "LeRobot is not available. Evaluation requires lerobot to be installed. "
+                "Use Docker mode for evaluation instead of local mode."
+            )
         self.visualization_manager = VisualizationManager()
 
     def load_dataset(

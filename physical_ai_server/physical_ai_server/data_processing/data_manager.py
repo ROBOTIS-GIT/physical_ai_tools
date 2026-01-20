@@ -38,7 +38,13 @@ from huggingface_hub import (
     upload_large_folder
 )
 from huggingface_hub.errors import LocalTokenNotFoundError
-from lerobot.datasets.utils import DEFAULT_FEATURES
+DEFAULT_FEATURES = {
+    'episode_index': {'dtype': 'int64', 'names': None, 'shape': (1,)},
+    'frame_index': {'dtype': 'int64', 'names': None, 'shape': (1,)},
+    'index': {'dtype': 'int64', 'names': None, 'shape': (1,)},
+    'task_index': {'dtype': 'int64', 'names': None, 'shape': (1,)},
+    'timestamp': {'dtype': 'float32', 'names': None, 'shape': (1,)}
+}
 from nav_msgs.msg import Odometry
 import numpy as np
 from physical_ai_interfaces.msg import TaskStatus

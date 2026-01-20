@@ -27,6 +27,7 @@ const initialState = {
   deviceList: [],
   modelWeightList: [],
   selectedModelWeight: undefined,
+  selectedCheckpoint: null, // Selected checkpoint for inference/resume
   resumePolicyPath: undefined,
   hasTrainConfig: null,
   isTrainingInfoLoaded: false, // Track if Load button was pressed
@@ -103,6 +104,9 @@ const trainingSlice = createSlice({
     },
     setSelectedModelWeight: (state, action) => {
       state.selectedModelWeight = action.payload;
+    },
+    setSelectedCheckpoint: (state, action) => {
+      state.selectedCheckpoint = action.payload;
     },
     setResumePolicyPath: (state, action) => {
       state.resumePolicyPath = action.payload;
@@ -193,6 +197,7 @@ export const {
   setOutputFolderName,
   setModelWeightList,
   setSelectedModelWeight,
+  setSelectedCheckpoint,
   setResumePolicyPath,
   setHasTrainConfig,
   setIsTrainingInfoLoaded,

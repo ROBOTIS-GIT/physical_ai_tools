@@ -18,7 +18,13 @@
 
 import os
 
-from lerobot.policies.pretrained import PreTrainedPolicy
+try:
+    from lerobot.policies.pretrained import PreTrainedPolicy
+    LEROBOT_AVAILABLE = True
+except ImportError:
+    LEROBOT_AVAILABLE = False
+    PreTrainedPolicy = None
+    
 import numpy as np
 from physical_ai_server.utils.file_utils import read_json_file
 import torch
@@ -29,7 +35,11 @@ class InferenceManager:
     def __init__(
             self,
             device: str = 'cuda'):
-
+        if not LEROBOT_AVAILABLE:
+            raise ImportError(
+                "LeRobot is not available. Inference requires lerobot to be installed. "
+                "Use Docker mode for inference instead of local mode."
+            )
         self.device = device
         self.policy_type = None
         self.policy_path = None

@@ -19,15 +19,14 @@
 """
 Inference Manager Adapter
 
-Provides a unified interface for inference that can use either:
-- Local execution (direct lerobot import)
-- Docker execution (via Zenoh communication)
+Provides a unified interface for inference via Docker execution (Zenoh communication).
+LeRobot runs inside Docker container, not on the host.
 
 Usage:
-    # Local mode (default, requires lerobot installed)
-    adapter = InferenceManagerAdapter(backend='local')
+    # Docker mode (default, requires LeRobot Docker container running)
+    adapter = InferenceManagerAdapter()
     
-    # Docker mode (requires LeRobot Docker container running)
+    # Or explicitly specify docker backend
     adapter = InferenceManagerAdapter(backend='docker')
 """
 
@@ -44,32 +43,17 @@ class InferenceBackend(Enum):
 
 
 class InferenceManagerAdapter:
-    """
-    Adapter that provides unified interface for both local and Docker-based inference.
-    
-    This adapter allows seamless switching between:
-    - Local execution: Uses InferenceManager which imports lerobot directly
-    - Docker execution: Uses ZenohInferenceManager which communicates via Zenoh
-    
-    Attributes
-    ----------
-    backend : InferenceBackend
-        The execution backend (LOCAL or DOCKER)
-    device : str
-        Device for inference (cuda/cpu)
-    policy_type : str
-        Type of policy loaded
-    policy_path : str
-        Path to the policy
-    """
     
     SUPPORTED_POLICIES = [
-        'tdmpc', 'diffusion', 'act', 'vqbet', 'pi0', 'pi0fast', 'smolvla'
+        'tdmpc', 'diffusion', 'act', 'vqbet', 'pi0', 'pi0_fast', 'pi05',
+        'smolvla', 'groot', 'xvla', 'sac'
     ]
+    
+    _cached_policies: list = None
 
     def __init__(
             self,
-            backend: Union[str, InferenceBackend] = 'local',
+            backend: Union[str, InferenceBackend] = 'docker',
             device: str = 'cuda'):
         """
         Initialize inference manager adapter.
@@ -360,11 +344,26 @@ class InferenceManagerAdapter:
             return self._manager.list_models()
         raise NotImplementedError("list_models() only available in Docker mode")
 
-    # Static methods
     @staticmethod
     def get_available_policies() -> List[str]:
-        """Get list of supported policy types."""
-        return InferenceManagerAdapter.SUPPORTED_POLICIES
+        if InferenceManagerAdapter._cached_policies is None:
+            InferenceManagerAdapter._fetch_policies_from_container()
+        
+        return (
+            InferenceManagerAdapter._cached_policies
+            if InferenceManagerAdapter._cached_policies
+            else InferenceManagerAdapter.SUPPORTED_POLICIES
+        )
+    
+    @staticmethod
+    def _fetch_policies_from_container():
+        try:
+            from physical_ai_server.inference.zenoh_inference_manager import ZenohInferenceManager
+            policies = ZenohInferenceManager.get_available_policies()
+            if policies:
+                InferenceManagerAdapter._cached_policies = policies
+        except Exception:
+            pass
 
     @staticmethod
     def get_saved_policies() -> tuple[List[str], List[str]]:

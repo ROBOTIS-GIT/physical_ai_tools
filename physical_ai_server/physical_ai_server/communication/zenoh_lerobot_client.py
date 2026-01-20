@@ -23,7 +23,10 @@ from dataclasses import dataclass
 from enum import Enum
 from typing import Any, Callable, Dict, Optional
 
-import zenoh
+try:
+    import zenoh
+except ImportError:
+    zenoh = None  # Zenoh not available - client will not work but dataclasses remain usable
 
 
 class CommandType(Enum):
@@ -37,6 +40,10 @@ class CommandType(Enum):
     MODEL_LOAD = "model_load"
     MODEL_UNLOAD = "model_unload"
     MODEL_LIST = "model_list"
+    CHECKPOINT_LIST = "checkpoint_list"
+    CHECKPOINT_INFO = "checkpoint_info"
+    CHECKPOINT_DELETE = "checkpoint_delete"
+    POLICY_LIST = "policy_list"
 
 
 @dataclass
@@ -79,9 +86,11 @@ class ZenohLeRobotClient:
         self.command_key = "lerobot/command"
         self.status_key = "lerobot/status"
         self.action_key = "lerobot/action"
+        self.training_log_key = "lerobot/training_log"
         
         self._status_callback: Optional[Callable] = None
         self._action_callback: Optional[Callable] = None
+        self._training_log_callback: Optional[Callable] = None
         self._subscribers = []
         
     def connect(self) -> bool:
@@ -130,14 +139,14 @@ class ZenohLeRobotClient:
         }
         
         try:
+            # New Zenoh API (1.x) - no Queue(), direct iteration
             replies = self.session.get(
                 self.command_key,
-                zenoh.Queue(),
                 payload=json.dumps(request_data).encode('utf-8'),
                 timeout=self.timeout_sec
             )
             
-            for reply in replies.receiver:
+            for reply in replies:
                 if reply.ok:
                     return LeRobotResponse.from_json(bytes(reply.ok.payload))
             
@@ -260,3 +269,85 @@ class ZenohLeRobotClient:
         sub = self.session.declare_subscriber(self.action_key, on_action)
         self._subscribers.append(sub)
         return True
+    
+    def subscribe_training_log(self, callback: Callable[[Dict], None]):
+        """Subscribe to detailed training log updates"""
+        if not self.session:
+            return False
+        
+        self._training_log_callback = callback
+        
+        def on_training_log(sample):
+            try:
+                data = json.loads(bytes(sample.payload).decode('utf-8'))
+                callback(data)
+            except Exception as e:
+                print(f"[ZenohLeRobotClient] Training log parse error: {e}")
+        
+        sub = self.session.declare_subscriber(self.training_log_key, on_training_log)
+        self._subscribers.append(sub)
+        return True
+    
+    # ========== Checkpoint Management ==========
+    
+    def list_checkpoints(self) -> LeRobotResponse:
+        """
+        List all available checkpoints from training runs.
+        
+        Returns:
+            LeRobotResponse with data containing:
+            - checkpoints: List of checkpoint info dicts with:
+                - run_name: Training run name
+                - checkpoint_name: Checkpoint identifier (step number or 'last')
+                - path: Full path to pretrained_model directory
+                - created_at: ISO timestamp
+                - policy_type: Model type (act, diffusion, etc.)
+                - dataset: Dataset used for training
+                - step: Training step number
+                - size_mb: Checkpoint size in MB
+                - is_latest: True if this is the 'last' checkpoint
+        """
+        return self._send_command(CommandType.CHECKPOINT_LIST.value, {})
+    
+    def get_checkpoint_info(self, checkpoint_path: str) -> LeRobotResponse:
+        """
+        Get detailed information about a specific checkpoint.
+        
+        Args:
+            checkpoint_path: Path to the pretrained_model directory
+            
+        Returns:
+            LeRobotResponse with detailed checkpoint metadata including:
+            - config: Full model configuration
+            - files: List of model files with sizes
+            - All fields from list_checkpoints
+        """
+        return self._send_command(
+            CommandType.CHECKPOINT_INFO.value,
+            {"checkpoint_path": checkpoint_path}
+        )
+    
+    def delete_checkpoint(self, checkpoint_path: str) -> LeRobotResponse:
+        """
+        Delete a checkpoint.
+        
+        Args:
+            checkpoint_path: Path to the pretrained_model directory
+            
+        Returns:
+            LeRobotResponse indicating success/failure
+            
+        Note:
+            Only checkpoints within the outputs directory can be deleted.
+            The entire checkpoint directory (parent of pretrained_model) is removed.
+        """
+        return self._send_command(
+            CommandType.CHECKPOINT_DELETE.value,
+            {"checkpoint_path": checkpoint_path}
+        )
+    
+    def get_policy_list(self, category: str = None) -> LeRobotResponse:
+        params = {}
+        if category:
+            params["category"] = category
+        return self._send_command(CommandType.POLICY_LIST.value, params)

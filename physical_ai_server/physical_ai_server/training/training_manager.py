@@ -20,11 +20,20 @@ import json
 from pathlib import Path
 import threading
 
-import draccus
-import lerobot
-from lerobot.configs.train import TrainPipelineConfig
+try:
+    import draccus
+    import lerobot
+    from lerobot.configs.train import TrainPipelineConfig
+    from physical_ai_server.training.trainers.lerobot.lerobot_trainer import LerobotTrainer
+    LEROBOT_AVAILABLE = True
+except ImportError:
+    LEROBOT_AVAILABLE = False
+    draccus = None
+    lerobot = None
+    TrainPipelineConfig = None
+    LerobotTrainer = None
+    
 from physical_ai_interfaces.msg import TrainingInfo, TrainingStatus
-from physical_ai_server.training.trainers.lerobot.lerobot_trainer import LerobotTrainer
 # TODO: Uncomment when training metrics is implemented
 # from physical_ai_server.training.trainers.gr00tn1.gr00tn1_trainer import Gr00tN1Trainer
 # from physical_ai_server.training.trainers.openvla.openvla_trainer import OpenVLATrainer
@@ -222,16 +231,16 @@ class TrainingManager:
             Absolute path to the training outputs directory
 
         """
-        # Extract the base lerobot directory from lerobot.__file__
+        if not LEROBOT_AVAILABLE or lerobot is None:
+            return Path.home() / '.cache' / 'lerobot' / 'outputs' / 'train'
+            
         lerobot_file_path = Path(lerobot.__file__).resolve()
 
-        # Find the outermost 'lerobot' directory in the path
         lerobot_dirs = [parent for parent in lerobot_file_path.parents if parent.name == 'lerobot']
         if lerobot_dirs:
-            current_path = lerobot_dirs[-1]  # outermost 'lerobot' directory
+            current_path = lerobot_dirs[-1]
         else:
-            # Fallback: use the parent of the file
-            current_path = lerobot_file_path.parent.parent  # up to 'lerobot'
+            current_path = lerobot_file_path.parent.parent
 
         weight_save_root_path = current_path / 'outputs' / 'train'
         return weight_save_root_path.resolve()

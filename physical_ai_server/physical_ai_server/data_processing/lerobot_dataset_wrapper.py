@@ -18,17 +18,24 @@
 
 import threading
 
-from lerobot.datasets.compute_stats import (
-    get_feature_stats
-)
-from lerobot.datasets.lerobot_dataset import LeRobotDataset
-from lerobot.datasets.utils import (
-    validate_episode_buffer,
-    validate_frame,
-    write_episode,
-    write_episode_stats,
-    write_info
-)
+try:
+    from lerobot.datasets.compute_stats import (
+        aggregate_stats,
+        get_feature_stats
+    )
+    from lerobot.datasets.lerobot_dataset import LeRobotDataset
+    from lerobot.datasets.utils import (
+        flatten_dict,
+        validate_episode_buffer,
+        validate_frame,
+        write_info,
+        write_stats
+    )
+    LEROBOT_AVAILABLE = True
+except ImportError:
+    LEROBOT_AVAILABLE = False
+    LeRobotDataset = object
+    
 import numpy as np
 from physical_ai_server.video_encoder.ffmpeg_encoder import FFmpegEncoder
 
@@ -36,12 +43,17 @@ from physical_ai_server.video_encoder.ffmpeg_encoder import FFmpegEncoder
 class LeRobotDatasetWrapper(LeRobotDataset):
 
     def __init__(self, *args, **kwargs):
+        if not LEROBOT_AVAILABLE:
+            raise ImportError(
+                "LeRobot is not available. This class requires lerobot to be installed. "
+                "Use Docker mode for training instead of local mode."
+            )
         super().__init__(*args, **kwargs)
         self.encoders = {}
         self.total_frame_buffer = None
         self.episode_ranges = []
         self._append_in_progress = False
-        self._robot_type = 'default'  # default
+        self._robot_type = 'default'
 
     def set_robot_type(self, robot_type: str) -> None:
         self._robot_type = robot_type
@@ -307,15 +319,23 @@ class LeRobotDatasetWrapper(LeRobotDataset):
         self.meta.info['splits'] = {'train': f"0:{self.meta.info['total_episodes']}"}
         self.meta.info['robot_type'] = self._robot_type
 
+        # Build episode metadata dict with stats (new LeRobot v3.0 format)
         episode_dict = {
             'episode_index': episode_index,
             'tasks': episode_tasks,
             'length': episode_length,
         }
+        episode_dict.update(flatten_dict({'stats': episode_stats}))
 
+        # Save episode metadata using parent class method
+        self._save_episode_metadata(episode_dict)
+
+        # Write info file
         write_info(self.meta.info, self.meta.root)
-        write_episode(episode_dict, self.meta.root)
-        write_episode_stats(episode_index, episode_stats, self.meta.root)
+
+        # Aggregate and write dataset-level stats
+        self.stats = aggregate_stats([self.stats, episode_stats]) if self.stats is not None else episode_stats
+        write_stats(self.stats, self.meta.root)
 
     def _create_video(
             self,
