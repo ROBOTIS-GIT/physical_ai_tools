@@ -739,3 +739,57 @@ doc/
 .claude/
 
 
+##############################
+# Third-Party Model Workspaces
+##############################
+
+# All third-party model workspaces follow the same structure:
+# third_party/<model>/workspace/{checkpoints,datasets,outputs}
+# These contain large binary files and should never be committed.
+
+# LeRobot workspace
+third_party/lerobot/workspace/checkpoints/
+third_party/lerobot/workspace/datasets/
+third_party/lerobot/workspace/outputs/
+
+# OpenVLA workspace (future)
+third_party/openvla/workspace/checkpoints/
+third_party/openvla/workspace/datasets/
+third_party/openvla/workspace/outputs/
+
+# GR00T workspace (future)
+third_party/groot/workspace/checkpoints/
+third_party/groot/workspace/datasets/
+third_party/groot/workspace/outputs/
+
+# Legacy outputs (to be removed)
+third_party/lerobot_old/
+
+# Docker runtime workspace
+docker/workspace/
+
+# HuggingFace cache
+docker/huggingface/
+
+##############################
+# Model Weight Files
+##############################
+
+# PyTorch model files
+*.safetensors
+*.pt
+*.pth
+*.ckpt
+
+# TensorFlow/Keras model files
+*.h5
+*.keras
+
+# ONNX model files
+*.onnx
+
+# Generic binary model files
+*.bin
+
+# Exception: keep requirements files
+!requirements*.txt
