@@ -8,7 +8,7 @@ This document defines the standard workspace structure for all opensource AI mod
 
 ```
 third_party/<model_name>/
-├── <model_name>/           # Original repository (git submodule)
+├── <model_name>/           # Original repository (git submodule) ← SUBMODULE HERE
 ├── executor.py             # Zenoh-based executor for ROS2 communication
 ├── Dockerfile              # Container build definition
 ├── entrypoint.sh           # Container entrypoint script
@@ -19,6 +19,56 @@ third_party/<model_name>/
     ├── datasets/           # Training/evaluation datasets
     └── outputs/            # Logs, tensorboard, misc outputs
 ```
+
+## Git Submodule Rules (CRITICAL)
+
+### Submodule Path Convention
+
+**CORRECT**: Submodule은 반드시 `third_party/<model>/<model>/` 경로에 추가
+
+```bash
+# CORRECT - submodule은 nested 경로에
+git submodule add https://github.com/huggingface/lerobot.git third_party/lerobot/lerobot
+
+# .gitmodules 결과:
+[submodule "third_party/lerobot/lerobot"]
+    path = third_party/lerobot/lerobot
+    url = https://github.com/huggingface/lerobot.git
+```
+
+**WRONG**: Submodule을 `third_party/<model>/`에 직접 추가하면 안됨
+
+```bash
+# WRONG - 이렇게 하면 우리 통합 코드(executor.py 등)를 넣을 공간이 없음
+git submodule add https://github.com/huggingface/lerobot.git third_party/lerobot
+```
+
+### 파일 소유권 구분
+
+| 경로 | 소유권 | 설명 |
+|------|--------|------|
+| `third_party/<model>/` | **우리 코드** | executor.py, Dockerfile, workspace/ 등 |
+| `third_party/<model>/<model>/` | **외부 레포** | 원본 오픈소스 코드 (submodule, 수정 금지) |
+
+### Submodule 추가 절차
+
+1. **먼저 통합 폴더 생성**:
+   ```bash
+   mkdir -p third_party/<model>/workspace/{checkpoints,datasets,outputs}
+   ```
+
+2. **그 다음 submodule 추가**:
+   ```bash
+   git submodule add <repo_url> third_party/<model>/<model>
+   ```
+
+3. **통합 코드 작성**:
+   ```bash
+   # 이 파일들은 우리가 작성/관리
+   third_party/<model>/executor.py
+   third_party/<model>/Dockerfile
+   third_party/<model>/entrypoint.sh
+   ```
 
 ## Workspace Directory Details
 

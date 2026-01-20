@@ -1,4 +1,4 @@
-[submodule "third_party/lerobot"]
-	path = third_party/lerobot
+[submodule "third_party/lerobot/lerobot"]
+	path = third_party/lerobot/lerobot
 	url = https://github.com/huggingface/lerobot.git
 	branch = main
