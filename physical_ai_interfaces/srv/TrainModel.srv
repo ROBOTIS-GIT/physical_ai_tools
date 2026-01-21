@@ -1,0 +1,13 @@
+string policy_type
+string dataset_path
+string output_dir
+int32 steps
+int32 batch_size
+float32 learning_rate
+int32 save_freq
+string wandb_project
+bool push_to_hub
+---
+bool success
+string message
+string job_id

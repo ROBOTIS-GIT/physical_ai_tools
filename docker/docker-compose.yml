@@ -110,6 +110,9 @@ services:
       # Zenoh SDK (shared across all opensource integrations)
       - ../third_party/zenoh_ros2_sdk:/zenoh_sdk:ro
       
+      # LeRobot executor.py (for development - mount latest code)
+      - ../third_party/lerobot/executor.py:/app/executor.py:ro
+      
       # Timezone
       - /etc/timezone:/etc/timezone:ro
       - /etc/localtime:/etc/localtime:ro

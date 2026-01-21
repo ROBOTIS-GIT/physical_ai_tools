@@ -1,0 +1,6 @@
+string model_path
+string[] image_topics
+string joint_state_topic
+---
+bool success
+string message

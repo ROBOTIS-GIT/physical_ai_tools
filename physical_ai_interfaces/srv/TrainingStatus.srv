@@ -1,0 +1,12 @@
+# Request current training status
+---
+string state
+int32 step
+int32 total_steps
+float32 loss
+float32 learning_rate
+float32 gradient_norm
+float32 elapsed_seconds
+float32 eta_seconds
+string job_id
+string message

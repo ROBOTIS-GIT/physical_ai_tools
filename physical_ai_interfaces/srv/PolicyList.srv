@@ -1,0 +1,5 @@
+string category
+---
+bool success
+string message
+string policies_json

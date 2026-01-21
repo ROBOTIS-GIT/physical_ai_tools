@@ -1,0 +1,5 @@
+# Request list of available models
+---
+bool success
+string message
+string models_json

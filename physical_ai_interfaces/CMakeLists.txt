@@ -11,6 +11,7 @@ rosidl_generate_interfaces(${PROJECT_NAME}
   "msg/TaskInfo.msg"
   "msg/TaskStatus.msg"
   "msg/TrainingInfo.msg"
+  "msg/TrainingProgress.msg"
   "msg/TrainingStatus.msg"
   "srv/BrowseFile.srv"
   "srv/ControlHfServer.srv"
@@ -30,6 +31,13 @@ rosidl_generate_interfaces(${PROJECT_NAME}
   "srv/SendTrainingCommand.srv"
   "srv/SetHFUser.srv"
   "srv/SetRobotType.srv"
+  "srv/CheckpointList.srv"
+  "srv/ModelList.srv"
+  "srv/PolicyList.srv"
+  "srv/StartInference.srv"
+  "srv/StopTraining.srv"
+  "srv/TrainModel.srv"
+  "srv/TrainingStatus.srv"
 )
 
 install(

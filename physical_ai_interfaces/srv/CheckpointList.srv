@@ -1,0 +1,5 @@
+# Request list of available checkpoints
+---
+bool success
+string message
+string checkpoints_json

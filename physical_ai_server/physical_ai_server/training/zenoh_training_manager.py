@@ -50,6 +50,7 @@ class ZenohTrainingManager:
         self._status_callback: Optional[Callable] = None
         self._current_status = "idle"
         self._current_step = 0
+        self._total_steps = 0
         self._current_loss = float('nan')
         self._training_completed = False
         
@@ -77,20 +78,29 @@ class ZenohTrainingManager:
 
     def _on_status_update(self, status_data: dict):
         print(f"[ZenohTrainingManager] Status update received: {status_data}")
-        self._current_status = status_data.get("status", "unknown")
+        new_status = status_data.get("status", "unknown")
         
         # Update training metrics from status
         if "step" in status_data:
             self._current_step = status_data.get("step", 0)
+        if "total_steps" in status_data:
+            self._total_steps = status_data.get("total_steps", 0)
         if "loss" in status_data:
             loss_value = status_data.get("loss")
             if loss_value is not None and loss_value != 0:
                 self._current_loss = float(loss_value)
         
         # Set completion flag if training finished
-        if self._current_status in ["completed", "failed", "stopped"]:
+        # Executor states: idle, training, inference, stopping, error
+        # If we were training and state changed to idle, training is complete
+        if self._current_status == "training" and new_status == "idle":
             self._training_completed = True
-            print(f"[ZenohTrainingManager] Training {self._current_status}")
+            print(f"[ZenohTrainingManager] Training completed (state changed to idle)")
+        elif new_status == "error":
+            self._training_completed = True
+            print(f"[ZenohTrainingManager] Training failed with error")
+        
+        self._current_status = new_status
         
         if self._status_callback:
             self._status_callback(status_data)
@@ -166,8 +176,12 @@ class ZenohTrainingManager:
 
     def train(self) -> LeRobotResponse:
         """Start training and wait for completion"""
+        print(f"[ZenohTrainingManager] train() called, connected={self._connected}")
+        
         if not self._connected:
+            print(f"[ZenohTrainingManager] Not connected, attempting to connect...")
             if not self.connect():
+                print(f"[ZenohTrainingManager] Connection failed!")
                 return LeRobotResponse(
                     success=False,
                     message="Failed to connect to LeRobot server",
@@ -175,23 +189,26 @@ class ZenohTrainingManager:
                     request_id=""
                 )
 
-        # Reset completion flag
         self._training_completed = False
         self._current_status = "idle"
 
-        # Start training
+        print(f"[ZenohTrainingManager] Starting training: policy={self.training_info.policy_type}, dataset={self.training_info.dataset}")
+        
         if self.resume and self.resume_model_path:
             response = self.client.resume_training(self.resume_model_path)
         else:
             response = self.client.start_training(
                 policy_type=self.training_info.policy_type,
                 dataset_path=self.training_info.dataset,
-                output_dir=self.training_info.output_folder_name or None,
-                num_epochs=self.training_info.steps if self.training_info.steps > 0 else None,
-                batch_size=self.training_info.batch_size if self.training_info.batch_size > 0 else None
+                output_dir=self.training_info.output_folder_name or "",
+                num_epochs=self.training_info.steps if self.training_info.steps > 0 else 0,
+                batch_size=self.training_info.batch_size if self.training_info.batch_size > 0 else 0
             )
         
+        print(f"[ZenohTrainingManager] start_training response: success={response.success}, message={response.message}")
+        
         if not response.success:
+            print(f"[ZenohTrainingManager] Training start failed: {response.message}")
             return response
         
         print(f"[ZenohTrainingManager] Training started, waiting for completion...")

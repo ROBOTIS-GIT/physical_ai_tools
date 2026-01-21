@@ -1,0 +1,4 @@
+# Request to stop ongoing training
+---
+bool success
+string message

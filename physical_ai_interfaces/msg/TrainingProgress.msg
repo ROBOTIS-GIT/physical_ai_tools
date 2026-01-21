@@ -1,0 +1,10 @@
+int32 step
+int32 total_steps
+float64 epoch
+float64 loss
+float64 learning_rate
+float64 gradient_norm
+float64 samples_per_second
+float64 elapsed_seconds
+float64 eta_seconds
+string state
