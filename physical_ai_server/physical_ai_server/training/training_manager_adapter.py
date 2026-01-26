@@ -195,7 +195,7 @@ class TrainingManagerAdapter:
     def get_current_training_status(self) -> TrainingStatus:
         """
         Get current training status.
-        
+
         Returns
         -------
         TrainingStatus
@@ -207,7 +207,7 @@ class TrainingManagerAdapter:
             status.current_step = 0
             status.current_loss = float('nan')
             return status
-        
+
         return self._manager.get_current_training_status()
 
     def train(self):
