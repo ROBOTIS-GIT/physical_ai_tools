@@ -31,6 +31,7 @@ services:
       - ./huggingface:/root/.cache/huggingface
       - /etc/timezone:/etc/timezone:ro
       - /etc/localtime:/etc/localtime:ro
+      - /var/run/docker.sock:/var/run/docker.sock
     privileged: true
     command: bash
     runtime: nvidia
@@ -44,6 +45,10 @@ services:
   isaac_gr00t:
     container_name: isaac_gr00t
     image: isaac-gr00t-n1.5:l4t-jp6.2
+    build:
+      context: ../Isaac-GR00T
+      dockerfile: orin.Dockerfile
+    pull_policy: build
     tty: true
     restart: always
     cap_add:
@@ -54,7 +59,7 @@ services:
       memlock: 8428281856
     network_mode: host
     environment:
-      - PYTHONPATH=.:$PYTHONPATH
+      - PYTHONPATH=/workspace:$PYTHONPATH
       - TERM=${TERM:-xterm-256color}
       - EDITOR=vi
     volumes:
