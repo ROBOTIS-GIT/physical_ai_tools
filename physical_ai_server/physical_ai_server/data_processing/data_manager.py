@@ -246,13 +246,15 @@ class DataManager:
             self,
             images: dict,
             state: list,
-            action: list) -> dict:
+            action: list,
+            task_phase: int = 0) -> dict:
 
         frame = {}
         for camera_name, image in images.items():
             frame[f'observation.images.{camera_name}'] = image
         frame['observation.state'] = np.array(state)
-        frame['action'] = np.array(action)
+        action_with_phase = np.append(np.array(action), float(task_phase))
+        frame['action'] = action_with_phase
         self.current_instruction = self._task_info.task_instruction[
             self._current_task % len(self._task_info.task_instruction)
         ]
@@ -508,10 +510,11 @@ class DataManager:
             'shape': (len(joint_list),)
         }
 
+        action_names = list(joint_list) + ['task_phase']
         features['action'] = {
             'dtype': 'float32',
-            'names': joint_list,
-            'shape': (len(joint_list),)
+            'names': action_names,
+            'shape': (len(action_names),)
         }
         return LeRobotDatasetWrapper.create(
                 repo_id=repo_id,

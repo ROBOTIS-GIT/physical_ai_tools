@@ -37,6 +37,7 @@ class ZmqInferenceServer:
         self.socket.bind(f'tcp://{server_address}:{port}')
         self._callback_group = {}
         self.policy = None
+        self.has_task_phase = False
 
         # Async inference management
         self.inference_tasks = {}  # task_id -> {status, result, thread}
@@ -83,6 +84,8 @@ class ZmqInferenceServer:
                 'status': 'error',
                 'message': "Missing required fields: 'policy_type', 'policy_path', 'robot_type'"
             }
+
+        self.has_task_phase = data.get('has_task_phase', False)
 
         try:
             if data['policy_type'] == 'GR00T_N1_5':
@@ -168,6 +171,8 @@ class ZmqInferenceServer:
         def run_inference():
             try:
                 result = self.policy.get_action(data)
+                # Extract task_phase from action arrays if present
+                result = self._extract_task_phase(result)
                 with self.inference_lock:
                     if task_id in self.inference_tasks:
                         self.inference_tasks[task_id]['status'] = 'completed'
@@ -191,6 +196,45 @@ class ZmqInferenceServer:
             'task_id': task_id,
             'message': 'Inference started'
         }
+
+    def _extract_task_phase(self, result: dict) -> dict:
+        """Extract task_phase from action arrays if the last dim is task_phase.
+
+        When the policy was trained with task_phase appended to action,
+        each action array's last element is the task_phase value.
+        This method strips it and adds a separate 'task_phase' key.
+
+        Args:
+            result: Dict with action arrays (e.g., left_action, right_action)
+
+        Returns:
+            Modified result dict with optional 'task_phase' key
+        """
+        if not self.has_task_phase or not isinstance(result, dict):
+            return result
+
+        import numpy as np
+
+        # Collect task_phase from all action arrays and average
+        phase_values = []
+        for key in list(result.keys()):
+            val = result[key]
+            if hasattr(val, 'shape') and len(val.shape) >= 1:
+                # Take the last element of the last dim as task_phase
+                if len(val.shape) == 2:
+                    # Shape: (horizon, action_dim) -> strip last col
+                    phase_values.extend(val[:, -1].tolist())
+                    result[key] = val[:, :-1]
+                elif len(val.shape) == 1:
+                    phase_values.append(float(val[-1]))
+                    result[key] = val[:-1]
+
+        if phase_values:
+            # Use the mean and round to nearest class
+            avg_phase = np.mean(phase_values)
+            result['task_phase'] = int(np.clip(np.round(avg_phase), 0, 2))
+
+        return result
 
     def _check_inference_callback(self, data: dict) -> dict:
         task_id = data.get('task_id')

@@ -125,6 +125,7 @@ class PhysicalAIServer(Node):
         )
         self._used_action_count = 0
         self._last_executed_action = []
+        self._current_task_phase = 0
 
         self.previous_data_manager_status = None
 
@@ -603,11 +604,13 @@ class PhysicalAIServer(Node):
                     self.communicator.publish_status(status=current_status)
                     return
 
-                action = self.inference_manager.predict(
+                action, task_phase = self.inference_manager.predict(
                         images=camera_data,
                         state=follower_data,
                         task_instruction=self.task_instruction[0]
                     )
+                if task_phase is not None:
+                    self._current_task_phase = task_phase
             except Exception as e:
                 self.get_logger().error(f'Inference failed, please check : {str(e)}')
                 # Stop inference on error
@@ -632,6 +635,7 @@ class PhysicalAIServer(Node):
             )
             current_status = self.data_manager.get_current_record_status()
             current_status.phase = TaskStatus.INFERENCING
+            current_status.task_phase_classification = self._current_task_phase
             self.communicator.publish_status(status=current_status)
 
         except Exception as e:
@@ -654,6 +658,7 @@ class PhysicalAIServer(Node):
         self.wait_inference = False
         self._used_action_count = 0
         self._last_executed_action = []
+        self._current_task_phase = 0
         self.start_inference_once = False
         self.get_logger().info('Inference state variables reset')
 
@@ -754,6 +759,9 @@ class PhysicalAIServer(Node):
                     if self.zmq_client.check_inference_ready():
                         try:
                             result = self.zmq_client.get_inference_result()
+                            # Extract task_phase if present in result
+                            if 'task_phase' in result:
+                                self._current_task_phase = int(result.pop('task_phase'))
                             left_action, right_action = result.values()
                             new_action = np.hstack((left_action, right_action)).tolist()
                             skip_action = 0
@@ -833,6 +841,7 @@ class PhysicalAIServer(Node):
             )
             current_status = self.data_manager.get_current_record_status()
             current_status.phase = TaskStatus.INFERENCING
+            current_status.task_phase_classification = self._current_task_phase
             self.communicator.publish_status(status=current_status)
 
         except Exception as e:

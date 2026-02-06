@@ -34,6 +34,7 @@ class InferenceManager:
         self.policy_type = None
         self.policy_path = None
         self.policy = None
+        self.has_task_phase = False
 
     def validate_policy(self, policy_path: str) -> bool:
         result_message = ''
@@ -66,15 +67,35 @@ class InferenceManager:
         try:
             policy_cls = self._get_policy_class(self.policy_type)
             self.policy = policy_cls.from_pretrained(self.policy_path)
+            self._detect_task_phase()
             return True
         except Exception as e:
             print(f'Failed to load policy from {self.policy_path}: {e}')
             return False
 
+    def _detect_task_phase(self):
+        """Check if the loaded policy outputs task_phase as the last action dim."""
+        try:
+            config = self.policy.config
+            output_features = getattr(config, 'output_features', {})
+            for key, feature in output_features.items():
+                if key == 'action':
+                    names = getattr(feature, 'names', None)
+                    if names is None:
+                        names = feature.get('names', []) if isinstance(feature, dict) else []
+                    if isinstance(names, (list, tuple)) and 'task_phase' in names:
+                        self.has_task_phase = True
+                        print('Task phase classification detected in policy output')
+                        return
+            self.has_task_phase = False
+        except Exception:
+            self.has_task_phase = False
+
     def clear_policy(self):
         if hasattr(self, 'policy'):
             del self.policy
             self.policy = None
+            self.has_task_phase = False
         else:
             print('No policy to clear.')
 
@@ -85,14 +106,20 @@ class InferenceManager:
             self,
             images: dict[str, np.ndarray],
             state: list[float],
-            task_instruction: str = None) -> list:
+            task_instruction: str = None) -> tuple:
 
         observation = self._preprocess(images, state, task_instruction)
         with torch.inference_mode():
             action = self.policy.select_action(observation)
             action = action.squeeze(0).to('cpu').numpy()
 
-        return action
+        if self.has_task_phase:
+            robot_action = action[:-1]
+            task_phase_raw = action[-1]
+            task_phase = int(np.clip(np.round(task_phase_raw), 0, 2))
+            return robot_action, task_phase
+        else:
+            return action, None
 
     def _preprocess(
             self,
