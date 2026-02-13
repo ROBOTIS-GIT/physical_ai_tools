@@ -16,6 +16,11 @@ third_party/groot/workspace/
 **/__pycache__/
 **/*.pyc
 
+# ROS2 build artifacts (should not be in Docker image)
+install/
+build/
+log/
+
 # IDE
 **/.idea/
 **/.vscode/

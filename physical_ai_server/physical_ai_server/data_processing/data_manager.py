@@ -519,8 +519,12 @@ class DataManager:
         return info.get('robot_type', '')
 
     @staticmethod
-    def get_huggingface_user_id():
+    def get_huggingface_user_id(hf_endpoint='http://192.168.60.152:1000'):
         def api_call():
+            # Set custom HF endpoint
+            os.environ['HF_ENDPOINT'] = hf_endpoint
+            print(f'[get_huggingface_user_id] Using HF endpoint: {hf_endpoint}')
+
             api = HfApi()
             try:
                 user_info = api.whoami()
@@ -563,23 +567,40 @@ class DataManager:
             return None
 
     @staticmethod
-    def register_huggingface_token(hf_token):
-        def validate_token():
-            api = HfApi(token=hf_token)
+    def register_huggingface_token(hf_token, hf_endpoint='http://192.168.60.152:1000'):
+        def validate_and_save_token():
+            # Set custom HF endpoint BEFORE any HF API calls
+            os.environ['HF_ENDPOINT'] = hf_endpoint
+            print(f'[register_huggingface_token] Using HF endpoint: {hf_endpoint}')
+
             try:
+                # Verify the token works with custom endpoint
+                api = HfApi(token=hf_token)
                 user_info = api.whoami()
                 user_name = user_info['name']
                 print(f'Successfully validated HuggingFace token for user: {user_name}')
+
+                # Save token using login() function
+                from huggingface_hub import login
+                login(token=hf_token, add_to_git_credential=False)
+
+                # Verify token was saved
+                from pathlib import Path
+                token_path = Path.home() / ".cache" / "huggingface" / "token"
+                print(f'Token saved successfully to {token_path}')
+
                 return True
             except Exception as e:
-                print(f'Token is invalid, please check hf token: {e}')
+                print(f'Token is invalid or save failed: {e}')
+                import traceback
+                traceback.print_exc()
                 return False
 
         # Use queue to get result from thread
         result_queue = queue.Queue()
 
         def worker():
-            result = validate_token()
+            result = validate_and_save_token()
             result_queue.put(result)
 
         # Start thread and wait with timeout
@@ -591,24 +612,13 @@ class DataManager:
             is_valid = result_queue.get(timeout=1.5)
             if not is_valid:
                 return False
+
+            # Token validation and save successful
+            print('Token validation and save completed successfully')
+            return True
+
         except queue.Empty:
             print('Token validation timed out after 1.5 seconds')
-            return False
-
-        try:
-            result = subprocess.run([
-                'huggingface-cli', 'login', '--token', hf_token
-            ], capture_output=True, text=True, check=True)
-
-            print('Successfully logged in to HuggingFace Hub')
-            return result
-
-        except subprocess.CalledProcessError as e:
-            print(f'Failed to login with huggingface-cli: {e}')
-            print(f'Error output: {e.stderr}')
-            return False
-        except FileNotFoundError:
-            print('huggingface-cli not found. Please install package.')
             return False
 
     @staticmethod
@@ -940,3 +950,143 @@ class DataManager:
         for item in collection_list.items:
             repo_list_in_collection.append(item.item_id)
         return repo_list_in_collection
+
+    @staticmethod
+    def upload_rosbag_folders(
+        folder_paths,
+        hf_token,
+        hf_endpoint='http://192.168.60.152:1000',
+        progress_callback=None
+    ):
+        """
+        Upload multiple rosbag folders to custom HuggingFace Hub.
+
+        Args:
+            folder_paths: List of rosbag folder paths to upload
+            hf_token: HuggingFace authentication token
+            hf_endpoint: Custom HF Hub endpoint (default: internal server)
+            progress_callback: Optional callback function for progress updates
+                             Signature: callback(folder_name, percentage, status, error=None)
+
+        Returns:
+            Dict with upload results:
+            {
+                'success': bool,
+                'results': [
+                    {
+                        'folder_name': str,
+                        'repo_id': str,
+                        'success': bool,
+                        'error': str (optional)
+                    },
+                    ...
+                ]
+            }
+        """
+        import os
+
+        try:
+            # Set custom HF endpoint
+            os.environ['HF_ENDPOINT'] = hf_endpoint
+            print(f'[upload_rosbag_folders] Using HF endpoint: {hf_endpoint}')
+
+            # Initialize HuggingFace API with token
+            # If hf_token is None, HfApi will use the saved token from ~/.cache/huggingface/token
+            if hf_token is None:
+                print('[upload_rosbag_folders] Using saved token from server')
+                api = HfApi()  # Use saved token
+            else:
+                api = HfApi(token=hf_token)  # Use provided token
+
+            # Verify authentication and get username
+            try:
+                user_info = api.whoami()
+                username = user_info['name']
+                print(f'[upload_rosbag_folders] Authenticated as: {username}')
+            except Exception as auth_e:
+                print(f'[upload_rosbag_folders] Authentication failed: {auth_e}')
+                return {
+                    'success': False,
+                    'results': [],
+                    'error': f'Authentication failed: {auth_e}'
+                }
+
+            results = []
+
+            # Upload each folder
+            for folder_path in folder_paths:
+                folder_path_obj = Path(folder_path)
+                folder_name = folder_path_obj.name
+                repo_id = f"{username}/{folder_name}"
+
+                print(f'[upload_rosbag_folders] Processing folder: {folder_name} -> {repo_id}')
+
+                try:
+                    # Notify upload start
+                    if progress_callback:
+                        progress_callback(folder_name, 0, 'starting')
+
+                    # Create repository
+                    print(f'[upload_rosbag_folders] Creating repository: {repo_id}')
+                    api.create_repo(
+                        repo_id=repo_id,
+                        repo_type='dataset',
+                        private=False,
+                        exist_ok=True
+                    )
+
+                    # Notify upload in progress
+                    if progress_callback:
+                        progress_callback(folder_name, 10, 'uploading')
+
+                    # Upload folder contents
+                    print(f'[upload_rosbag_folders] Uploading folder: {folder_path}')
+                    api.upload_folder(
+                        folder_path=folder_path,
+                        repo_id=repo_id,
+                        repo_type='dataset',
+                    )
+
+                    # Notify completion
+                    if progress_callback:
+                        progress_callback(folder_name, 100, 'completed')
+
+                    results.append({
+                        'folder_name': folder_name,
+                        'repo_id': repo_id,
+                        'success': True,
+                    })
+
+                    print(f'[upload_rosbag_folders] Successfully uploaded {folder_name} to {repo_id}')
+
+                except Exception as e:
+                    error_msg = str(e)
+                    print(f'[upload_rosbag_folders] Failed to upload {folder_name}: {error_msg}')
+
+                    # Notify failure
+                    if progress_callback:
+                        progress_callback(folder_name, 0, 'failed', error=error_msg)
+
+                    results.append({
+                        'folder_name': folder_name,
+                        'repo_id': repo_id,
+                        'success': False,
+                        'error': error_msg,
+                    })
+
+            # Return overall result
+            all_success = all(r['success'] for r in results)
+            return {
+                'success': all_success,
+                'results': results,
+            }
+
+        except Exception as e:
+            print(f'[upload_rosbag_folders] Unexpected error: {e}')
+            import traceback
+            print(f'Traceback:\n{traceback.format_exc()}')
+            return {
+                'success': False,
+                'results': [],
+                'error': str(e)
+            }

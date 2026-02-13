@@ -24,6 +24,7 @@ const PageType = {
   TRAINING: 'training',
   EDIT_DATASET: 'edit_dataset',
   REPLAY: 'replay',
+  DATA_UPLOADER: 'data_uploader',
 };
 
 export default PageType;

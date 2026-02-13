@@ -908,6 +908,73 @@ class PhysicalAIServer(Node):
                     response.success = False
                     response.message = 'Failed to start MP4 conversion'
 
+            elif request.command == 10:  # UPLOAD_ROSBAG
+                # Handle rosbag upload to HuggingFace Hub
+                try:
+                    # Extract parameters from request
+                    import json
+                    data = json.loads(request.data) if isinstance(request.data, str) else request.data
+
+                    folder_paths = data.get('folder_paths', [])
+                    hf_token = data.get('hf_token', '')
+                    hf_endpoint = data.get('hf_endpoint', 'http://192.168.60.152:1000')
+
+                    if not folder_paths:
+                        response.success = False
+                        response.message = 'No folders specified for upload'
+                        return response
+
+                    # If no token provided, use saved token (pass None to use saved token)
+                    if not hf_token:
+                        hf_token = None
+                        self.get_logger().info('No token provided, will use saved token from server')
+
+                    self.get_logger().info(
+                        f'Starting upload of {len(folder_paths)} rosbag folder(s) to {hf_endpoint}'
+                    )
+
+                    # Define progress callback
+                    def progress_callback(folder_name, percentage, status, error=None):
+                        """Callback for upload progress updates."""
+                        self.get_logger().info(
+                            f'Upload progress: {folder_name} - {percentage}% ({status})'
+                        )
+                        # TODO: Publish to ROS topic for UI updates
+
+                    # Start upload in background thread
+                    def upload_worker():
+                        try:
+                            result = DataManager.upload_rosbag_folders(
+                                folder_paths=folder_paths,
+                                hf_token=hf_token,
+                                hf_endpoint=hf_endpoint,
+                                progress_callback=progress_callback
+                            )
+
+                            if result['success']:
+                                self.get_logger().info(
+                                    f"Upload completed successfully: {len(result['results'])} folders"
+                                )
+                            else:
+                                self.get_logger().error(
+                                    f"Upload failed: {result.get('error', 'Unknown error')}"
+                                )
+                        except Exception as e:
+                            self.get_logger().error(f'Upload worker error: {e}')
+                            import traceback
+                            self.get_logger().error(traceback.format_exc())
+
+                    upload_thread = threading.Thread(target=upload_worker, daemon=True)
+                    upload_thread.start()
+
+                    response.success = True
+                    response.message = f'Started uploading {len(folder_paths)} folder(s)'
+
+                except Exception as e:
+                    self.get_logger().error(f'Error starting upload: {e}')
+                    response.success = False
+                    response.message = f'Error starting upload: {str(e)}'
+
             else:
                 if not self.on_recording and not self.on_inference:
                     # Not recording - handle cancel to toggle previous episode review
@@ -1011,6 +1078,10 @@ class PhysicalAIServer(Node):
                             self.communicator.publish_status(status=final_status)
                         response.success = True
                         response.message = 'Recording cancelled'
+
+                    else:
+                        response.success = False
+                        response.message = f'Unknown command: {request.command}'
 
         except Exception as e:
             self.get_logger().error(f'Error in user interaction: {str(e)}')
