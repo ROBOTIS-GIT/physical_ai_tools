@@ -3,49 +3,48 @@ rosbag_to_lerobot_converter:
     # Basic conversion parameters
     # Support both single directory (string) and multiple directories (list)
     rosbag_dir: 
-    - '/workspace/physical_ai_server/ROBOTIS/ffw_bg2_rev4_PickMultiCoffee_Env3_Task2'
-    - '/workspace/physical_ai_server/ROBOTIS/ffw_bg2_rev4_PickMultiCoffee_Env3_Task3'
-    - '/workspace/physical_ai_server/ROBOTIS/ffw_bg2_rev4_PickMultiCoffee_Env3_Task4'
-    - '/workspace/physical_ai_server/ROBOTIS/ffw_bg2_rev4_PickMultiCoffee_Env3_Task5'
-    - '/workspace/physical_ai_server/ROBOTIS/ffw_bg2_rev4_PickMultiCoffee_Env4_Task1_2'
-    - '/workspace/physical_ai_server/ROBOTIS/ffw_bg2_rev4_PickMultiCoffee_Env4_Task1_3'
-    - '/workspace/physical_ai_server/ROBOTIS/ffw_bg2_rev4_PickMultiCoffee_Env4_Task1_4'
-    output_repo_id: 'ROBOTIS/ffw_bg2_rev4_PickMultiCoffee_250904_1_rosbag'
+    - '/workspace/rosbag/kimtaehyeong/ffw_sg2_rev1_task_2602191114'
+    output_repo_id: 'ROBOTIS/ffw_sg2_rev1_task_2602191114_converted_v21'
     task_name: 'Pick up the coffee and place it into the carton'
-    fps: 10
+    fps: 15
     use_videos: true
     robot_type: 'ffw_arm_only'
     use_optimized_save_mode: true
     # Map from rosbag directory path to list of episode indices to skip
     skip_episodes:
-      '/workspace/physical_ai_server/ROBOTIS/ffw_bg2_rev4_PickMultiCoffee_Env3_Task2': []
-      '/workspace/physical_ai_server/ROBOTIS/ffw_bg2_rev4_PickMultiCoffee_Env3_Task3': []
-      '/workspace/physical_ai_server/ROBOTIS/ffw_bg2_rev4_PickMultiCoffee_Env3_Task4': [0, 12]
-      '/workspace/physical_ai_server/ROBOTIS/ffw_bg2_rev4_PickMultiCoffee_Env3_Task5': []
-      '/workspace/physical_ai_server/ROBOTIS/ffw_bg2_rev4_PickMultiCoffee_Env4_Task1_2': []
-      '/workspace/physical_ai_server/ROBOTIS/ffw_bg2_rev4_PickMultiCoffee_Env4_Task1_3': [21, 22, 23, 24, 25, 31]
-      '/workspace/physical_ai_server/ROBOTIS/ffw_bg2_rev4_PickMultiCoffee_Env4_Task1_4': []
+      '/workspace/rosbag/kimtaehyeong/ffw_sg2_rev1_task_2602191114': []
 
     # Camera configuration
     camera_topics:
-      cam_head: '/zed/zed_node/left/image_rect_color/compressed'
-      cam_head_right: '/zed/zed_node/right/image_rect_color/compressed'
-      cam_wrist_left: '/camera_left/camera_left/color/image_rect_raw/compressed'
-      cam_wrist_right: '/camera_right/camera_right/color/image_rect_raw/compressed'
+      cam_left_head: '/robot/camera/cam_left_head/image_raw/compressed'
+      cam_right_head: '/robot/camera/cam_right_head/image_raw/compressed'
+      cam_left_wrist: '/robot/camera/cam_left_wrist/image_raw/compressed'
+      cam_right_wrist: '/robot/camera/cam_right_wrist/image_raw/compressed'
+
+    # Resize all camera images to [width, height] before encoding. null = no resize.
+    image_resize: [256, 256]
 
     # Camera rotations (0, 90, 180, 270 degrees)
     camera_rotations:
-      cam_wrist_left: 270
-      cam_wrist_right: 270
+      cam_left_wrist: 270
+      cam_right_wrist: 270
+
+    # Per-joint offsets added to leader (action) data. Omit a joint to apply zero offset.
+    action_joint_offset:
+      arm_l_joint6: 0.3
+      arm_r_joint6: 0.3
+      gripper_l_joint1: 0.1
+      gripper_r_joint1: 0.1
 
     # Joint state topics
     joint_state_topics:
-      joints: '/joint_states'
+      arm_left_follower: '/robot/arm_left_follower/joint_states'
+      arm_right_follower: '/robot/arm_right_follower/joint_states'
 
     # Action topics
     action_topics:
-      leader_joints_left: '/leader/joint_trajectory_command_broadcaster_left/joint_trajectory'
-      leader_joints_right: '/leader/joint_trajectory_command_broadcaster_right/joint_trajectory'
+      arm_left_leader: '/robot/arm_left_leader/joint_states'
+      arm_right_leader: '/robot/arm_right_leader/joint_states'
 
     # Joint names in order
     joint_names:

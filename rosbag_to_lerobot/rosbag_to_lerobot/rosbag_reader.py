@@ -31,7 +31,7 @@ class RosbagReader:
         self.bridge = CvBridge()
         self.fps = fps
 
-    def read_bag_file(self, bag_path: Path) -> Dict[str, List[Any]]:
+    def read_bag_file(self, bag_path: Path, action_topic_names: set = None) -> Dict[str, List[Any]]:
         """
         Read a ROS2 bag file and extract messages using MCAP format.
 
@@ -90,37 +90,29 @@ class RosbagReader:
 
             # Check message type using isinstance for proper type checking
             if isinstance(msg_data, JointState):
-                if topic_name not in messages['joint_states']:
-                    messages['joint_states'][topic_name] = []
-                messages['joint_states'][topic_name].append((current_timestamp, msg_data))
+                # Route to actions bucket when the topic is a known action topic
+                if action_topic_names and topic_name in action_topic_names:
+                    messages['actions'].setdefault(topic_name, []).append((current_timestamp, msg_data))
+                else:
+                    messages['joint_states'].setdefault(topic_name, []).append((current_timestamp, msg_data))
 
             elif isinstance(msg_data, Odometry):
-                if topic_name not in messages['joint_states']:
-                    messages['joint_states'][topic_name] = []
-                messages['joint_states'][topic_name].append((current_timestamp, msg_data))
+                messages['joint_states'].setdefault(topic_name, []).append((current_timestamp, msg_data))
 
             elif isinstance(msg_data, JointTrajectory):
-                if topic_name not in messages['actions']:
-                    messages['actions'][topic_name] = []
-                messages['actions'][topic_name].append((current_timestamp, msg_data))
+                messages['actions'].setdefault(topic_name, []).append((current_timestamp, msg_data))
 
             elif isinstance(msg_data, Twist):
-                if topic_name not in messages['actions']:
-                    messages['actions'][topic_name] = []
-                messages['actions'][topic_name].append((current_timestamp, msg_data))
+                messages['actions'].setdefault(topic_name, []).append((current_timestamp, msg_data))
 
             elif isinstance(msg_data, CompressedImage):
-                if topic_name not in messages['images']:
-                    messages['images'][topic_name] = []
-                messages['images'][topic_name].append((current_timestamp, msg_data))
+                messages['images'].setdefault(topic_name, []).append((current_timestamp, msg_data))
 
             elif isinstance(msg_data, Image):
-                if topic_name not in messages['images']:
-                    messages['images'][topic_name] = []
-                messages['images'][topic_name].append((current_timestamp, msg_data))
+                messages['images'].setdefault(topic_name, []).append((current_timestamp, msg_data))
 
             else:
-                raise ValueError(f"Unknown message type: {type(msg_data)}")
+                continue  # Ignore unrecognised message types
 
         return messages
 
@@ -391,44 +383,36 @@ class RosbagReader:
 
         # Merge states from all sources
         for state_name, state in latest_joint_states.items():
-            if state is not None:
-                if state_name == 'joints':
-                    # Joint states contain arm, head, gripper joints (excluding mobile base)
-                    # Use the same logic as action processing: filter out mobile base joints
-                    joint_state_names = [name for name in joint_names if name not in ['linear_x', 'linear_y', 'angular_z']]
-                    if len(state) == len(joint_state_names):
-                        # Map joint states to the first part of the combined state
-                        combined_state[:len(state)] = state
+            if state is None:
+                raise ValueError(f"No joint state data found for source: {state_name}")
+
+            if state_name == 'odometry':
+                # Odometry contains mobile base velocity (linear_x, linear_y, angular_z)
+                velocity_names = ['linear_x', 'linear_y', 'angular_z']
+                if len(state) == len(velocity_names):
+                    mobile_base_indices = []
+                    for vel_name in velocity_names:
+                        if vel_name in joint_names:
+                            mobile_base_indices.append(joint_names.index(vel_name))
+
+                    if len(mobile_base_indices) == len(velocity_names):
+                        for i, vel_idx in enumerate(mobile_base_indices):
+                            combined_state[vel_idx] = state[i]
                     else:
-                        raise ValueError(f"Joint state from {state_name} size ({len(state)}) doesn't match expected joint names ({len(joint_state_names)})")
-
-                elif state_name == 'odometry':
-                    # Odometry contains mobile base velocity (linear_x, linear_y, angular_z)
-                    # Use the same logic as action processing: specifically look for mobile base velocity names
-                    velocity_names = ['linear_x', 'linear_y', 'angular_z']
-                    if len(state) == len(velocity_names):
-                        # Check if mobile base joints exist in joint_names
-                        mobile_base_indices = []
-                        for vel_name in velocity_names:
-                            if vel_name in joint_names:
-                                mobile_base_indices.append(joint_names.index(vel_name))
-
-                        if len(mobile_base_indices) == len(velocity_names):
-                            # Map odometry to the correct positions in combined state
-                            for i, vel_idx in enumerate(mobile_base_indices):
-                                combined_state[vel_idx] = state[i]
-                        else:
-                            raise ValueError(f"Not all mobile base joints found in joint_names")
-                    else:
-                        raise ValueError(f"Odometry from {state_name} has unexpected size ({len(state)})")
-
+                        raise ValueError(f"Not all mobile base joints found in joint_names")
                 else:
-                    raise ValueError(f"Unknown joint state source: {state_name}")
+                    raise ValueError(f"Odometry from {state_name} has unexpected size ({len(state)})")
+            else:
+                # Generic JointState source: state is a full-length array (zeros for joints
+                # not owned by this source), so summing correctly fills in each joint's value.
+                if len(state) != len(joint_names):
+                    raise ValueError(f"Joint state from {state_name} size ({len(state)}) doesn't match joint_names ({len(joint_names)})")
+                combined_state += state
 
-                merged_count += 1
+            merged_count += 1
 
         if merged_count != len(latest_joint_states):
-            raise ValueError(f"No joint state data found for all target")
+            raise ValueError(f"No joint state data found for all targets")
 
         return combined_state
 
@@ -460,17 +444,18 @@ def read_episode_from_bag(episode_dir: Path,
     all_images = {cam: [] for cam in camera_topics.keys()}
     all_actions = ({k: [] for k in action_topics.keys()} if action_topics else None)
 
+    action_topic_names = set(action_topics.values()) if action_topics else None
+
     for bag_file in bag_files:
         # try:
-        messages = reader.read_bag_file(bag_file)
+        messages = reader.read_bag_file(bag_file, action_topic_names=action_topic_names)
 
         # Process joint states from different topics
         for state_name, topic_name in joint_state_topics.items():
             if topic_name in messages.get('joint_states', {}):
                 for timestamp, msg in messages['joint_states'][topic_name]:
                     if isinstance(msg, JointState):
-                        joint_state_names = [name for name in joint_names if name not in ['linear_x', 'linear_y', 'angular_z']]
-                        joint_state = reader.extract_joint_state(msg, joint_state_names)
+                        joint_state = reader.extract_joint_state(msg, joint_names)
                         all_joint_states[state_name].append((timestamp, joint_state))
                     elif isinstance(msg, Odometry):
                         velocity_names = ['linear_x', 'linear_y', 'angular_z']
@@ -500,7 +485,12 @@ def read_episode_from_bag(episode_dir: Path,
                     # Ensure the list exists
                     all_actions.setdefault(name, [])
                     for timestamp, msg in messages['actions'][topic]:
-                        if isinstance(msg, JointTrajectory):
+                        if isinstance(msg, JointState):
+                            act_map = {jn: float(pos)
+                                       for jn, pos in zip(msg.name, msg.position)
+                                       if jn in joint_names}
+                            all_actions[name].append((timestamp, act_map))
+                        elif isinstance(msg, JointTrajectory):
                             joint_state_names = [n for n in joint_names if n not in ['linear_x', 'linear_y', 'angular_z']]
                             act_map = reader.extract_joint_trajectory(msg, joint_state_names)
                             all_actions[name].append((timestamp, act_map))

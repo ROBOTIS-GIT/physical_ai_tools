@@ -30,7 +30,7 @@ from std_msgs.msg import String
 
 from lerobot.datasets.lerobot_dataset import LeRobotDataset
 
-from physical_ai_server.data_processing.lerobot_dataset_wrapper import LeRobotDatasetWrapper
+from .lerobot_dataset_wrapper import LeRobotDatasetWrapper
 
 # Import our rosbag reader
 from .rosbag_reader import read_episode_from_bag
@@ -61,6 +61,8 @@ class RosbagToLeRobotConverter(Node):
         self.declare_parameter('config_yaml_path', descriptor=dyn)
         self.declare_parameter('use_optimized_save_mode', descriptor=dyn)
         self.declare_parameter('skip_episodes', descriptor=dyn)
+        self.declare_parameter('image_resize', descriptor=dyn)
+        self.declare_parameter('action_joint_offset', descriptor=dyn)
 
         # Helper parsers to support both YAML dict/list and JSON strings
         def parse_dict_param(param_name: str, required: bool = True) -> Dict[str, Any]:
@@ -139,7 +141,28 @@ class RosbagToLeRobotConverter(Node):
         self.use_videos = self.get_parameter('use_videos').value
         self.robot_type = self.get_parameter('robot_type').value
         self.use_optimized_save_mode = self.get_parameter('use_optimized_save_mode').value
-        
+
+        # Parse optional image_resize parameter: [width, height] or null
+        image_resize_param = self.get_parameter('image_resize').value
+        if image_resize_param is None:
+            # Try YAML fallback
+            config_yaml_path = self.get_parameter('config_yaml_path').value
+            if config_yaml_path and os.path.isfile(config_yaml_path):
+                try:
+                    with open(config_yaml_path, 'r') as f:
+                        data = yaml.safe_load(f) or {}
+                    node_name = self.get_name()
+                    ros_params = data.get(node_name, {}).get('ros__parameters', {})
+                    image_resize_param = ros_params.get('image_resize')
+                except Exception:
+                    pass
+        if image_resize_param is not None:
+            if not (isinstance(image_resize_param, (list, tuple)) and len(image_resize_param) == 2):
+                raise ValueError(f"image_resize must be [width, height], got: {image_resize_param}")
+            self.image_resize = (int(image_resize_param[0]), int(image_resize_param[1]))
+        else:
+            self.image_resize = None
+
         # Parse skip_episodes parameter (map from rosbag_dir to list of episode indices to skip)
         skip_episodes_param = self.get_parameter('skip_episodes').value
         if skip_episodes_param is None:
@@ -241,6 +264,17 @@ class RosbagToLeRobotConverter(Node):
                 raise ValueError("Derived joint_names from joint_order is empty")
             self.joint_names = ordered_names
 
+        # Parse optional action_joint_offset parameter: {joint_name: offset_value, ...}
+        joint_offset_raw = parse_dict_param('action_joint_offset', required=False)
+        if joint_offset_raw:
+            for jn in joint_offset_raw:
+                if jn not in self.joint_names:
+                    raise ValueError(f"joint_offset contains unknown joint '{jn}'. Must be in joint_names.")
+        # Precompute offset as a numpy array aligned with joint_names order
+        self.action_joint_offset = np.zeros(len(self.joint_names), dtype=np.float32)
+        for jn, offset in joint_offset_raw.items():
+            self.action_joint_offset[self.joint_names.index(jn)] = float(offset)
+
         # Validate rotation parameters
         for camera_name, rotation in self.camera_rotations.items():
             if camera_name not in self.camera_topics:
@@ -287,9 +321,19 @@ class RosbagToLeRobotConverter(Node):
         for camera_name, topic in self.camera_topics.items():
             rotation = self.camera_rotations.get(camera_name, 0)
             self.get_logger().info(f'  {camera_name}: {topic} (rotation: {rotation}°)')
+        if self.image_resize:
+            self.get_logger().info(f'Image resize: {self.image_resize[0]}x{self.image_resize[1]} (WxH)')
+        else:
+            self.get_logger().info('Image resize: disabled')
         self.get_logger().info(f'Joint state topics: {list(self.joint_state_topics.keys())}')
         self.get_logger().info(f'Action topics: {list(self.action_topics.keys())}')
         self.get_logger().info(f'Joint names ({len(self.joint_names)}): {self.joint_names}')
+        nonzero_offsets = {self.joint_names[i]: float(self.action_joint_offset[i])
+                           for i in range(len(self.joint_names)) if self.action_joint_offset[i] != 0.0}
+        if nonzero_offsets:
+            self.get_logger().info(f'Action joint offsets: {nonzero_offsets}')
+        else:
+            self.get_logger().info('Action joint offsets: none')
         if self.skip_episodes:
             self.get_logger().info('Episodes to skip:')
             for rosbag_dir_str, episode_list in self.skip_episodes.items():
@@ -311,6 +355,13 @@ class RosbagToLeRobotConverter(Node):
         else:
             return image  # Should not happen due to validation
 
+    def resize_image(self, image: np.ndarray) -> np.ndarray:
+        """Resize image to self.image_resize (width, height) if configured."""
+        if self.image_resize is None:
+            return image
+        target_w, target_h = self.image_resize
+        return cv2.resize(image, (target_w, target_h), interpolation=cv2.INTER_LINEAR)
+
     def create_dataset_features(self, image_shapes: Dict[str, Tuple[int, int, int]] = None) -> Dict:
         """Create the features dictionary for the LeRobot dataset."""
         features = {
@@ -326,17 +377,11 @@ class RosbagToLeRobotConverter(Node):
             },
         }
 
-        # Add camera features with actual image shapes or defaults, accounting for rotation
+        # Add camera features with actual image shapes.
+        # image_shapes already reflects rotation and resize applied in determine_image_shapes().
         for camera_name in self.camera_topics.keys():
             if image_shapes and camera_name in image_shapes:
-                # Use actual image shape
                 height, width, channels = image_shapes[camera_name]
-                # Apply rotation to dimensions for this specific camera
-                rotation = self.camera_rotations.get(camera_name, 0)
-                if rotation in [90, 270]:
-                    # Width and height swap for 90° and 270° rotations
-                    height, width = width, height
-                # 0° and 180° rotations don't change dimensions
                 features[f"observation.images.{camera_name}"] = {
                     "dtype": "video" if self.use_videos else "image",
                     "shape": (channels, height, width),
@@ -370,6 +415,8 @@ class RosbagToLeRobotConverter(Node):
                 # Find the first non-None image
                 for img in images:
                     if img is not None:
+                        img = self.rotate_image(img, camera_name)
+                        img = self.resize_image(img)
                         height, width, channels = img.shape
                         image_shapes[camera_name] = (height, width, channels)
                         self.get_logger().info(f"Camera {camera_name}: {height}x{width}x{channels}")
@@ -473,16 +520,22 @@ class RosbagToLeRobotConverter(Node):
             raise ValueError(f"No frames in episode {episode_dir}")
 
         for i in range(num_frames):
+            raw_action = (episode_data['actions'][i]
+                          if 'actions' in episode_data and len(episode_data['actions']) > i
+                          else episode_data['joint_states'][i])
             frame = {
                 "observation.state": episode_data['joint_states'][i],
-                "action": episode_data['actions'][i] if 'actions' in episode_data and len(episode_data['actions']) > i else episode_data['joint_states'][i],
+                "action": raw_action + self.action_joint_offset,
             }
 
             # Add images
             for camera_name, images in episode_data['images'].items():
                 if i < len(images) and images[i] is not None:
-                    # Validate image shape consistency
                     img = images[i]
+                    # Apply rotation then resize before encoding
+                    img = self.rotate_image(img, camera_name)
+                    img = self.resize_image(img)
+                    # Validate shape consistency against the reference shape (post-transform)
                     if hasattr(self, 'image_shapes') and camera_name in self.image_shapes:
                         expected_height, expected_width, expected_channels = self.image_shapes[camera_name]
                         actual_height, actual_width, actual_channels = img.shape
@@ -492,8 +545,6 @@ class RosbagToLeRobotConverter(Node):
                                 f"expected {expected_height}x{expected_width}x{expected_channels}, "
                                 f"got {actual_height}x{actual_width}x{actual_channels}"
                             )
-                    # Apply rotation if specified for this camera
-                    img = self.rotate_image(img, camera_name)
                     frame[f"observation.images.{camera_name}"] = img
                 else:
                     error_msg = f"No image found for camera {camera_name} at frame {i}"
@@ -566,10 +617,7 @@ class RosbagToLeRobotConverter(Node):
         self.get_logger().info("Conversion completed")
 
     def _episode_reset(self, dataset: LeRobotDataset) -> None:
-        """Clear dataset's in-memory episode buffer after saving, freeing RAM.
-
-        Mirrors physical_ai_server DataManager._episode_reset behavior.
-        """
+        """Clear dataset's in-memory episode buffer after saving, freeing RAM."""
         if dataset.episode_buffer is not None:
             for key, value in dataset.episode_buffer.items():
                 if isinstance(value, list):
