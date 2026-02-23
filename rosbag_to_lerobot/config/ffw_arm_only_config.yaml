@@ -3,16 +3,20 @@ rosbag_to_lerobot_converter:
     # Basic conversion parameters
     # Support both single directory (string) and multiple directories (list)
     rosbag_dir: 
-    - '/workspace/rosbag/kimtaehyeong/ffw_sg2_rev1_task_2602191114'
-    output_repo_id: 'ROBOTIS/ffw_sg2_rev1_task_2602191114_converted_v21'
-    task_name: 'Pick up the coffee and place it into the carton'
-    fps: 15
+    - '/workspace/rosbag/kimtaehyeong/ffw_sg2_rev1_0220_dataset_test1'
+    - '/workspace/rosbag/kimtaehyeong/ffw_sg2_rev1_0220_dataset_test2'
+    - '/workspace/rosbag/kimtaehyeong/ffw_sg2_rev1_0220_dataset_test3'
+    output_repo_id: 'ROBOTIS/ffw_sg2_rev1_0220_dataset_merged_converted_v21'
+    task_name: 'Test motion'
+    fps: 30
     use_videos: true
     robot_type: 'ffw_arm_only'
     use_optimized_save_mode: true
     # Map from rosbag directory path to list of episode indices to skip
     skip_episodes:
-      '/workspace/rosbag/kimtaehyeong/ffw_sg2_rev1_task_2602191114': []
+      '/workspace/rosbag/kimtaehyeong/ffw_sg2_rev1_0220_dataset_test1': []
+      '/workspace/rosbag/kimtaehyeong/ffw_sg2_rev1_0220_dataset_test2': []
+      '/workspace/rosbag/kimtaehyeong/ffw_sg2_rev1_0220_dataset_test3': []
 
     # Camera configuration
     camera_topics:
@@ -30,11 +34,11 @@ rosbag_to_lerobot_converter:
       cam_right_wrist: 270
 
     # Per-joint offsets added to leader (action) data. Omit a joint to apply zero offset.
-    action_joint_offset:
-      arm_l_joint6: 0.3
-      arm_r_joint6: 0.3
-      gripper_l_joint1: 0.1
-      gripper_r_joint1: 0.1
+    # action_joint_offset:
+    #   arm_l_joint6: 0.3
+    #   arm_r_joint6: 0.3
+    #   gripper_l_joint1: 0.1
+    #   gripper_r_joint1: 0.1
 
     # Joint state topics
     joint_state_topics:
