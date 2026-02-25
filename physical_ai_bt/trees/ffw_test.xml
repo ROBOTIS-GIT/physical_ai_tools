@@ -2,15 +2,15 @@
 <root BTCPP_format="3" main_tree_to_execute="RobotControlSequence">
   <BehaviorTree ID="RobotControlSequence">
     <Sequence name="RobotControlSequence">
-      <!-- <Rotate name="Rule_Based_Rotation_2" angle_deg="90.0"/> -->
       <MoveArms name="ArmsControl_1"
         left_positions="0.75, 0.0, 0.0, -2.3, 0.0, 0.0, 0.0, 0.0"
         right_positions="0.75, 0.0, 0.0, -2.3, 0.0, 0.0, 0.0, 0.0"/>
 
-      <RotateLidar name="LidarRotation_1"
-        face_tape="false"
-        lift_position="-0.02"
-        position_threshold="0.01"/>
+
+      <MoveHeadLift name="LiftControl_2"
+        head_positions= "0.0,0.0"
+        lift_position="0.0"/>
+      <Rotate name="Rule_Based_Rotation_3" angle_deg="-90"/>
       <MoveHeadLift name="LiftControl_2"
         head_positions= "0.55,0.0"
         lift_position="-0.1"/>
@@ -19,16 +19,6 @@
       <ForEach name="TaskIteration" list_key="task_instruction_list">
         <Sequence name="PerTaskSequence">
           <UpdateTaskInstruction name="UpdateTask"/>
-          <!-- <InferenceUntilGesture name="InferUntilStable"
-            position_change_threshold="0.05"
-            static_duration="1.0"
-            history_window="1.0"/> -->
-          <!-- <InferenceUntilPositionWithGripper name="TestGripperMove"
-            left_positions="0.3922316969274152, 0.10839731426895019, 0.0065074341236086184, -2.0080527566917366, 0.24381905569947945, 0.07638744954674279, 0.02586707235103892, 0.09050486648525283"
-            right_positions="0.3742194068946643, -0.14899986824829825, 0.18719359302166966, -2.0959690305974323, -0.07971906407043192, 0.17344768705522567, -0.2131939073858318, 0.17794177139473438"
-            tolerance="0.8"
-            gripper_closed_threshold="0.3"
-            gripper_open_threshold="0.7"/> -->
           <InferenceUntilGestureWithGripper name="TestGestureGripper"
             position_change_threshold="0.05"
             static_duration="0.7"
@@ -45,21 +35,12 @@
         history_window="1.0"/>
       <PauseInference name="Pause_Publishing_1"/>
 
-      <!-- <Rotate name="Rule_Based_Rotation_2" angle_deg="-90.0"/> -->
-      
-      
-      <RotateLidar name="LidarRotation_1"
-        face_tape="true"
-        lift_position="-0.02"
-        position_threshold="0.01"/>
+      <MoveLift name="LiftControl_2" lift_position="0.0"/>
+      <Rotate name="Rule_Based_Rotation_3" angle_deg="90"/>
       <MoveLift name="LiftControl_2" lift_position="-0.1"/>
       
       <ResumeInference name="Resume_Publishing_2"/>
       <SetTaskInstruction name="SetTaskInstruction_2" instruction="Place the crate onto the table."/>
-      <!-- <InferenceUntilGesture name="VLA_Inference_3"
-        position_change_threshold="0.1"
-        static_duration="2.5"
-        history_window="2.0"/> -->
       <InferenceUntilPosition name="ArmsControl_1"
         left_positions="0.3922316969274152, 0.10839731426895019, 0.0065074341236086184, -2.0080527566917366, 0.24381905569947945, 0.07638744954674279, 0.02586707235103892, 0.09050486648525283"
         right_positions="0.3742194068946643, -0.14899986824829825, 0.18719359302166966, -2.0959690305974323, -0.07971906407043192, 0.17344768705522567, -0.2131939073858318, 0.17794177139473438"

@@ -55,7 +55,9 @@ class Rotate(BaseAction):
         self.topic_config = topic_config or {}
         if not isinstance(self.topic_config, dict):
             self.topic_config = {}
-        self.angular_velocity = 0.2
+        self.angular_velocity = 0.6
+        self.kp = 0.02
+        self.min_angular_velocity = 0.05
 
         qos_profile = QoSProfile(
             depth=10,
@@ -142,8 +144,11 @@ class Rotate(BaseAction):
                 self._thread_done = True
                 break
 
-            # Publish command
-            angular_z = self.angular_velocity if error > 0 else -self.angular_velocity
+            # Publish command (proportional control)
+            angular_z = self.kp * error
+            angular_z = max(-self.angular_velocity, min(self.angular_velocity, angular_z))
+            if 0 < abs(angular_z) < self.min_angular_velocity:
+                angular_z = self.min_angular_velocity if angular_z > 0 else -self.min_angular_velocity
             if 'leader_mobile' in self.publishers:
                 twist_msg = Twist()
                 twist_msg.linear.x = 0.0

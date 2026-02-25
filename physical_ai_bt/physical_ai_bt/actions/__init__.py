@@ -25,6 +25,7 @@ from physical_ai_bt.actions.inference_until_position import InferenceUntilPositi
 from physical_ai_bt.actions.inference_until_position_with_gripper import InferenceUntilPositionWithGripper
 from physical_ai_bt.actions.timed_inference import TimedInference
 from physical_ai_bt.actions.rotate import Rotate
+from physical_ai_bt.actions.rotate_head_lift import RotateHeadLift
 from physical_ai_bt.actions.rotate_lidar import RotateLidar
 from physical_ai_bt.actions.control_inference import PauseInference, ResumeInference
 from physical_ai_bt.actions.camera_depth import CameraDepth
@@ -43,6 +44,7 @@ __all__ = [
     'InferenceUntilPositionWithGripper',
     'TimedInference',
     'Rotate',
+    'RotateHeadLift',
     'RotateLidar',
     'PauseInference',
     'ResumeInference',

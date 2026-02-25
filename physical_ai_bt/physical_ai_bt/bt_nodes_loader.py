@@ -21,7 +21,7 @@
 import xml.etree.ElementTree as ET
 from typing import TYPE_CHECKING, Dict, Type
 
-from physical_ai_bt.actions import InferenceUntilGesture, InferenceUntilPosition, Rotate, RotateLidar
+from physical_ai_bt.actions import InferenceUntilGesture, InferenceUntilPosition, Rotate, RotateHeadLift, RotateLidar
 from physical_ai_bt.actions.inference_until_gesture_with_gripper import InferenceUntilGestureWithGripper
 from physical_ai_bt.actions.inference_until_position_with_gripper import InferenceUntilPositionWithGripper
 from physical_ai_bt.actions.timed_inference import TimedInference
@@ -80,6 +80,7 @@ class XMLTreeLoader:
             'InferenceUntilPositionWithGripper': InferenceUntilPositionWithGripper,
             'TimedInference': TimedInference,
             'Rotate': Rotate,
+            'RotateHeadLift': RotateHeadLift,
             'RotateLidar': RotateLidar,
             'PauseInference': PauseInference,
             'ResumeInference': ResumeInference,
@@ -244,6 +245,16 @@ class XMLTreeLoader:
             return action_class(
                 node=self.node,
                 angle_deg=params.get('angle_deg', 90.0),
+                topic_config=self.topic_config
+            )
+
+        elif action_class == RotateHeadLift:
+            return action_class(
+                node=self.node,
+                angle_deg=params.get('angle_deg', 90.0),
+                head_positions=params.get('head_positions', [0.0, 0.0]),
+                lift_position=params.get('lift_position', 0.0),
+                position_threshold=params.get('position_threshold', 0.01),
                 topic_config=self.topic_config
             )
 
