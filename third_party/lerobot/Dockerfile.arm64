@@ -86,6 +86,9 @@ RUN uv pip install --no-cache ".[smolvla,xvla,hilserl,async,peft]"
 RUN uv pip install --reinstall torch torchvision \
     --index-url https://pypi.jetson-ai-lab.io/jp6/cu126/+simple
 
+# Downgrade huggingface_hub to 0.35.3 for custom Hub server compatibility
+RUN pip install "huggingface_hub==0.35.3"
+
 # Copy the rest of LeRobot (configs, tests, etc.)
 COPY lerobot/ ./
 
@@ -110,6 +113,10 @@ RUN chmod +x /entrypoint.sh
 ENV HF_HOME=/root/.cache/huggingface
 ENV HF_LEROBOT_HOME=/root/.cache/huggingface/lerobot
 ENV TORCH_HOME=/root/.cache/torch
+
+# HuggingFace CLI aliases
+RUN echo "alias huggingface-cli='hf'" >> ~/.bashrc && \
+    echo "export HF_ENDPOINT=http://192.168.60.152:1000" >> ~/.bashrc
 
 # Zenoh configuration
 ENV ZENOH_ROUTER_IP=127.0.0.1

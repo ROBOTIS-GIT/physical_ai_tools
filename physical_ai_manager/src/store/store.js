@@ -23,6 +23,7 @@ import rosSlice from '../features/ros/rosSlice';
 import trainingSlice from '../features/training/trainingSlice';
 import editDatasetSlice from '../features/editDataset/editDatasetSlice';
 import replaySlice from '../features/replay/replaySlice';
+import dataUploaderSlice from '../features/dataUploader/dataUploaderSlice';
 
 export const store = configureStore({
   reducer: {
@@ -32,6 +33,7 @@ export const store = configureStore({
     training: trainingSlice,
     editDataset: editDatasetSlice,
     replay: replaySlice,
+    dataUploader: dataUploaderSlice,
   },
   middleware: (getDefaultMiddleware) =>
     getDefaultMiddleware({

@@ -55,7 +55,7 @@ RUN bash -c "source /opt/ros/${ROS_DISTRO}/setup.bash && \
     colcon build --symlink-install --cmake-args -DCMAKE_BUILD_TYPE=Release"
 
 # Install Python utilities
-RUN pip install psutil matplotlib huggingface_hub mcap mcap-ros2-support \
+RUN pip install psutil matplotlib "huggingface_hub==0.35.3" mcap mcap-ros2-support \
     pyarrow pyyaml "opencv-python-headless<4.11" "numpy<2"
 
 # Setup bashrc
@@ -66,7 +66,9 @@ RUN echo "source /opt/ros/${ROS_DISTRO}/setup.bash" >> ~/.bashrc  && \
     echo "export ROS_DOMAIN_ID=30" >> ~/.bashrc && \
     echo "export RMW_IMPLEMENTATION=rmw_zenoh_cpp" >> ~/.bashrc && \
     echo "export ZENOH_CONFIG_OVERRIDE='transport/shared_memory/enabled=true'" >> ~/.bashrc && \
-    echo "alias zenoh='ros2 run rmw_zenoh_cpp rmw_zenohd'" >> ~/.bashrc
+    echo "alias zenoh='ros2 run rmw_zenoh_cpp rmw_zenohd'" >> ~/.bashrc && \
+    echo "alias huggingface-cli='hf'" >> ~/.bashrc && \
+    echo "export HF_ENDPOINT=http://192.168.60.152:1000" >> ~/.bashrc
 
 # Create directory for agent Unix Domain Socket
 RUN mkdir -p /var/run/agent && \

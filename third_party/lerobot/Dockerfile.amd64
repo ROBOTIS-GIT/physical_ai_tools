@@ -65,6 +65,12 @@ COPY lerobot/src/ ./src/
 # Removed: aloha, pusht, phone, libero, metaworld, sarm (simulation)
 RUN uv pip install --no-cache ".[smolvla,xvla,hilserl,async,peft]"
 
+# Downgrade huggingface_hub to 0.35.3 for custom Hub server compatibility
+RUN pip install "huggingface_hub==0.35.3"
+
+# Downgrade huggingface_hub to 0.35.3 for custom Hub server compatibility
+RUN pip install "huggingface_hub==0.35.3"
+
 # Blackwell (sm_120) support: override PyTorch with nightly cu128 build
 RUN if [ "$GPU_ARCH" = "blackwell" ]; then \
       echo "=== Installing PyTorch nightly (cu128) for Blackwell ===" && \
@@ -98,6 +104,10 @@ RUN chmod +x /entrypoint.sh
 ENV HF_HOME=/root/.cache/huggingface
 ENV HF_LEROBOT_HOME=/root/.cache/huggingface/lerobot
 ENV TORCH_HOME=/root/.cache/torch
+
+# HuggingFace CLI aliases
+RUN echo "alias huggingface-cli='hf'" >> ~/.bashrc && \
+    echo "export HF_ENDPOINT=http://192.168.60.152:1000" >> ~/.bashrc
 
 # Zenoh configuration
 ENV ZENOH_ROUTER_IP=127.0.0.1

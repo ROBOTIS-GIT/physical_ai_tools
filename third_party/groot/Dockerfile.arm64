@@ -166,6 +166,9 @@ RUN uv pip install -e . --no-deps
 RUN uv pip install "eclipse-zenoh>=1.6.0,<1.7.0" rosbags>=0.11.0 GitPython>=3.1.18 json5>=0.9.14 \
     && mkdir -p /zenoh_sdk
 
+# Downgrade huggingface_hub to 0.35.3 for custom Hub server compatibility
+RUN pip install "huggingface_hub==0.35.3"
+
 # Create application directory for Zenoh server
 WORKDIR /app
 
@@ -190,6 +193,10 @@ EOF
 # Environment variables for HuggingFace cache (mapped via volume)
 ENV HF_HOME=/root/.cache/huggingface
 ENV TORCH_HOME=/root/.cache/torch
+
+# HuggingFace CLI aliases
+RUN echo "alias huggingface-cli='hf'" >> ~/.bashrc && \
+    echo "export HF_ENDPOINT=http://192.168.60.152:1000" >> ~/.bashrc
 
 # Zenoh configuration
 ENV ZENOH_ROUTER_IP=127.0.0.1

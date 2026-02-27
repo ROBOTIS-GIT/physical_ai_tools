@@ -665,6 +665,34 @@ export function useRosServiceCaller() {
     [rosbridgeUrl]
   );
 
+  const uploadRosbagFolders = useCallback(
+    async (folderPaths, hfToken, hfEndpoint = 'http://192.168.60.152:1000') => {
+      try {
+        console.log(`Uploading ${folderPaths.length} rosbag folder(s) to ${hfEndpoint}`);
+
+        const result = await callService(
+          '/task/command',
+          'physical_ai_interfaces/SendCommand',
+          {
+            command: 10,  // UPLOAD_ROSBAG
+            data: JSON.stringify({
+              folder_paths: folderPaths,
+              hf_token: hfToken,
+              hf_endpoint: hfEndpoint,
+            }),
+          }
+        );
+
+        console.log('Upload service call result:', result);
+        return result;
+      } catch (error) {
+        console.error('Failed to upload rosbag folders:', error);
+        throw new Error(`Upload failed: ${error.message || error}`);
+      }
+    },
+    [callService]
+  );
+
   return {
     callService,
     sendRecordCommand,
@@ -685,5 +713,6 @@ export function useRosServiceCaller() {
     getTrainingInfo,
     getReplayData,
     getRosbagList,
+    uploadRosbagFolders,
   };
 }
