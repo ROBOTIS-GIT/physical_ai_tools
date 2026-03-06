@@ -241,7 +241,8 @@ class RosbagReader:
                         images: Dict[str, List[Tuple[float, np.ndarray]]],
                         joint_names: List[str],
                         actions: Dict[str, List[Tuple[float, np.ndarray]]],
-                        target_fps: float = 30.0) -> Dict[str, List[np.ndarray]]:
+                        target_fps: float = 30.0,
+                        time_range: Optional[Tuple[float, float]] = None) -> Dict[str, List[np.ndarray]]:
         """
         Synchronize joint states, images, and leader actions by timestamp and sample at target frequency.
         Takes the latest data that is not in the future relative to the target timestamp.
@@ -278,8 +279,11 @@ class RosbagReader:
             print(f"joint_states: {joint_states}")
             raise ValueError(f"No timestamps found for synchronization")
 
-        start_time = min(all_timestamps)
-        end_time = max(all_timestamps)
+        if time_range is not None:
+            start_time, end_time = time_range
+        else:
+            start_time = min(all_timestamps)
+            end_time = max(all_timestamps)
 
         # Calculate target timestamps based on desired frequency
         target_interval = 1.0 / target_fps
@@ -422,7 +426,8 @@ def read_episode_from_bag(episode_dir: Path,
                          camera_topics: Dict[str, str],
                          joint_state_topics: Dict[str, str],
                          action_topics: Dict[str, str] = None,
-                         fps: float = 30.0) -> Dict[str, List[np.ndarray]]:
+                         fps: float = 30.0,
+                         time_range: Optional[Tuple[float, float]] = None) -> Dict[str, List[np.ndarray]]:
     """
     Read an episode from a directory containing rosbag files.
     """
@@ -504,6 +509,6 @@ def read_episode_from_bag(episode_dir: Path,
         #     continue
 
     # Synchronize data at target frequency
-    synchronized_data = reader.synchronize_data(all_joint_states, all_images, joint_names, all_actions, target_fps=fps)
+    synchronized_data = reader.synchronize_data(all_joint_states, all_images, joint_names, all_actions, target_fps=fps, time_range=time_range)
 
     return synchronized_data

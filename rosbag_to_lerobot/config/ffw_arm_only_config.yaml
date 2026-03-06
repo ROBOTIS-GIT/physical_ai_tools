@@ -2,36 +2,32 @@ rosbag_to_lerobot_converter:
   ros__parameters:
     # Basic conversion parameters
     # Support both single directory (string) and multiple directories (list)
-    rosbag_dir: 
-    - '/workspace/rosbag/kimtaehyeong/ffw_sg2_rev1_0220_dataset_test1'
-    - '/workspace/rosbag/kimtaehyeong/ffw_sg2_rev1_0220_dataset_test2'
-    - '/workspace/rosbag/kimtaehyeong/ffw_sg2_rev1_0220_dataset_test3'
-    output_repo_id: 'ROBOTIS/ffw_sg2_rev1_0220_dataset_merged_converted_v21'
-    task_name: 'Test motion'
-    fps: 30
+    rosbag_dir:
+    - '/workspace/ROBOTIS/ffw_sg2_rev1_task_2603031020_354'
+    output_repo_id: 'ROBOTIS/ffw_sg2_rev1_task_2603031020_354_lerobot'
+    task_name: 'task instruction.'
+    fps: 15
     use_videos: true
     robot_type: 'ffw_arm_only'
     use_optimized_save_mode: true
     # Map from rosbag directory path to list of episode indices to skip
     skip_episodes:
-      '/workspace/rosbag/kimtaehyeong/ffw_sg2_rev1_0220_dataset_test1': []
-      '/workspace/rosbag/kimtaehyeong/ffw_sg2_rev1_0220_dataset_test2': []
-      '/workspace/rosbag/kimtaehyeong/ffw_sg2_rev1_0220_dataset_test3': []
+      '/workspace/ROBOTIS/ffw_sg2_rev1_task_2603031020_354': []
 
     # Camera configuration
     camera_topics:
       cam_left_head: '/robot/camera/cam_left_head/image_raw/compressed'
-      cam_right_head: '/robot/camera/cam_right_head/image_raw/compressed'
-      cam_left_wrist: '/robot/camera/cam_left_wrist/image_raw/compressed'
-      cam_right_wrist: '/robot/camera/cam_right_wrist/image_raw/compressed'
+      # cam_right_head: '/robot/camera/cam_right_head/image_raw/compressed'
+      # cam_left_wrist: '/robot/camera/cam_left_wrist/image_raw/compressed'
+      # cam_right_wrist: '/robot/camera/cam_right_wrist/image_raw/compressed'
 
     # Resize all camera images to [width, height] before encoding. null = no resize.
-    image_resize: [256, 256]
+    # image_resize: [256, 256]
 
     # Camera rotations (0, 90, 180, 270 degrees)
-    camera_rotations:
-      cam_left_wrist: 270
-      cam_right_wrist: 270
+    # camera_rotations:
+    #   cam_left_wrist: 270
+    #   cam_right_wrist: 270
 
     # Per-joint offsets added to leader (action) data. Omit a joint to apply zero offset.
     # action_joint_offset:

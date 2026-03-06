@@ -7,6 +7,7 @@ This node reads rosbag files from a directory and converts them to the LeRobot d
 The rosbag recorder saves episodes in subdirectories with episode indices.
 """
 
+import json
 import os
 import gc
 import sys
@@ -34,6 +35,7 @@ from .lerobot_dataset_wrapper import LeRobotDatasetWrapper
 
 # Import our rosbag reader
 from .rosbag_reader import read_episode_from_bag
+from .start_end_parser import parse_start_end_points
 
 import time
 
@@ -459,9 +461,13 @@ class RosbagToLeRobotConverter(Node):
         self.get_logger().info(f"Found {len(all_episode_dirs)} total episode directories across all rosbag directories")
         return all_episode_dirs
 
-    def read_rosbag_episode(self, episode_dir: Path) -> Tuple[Dict, int]:
+    def read_rosbag_episode(self, episode_dir: Path, time_range=None) -> Tuple[Dict, int]:
         """Read a single episode from rosbag directory."""
-        self.get_logger().info(f"Reading episode from {episode_dir}")
+        if time_range:
+            self.get_logger().info(f"Reading episode from {episode_dir} "
+                                  f"(time_range: {time_range[0]:.3f} - {time_range[1]:.3f})")
+        else:
+            self.get_logger().info(f"Reading episode from {episode_dir}")
 
         # Use our rosbag reader to extract data
         episode_data = read_episode_from_bag(
@@ -470,7 +476,8 @@ class RosbagToLeRobotConverter(Node):
             camera_topics=self.camera_topics,
             joint_state_topics=self.joint_state_topics,
             action_topics=self.action_topics,
-            fps=self.fps
+            fps=self.fps,
+            time_range=time_range
         )
 
         num_frames = len(episode_data['joint_states'])
@@ -510,11 +517,11 @@ class RosbagToLeRobotConverter(Node):
         self.get_logger().info(f"Created LeRobot dataset: {self.output_repo_id}")
         return dataset
 
-    def convert_episode(self, dataset: LeRobotDataset, episode_dir: Path, episode_index: int):
+    def convert_episode(self, dataset: LeRobotDataset, episode_dir: Path, episode_index: int, time_range=None):
         """Convert a single episode to LeRobot dataset format."""
         self.get_logger().info(f"Converting episode {episode_index} from {episode_dir}")
 
-        episode_data, num_frames = self.read_rosbag_episode(episode_dir)
+        episode_data, num_frames = self.read_rosbag_episode(episode_dir, time_range=time_range)
 
         if num_frames == 0:
             raise ValueError(f"No frames in episode {episode_dir}")
@@ -601,8 +608,53 @@ class RosbagToLeRobotConverter(Node):
             if episode_index in skip_list:
                 self.get_logger().info(f"Skipping episode {episode_index} from {rosbag_dir_str} (specified in skip_episodes)")
                 continue
-                
-            self.convert_episode(dataset, episode_dir, episode_index)
+
+            # Skip episodes marked as needs_review in episode_info.json
+            episode_info_path = episode_dir / "episode_info.json"
+            if episode_info_path.exists():
+                try:
+                    with open(episode_info_path, 'r') as f:
+                        episode_info = json.load(f)
+                    if episode_info.get('needs_review', False):
+                        self.get_logger().warning(
+                            f"Skipping episode {episode_index} from {rosbag_dir_str} (needs_review=true)")
+                        continue
+                except (json.JSONDecodeError, IOError) as e:
+                    self.get_logger().warning(
+                        f"Failed to read episode_info.json for episode {episode_index}: {e}")
+
+            # Parse start_end_points.jsonl for time-based trimming
+            time_ranges = parse_start_end_points(episode_dir, logger=self.get_logger())
+
+            if time_ranges is None:
+                # No JSONL file — use full episode (backwards compatible)
+                try:
+                    self.convert_episode(dataset, episode_dir, episode_index)
+                except Exception as e:
+                    self.get_logger().error(
+                        f"Failed to convert episode {episode_index} from {rosbag_dir_str}: {e}. Skipping.")
+                    continue
+            elif len(time_ranges) == 0:
+                # Invalid JSONL — skip
+                self.get_logger().warning(
+                    f"Skipping episode {episode_index} from {rosbag_dir_str} (invalid start_end_points.jsonl)")
+                continue
+            else:
+                # Valid time ranges — create sub-episodes
+                self.get_logger().info(
+                    f"Episode {episode_index} from {rosbag_dir_str}: "
+                    f"{len(time_ranges)} sub-episode(s) from start_end_points.jsonl")
+                for sub_idx, time_range in enumerate(time_ranges):
+                    try:
+                        self.get_logger().info(
+                            f"  Sub-episode {sub_idx}: {time_range[0]:.3f} - {time_range[1]:.3f} "
+                            f"({time_range[1] - time_range[0]:.1f}s)")
+                        self.convert_episode(dataset, episode_dir, episode_index, time_range=time_range)
+                    except Exception as e:
+                        self.get_logger().error(
+                            f"Failed to convert sub-episode {sub_idx} of episode {episode_index} "
+                            f"from {rosbag_dir_str}: {e}. Skipping.")
+                        continue
 
         # Consolidate the dataset
         self.get_logger().info("Dataset conversion completed")
