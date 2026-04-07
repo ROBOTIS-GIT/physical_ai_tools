@@ -145,10 +145,10 @@ services:
     ipc: host
     environment:
       - ROS_DOMAIN_ID=${ROS_DOMAIN_ID:-30}
-      - ZENOH_ROUTER_IP=
-      - ZENOH_ROUTER_PORT=
+      - ZENOH_ROUTER_IP=127.0.0.1
+      - ZENOH_ROUTER_PORT=7447
       - ZENOH_SDK_PATH=/zenoh_sdk
-      - ZENOH_CONFIG_OVERRIDE=
+      - ZENOH_CONFIG_OVERRIDE=transport/shared_memory/enabled=true
       - ZENOH_TRANSPORT_SHM_ENABLED=
       - ZENOH_SHM_ENABLED=
       - NVIDIA_VISIBLE_DEVICES=all

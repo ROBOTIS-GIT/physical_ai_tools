@@ -1,0 +1,103 @@
+physical_ai_server:
+  ros__parameters:
+    ffw_sh5_rev1:
+      observation_list:
+        - cam_left_head
+        - cam_right_head
+        - state
+
+      camera_topic_list:
+        - cam_left_head:/robot/camera/cam_left_head/image_raw/compressed
+        - cam_right_head:/robot/camera/cam_right_head/image_raw/compressed
+
+      joint_topic_list:
+        - follower_arm_left:/robot/arm_left_follower/joint_states
+        - follower_arm_right:/robot/arm_right_follower/joint_states
+        - follower_head:/robot/head_follower/joint_states
+        - follower_lift:/robot/lift_follower/joint_states
+        - follower_mobile:/odom
+        - leader_arm_left:/robot/arm_left_leader/joint_states
+        - leader_arm_right:/robot/arm_right_leader/joint_states
+        - leader_head:/robot/head_leader/joint_states
+        - leader_lift:/robot/lift_leader/joint_states
+        - leader_mobile:/cmd_vel
+
+      command_topic_list:
+        - leader_arm_left:/leader/joint_trajectory_command_broadcaster_left/joint_trajectory
+        - leader_arm_right:/leader/joint_trajectory_command_broadcaster_right/joint_trajectory
+        - leader_head:/leader/joystick_controller_left/joint_trajectory
+        - leader_lift:/leader/joystick_controller_right/joint_trajectory
+        - leader_mobile:/cmd_vel
+
+      joint_list:
+        - leader_arm_left
+        - leader_arm_right
+        - leader_head
+        - leader_lift
+        - leader_mobile
+
+      rosbag_extra_topic_list:
+        - /tf
+        - /odom
+        - /cmd_vel
+        # CameraInfo for MP4 conversion (must match image frame count)
+        - /robot/camera/cam_left_head/image_raw/compressed/camera_info
+        - /robot/camera/cam_right_head/image_raw/compressed/camera_info
+
+      joint_order:
+        follower_arm_left:
+          - arm_l_joint1
+          - arm_l_joint2
+          - arm_l_joint3
+          - arm_l_joint4
+          - arm_l_joint5
+          - arm_l_joint6
+          - arm_l_joint7
+          - gripper_l_joint1
+        follower_arm_right:
+          - arm_r_joint1
+          - arm_r_joint2
+          - arm_r_joint3
+          - arm_r_joint4
+          - arm_r_joint5
+          - arm_r_joint6
+          - arm_r_joint7
+          - gripper_r_joint1
+        follower_head:
+          - head_joint1
+          - head_joint2
+        follower_lift:
+          - lift_joint
+        follower_mobile:
+          - linear_x
+          - linear_y
+          - angular_z
+        leader_arm_left:
+          - arm_l_joint1
+          - arm_l_joint2
+          - arm_l_joint3
+          - arm_l_joint4
+          - arm_l_joint5
+          - arm_l_joint6
+          - arm_l_joint7
+          - gripper_l_joint1
+        leader_arm_right:
+          - arm_r_joint1
+          - arm_r_joint2
+          - arm_r_joint3
+          - arm_r_joint4
+          - arm_r_joint5
+          - arm_r_joint6
+          - arm_r_joint7
+          - gripper_r_joint1
+        leader_head:
+          - head_joint1
+          - head_joint2
+        leader_lift:
+          - lift_joint
+        leader_mobile:
+          - linear_x
+          - linear_y
+          - angular_z
+
+      urdf_path: /root/ros2_ws/src/physical_ai_tools/rosbag_recorder/config/urdf/ffw_sg2_follower.urdf

@@ -28,6 +28,12 @@ import torch
 
 import sys
 
+# Ensure system site-packages are accessible (TensorRT is installed system-wide
+# but the venv has include-system-site-packages=false)
+_SYSTEM_SITE = "/usr/lib/python3.10/dist-packages"
+if _SYSTEM_SITE not in sys.path:
+    sys.path.append(_SYSTEM_SITE)
+
 import gr00t.model  # noqa: F401 - register custom models
 from gr00t.data.embodiment_tags import EmbodimentTag
 from gr00t.policy.gr00t_policy import Gr00tPolicy
