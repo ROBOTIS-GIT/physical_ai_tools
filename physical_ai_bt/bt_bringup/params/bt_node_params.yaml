@@ -1,5 +1,4 @@
 bt_node:
   ros__parameters:
     robot_type: 'ffw_sg2_rev1'
-    tree_xml: 'korea_mat.xml'
-    tick_rate: 30.0
+    tick_rate: 10.0

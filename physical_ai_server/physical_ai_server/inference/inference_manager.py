@@ -40,6 +40,7 @@ Architecture:
 import collections
 import logging
 import threading
+import time
 from typing import Optional
 
 import numpy as np
@@ -58,7 +59,7 @@ class InferenceManager:
     via the service_prefix parameter.
     """
 
-    INFERENCE_HZ = 15.0   # Model output rate
+    INFERENCE_HZ = 12.0   # Model output rate
     BLEND_DURATION_S = 0.2  # Blend duration in seconds at chunk boundaries
     REFILL_MARGIN_S = 0.1  # Fixed time margin added to adaptive refill threshold
     EMA_ALPHA = 0.3        # EMA smoothing factor for chunk fetch time
@@ -372,6 +373,8 @@ class InferenceManager:
             if self._last_action is not None and len(chunk) > 1:
                 distances = np.linalg.norm(chunk - self._last_action, axis=1)
                 start_idx = int(np.argmin(distances)) + 1
+                # max_skip = len(chunk) // 2 
+                # start_idx = min(start_idx, max_skip)
                 if start_idx < len(chunk):
                     chunk = chunk[start_idx:]
 
@@ -547,6 +550,7 @@ class InferenceManager:
         with self._buffer_lock:
             self._action_buffer.clear()
         self._last_action = None
+        self._load_error = None  # Clear any stale load error from previous session
         self._requesting = False  # Reset flag so resume always starts a fresh request
         self._paused = False
         self._request_chunk_async()

@@ -26,6 +26,7 @@ Services (via RobotServiceServer):
     /lerobot/stop              - Stop training/inference
     /lerobot/status            - Get state and progress (built-in)
 """
+import atexit
 import logging
 import os
 
@@ -73,4 +74,5 @@ def stop_callback():
 
 
 if __name__ == "__main__":
+    atexit.register(server._cleanup)
     server.spin()

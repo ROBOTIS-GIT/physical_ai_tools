@@ -31,7 +31,10 @@ Supports both inference and training services:
 """
 
 from dataclasses import dataclass
+import json
 import logging
+import socket
+import struct
 import threading
 import time
 from typing import Any, Callable, Dict, Optional
@@ -102,12 +105,19 @@ class ContainerServiceClient:
     the standard service interface, parameterized by service_prefix.
     """
 
+    # Container name → TCP bridge port mapping
+    BRIDGE_PORTS = {
+        "/groot": 9100,
+        "/lerobot": 9101,
+    }
+
     def __init__(
         self,
         node: Node,
         service_prefix: str = "/groot",
         timeout_sec: float = 180.0,
         callback_group: Optional[CallbackGroup] = None,
+        bridge_host: str = "127.0.0.1",
     ):
         self._node = node
         self._service_prefix = service_prefix
@@ -116,7 +126,13 @@ class ContainerServiceClient:
         self._cancelled = threading.Event()
         self._callback_group = callback_group
 
-        # Service clients
+        # TCP bridge connection (bypasses rmw_zenoh_cpp)
+        self._bridge_host = bridge_host
+        self._bridge_port = self.BRIDGE_PORTS.get(service_prefix, 9100)
+        self._bridge_sock = None
+        self._bridge_lock = threading.Lock()
+
+        # ROS2 service clients (for training services only)
         self._infer_client = None
         self._stop_client = None
         self._action_chunk_client = None
@@ -204,7 +220,9 @@ class ContainerServiceClient:
             return False
 
     def disconnect(self):
-        """Destroy all service clients and subscribers."""
+        """Destroy all service clients, subscribers, and bridge connection."""
+        self._bridge_disconnect()
+
         if self._progress_sub is not None:
             try:
                 self._node.destroy_subscription(self._progress_sub)
@@ -315,7 +333,77 @@ class ContainerServiceClient:
                 request_id="",
             )
 
-    # --- Inference services ---
+    # --- TCP Bridge communication ---
+
+    def _bridge_connect(self):
+        """Connect to the TCP bridge server in the executor container."""
+        if self._bridge_sock is not None:
+            return
+        try:
+            sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            sock.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)
+            sock.settimeout(600.0)
+            sock.connect((self._bridge_host, self._bridge_port))
+            self._bridge_sock = sock
+            logger.info(
+                f"Bridge connected: {self._bridge_host}:{self._bridge_port}"
+            )
+        except Exception as e:
+            self._bridge_sock = None
+            raise ConnectionError(
+                f"Bridge connect failed ({self._bridge_host}:{self._bridge_port}): {e}"
+            )
+
+    def _bridge_disconnect(self):
+        """Close the TCP bridge connection."""
+        if self._bridge_sock is not None:
+            try:
+                self._bridge_sock.close()
+            except Exception:
+                pass
+            self._bridge_sock = None
+
+    def _bridge_call(self, request: dict, timeout: float = 600.0) -> dict:
+        """Send a request to the TCP bridge and return the response."""
+        with self._bridge_lock:
+            try:
+                if self._bridge_sock is None:
+                    self._bridge_connect()
+                self._bridge_sock.settimeout(timeout)
+
+                # Send: 4-byte length + JSON
+                payload = json.dumps(request).encode("utf-8")
+                self._bridge_sock.sendall(
+                    struct.pack(">I", len(payload)) + payload
+                )
+
+                # Recv: 4-byte length + JSON
+                header = self._recv_exact(self._bridge_sock, 4)
+                if not header:
+                    self._bridge_disconnect()
+                    return {"success": False, "message": "Bridge connection closed"}
+                resp_len = struct.unpack(">I", header)[0]
+                resp_data = self._recv_exact(self._bridge_sock, resp_len)
+                if not resp_data:
+                    self._bridge_disconnect()
+                    return {"success": False, "message": "Bridge response incomplete"}
+                return json.loads(resp_data)
+            except Exception as e:
+                self._bridge_disconnect()
+                return {"success": False, "message": f"Bridge call failed: {e}"}
+
+    @staticmethod
+    def _recv_exact(sock, n):
+        """Receive exactly n bytes from socket."""
+        buf = b""
+        while len(buf) < n:
+            chunk = sock.recv(n - len(buf))
+            if not chunk:
+                return None
+            buf += chunk
+        return buf
+
+    # --- Inference services (via TCP bridge) ---
 
     def start_inference(
         self,
@@ -324,35 +412,51 @@ class ContainerServiceClient:
         robot_type: str,
         task_instruction: str = "",
     ) -> ServiceResponse:
-        """Call /{prefix}/infer to setup model + RobotClient."""
-        request = StartInference.Request()
-        request.model_path = model_path
-        request.embodiment_tag = embodiment_tag
-        request.robot_type = robot_type
-        request.task_instruction = task_instruction
-
-        return self._call_service(
-            self._infer_client, request, self.service_infer,
-            timeout_sec=600.0,
+        """Call /{prefix}/infer via TCP bridge."""
+        result = self._bridge_call({
+            "action": "start_inference",
+            "service_prefix": self._service_prefix,
+            "model_path": model_path,
+            "embodiment_tag": embodiment_tag,
+            "robot_type": robot_type,
+            "task_instruction": task_instruction,
+        }, timeout=600.0)
+        return ServiceResponse(
+            success=result.get("success", False),
+            message=result.get("message", ""),
+            data={"action_keys": result.get("action_keys", [])},
+            request_id="",
         )
 
     def get_action_chunk(self, task_instruction: str = "") -> ServiceResponse:
-        """Call /{prefix}/get_action_chunk for on-demand inference."""
-        request = GetActionChunk.Request()
-        request.task_instruction = task_instruction
-
-        return self._call_service(
-            self._action_chunk_client,
-            request,
-            self.service_get_action_chunk,
-            timeout_sec=5.0,
+        """Call /{prefix}/get_action_chunk via TCP bridge."""
+        result = self._bridge_call({
+            "action": "get_action_chunk",
+            "service_prefix": self._service_prefix,
+            "task_instruction": task_instruction,
+        }, timeout=5.0)
+        return ServiceResponse(
+            success=result.get("success", False),
+            message=result.get("message", ""),
+            data={
+                "action_chunk": result.get("action_chunk", []),
+                "chunk_size": result.get("chunk_size", 0),
+                "action_dim": result.get("action_dim", 0),
+            },
+            request_id="",
         )
 
     def stop_inference(self) -> ServiceResponse:
-        """Call /{prefix}/stop to stop inference."""
-        request = StopTraining.Request()
-        return self._call_service(
-            self._stop_client, request, self.service_stop
+        """Call /{prefix}/stop via TCP bridge."""
+        result = self._bridge_call({
+            "action": "stop",
+            "service_prefix": self._service_prefix,
+        })
+        return ServiceResponse(
+            success=result.get("success", False),
+            message=result.get("message", ""),
+            data={},
+            request_id="",
         )
 
     # --- Training services ---

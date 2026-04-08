@@ -23,15 +23,20 @@ from typing import Dict  # noqa: I100
 from typing import TYPE_CHECKING  # noqa: I100
 from typing import Type  # noqa: I100
 
+from physical_ai_bt.actions import DockingPerception
+from physical_ai_bt.actions import MarkerMove
+from physical_ai_bt.actions import MoveAbMove
 from physical_ai_bt.actions import InferenceUntilGripperClose
 from physical_ai_bt.actions import InferenceUntilGripperOpen
 from physical_ai_bt.actions import InferenceUntilPositionWithGripper
 from physical_ai_bt.actions import InferenceUntilStatic
 from physical_ai_bt.actions import MoveArms
+from physical_ai_bt.actions import MoveArmsAndHead
 from physical_ai_bt.actions import MoveHead
 from physical_ai_bt.actions import MoveLift
 from physical_ai_bt.actions import Rotate
 from physical_ai_bt.actions import SendCommandAction
+from physical_ai_bt.actions import SwerveHome
 from physical_ai_bt.actions import Wait
 from physical_ai_bt.actions.base_action import BaseAction
 from physical_ai_bt.constants import GRIPPER_CLOSED_THRESHOLD
@@ -67,13 +72,18 @@ class TreeLoader:
             'Rotate': Rotate,
             'MoveHead': MoveHead,
             'MoveArms': MoveArms,
+            'MoveArmsAndHead': MoveArmsAndHead,
             'MoveLift': MoveLift,
             'SendCommand': SendCommandAction,
             'Wait': Wait,
+            'DockingPerception': DockingPerception,
+            'MarkerMove': MarkerMove,
+            'MoveAbMove': MoveAbMove,
             'InferenceUntilGripperClose': InferenceUntilGripperClose,
             'InferenceUntilGripperOpen': InferenceUntilGripperOpen,
             'InferenceUntilPositionWithGripper': InferenceUntilPositionWithGripper,
             'InferenceUntilStatic': InferenceUntilStatic,
+            'SwerveHome': SwerveHome,
         }
 
     def load_tree_from_string(
@@ -198,13 +208,18 @@ class TreeLoader:
 
         elif action_class == MoveHead:
             head_joints = self._get_joint_names_for_group('leader_head')
+            lift_joints = self._get_joint_names_for_group('leader_lift')
+            lift_joint_name = lift_joints[0] if lift_joints else None
 
             action = action_class(
                 node=self.node,
                 head_positions=params.get('head_positions', [0.0, 0.0]),
+                lift_position=params.get('lift_position', -0.15),
                 head_joint_names=head_joints if head_joints else None,
+                lift_joint_name=lift_joint_name,
                 position_threshold=params.get('position_threshold', 0.01),
-                duration=params.get('duration', 5.0)
+                duration=params.get('duration', 5.0),
+                lift_duration=params.get('lift_duration', 2.0),
             )
             action.name = name
             return action
@@ -224,6 +239,34 @@ class TreeLoader:
                 right_joint_names=right_joints if right_joints else None,
                 position_threshold=params.get('position_threshold', 0.01),
                 duration=params.get('duration', 2.0)
+            )
+            action.name = name
+            return action
+
+        elif action_class == MoveArmsAndHead:
+            default_positions = [0.0] * 8
+            left_joints = self._get_joint_names_for_group('leader_left')
+            right_joints = self._get_joint_names_for_group('leader_right')
+            head_joints = self._get_joint_names_for_group('leader_head')
+            lift_joints = self._get_joint_names_for_group('leader_lift')
+            lift_joint_name = lift_joints[0] if lift_joints else None
+
+            action = action_class(
+                node=self.node,
+                left_positions=params.get('left_positions', default_positions),
+                right_positions=params.get(
+                    'right_positions', default_positions
+                ),
+                head_positions=params.get('head_positions', [0.0, 0.0]),
+                lift_position=params.get('lift_position', -0.15),
+                left_joint_names=left_joints if left_joints else None,
+                right_joint_names=right_joints if right_joints else None,
+                head_joint_names=head_joints if head_joints else None,
+                lift_joint_name=lift_joint_name,
+                position_threshold=params.get('position_threshold', 0.01),
+                duration=params.get('duration', 2.0),
+                head_duration=params.get('head_duration', 1.0),
+                lift_duration=params.get('lift_duration', 2.0),
             )
             action.name = name
             return action
@@ -320,6 +363,48 @@ class TreeLoader:
             action = action_class(
                 node=self.node,
                 duration=params.get('duration', 5.0),
+            )
+            action.name = name
+            return action
+
+        elif action_class == DockingPerception:
+            action = action_class(
+                node=self.node,
+                activate=params.get('activate', True),
+            )
+            action.name = name
+            return action
+
+        elif action_class == MarkerMove:
+            action = action_class(
+                node=self.node,
+                move_to_a=params.get('move_to_a', True),
+            )
+            action.name = name
+            return action
+
+        elif action_class == MoveAbMove:
+            action = action_class(
+                node=self.node,
+                a=params.get('a', 1),
+                b=params.get('b', 0),
+            )
+            action.name = name
+            return action
+
+        elif action_class == SwerveHome:
+            default_arm = [0.75, 0.0, 0.0, -2.3, 0.0, 0.0, 0.0, 0.0]
+            action = action_class(
+                node=self.node,
+                swerve_positions=params.get(
+                    'swerve_positions', [0.0, 0.0, 0.0]
+                ),
+                left_positions=params.get('left_positions', default_arm),
+                right_positions=params.get('right_positions', default_arm),
+                head_positions=params.get('head_positions', [0.0, 0.0]),
+                duration=params.get('duration', 10.0),
+                arms_duration=params.get('arms_duration', 2.0),
+                head_duration=params.get('head_duration', 2.0),
             )
             action.name = name
             return action

@@ -1,0 +1,50 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<root BTCPP_format="3" main_tree_to_execute="InitPose">
+  <BehaviorTree ID="InitPose">
+    <Sequence name="Init">
+
+      <DockingPerception name="ActivateDocking"
+        activate="true"/>
+
+      <MoveAbMove name="GoToPosition1" a="1" b="0"/>
+
+      <MoveArmsAndHead name="InitPose"
+        left_positions="0.75,0.0,0.0,-2.3,0.0,0.0,0.0,0.0"
+        right_positions="0.75,0.0,0.0,-2.3,0.0,0.0,0.0,0.0"
+        head_positions="0.69369,0.0"
+        lift_position="-0.15"
+        duration="1.0"
+        head_duration="2.0"/>
+
+    </Sequence>
+  </BehaviorTree>
+
+  <TreeNodesModel>
+    <Action ID="DockingPerception">
+      <input_port name="activate" default="true">
+        Activate (true) or deactivate (false) docking perception.
+      </input_port>
+    </Action>
+    <Action ID="MoveAbMove">
+      <input_port name="a" default="1">Target position ID.</input_port>
+      <input_port name="b" default="0">Secondary parameter.</input_port>
+    </Action>
+    <Action ID="MoveArmsAndHead">
+      <input_port name="left_positions" default="0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0">
+        Target positions for left arm joints.
+      </input_port>
+      <input_port name="right_positions" default="0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0">
+        Target positions for right arm joints.
+      </input_port>
+      <input_port name="head_positions" default="0.0,0.0">
+        Target positions for head joints.
+      </input_port>
+      <input_port name="lift_position" default="-0.15">
+        Target position for lift joint.
+      </input_port>
+      <input_port name="duration" default="2.0">Arms trajectory duration.</input_port>
+      <input_port name="head_duration" default="1.0">Head trajectory duration.</input_port>
+      <input_port name="lift_duration" default="2.0">Lift trajectory duration.</input_port>
+    </Action>
+  </TreeNodesModel>
+</root>

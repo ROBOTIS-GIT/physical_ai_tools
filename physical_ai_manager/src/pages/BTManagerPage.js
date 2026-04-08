@@ -26,7 +26,7 @@ import {
 import '@xyflow/react/dist/style.css';
 import clsx from 'clsx';
 import toast from 'react-hot-toast';
-import { MdPlayArrow, MdStop, MdUploadFile } from 'react-icons/md';
+import { MdPlayArrow, MdStop, MdUploadFile, MdRestartAlt } from 'react-icons/md';
 
 import BTControlNode from '../components/bt/BTControlNode';
 import BTActionNode from '../components/bt/BTActionNode';
@@ -163,6 +163,68 @@ export default function BTManagerPage({ isActive = true }) {
       toast.error(`Failed to start BT: ${err.message}`);
     }
   }, [callService, dispatch, treeXml, getHttpBaseUrl]);
+
+  // BT Init - load and run init.xml to return robot to home pose
+  const handleInit = useCallback(async () => {
+    try {
+      // 1. Stop current tree if running
+      if (btStatus === 'running') {
+        try {
+          await callService(
+            '/bt/set_running',
+            'std_srvs/srv/SetBool',
+            { data: false }
+          );
+        } catch {
+          // BT node may already be gone
+        }
+      }
+
+      // 2. Fetch init.xml from server
+      const baseUrl = getHttpBaseUrl();
+      const initXmlPath = `${DEFAULT_PATHS.BT_TREES_PATH}init.xml`;
+      const fileRes = await fetch(`${baseUrl}${initXmlPath}`);
+      if (!fileRes.ok) {
+        toast.error('Failed to fetch init.xml');
+        return;
+      }
+      const initXml = await fileRes.text();
+
+      // 3. Launch BT node if not running
+      const launchRes = await fetch(`${baseUrl}/bt/launch`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({}),
+      });
+      const launchData = await launchRes.json();
+      if (!launchData.success) {
+        toast.error(`Failed to launch BT node: ${launchData.message}`);
+        return;
+      }
+
+      const isAlreadyRunning = launchData.message.includes('already running');
+      if (!isAlreadyRunning) {
+        await new Promise((resolve) => setTimeout(resolve, 8000));
+      }
+
+      // 4. Load and run init tree
+      const result = await callService(
+        '/bt/load_and_run',
+        'physical_ai_interfaces/srv/LoadAndRunTree',
+        { tree_xml: initXml },
+        30000
+      );
+      if (result.success) {
+        dispatch(setBtStatus('running'));
+        dispatch(setSelectedNodeId(null));
+        toast.success('Init started - returning to home pose');
+      } else {
+        toast.error(`Init failed: ${result.message}`);
+      }
+    } catch (err) {
+      toast.error(`Init failed: ${err.message}`);
+    }
+  }, [callService, dispatch, btStatus, getHttpBaseUrl]);
 
   // BT Stop - stop tree and shutdown node
   const handleStop = useCallback(async () => {
@@ -357,6 +419,16 @@ export default function BTManagerPage({ isActive = true }) {
           >
             <MdStop size={20} />
             Stop
+          </button>
+          <button
+            onClick={handleInit}
+            className={clsx(
+              'flex items-center gap-2 px-5 py-2 rounded-lg text-sm font-medium transition-colors',
+              'bg-blue-600 hover:bg-blue-700 text-white cursor-pointer'
+            )}
+          >
+            <MdRestartAlt size={20} />
+            Init
           </button>
         </div>
 

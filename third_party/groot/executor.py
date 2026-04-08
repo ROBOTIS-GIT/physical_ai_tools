@@ -26,6 +26,7 @@ Services (via RobotServiceServer):
     /groot/stop              - Stop training/inference
     /groot/status            - Get state and progress (built-in)
 """
+import atexit
 import logging
 import os
 
@@ -39,6 +40,9 @@ logging.basicConfig(
 
 server = RobotServiceServer(
     name="groot",
+    router_ip=os.environ.get("ZENOH_ROUTER_IP", "127.0.0.1"),
+    router_port=int(os.environ.get("ZENOH_ROUTER_PORT", "7447") or "7447"),
+    domain_id=int(os.environ.get("ROS_DOMAIN_ID", "30")),
     node_name="groot_executor",
 )
 
@@ -69,4 +73,17 @@ def stop_callback():
 
 
 if __name__ == "__main__":
+    # Start TCP bridge server in the SAME process as the executor.
+    # It calls inference handlers directly (no Zenoh), completely
+    # bypassing stale queryable routing issues.
+    from bridge_server import start_bridge_server
+
+    def _stop_all():
+        from training import cleanup_training
+        inference.cleanup()
+        cleanup_training()
+
+    start_bridge_server(port=9100, inference=inference, stop_fn=_stop_all)
+
+    atexit.register(server._cleanup)
     server.spin()

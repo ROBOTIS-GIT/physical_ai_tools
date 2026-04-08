@@ -145,8 +145,8 @@ services:
     ipc: host
     environment:
       - ROS_DOMAIN_ID=${ROS_DOMAIN_ID:-30}
-      - ZENOH_ROUTER_IP=
-      - ZENOH_ROUTER_PORT=
+      - ZENOH_ROUTER_IP=127.0.0.1
+      - ZENOH_ROUTER_PORT=7447
       - ZENOH_SDK_PATH=/zenoh_sdk
       - ZENOH_CONFIG_OVERRIDE=
       - ZENOH_TRANSPORT_SHM_ENABLED=
@@ -169,6 +169,8 @@ services:
       - ../third_party/groot/executor.py:/app/executor.py:ro
       - ../third_party/groot/training.py:/app/training.py:ro
       - ../third_party/groot/inference.py:/app/inference.py:ro
+      - ../third_party/groot/bridge_infer.py:/app/bridge_infer.py:ro
+      - ../third_party/groot/bridge_server.py:/app/bridge_server.py:ro
     command: server
     depends_on:
       - physical_ai_server

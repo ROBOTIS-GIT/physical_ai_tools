@@ -18,9 +18,6 @@
 
 """ROS 2 node for executing behavior trees."""
 
-import os
-
-from ament_index_python.packages import get_package_share_directory
 import rclpy
 from rclpy.executors import MultiThreadedExecutor
 from rclpy.node import Node
@@ -44,29 +41,16 @@ class BehaviorTreeNode(Node):
         self.blackboard = Blackboard()
 
         self.tree_execution_mode = 'stopped'
-        self.main_tree_path = None
 
         self.declare_parameter('robot_type', 'ffw_sg2_rev1')
-        self.declare_parameter('tree_xml', 'ffw_test.xml')
         self.declare_parameter('tick_rate', 30.0)
 
         robot_type = self.get_parameter('robot_type').value
-        tree_xml = self.get_parameter('tree_xml').value
         tick_rate = self.get_parameter('tick_rate').value
 
         self.robot_type = robot_type
         self.joint_names = self._load_joint_order(robot_type)
         self.topic_config = self._load_topic_config(robot_type)
-
-        pkg_share = get_package_share_directory('physical_ai_bt')
-
-        self.main_tree_path = os.path.join(pkg_share, 'trees', tree_xml)
-        if not os.path.exists(self.main_tree_path):
-            self.main_tree_path = os.path.join(
-                os.path.dirname(os.path.dirname(__file__)),
-                'trees',
-                tree_xml
-            )
 
         self.tree_loader = TreeLoader(
             self,
@@ -75,26 +59,6 @@ class BehaviorTreeNode(Node):
         )
 
         self.root = None
-        try:
-            self.get_logger().info(
-                f'Loading main tree: {self.main_tree_path}'
-            )
-            if os.path.exists(self.main_tree_path):
-                tree_file = self.main_tree_path
-                self.root = self.tree_loader.load_tree_from_file(tree_file)
-                self.tree_execution_mode = 'stopped'
-                self.get_logger().info(
-                    f'Main tree loaded successfully: {self.root.name}'
-                )
-            else:
-                self.get_logger().error(
-                    f'Main tree file not found: {self.main_tree_path}'
-                )
-                self.tree_execution_mode = 'stopped'
-        except Exception as e:
-            self.get_logger().error(f'Failed to load main tree: {str(e)}')
-            self.root = None
-            self.tree_execution_mode = 'stopped'
 
         self.timer = self.create_timer(1.0 / tick_rate, self.tick_callback)
 
@@ -124,14 +88,10 @@ class BehaviorTreeNode(Node):
 
         self.get_logger().info('Behavior Tree Node initialized')
         self.get_logger().info(f'Robot type: {robot_type}')
-        self.get_logger().info(f'Main tree XML: {tree_xml}')
-        if self.root:
-            self.get_logger().info(
-                'Tree loaded, waiting for start command'
-            )
-        else:
-            self.get_logger().error('Tree failed to load')
         self.get_logger().info(f'Tick rate: {tick_rate} Hz')
+        self.get_logger().info(
+            'Waiting for tree via /bt/load_and_run'
+        )
 
     def _load_joint_order(self, robot_type: str) -> list:
         """Load joint order configuration for the robot type."""

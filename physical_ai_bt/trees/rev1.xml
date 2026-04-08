@@ -6,9 +6,9 @@
       <!-- Phase 1: Load model and immediately pause (runs once) -->
       <SendCommand name="LoadModel"
         command="START_INFERENCE"
-        policy_path="/workspace/checkpoints/ROBOTIS/ffw_sg2_0331_siglip2_top_100k" 
+        policy_path="/workspace/checkpoints/ROBOTIS/ffw_sg2_0325_all_95k"
         task_instruction="Pick up the pouch with your right hand first, then pick up the pouch with your left hand"
-        control_hz="100"
+        control_hz="15"
         wait_until_ready="true"/>
       <SendCommand name="PauseAfterLoad"
         command="STOP_INFERENCE"/>
@@ -17,102 +17,62 @@
       <DockingPerception name="ActivateDocking"
         activate="true"/>
 
-      <!-- Phase 2: Infinite loop (1→2→1→3→1→2→1→3→...) -->
+      <!-- Phase 2: Infinite loop -->
       <Loop name="InfiniteLoop">
         <Sequence name="OneIteration">
-
-          <!-- ===== Part A: 1→2 (handshake at position 2, return to 1) ===== -->
           <MoveHead name="LookDown"
             head_positions="0.69369,0.0"
-            lift_position="-0.15"
-            duration="1.0"/>
+            duration="2.0"/>
           <SendCommand name="ResumeInference"
             command="RESUME_INFERENCE"
             task_instruction="Shake the right hand in the air, then go to the initial position with both arms"/>
           <InferenceUntilStatic name="WaitForStatic"
-            position_change_threshold="0.07"
+            position_change_threshold="0.05"
             static_duration="1.5"/>
           <SendCommand name="PauseInference"
             command="STOP_INFERENCE"/>
 
-          <MoveAbMove name="GoToPosition2" a="2" b="0"/>
+          <MarkerMove name="MoveToB"
+            move_to_a="false"/>
 
-          <!-- <MoveArmsAndHead name="ReadyPoseWithHead"
+          <!-- <MoveHead name="LookLeft"
+            head_positions="0.0,0.5"
+            duration="2.0"/>
+
+          <MoveHead name="LookDown"
+            head_positions="0.69369,0.0"
+            duration="1.0"/> -->
+
+          <!-- Move to ready pose -->
+          <MoveArms name="ReadyPose"
             left_positions="0.75,0.0,0.0,-2.3,0.0,0.0,0.0,0.0"
             right_positions="0.75,0.0,0.0,-2.3,0.0,0.0,0.0,0.0"
-            head_positions="0.0,0.34"
-            lift_position="-0.15"
-            duration="2.0"
-            head_duration="2.0"/> -->
-
-          <MoveArmsAndHead name="ReadyPoseWithHead"
-            left_positions="0.75,0.0,0.0,-2.3,0.0,0.0,0.0,0.0"
-            right_positions="0.75,0.0,0.0,-2.3,0.0,0.0,0.0,0.0"
+            duration="2.0"/>
+          <MoveHead name="LookDown"
             head_positions="0.69369,0.0"
-            lift_position="-0.15"
-            duration="1.0"
-            head_duration="1.0"/>
-          <!-- <MoveHead name="LookDown"
-            head_positions="0.69369,0.0"
-            lift_position="-0.15"
-            duration="2.0"/> -->
+            duration="2.0"/>
 
+          <!-- Resume inference -->
           <SendCommand name="ResumeInference"
             command="RESUME_INFERENCE"
             task_instruction="Pick up the pouch with your right hand first, then pick up the pouch with your left hand"/>
           <InferenceUntilGripperClose name="WaitForGrip"
             position_change_threshold="0.05"
-            static_duration="1.5"/>
+            static_duration="1.0"/>
           <SendCommand name="PauseInference"
             command="STOP_INFERENCE"/>
-          
-          <!-- <MoveHead name="LookDown"
-            head_positions="0.69369,0.0"
-            lift_position="-0.15"
-            duration="1.0"/> -->
 
-          <MoveAbMove name="GoToPosition1" a="1" b="0"/>
-
-          <MoveArmsAndHead name="ReadyPoseWithHead"
-            left_positions="0.75,0.0,0.0,-2.3,0.0,0.0,0.0,1.05"
-            right_positions="0.75,0.0,0.0,-2.3,0.0,0.0,0.0,1.05"
-            head_positions="0.69369,0.0"
-            lift_position="-0.15"
-            duration="6.0"
-            head_duration="1.0"/>
-
-          <MoveArmsAndHead name="ReadyPoseWithHead"
-            left_positions="0.75,0.0,0.0,-2.3,0.0,0.0,0.0,1.05"
-            right_positions="0.4,0.0,0.0,-2.3,0.0,0.0,0.0,1.05"
-            head_positions="0.69369,0.0"
-            lift_position="-0.15"
-            duration="1.0"
-            head_duration="1.0"/>
-
-          <MoveArmsAndHead name="ReadyPoseWithHead"
-            left_positions="0.9196574350121579,0.062102253459557756,-0.06657236934925576,-2.2018736260860683,0.03540140037042331,-0.13162274213553124,0.010932225299899297,0.0"
-            right_positions="-0.06403171366932016,-0.5717314175598459,0.1722732330145007,-2.2031559381509416,-0.3664416449310879,0.7014726363852362,0.6495210490384824,0.0"
-            head_positions="0.69369,0.0"
-            lift_position="-0.15"
-            duration="4.0"
-            head_duration="1.0"/>
+          <MarkerMove name="MoveToA"
+            move_to_a="true"/>
 
           <SendCommand name="ResumeInference"
             command="RESUME_INFERENCE"
             task_instruction="Put the pouch into the box with your right hand first, then put the pouch into the box with your left hand"/>
           <InferenceUntilGripperOpen name="WaitForRelease"
             position_change_threshold="0.05"
-            static_duration="0.5"/>
+            static_duration="1.5"/>
           <SendCommand name="PauseInference"
             command="STOP_INFERENCE"/>
-          
-          <!-- <MoveArmsAndHead name="ReadyPoseWithHead"
-            left_positions="0.9196574350121579,0.062102253459557756,-0.06657236934925576,-2.2018736260860683,0.03540140037042331,-0.13162274213553124,0.010932225299899297,0.0"
-            right_positions="-0.06403171366932016,-0.5717314175598459,0.1722732330145007,-2.2031559381509416,-0.3664416449310879,0.7014726363852362,0.6495210490384824,0.0"
-            head_positions="0.69369,0.0"
-            lift_position="-0.15"
-            duration="2.0"
-            head_duration="1.0"/> -->
 
           <SendCommand name="ResumeInference"
             command="RESUME_INFERENCE"
@@ -124,107 +84,14 @@
             check_delay="3.0"/>
           <SendCommand name="PauseInference"
             command="STOP_INFERENCE"/>
-          
-          <MoveHead name="LookDown"
-            head_positions="0.69369,0.0"
-            lift_position="-0.15"
-            duration="1.0"/>
 
-          <!-- ===== Part B: 1→3 (pickup at position 3, return to 1) ===== -->
-          <SendCommand name="ResumeInference"
-            command="RESUME_INFERENCE"
-            task_instruction="Shake the right hand in the air, then go to the initial position with both arms"/>
-          <InferenceUntilStatic name="WaitForStatic2"
-            position_change_threshold="0.07"
-            static_duration="1.5"/>
-          <SendCommand name="PauseInference"
-            command="STOP_INFERENCE"/>
-
-          <MoveAbMove name="GoToPosition3" a="3" b="0"/>
-
-          <!-- <MoveArmsAndHead name="ReadyPoseWithHead"
+          <MoveArms name="ReadyPose"
             left_positions="0.75,0.0,0.0,-2.3,0.0,0.0,0.0,0.0"
             right_positions="0.75,0.0,0.0,-2.3,0.0,0.0,0.0,0.0"
-            head_positions="0.0,0.34"
-            lift_position="-0.15"
-            duration="2.0"
-            head_duration="2.0"/>
+            duration="2.0"/>
           <MoveHead name="LookDown"
             head_positions="0.69369,0.0"
-            lift_position="-0.15"
-            duration="2.0"/> -->
-          <MoveArmsAndHead name="ReadyPoseWithHead"
-            left_positions="0.75,0.0,0.0,-2.3,0.0,0.0,0.0,0.0"
-            right_positions="0.75,0.0,0.0,-2.3,0.0,0.0,0.0,0.0"
-            head_positions="0.69369,0.0"
-            lift_position="-0.15"
-            duration="1.0"
-            head_duration="1.0"/>
-
-          <SendCommand name="ResumeInference"
-            command="RESUME_INFERENCE"
-            task_instruction="Pick up the pouch with your right hand first, then pick up the pouch with your left hand"/>
-          <InferenceUntilGripperClose name="WaitForGrip2"
-            position_change_threshold="0.05"
-            static_duration="1.5"/>
-          <SendCommand name="PauseInference"
-            command="STOP_INFERENCE"/>
-          
-          <!-- <MoveHead name="LookDown"
-            head_positions="0.69369,0.0"
-            lift_position="-0.15"
-            duration="1.0"/> -->
-
-          <MoveAbMove name="GoToPosition1Again" a="1" b="0"/>
-
-          <MoveArmsAndHead name="ReadyPoseWithHead"
-            left_positions="0.75,0.0,0.0,-2.3,0.0,0.0,0.0,1.05"
-            right_positions="0.75,0.0,0.0,-2.3,0.0,0.0,0.0,1.05"
-            head_positions="0.69369,0.0"
-            lift_position="-0.15"
-            duration="6.0"
-            head_duration="1.0"/>
-          <MoveArmsAndHead name="ReadyPoseWithHead"
-            left_positions="0.75,0.0,0.0,-2.3,0.0,0.0,0.0,1.05"
-            right_positions="0.4,0.0,0.0,-2.3,0.0,0.0,0.0,1.05"
-            head_positions="0.69369,0.0"
-            lift_position="-0.15"
-            duration="1.0"
-            head_duration="1.0"/>
-
-          <SendCommand name="ResumeInference"
-            command="RESUME_INFERENCE"
-            task_instruction="Put the pouch into the box with your right hand first, then put the pouch into the box with your left hand"/>
-          <InferenceUntilGripperOpen name="WaitForRelease2"
-            position_change_threshold="0.05"
-            static_duration="0.5"/>
-          <SendCommand name="PauseInference"
-            command="STOP_INFERENCE"/>
-          
-          <MoveArmsAndHead name="ReadyPoseWithHead"
-            left_positions="0.9196574350121579,0.062102253459557756,-0.06657236934925576,-2.2018736260860683,0.03540140037042331,-0.13162274213553124,0.010932225299899297,0.0"
-            right_positions="-0.06403171366932016,-0.5717314175598459,0.1722732330145007,-2.2031559381509416,-0.3664416449310879,0.7014726363852362,0.6495210490384824,0.0"
-            head_positions="0.69369,0.0"
-            lift_position="-0.15"
-            duration="2.0"
-            head_duration="1.0"/>
-
-          <SendCommand name="ResumeInference"
-            command="RESUME_INFERENCE"
-            task_instruction="Grasp the box with your right hand first, then relocate the box to the conveyor belt"/>
-          <InferenceUntilPositionWithGripper name="WaitForGripAndPosition2"
-            left_positions="0.622484610034031,0.20556540980158128,-0.26517494448082485,-1.898169398534522,0.03471829955081799,-0.3815897052114586,0.34545625093844506,0.10737865515199488"
-            right_positions="0.7755351463003398,-0.17293236538429532,0.12276639993047272,-2.197055967674115,-0.06678808539755217,-0.19231085705625692,-0.09371513097671479,0.11504855909142309"
-            tolerance="1.5"
-            check_delay="3.0"/>
-          <SendCommand name="PauseInference"
-            command="STOP_INFERENCE"/>
-          
-          <MoveHead name="LookDown"
-            head_positions="0.69369,0.0"
-            lift_position="-0.15"
-            duration="1.0"/>
-
+            duration="2.0"/>
         </Sequence>
       </Loop>
 
@@ -260,17 +127,11 @@
       <input_port name="head_positions" default="0.0,0.0">
         Target positions for head joints (comma-separated).
       </input_port>
-      <input_port name="lift_position" default="-0.15">
-        Target position for lift joint.
-      </input_port>
       <input_port name="position_threshold" default="0.01">
         Position tolerance for completion.
       </input_port>
       <input_port name="duration" default="5.0">
-        Head trajectory duration in seconds.
-      </input_port>
-      <input_port name="lift_duration" default="2.0">
-        Lift trajectory duration in seconds.
+        Trajectory duration in seconds.
       </input_port>
     </Action>
     <Action ID="MoveArms">
@@ -287,32 +148,6 @@
         Trajectory duration in seconds.
       </input_port>
     </Action>
-    <Action ID="MoveArmsAndHead">
-      <input_port name="left_positions" default="0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0">
-        Target positions for left arm joints (comma-separated).
-      </input_port>
-      <input_port name="right_positions" default="0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0">
-        Target positions for right arm joints (comma-separated).
-      </input_port>
-      <input_port name="head_positions" default="0.0,0.0">
-        Target positions for head joints (comma-separated).
-      </input_port>
-      <input_port name="lift_position" default="-0.15">
-        Target position for lift joint.
-      </input_port>
-      <input_port name="position_threshold" default="0.01">
-        Position tolerance for completion.
-      </input_port>
-      <input_port name="duration" default="2.0">
-        Arms trajectory duration in seconds.
-      </input_port>
-      <input_port name="head_duration" default="1.0">
-        Head trajectory duration in seconds.
-      </input_port>
-      <input_port name="lift_duration" default="2.0">
-        Lift trajectory duration in seconds.
-      </input_port>
-    </Action>
     <Action ID="MoveLift">
       <input_port name="lift_position" default="0.0">
         Target position for lift joint.
@@ -327,6 +162,7 @@
     <Action ID="Wait">
       <input_port name="duration" default="5.0">
         Duration to wait in seconds.
+        
       </input_port>
     </Action>
     <Action ID="InferenceUntilGripperClose">
@@ -402,14 +238,6 @@
     <Action ID="MarkerMove">
       <input_port name="move_to_a" default="true">
         Move to position A (true) or position B (false).
-      </input_port>
-    </Action>
-    <Action ID="MoveAbMove">
-      <input_port name="a" default="1">
-        Target position ID (1, 2, 3, etc.)
-      </input_port>
-      <input_port name="b" default="0">
-        Secondary parameter (default 0).
       </input_port>
     </Action>
     <Action ID="SwerveHome">

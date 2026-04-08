@@ -301,6 +301,15 @@ class GR00TInference:
             images = self.robot.get_images(format="rgb")
             joints = self.robot.get_joint_positions()
             task = request.task_instruction
+            # if task == 'Grasp the box with your right hand first, then relocate the box to the conveyor belt':
+            #     timestamp = time.strftime("%H%M%S")
+            #     for cam_key in images:
+            #         img = images[cam_key]
+            #         h = img.shape[0]
+            #         mask_h = h // 3 + 10
+            #         img[:mask_h, :] = 127
+            #         images[cam_key] = img
+            #         task_check = 'mask'
 
             observation = self.preprocess(images, joints, task)
             if "success" in observation:
@@ -354,7 +363,7 @@ class GR00TInference:
 
         chunk = np.concatenate(chunks, axis=1)  # (T, D_total)
         T, D = chunk.shape
-        self.logger.info("Action chunk: T=%d, D=%d", T, D)
+        # self.logger.info("Action chunk: T=%d, D=%d", T, D)
         return {
             "success": True,
             "action_chunk": np.asarray(chunk.flatten(), dtype=np.float64).tolist(),

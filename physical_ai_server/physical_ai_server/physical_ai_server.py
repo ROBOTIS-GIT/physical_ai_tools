@@ -136,6 +136,8 @@ class PhysicalAIServer(Node):
         self.training_manager: Optional[ZenohTrainingManager] = None
         # Action chunk inference manager (GR00T, LeRobot, etc.)
         self.inference_manager: Optional[InferenceManager] = None
+        self._cleanup_done = threading.Event()
+        self._cleanup_done.set()  # No cleanup pending initially
 
         # Initialize HF API Worker
         self.hf_endpoint_store = HFEndpointStore()
@@ -969,11 +971,10 @@ class PhysicalAIServer(Node):
                     else ''
                 )
 
-                # If model already loaded and paused, just resume
-                if (
-                    self.inference_manager is not None
-                    and self.inference_manager.is_paused
-                ):
+                # If model already loaded, pause then resume (avoid reload)
+                if self.inference_manager is not None:
+                    if not self.inference_manager.is_paused:
+                        self.inference_manager.pause()
                     self.get_logger().info(
                         'Model already loaded, resuming inference'
                     )
@@ -982,9 +983,10 @@ class PhysicalAIServer(Node):
                     response.success = True
                     response.message = 'Inference resumed (model already loaded)'
                 else:
-                    # Clean up existing inference session if any
-                    if self.inference_manager is not None:
-                        self._stop_groot_inference()
+                    # Wait for any pending cleanup to finish before starting new inference
+                    if not self._cleanup_done.is_set():
+                        self.get_logger().info('Waiting for previous inference cleanup...')
+                        self._cleanup_done.wait(timeout=10.0)
 
                     self.init_robot_control_parameters_from_user_task(task_info)
                     self.joint_topic_types = self.communicator.get_publisher_msg_types()
@@ -1841,24 +1843,34 @@ class PhysicalAIServer(Node):
         # Default to groot for backward compatibility
         return '/groot'
 
-    def _stop_groot_inference(self):
-        """Stop GR00T inference and cleanup (non-blocking).
+    def _stop_groot_inference(self, blocking=False):
+        """Stop GR00T inference and cleanup.
 
         Clears the inference_manager reference immediately so no new
         actions are dispatched, then runs the blocking cleanup (thread
         join + container stop service call) in a background thread.
+
+        Args:
+            blocking: If True, wait for cleanup to complete before returning.
         """
         if self.inference_manager is not None:
             manager = self.inference_manager
             self.inference_manager = None
+            self._cleanup_done.clear()
 
             def _cleanup():
                 try:
                     manager.stop()
                 except Exception as e:
                     self.get_logger().error(f'Error stopping inference: {e}')
+                finally:
+                    self._cleanup_done.set()
 
-            threading.Thread(target=_cleanup, daemon=True).start()
+            thread = threading.Thread(target=_cleanup, daemon=True)
+            thread.start()
+
+            if blocking:
+                thread.join(timeout=10.0)
 
     def handle_joystick_trigger(self, joystick_mode: str):
         """

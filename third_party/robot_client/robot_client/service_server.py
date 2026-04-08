@@ -525,7 +525,12 @@ class RobotServiceServer:
     # ------------------------------------------------------------------ #
 
     def _setup_services(self):
-        """Register all services and start progress publisher."""
+        """Register all services and start progress publisher.
+
+        Closes any stale ZenohSession first to ensure clean discovery state.
+        This prevents stale queryables from previous executor runs from
+        interfering with service calls.
+        """
         prefix = f"/{self._name}"
         common_kwargs = {
             "node_name": self._node_name,
@@ -620,6 +625,14 @@ class RobotServiceServer:
             except Exception:
                 pass
             self._progress_publisher = None
+
+        # Close ZenohSession to undeclare all liveliness tokens
+        try:
+            from zenoh_ros2_sdk.session import ZenohSession
+            session = ZenohSession.get_instance(self._router_ip, self._router_port)
+            session.close()
+        except Exception as e:
+            logger.debug(f"Error closing ZenohSession: {e}")
 
         logger.info(f"RobotServiceServer '{self._name}' stopped")
 
