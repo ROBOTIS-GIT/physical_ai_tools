@@ -14,21 +14,26 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Merge per-segment rosbag2 .mcap files into a single episode .mcap.
+"""Merge per-segment rosbag2 directories into a single rosbag2 episode.
 
-Layout:
-    {episode_dir}/segments/{segment_idx}/<rosbag>.mcap
-    {episode_dir}/merged.mcap   <- output
+Uses `rosbag2_py.SequentialReader` / `SequentialWriter` so the output
+directory contains a standard `metadata.yaml` + `{basename}_0.mcap`,
+identical in layout to a single-shot rosbag2 recording.
 """
 
 from pathlib import Path
 
-from mcap.reader import make_reader
-from mcap.writer import Writer
+from rosbag2_py import (
+    ConverterOptions,
+    SequentialReader,
+    SequentialWriter,
+    StorageOptions,
+    TopicMetadata,
+)
 
 
-def _segment_dirs(episode_dir: Path):
-    segments_root = episode_dir / 'segments'
+def _segment_dirs(pending_dir: Path):
+    segments_root = pending_dir / 'segments'
     if not segments_root.is_dir():
         return []
     dirs = [
@@ -38,98 +43,78 @@ def _segment_dirs(episode_dir: Path):
     return sorted(dirs, key=lambda d: int(d.name))
 
 
-def merge_episode(episode_dir) -> Path:
-    """Merge all segments under `episode_dir` into `episode_dir/merged.mcap`.
+def merge_segments_to(segment_dirs, output_uri) -> Path:
+    """Merge rosbag2 segment directories into a single rosbag2 at `output_uri`.
 
-    Segments are processed in numeric order; messages within each segment
-    are appended in their stored order. Schemas/channels are de-duplicated
-    across segments.
+    `output_uri` must be a path that does NOT yet exist as a rosbag2
+    directory — rosbag2_py will create it and populate `metadata.yaml` +
+    `<basename>_0.mcap`.
+
+    Args:
+        segment_dirs: iterable of rosbag2 segment directories (each must
+            contain its own metadata.yaml + .mcap).
+        output_uri: target directory for the merged rosbag2.
 
     Returns:
-        Path to the produced `merged.mcap`.
+        Path to the output directory.
+    """
+    output_uri = str(output_uri)
+    seg_list = [str(p) for p in segment_dirs]
+    if not seg_list:
+        raise FileNotFoundError('No segment directories to merge')
 
-    Raises:
-        FileNotFoundError if no segments / no .mcap inputs.
+    writer = SequentialWriter()
+    writer.open(
+        StorageOptions(uri=output_uri, storage_id='mcap'),
+        ConverterOptions(
+            input_serialization_format='cdr',
+            output_serialization_format='cdr',
+        ),
+    )
+
+    registered = set()
+    total_messages = 0
+    try:
+        for seg in seg_list:
+            reader = SequentialReader()
+            reader.open(
+                StorageOptions(uri=seg, storage_id='mcap'),
+                ConverterOptions(
+                    input_serialization_format='cdr',
+                    output_serialization_format='cdr',
+                ),
+            )
+            for tm in reader.get_all_topics_and_types():
+                if tm.name in registered:
+                    continue
+                writer.create_topic(TopicMetadata(
+                    name=tm.name,
+                    type=tm.type,
+                    serialization_format=tm.serialization_format,
+                ))
+                registered.add(tm.name)
+            while reader.has_next():
+                topic, data, t = reader.read_next()
+                writer.write(topic, data, t)
+                total_messages += 1
+            del reader
+    finally:
+        del writer
+
+    print(f'[mcap_merger] Merged {total_messages} messages from '
+          f'{len(seg_list)} segment(s) -> {output_uri}')
+    return Path(output_uri)
+
+
+def merge_episode(episode_dir) -> Path:
+    """Backward-compat wrapper: merge `{episode_dir}/segments/*/` in place.
+
+    Retained so callers that still pass a single episode_dir keep working.
+    Produces `{episode_dir}/merged.mcap` subdir with metadata.yaml + mcap.
     """
     episode_dir = Path(episode_dir)
-    seg_dirs = _segment_dirs(episode_dir)
-    if not seg_dirs:
+    segs = _segment_dirs(episode_dir)
+    if not segs:
         raise FileNotFoundError(
             f'No segments under {episode_dir}/segments')
-
-    output_path = episode_dir / 'merged.mcap'
-    tmp_path = episode_dir / '.merged.mcap.tmp'
-
-    schema_id_map = {}   # (name, encoding, data_bytes) -> new schema id
-    channel_id_map = {}  # (topic, schema_id, encoding) -> new channel id
-    total_messages = 0
-    used_segments = 0
-
-    with open(tmp_path, 'wb') as out_stream:
-        writer = Writer(out_stream)
-        writer.start(profile='ros2', library='physical_ai_server')
-
-        for seg_dir in seg_dirs:
-            mcap_files = sorted(seg_dir.glob('*.mcap'))
-            if not mcap_files:
-                continue
-            used_segments += 1
-            for mcap_path in mcap_files:
-                with open(mcap_path, 'rb') as in_stream:
-                    reader = make_reader(in_stream)
-                    for schema, channel, message in reader.iter_messages():
-                        if schema is None:
-                            new_schema_id = 0
-                        else:
-                            schema_key = (
-                                schema.name,
-                                schema.encoding,
-                                bytes(schema.data),
-                            )
-                            if schema_key not in schema_id_map:
-                                schema_id_map[schema_key] = \
-                                    writer.register_schema(
-                                        name=schema.name,
-                                        encoding=schema.encoding,
-                                        data=schema.data,
-                                    )
-                            new_schema_id = schema_id_map[schema_key]
-
-                        channel_key = (
-                            channel.topic,
-                            new_schema_id,
-                            channel.message_encoding,
-                        )
-                        if channel_key not in channel_id_map:
-                            channel_id_map[channel_key] = \
-                                writer.register_channel(
-                                    topic=channel.topic,
-                                    message_encoding=channel.message_encoding,
-                                    schema_id=new_schema_id,
-                                    metadata=dict(channel.metadata or {}),
-                                )
-                        new_channel_id = channel_id_map[channel_key]
-
-                        writer.add_message(
-                            channel_id=new_channel_id,
-                            log_time=message.log_time,
-                            data=message.data,
-                            publish_time=message.publish_time,
-                            sequence=message.sequence,
-                        )
-                        total_messages += 1
-
-        writer.finish()
-
-    if used_segments == 0:
-        try:
-            tmp_path.unlink()
-        except OSError:
-            pass
-        raise FileNotFoundError(
-            f'No .mcap files found in any segment of {episode_dir}')
-
-    tmp_path.replace(output_path)
-    print(f'[mcap_merger] Merged {total_messages} messages from '
-          f'{used_segments} segment(s) -> {output_path}')
-    return output_path
+    return merge_segments_to(segs, episode_dir / 'merged')

@@ -223,13 +223,19 @@ class DataManager:
         self._status = 'idle'
         print('[DataManager] Pending episode discarded')
 
-    def finalize_to_archive(self, task_info):
-        """Merge pending segments, move them under `Task_{num}_{name}_MCAP/`.
+    def finalize_to_archive(self, task_info, urdf_path: str = None):
+        """Merge pending rosbag2 segments into a standard rosbag2 episode dir.
 
-        Returns the archive episode directory on success. Raises on invalid
-        task info, empty pending state, merge failure, or I/O errors. On
-        failure the pending scratch is left intact for retry (it is moved
-        *after* a successful merge).
+        Produces a layout compatible with ROBOTIS legacy single-shot
+        recordings:
+
+            {robot_type}_{task_name}/{ep_idx}/
+                {ep_idx}_0.mcap       (rosbag2_py)
+                metadata.yaml         (rosbag2_py)
+                robot.urdf            (copied from `urdf_path`)
+                episode_info.json     (v1 schema + task_num/task_name/segments)
+
+        On failure the scratch is preserved so the user can retry.
         """
         if self._status != 'between_segments':
             raise RuntimeError(
@@ -247,65 +253,106 @@ class DataManager:
             raise ValueError(
                 'task_num, task_name, and task_instruction are required')
 
-        from physical_ai_server.data_processing.mcap_merger import merge_episode
+        from physical_ai_server.data_processing.mcap_merger import (
+            merge_segments_to,
+        )
+
+        pending_segments_root = os.path.join(
+            self.PENDING_ROSBAG_PATH, 'segments')
+        seg_names = sorted(
+            (d for d in os.listdir(pending_segments_root) if d.isdigit()),
+            key=int,
+        )
+        seg_paths = [
+            os.path.join(pending_segments_root, d) for d in seg_names
+        ]
+
+        repo_name = f'{self._robot_type}_{task_name}'
+        archive_root = os.path.join(self.ARCHIVE_ROSBAG_ROOT, repo_name)
+        os.makedirs(archive_root, exist_ok=True)
+        ep_idx = self._find_next_episode_number_in(archive_root)
+        archive_dir = os.path.join(archive_root, str(ep_idx))
+        if os.path.exists(archive_dir):
+            raise RuntimeError(
+                f'Archive dir already exists: {archive_dir}')
 
         self._status = 'merging'
         self._merge_status = 'pending'
         try:
-            self._write_episode_info()  # reflect pending status on disk
+            self._write_episode_info()
         except Exception:
             pass
 
         try:
-            merge_episode(Path(self.PENDING_ROSBAG_PATH))
+            merge_segments_to(seg_paths, archive_dir)
         except Exception as e:
+            # Roll back half-written archive_dir so a retry starts clean.
+            shutil.rmtree(archive_dir, ignore_errors=True)
             self._merge_status = 'failed'
             self._status = 'between_segments'
             try:
                 self._write_episode_info()
             except Exception:
                 pass
-            raise RuntimeError(f'merge_episode failed: {e}') from e
+            raise RuntimeError(f'merge_segments_to failed: {e}') from e
 
-        repo_name = f'Task_{task_num}_{task_name}_MCAP'
-        archive_root = os.path.join(self.ARCHIVE_ROSBAG_ROOT, repo_name)
-        os.makedirs(archive_root, exist_ok=True)
-        ep_idx = self._find_next_episode_number_in(archive_root)
-        archive_dir = os.path.join(archive_root, str(ep_idx))
-        if os.path.exists(archive_dir):
-            self._merge_status = 'failed'
-            self._status = 'between_segments'
-            raise RuntimeError(
-                f'Archive dir already exists: {archive_dir}')
-
-        try:
-            shutil.move(self.PENDING_ROSBAG_PATH, archive_dir)
-        except Exception as e:
-            self._merge_status = 'failed'
-            self._status = 'between_segments'
-            raise RuntimeError(f'Failed to move scratch to archive: {e}') from e
+        if urdf_path and os.path.exists(urdf_path):
+            urdf_dest = os.path.join(archive_dir, 'robot.urdf')
+            try:
+                self._copy_urdf_with_meshes(
+                    urdf_path, urdf_dest, archive_dir)
+            except Exception as e:
+                print(f'[DataManager] URDF copy (with meshes) failed: {e}')
+                try:
+                    shutil.copy2(urdf_path, urdf_dest)
+                except Exception as e2:
+                    print(f'[DataManager] URDF copy fallback failed: {e2}')
 
         self.current_instruction = instruction_list[0]
         self._task_info = task_info
-        self._merge_status = 'done'
-        self._merged_file = 'merged.mcap'
-        self._record_episode_count = ep_idx + 1
         try:
-            self._write_episode_info(
-                in_dir=archive_dir,
-                task_info_override=task_info,
-                episode_index=ep_idx,
-            )
+            self._write_episode_info_v1(
+                archive_dir, task_info, ep_idx)
         except Exception as e:
             print(f'[DataManager] Failed to write final episode_info: {e}')
+
+        shutil.rmtree(self.PENDING_ROSBAG_PATH, ignore_errors=True)
 
         self._segments_meta = []
         self._current_segment_index = 0
         self._merge_status = 'none'
         self._merged_file = None
+        self._record_episode_count = ep_idx + 1
         self._status = 'idle'
         print(f'[DataManager] Finalized -> {archive_dir}')
         return Path(archive_dir)
+
+    def _write_episode_info_v1(self, archive_dir, task_info, episode_index):
+        """Write a v1-compatible episode_info.json with segment extensions."""
+        task_num = (getattr(task_info, 'task_num', '') or '')
+        task_name = (getattr(task_info, 'task_name', '') or '')
+        instr_list = getattr(task_info, 'task_instruction', []) or []
+        task_instruction = instr_list[0] if instr_list else ''
+        fps = getattr(task_info, 'fps', 15)
+
+        meta = {
+            'task_instruction': task_instruction,
+            'robot_type': self._robot_type,
+            'episode_index': episode_index,
+            'timestamp': time.strftime('%Y-%m-%dT%H:%M:%SZ', time.gmtime()),
+            'fps': fps,
+            'format_version': 'robotis_v1',
+            'device_serial': socket.gethostname(),
+            'needs_review': False,
+            # --- segment extensions (ignored by legacy tooling) ---
+            'task_num': task_num,
+            'task_name': task_name,
+            'segments': list(self._segments_meta),
+        }
+        info_path = os.path.join(archive_dir, 'episode_info.json')
+        with open(info_path, 'w') as f:
+            json.dump(meta, f, indent=2)
+        print(f'[ROBOTIS] episode_info.json written: {info_path}')
 
     # ========== Legacy wrappers (single-segment semantics) ==========
 

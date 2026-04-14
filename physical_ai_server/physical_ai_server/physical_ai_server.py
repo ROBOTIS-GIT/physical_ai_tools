@@ -625,9 +625,14 @@ class PhysicalAIServer(Node):
         if self.data_manager is None:
             raise RuntimeError('Data manager not initialized')
 
+        urdf_path = ''
+        if self.params:
+            urdf_path = self.params.get('urdf_path', '') or ''
+
         def _worker():
             try:
-                archive_dir = self.data_manager.finalize_to_archive(task_info)
+                archive_dir = self.data_manager.finalize_to_archive(
+                    task_info, urdf_path=urdf_path)
                 self.get_logger().info(
                     f'Finalize complete: {archive_dir}')
             except Exception as e:
