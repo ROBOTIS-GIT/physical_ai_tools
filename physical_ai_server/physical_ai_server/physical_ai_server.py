@@ -597,6 +597,26 @@ class PhysicalAIServer(Node):
             self.get_logger().error(traceback.format_exc())
             self.get_logger().error(error_msg)
 
+    def stop_current_segment(self):
+        """Stop the active segment, save its rosbag, refresh episode_info.json."""
+        if self.data_manager is None:
+            return
+        self.communicator.stop_rosbag()
+        self.data_manager.stop_segment()
+        urdf_path = self.params.get('urdf_path', '')
+        if urdf_path:
+            self.data_manager.save_robotis_metadata(urdf_path=urdf_path)
+        else:
+            self.data_manager._write_episode_info()
+        self.previous_data_manager_status = 'idle'
+
+    def finish_current_episode(self, needs_review: bool = False):
+        """Finalize episode (after all segments stopped) and increment counter."""
+        if self.data_manager is None:
+            return
+        self.data_manager.finish_episode(needs_review=needs_review)
+        self.previous_data_manager_status = 'idle'
+
     def stop_recording_and_save(self):
         """Stop recording and save the rosbag (simplified mode)."""
         if self.data_manager is None:
@@ -914,7 +934,10 @@ class PhysicalAIServer(Node):
         - RERECORD: Cancel current recording (discard)
         """
         try:
-            if request.command == SendCommand.Request.START_RECORD:
+            if request.command in (
+                SendCommand.Request.START_RECORD,
+                SendCommand.Request.START_SEGMENT,
+            ):
                 # Initialize data manager only if it doesn't exist or task changed
                 task_info = request.task_info
                 # Cache so the joystick path can reuse what the user entered.
@@ -957,12 +980,75 @@ class PhysicalAIServer(Node):
                     response.message = f'Failed to start rosbag: {str(e)}'
                     return response
 
-                self.data_manager.start_recording()
+                primitive = getattr(
+                    task_info, 'primitive_description', '') or ''
+                self.data_manager.start_segment(primitive)
                 self.on_recording = True
                 self.start_recording_time = time.perf_counter()
                 self.communicator.publish_action_event('start')
                 response.success = True
-                response.message = 'Recording started'
+                response.message = (
+                    f'Segment {self.data_manager._current_segment_index - 0} '
+                    f'started'
+                )
+
+            elif request.command == SendCommand.Request.STOP_SEGMENT:
+                if (self.data_manager is None
+                        or not self.data_manager.is_recording()):
+                    response.success = False
+                    response.message = 'Not currently recording a segment'
+                else:
+                    self.get_logger().info('Stopping current segment')
+                    self.stop_current_segment()
+                    self.on_recording = False
+                    self.communicator.publish_action_event('finish')
+                    response.success = True
+                    response.message = (
+                        f'Segment stopped. Total segments: '
+                        f'{len(self.data_manager._segments_meta)}'
+                    )
+
+            elif request.command == SendCommand.Request.DISCARD_SEGMENT:
+                if self.data_manager is None:
+                    response.success = False
+                    response.message = 'Data manager not initialized'
+                else:
+                    try:
+                        self.data_manager.discard_segment(
+                            int(request.segment_index))
+                        response.success = True
+                        response.message = (
+                            f'Segment {request.segment_index} discarded'
+                        )
+                    except Exception as e:
+                        response.success = False
+                        response.message = f'Discard failed: {e}'
+
+            elif request.command == SendCommand.Request.FINISH_EPISODE:
+                if self.data_manager is None:
+                    response.success = False
+                    response.message = 'Data manager not initialized'
+                else:
+                    if self.data_manager.is_recording():
+                        # Safety: stop current segment before finishing.
+                        self.stop_current_segment()
+                        self.on_recording = False
+                    self.get_logger().info('Finishing episode')
+                    self.finish_current_episode()
+                    self.communicator.finish_rosbag()
+                    if self.timer_manager:
+                        self.timer_manager.stop(
+                            timer_name=self.operation_mode)
+                    final_status = \
+                        self.data_manager.get_current_record_status()
+                    self.communicator.publish_status(status=final_status)
+                    response.success = True
+                    response.message = 'Episode finished'
+
+            elif request.command == SendCommand.Request.MERGE_EPISODE:
+                # Phase 5 — stub until merge pipeline lands.
+                response.success = False
+                response.message = 'Merge not implemented yet'
 
             elif request.command == SendCommand.Request.START_INFERENCE:
                 self.operation_mode = 'inference'

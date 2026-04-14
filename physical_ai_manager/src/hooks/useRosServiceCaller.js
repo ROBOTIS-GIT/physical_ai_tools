@@ -166,6 +166,7 @@ export function useRosServiceCaller() {
             task_name: String(taskName),
             task_type: String(taskType),
             task_instruction: taskInstruction,
+            primitive_description: String(taskInfo.primitiveDescription || ''),
             policy_path: String(taskInfo.policyPath || ''),
             record_inference_mode: Boolean(taskInfo.recordInferenceMode),
             tags: [],

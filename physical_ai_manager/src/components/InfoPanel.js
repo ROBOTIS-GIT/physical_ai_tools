@@ -18,6 +18,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { useSelector, useDispatch } from 'react-redux';
 import clsx from 'clsx';
 import TaskPhase from '../constants/taskPhases';
+import PRIMITIVE_DESCRIPTIONS from '../constants/primitiveDescriptions';
 import { setTaskInfo } from '../features/tasks/taskSlice';
 
 const InfoPanel = () => {
@@ -193,6 +194,24 @@ const InfoPanel = () => {
           disabled={!isEditable}
           placeholder="Enter Task Instruction"
         />
+      </div>
+
+      {/* Primitive Description */}
+      <div className={clsx('flex', 'items-center', 'mb-2.5')}>
+        <span className={classLabel}>Primitive Desc.</span>
+        <select
+          className={clsx(classTaskNameTextarea, 'h-9')}
+          value={info.primitiveDescription || ''}
+          onChange={(e) => handleChange('primitiveDescription', e.target.value)}
+          disabled={!isEditable}
+        >
+          <option value="">-- Select primitive --</option>
+          {PRIMITIVE_DESCRIPTIONS.map((p) => (
+            <option key={p} value={p}>
+              {p}
+            </option>
+          ))}
+        </select>
       </div>
 
       {/* Dataset save path indicator */}

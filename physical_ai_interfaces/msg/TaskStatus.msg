@@ -21,6 +21,10 @@ uint16 proceed_time             # [s]
 uint16 current_episode_number
 uint16 current_scenario_number
 string current_task_instruction
+uint16 current_segment_index
+uint16 segment_count
+string[] segment_primitives
+string merge_status
 float32 encoding_progress       # [%]
 float32 used_storage_size       # [GB]
 float32 total_storage_size      # [GB]

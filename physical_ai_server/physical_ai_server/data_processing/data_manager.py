@@ -68,12 +68,20 @@ class DataManager:
         self._record_episode_count = self._find_next_episode_number()
         self._start_time_s = 0
         self._proceed_time = 0
-        self._status = 'idle'  # Start in idle state (simplified mode)
+        self._status = 'idle'  # idle | seg_recording | between_segments | merging
         self._cpu_checker = CPUChecker()
         self.data_converter = DataConverter()
         self.current_instruction = ''
         self._init_task_limits()
         self._current_scenario_number = 0
+
+        # Segmented episode state (v2)
+        self._current_segment_index = 0
+        self._segments_meta = []  # list of dicts (see _write_episode_info)
+        self._pending_primitive = ''
+        self._segment_start_time_s = 0
+        self._merge_status = 'none'
+        self._merged_file = None
 
     def _find_next_episode_number(self) -> int:
         """
@@ -116,97 +124,208 @@ class DataManager:
 
     # ========== Simplified Recording Methods (rosbag2-only mode) ==========
 
-    def start_recording(self):
-        """
-        Start recording (simplified mode).
+    # ========== Segment-based recording (v2) ==========
 
-        Changes status to 'recording' for rosbag to begin writing.
-        """
-        self._status = 'recording'
-        self._start_time_s = time.perf_counter()
+    def start_segment(self, primitive_description: str = ''):
+        """Begin a new segment within the current episode."""
+        if self._status not in ('idle', 'between_segments'):
+            raise RuntimeError(
+                f'Cannot start segment in status {self._status}')
+        if self._status == 'idle':
+            # Fresh episode: reset segment bookkeeping.
+            self._segments_meta = []
+            self._current_segment_index = 0
+            self._merge_status = 'none'
+            self._merged_file = None
+        self._pending_primitive = primitive_description or ''
+        self._status = 'seg_recording'
+        self._segment_start_time_s = time.perf_counter()
+        self._start_time_s = self._segment_start_time_s
         self.current_instruction = self._task_info.task_instruction[0] \
             if self._task_info.task_instruction else ''
-        print(f'[DataManager] Recording started - Episode {self._record_episode_count}')
+        print(f'[DataManager] Segment {self._current_segment_index} started '
+              f'(episode {self._record_episode_count}, '
+              f'primitive={primitive_description!r})')
+
+    def stop_segment(self):
+        """End the current segment and record its metadata."""
+        if self._status != 'seg_recording':
+            raise RuntimeError(
+                f'Cannot stop segment in status {self._status}')
+        now = time.perf_counter()
+        duration = now - self._segment_start_time_s \
+            if self._segment_start_time_s else 0.0
+        seg = {
+            'segment_index': self._current_segment_index,
+            'primitive_description': self._pending_primitive,
+            'rosbag_path': f'segments/{self._current_segment_index}',
+            'start_timestamp': time.strftime(
+                '%Y-%m-%dT%H:%M:%SZ',
+                time.gmtime(time.time() - duration)),
+            'duration_s': round(duration, 3),
+        }
+        self._segments_meta.append(seg)
+        self._current_segment_index += 1
+        self._status = 'between_segments'
+        self._start_time_s = 0
+        self._segment_start_time_s = 0
+        self._pending_primitive = ''
+        print(f'[DataManager] Segment {seg["segment_index"]} stopped '
+              f'({duration:.2f}s)')
+
+    def discard_segment(self, idx: int):
+        """Remove segment `idx` and renumber trailing segments."""
+        if self._status != 'between_segments':
+            raise RuntimeError(
+                f'Cannot discard segment in status {self._status}')
+        if not (0 <= idx < len(self._segments_meta)):
+            raise ValueError(f'Invalid segment index {idx}')
+        seg_root = os.path.join(self.get_episode_dir(allow_idle=True),
+                                'segments')
+        target = os.path.join(seg_root, str(idx))
+        if os.path.isdir(target):
+            shutil.rmtree(target)
+        for i in range(idx + 1, len(self._segments_meta)):
+            src = os.path.join(seg_root, str(i))
+            dst = os.path.join(seg_root, str(i - 1))
+            if os.path.isdir(src):
+                os.rename(src, dst)
+        self._segments_meta.pop(idx)
+        for i, seg in enumerate(self._segments_meta):
+            seg['segment_index'] = i
+            seg['rosbag_path'] = f'segments/{i}'
+        self._current_segment_index = len(self._segments_meta)
+        if not self._segments_meta:
+            self._status = 'idle'
+        self._write_episode_info()
+        print(f'[DataManager] Segment {idx} discarded. '
+              f'Remaining: {len(self._segments_meta)}')
+
+    def finish_episode(self, needs_review: bool = False):
+        """Finalize the current episode and increment episode counter."""
+        if self._status == 'seg_recording':
+            raise RuntimeError('Cannot finish episode while recording segment')
+        if not self._segments_meta:
+            # Nothing to finalize.
+            self._status = 'idle'
+            return
+        self._write_episode_info(needs_review=needs_review)
+        print(f'[DataManager] Episode {self._record_episode_count} finished '
+              f'with {len(self._segments_meta)} segment(s)')
+        self._record_episode_count += 1
+        self._segments_meta = []
+        self._current_segment_index = 0
+        self._merge_status = 'none'
+        self._merged_file = None
+        self._status = 'idle'
+
+    # ========== Legacy wrappers (single-segment semantics) ==========
+
+    def start_recording(self):
+        """Legacy: start a single segment using task_info.primitive_description."""
+        primitive = getattr(self._task_info, 'primitive_description', '') or ''
+        self.start_segment(primitive)
 
     def stop_recording(self):
-        """
-        Stop recording and save (simplified mode).
-
-        Changes status to 'idle' and increments episode count.
-        """
-        self._status = 'idle'
-        self._record_episode_count += 1
+        """Legacy: stop current segment and finalize episode in one step."""
+        if self._status == 'seg_recording':
+            self.stop_segment()
+        if self._status == 'between_segments':
+            self.finish_episode()
         self._start_time_s = 0
-        print(f'[DataManager] Recording stopped - Episode saved. '
-              f'Total episodes: {self._record_episode_count}')
 
     def is_recording(self):
-        """Check if currently recording."""
-        return self._status == 'recording'
+        """Check if currently recording a segment."""
+        return self._status == 'seg_recording'
 
-    # ========== End Simplified Recording Methods ==========
+    # ========== Paths ==========
+
+    def get_episode_dir(self, allow_idle: bool = False):
+        """Return absolute path of current episode directory."""
+        if self._status == 'idle' and not allow_idle:
+            return None
+        if self._status == 'warmup':
+            return None
+        return self._save_rosbag_path + f'/{self._record_episode_count}'
 
     def get_save_rosbag_path(self, allow_idle: bool = False):
-        """Get rosbag save path for current episode."""
-        # For simplified mode, return path when recording.
-        # `allow_idle` is used during START pre-check before status flips to recording.
-        if self._status == 'idle' and not allow_idle:
-            return None  # Not recording
-        if self._status == 'warmup':
-            return None  # Legacy: Not ready yet
-        return self._save_rosbag_path + f'/{self._record_episode_count}'
+        """Return absolute path of the active segment's rosbag directory."""
+        ep_dir = self.get_episode_dir(allow_idle=allow_idle)
+        if ep_dir is None:
+            return None
+        return f'{ep_dir}/segments/{self._current_segment_index}'
 
     def save_robotis_metadata(self, urdf_path: str = None, needs_review: bool = False):
         """
-        Save URDF and metadata for ROBOTIS format.
+        Copy URDF+meshes into the episode directory and refresh episode_info.json.
 
-        Called after each episode rosbag is saved.
-        Copies URDF file and all referenced mesh files.
-
-        Args:
-            urdf_path: Path to URDF file to copy.
-            needs_review: If True, marks episode as needing review (e.g., cancelled recording).
+        Called after each segment stop and on episode finish/discard.
         """
-        rosbag_path = self.get_save_rosbag_path()
-        if rosbag_path is None:
+        episode_dir = self.get_episode_dir(allow_idle=True)
+        if episode_dir is None:
             return
 
-        # Create rosbag directory if not exists
-        os.makedirs(rosbag_path, exist_ok=True)
+        os.makedirs(episode_dir, exist_ok=True)
 
-        # Copy URDF file and mesh files
         if urdf_path and os.path.exists(urdf_path):
-            urdf_dest = os.path.join(rosbag_path, 'robot.urdf')
-            try:
-                # Copy URDF and mesh files with path conversion
-                self._copy_urdf_with_meshes(urdf_path, urdf_dest, rosbag_path)
-                print(f'[ROBOTIS] URDF and meshes copied to: {rosbag_path}')
-            except Exception as e:
-                print(f'[ROBOTIS] Failed to copy URDF/meshes: {e}')
-                # Fallback: copy URDF only
+            urdf_dest = os.path.join(episode_dir, 'robot.urdf')
+            if not os.path.exists(urdf_dest):
                 try:
-                    shutil.copy2(urdf_path, urdf_dest)
-                    print(f'[ROBOTIS] URDF copied (without meshes): {urdf_dest}')
-                except Exception as e2:
-                    print(f'[ROBOTIS] Failed to copy URDF: {e2}')
+                    self._copy_urdf_with_meshes(
+                        urdf_path, urdf_dest, episode_dir)
+                    print(f'[ROBOTIS] URDF and meshes copied to: {episode_dir}')
+                except Exception as e:
+                    print(f'[ROBOTIS] Failed to copy URDF/meshes: {e}')
+                    try:
+                        shutil.copy2(urdf_path, urdf_dest)
+                        print(f'[ROBOTIS] URDF copied (no meshes): {urdf_dest}')
+                    except Exception as e2:
+                        print(f'[ROBOTIS] Failed to copy URDF: {e2}')
 
-        # Save metadata JSON
-        meta_data = {
+        self._write_episode_info(needs_review=needs_review)
+
+    def _write_episode_info(self,
+                            needs_review: bool = False,
+                            merge_status: str = None,
+                            merged_file: str = None):
+        """Persist (or refresh) episode_info.json using current segment state."""
+        episode_dir = self.get_episode_dir(allow_idle=True)
+        if episode_dir is None:
+            return
+        os.makedirs(episode_dir, exist_ok=True)
+        info_path = os.path.join(episode_dir, 'episode_info.json')
+
+        existing = {}
+        if os.path.exists(info_path):
+            try:
+                with open(info_path) as f:
+                    existing = json.load(f)
+            except Exception:
+                existing = {}
+
+        if merge_status is not None:
+            self._merge_status = merge_status
+        if merged_file is not None:
+            self._merged_file = merged_file
+
+        meta = {
+            'episode_index': self._record_episode_count,
             'task_instruction': self.current_instruction,
             'robot_type': self._robot_type,
-            'episode_index': self._record_episode_count,
             'timestamp': time.strftime('%Y-%m-%dT%H:%M:%SZ', time.gmtime()),
-            'fps': self._task_info.fps if hasattr(self._task_info, 'fps') else 15,
-            'format_version': 'robotis_v1',
+            'fps': getattr(self._task_info, 'fps', 15),
+            'format_version': 'robotis_v2',
             'device_serial': socket.gethostname(),
-            'needs_review': needs_review,
+            'needs_review': needs_review or existing.get('needs_review', False),
+            'segments': list(self._segments_meta),
+            'merge_status': self._merge_status,
+            'merged_file': self._merged_file,
         }
 
-        meta_data_path = os.path.join(rosbag_path, 'episode_info.json')
         try:
-            with open(meta_data_path, 'w') as f:
-                json.dump(meta_data, f, indent=2)
-            print(f'[ROBOTIS] Metadata saved to: {meta_data_path}')
+            with open(info_path, 'w') as f:
+                json.dump(meta, f, indent=2)
+            print(f'[ROBOTIS] Metadata saved to: {info_path}')
         except Exception as e:
             print(f'[ROBOTIS] Failed to save metadata: {e}')
 
@@ -424,13 +543,21 @@ class DataManager:
         if self._status == 'idle':
             current_status.phase = TaskStatus.READY
             current_status.total_time = int(0)
-        elif self._status == 'recording':
+        elif self._status == 'seg_recording' or self._status == 'recording':
             current_status.phase = TaskStatus.RECORDING
             # Calculate elapsed time
             if self._start_time_s > 0:
                 elapsed = time.perf_counter() - self._start_time_s
                 self._proceed_time = int(elapsed)
             current_status.total_time = int(0)  # No time limit in simplified mode
+        elif self._status == 'between_segments':
+            current_status.phase = TaskStatus.STOPPED
+            current_status.total_time = int(0)
+            self._proceed_time = 0
+        elif self._status == 'merging':
+            current_status.phase = TaskStatus.CONVERTING
+            current_status.total_time = int(0)
+            self._proceed_time = 0
         # Legacy statuses (for backward compatibility)
         elif self._status == 'warmup':
             current_status.phase = TaskStatus.WARMING_UP
@@ -463,6 +590,12 @@ class DataManager:
         current_status.current_task_instruction = self.current_instruction
         current_status.proceed_time = int(getattr(self, '_proceed_time', 0))
         current_status.current_episode_number = int(self._record_episode_count)
+        current_status.current_segment_index = int(self._current_segment_index)
+        current_status.segment_count = int(len(self._segments_meta))
+        current_status.segment_primitives = [
+            s.get('primitive_description', '') for s in self._segments_meta
+        ]
+        current_status.merge_status = self._merge_status
 
         total_storage, used_storage = StorageChecker.get_storage_gb('/')
         current_status.used_storage_size = float(used_storage)

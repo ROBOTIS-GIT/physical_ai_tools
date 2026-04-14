@@ -2,6 +2,7 @@ string task_num
 string task_name
 string task_type
 string[] task_instruction
+string primitive_description
 string policy_path
 string[] tags
 bool record_inference_mode

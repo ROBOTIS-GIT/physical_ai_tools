@@ -25,6 +25,7 @@ const initialState = {
     taskName: '',
     taskType: '',
     taskInstruction: [],
+    primitiveDescription: '',
     policyPath: '',
     recordInferenceMode: false,
   },
