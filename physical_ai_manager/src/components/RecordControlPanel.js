@@ -60,9 +60,6 @@ export default function RecordControlPanel() {
     'border-gray-100'
   );
 
-  const segmentCount = taskStatus.segmentCount || 0;
-  const currentSegmentIndex = taskStatus.currentSegmentIndex || 0;
-
   return (
     <div className={classBody}>
       <span className="text-lg font-semibold text-gray-500 whitespace-nowrap px-1 shrink-0">
@@ -92,31 +89,6 @@ export default function RecordControlPanel() {
           </div>
         </>
       )}
-
-      <div className="w-px h-2/3 bg-gray-400 shrink-0"></div>
-
-      <div className="flex items-center gap-1 shrink-0 px-1">
-        <span className="text-gray-500 text-lg font-medium">EP</span>
-        <span className="bg-gray-100 rounded px-1.5 py-0.5 text-lg font-bold">
-          {taskStatus.currentEpisodeNumber}
-        </span>
-      </div>
-
-      <div className="w-px h-2/3 bg-gray-400 shrink-0"></div>
-
-      <div className="flex items-center gap-1 shrink-0 px-1">
-        <span className="text-gray-500 text-lg font-medium">Seg</span>
-        <span
-          className={clsx(
-            'rounded px-1.5 py-0.5 text-lg font-bold',
-            isRecording ? 'bg-red-100 text-red-700' : 'bg-gray-100'
-          )}
-        >
-          {isRecording ? currentSegmentIndex : segmentCount}
-          <span className="text-gray-400 mx-0.5">/</span>
-          {segmentCount}
-        </span>
-      </div>
     </div>
   );
 }

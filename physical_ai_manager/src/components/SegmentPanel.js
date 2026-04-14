@@ -288,13 +288,7 @@ const SegmentPanel = () => {
 
   return (
     <div className={classPanel}>
-      <div className="flex items-center justify-between mb-3">
-        <div className="text-lg font-semibold text-gray-800">Segments</div>
-        <div className="text-xs text-gray-500">
-          Episode{' '}
-          <span className="font-bold text-gray-700">{currentEpisode}</span>
-        </div>
-      </div>
+      <div className="mb-3 text-lg font-semibold text-gray-800">Segments</div>
 
       {/* Primitive picker */}
       <div className="flex items-center gap-2 mb-3">
