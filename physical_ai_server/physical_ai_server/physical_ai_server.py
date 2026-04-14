@@ -617,62 +617,24 @@ class PhysicalAIServer(Node):
         self.data_manager.finish_episode(needs_review=needs_review)
         self.previous_data_manager_status = 'idle'
 
-    def _start_merge_worker(self, episode_dir, ep_idx):
-        """Spawn a daemon thread that merges segments into merged.mcap."""
+    def _start_finalize_worker(self, task_info):
+        """Spawn a daemon thread that merges scratch + moves it to archive."""
         if (getattr(self, '_merge_thread', None) is not None
                 and self._merge_thread.is_alive()):
             raise RuntimeError('Merge already in progress')
-
-        self._set_merge_status(episode_dir, ep_idx, 'pending', None)
+        if self.data_manager is None:
+            raise RuntimeError('Data manager not initialized')
 
         def _worker():
             try:
-                from physical_ai_server.data_processing.mcap_merger import (
-                    merge_episode,
-                )
-                merged = merge_episode(episode_dir)
-                self._set_merge_status(
-                    episode_dir, ep_idx, 'done', merged.name)
-                self.get_logger().info(f'Merge complete: {merged}')
+                archive_dir = self.data_manager.finalize_to_archive(task_info)
+                self.get_logger().info(
+                    f'Finalize complete: {archive_dir}')
             except Exception as e:
-                self._set_merge_status(
-                    episode_dir, ep_idx, 'failed', None)
-                self.get_logger().error(f'Merge failed: {e}')
+                self.get_logger().error(f'Finalize failed: {e}')
 
         self._merge_thread = threading.Thread(target=_worker, daemon=True)
         self._merge_thread.start()
-
-    def _set_merge_status(self, episode_dir, ep_idx, status_str, merged_file):
-        """Update merge_status both in DataManager (if current) and on disk."""
-        is_current = (
-            self.data_manager is not None
-            and ep_idx == self.data_manager._record_episode_count
-        )
-        if is_current:
-            self.data_manager._merge_status = status_str
-            if merged_file is not None:
-                self.data_manager._merged_file = merged_file
-            try:
-                self.data_manager._write_episode_info()
-            except Exception as e:
-                self.get_logger().warning(
-                    f'Failed to refresh episode_info.json: {e}')
-            return
-
-        info_path = Path(episode_dir) / 'episode_info.json'
-        try:
-            data = {}
-            if info_path.exists():
-                with open(info_path) as f:
-                    data = json.load(f)
-            data['merge_status'] = status_str
-            if merged_file is not None:
-                data['merged_file'] = merged_file
-            with open(info_path, 'w') as f:
-                json.dump(data, f, indent=2)
-        except Exception as e:
-            self.get_logger().warning(
-                f'Failed to update merge_status on {info_path}: {e}')
 
     def stop_recording_and_save(self):
         """Stop recording and save the rosbag (simplified mode)."""
@@ -995,27 +957,20 @@ class PhysicalAIServer(Node):
                 SendCommand.Request.START_RECORD,
                 SendCommand.Request.START_SEGMENT,
             ):
-                # Initialize data manager only if it doesn't exist or task changed
+                # Scratch flow: task_info is irrelevant at segment-start time;
+                # only primitive_description is consumed from the request.
                 task_info = request.task_info
-                # Cache so the joystick path can reuse what the user entered.
                 self._last_ui_task_info = task_info
-                task_name = f'{self.robot_type}_{task_info.task_name}'
 
-                # Check if we need to create a new DataManager
-                need_new_manager = (
-                    self.data_manager is None or
-                    self.data_manager._save_repo_name != task_name
-                )
-
-                if need_new_manager:
+                if self.data_manager is None:
                     self.get_logger().info('Initializing new recording session')
                     self.operation_mode = 'collection'
                     self.init_robot_control_parameters_from_user_task(task_info)
                 else:
-                    episode = self.data_manager._record_episode_count
-                    self.get_logger().info(
-                        f'Continuing recording session - Episode {episode}')
-                    # Restart timer if it was stopped
+                    # Refresh cached task_info so any later finalize can pick up
+                    # the latest user-entered values (though the actual merge
+                    # always overrides with the task_info in the merge request).
+                    self.data_manager._task_info = task_info
                     if self.timer_manager:
                         self.timer_manager.start(timer_name=self.operation_mode)
 
@@ -1082,25 +1037,30 @@ class PhysicalAIServer(Node):
                         response.message = f'Discard failed: {e}'
 
             elif request.command == SendCommand.Request.FINISH_EPISODE:
+                # Deprecated in scratch flow. Kept for backward-compatibility;
+                # responds OK without mutating state.
+                response.success = True
+                response.message = (
+                    'FINISH_EPISODE is deprecated; use MERGE_EPISODE '
+                    'or DISCARD_EPISODE'
+                )
+                return response
+
+            elif request.command == SendCommand.Request.DISCARD_EPISODE:
                 if self.data_manager is None:
                     response.success = False
                     response.message = 'Data manager not initialized'
                 else:
-                    if self.data_manager.is_recording():
-                        # Safety: stop current segment before finishing.
-                        self.stop_current_segment()
-                        self.on_recording = False
-                    self.get_logger().info('Finishing episode')
-                    self.finish_current_episode()
-                    self.communicator.finish_rosbag()
-                    if self.timer_manager:
-                        self.timer_manager.stop(
-                            timer_name=self.operation_mode)
-                    final_status = \
-                        self.data_manager.get_current_record_status()
-                    self.communicator.publish_status(status=final_status)
-                    response.success = True
-                    response.message = 'Episode finished'
+                    try:
+                        if self.data_manager.is_recording():
+                            self.stop_current_segment()
+                            self.on_recording = False
+                        self.data_manager.discard_episode()
+                        response.success = True
+                        response.message = 'Pending episode discarded'
+                    except Exception as e:
+                        response.success = False
+                        response.message = f'Discard episode failed: {e}'
 
             elif request.command == SendCommand.Request.MERGE_EPISODE:
                 if self.data_manager is None:
@@ -1108,28 +1068,9 @@ class PhysicalAIServer(Node):
                     response.message = 'Data manager not initialized'
                 else:
                     try:
-                        ep_idx = int(request.episode_index)
-                        # 0 = auto-resolve: current episode if segments are
-                        # in-flight, otherwise the most recently finished one.
-                        if ep_idx == 0:
-                            if self.data_manager._segments_meta:
-                                ep_idx = \
-                                    self.data_manager._record_episode_count
-                            else:
-                                ep_idx = max(
-                                    self.data_manager._record_episode_count
-                                    - 1, 0)
-                        episode_dir = (
-                            Path(self.data_manager._save_rosbag_path)
-                            / str(ep_idx)
-                        )
-                        if not episode_dir.is_dir():
-                            raise FileNotFoundError(
-                                f'Episode dir not found: {episode_dir}')
-                        self._start_merge_worker(episode_dir, ep_idx)
+                        self._start_finalize_worker(request.task_info)
                         response.success = True
-                        response.message = (
-                            f'Merge started for episode {ep_idx}')
+                        response.message = 'Merge started'
                     except Exception as e:
                         response.success = False
                         response.message = f'Merge failed to start: {e}'
@@ -1691,6 +1632,25 @@ class PhysicalAIServer(Node):
                     f'Rosbag prepared with {topic_count} topics - ready for recording')
             else:
                 self.get_logger().warn('Rosbag service not available - prepare skipped')
+
+            # Scratch flow: create DataManager eagerly so restore_pending()
+            # runs and any in-flight segments from a prior session become
+            # visible to the UI without requiring a user action.
+            if self.data_manager is None:
+                try:
+                    self.data_manager = DataManager(
+                        save_root_path=self.DEFAULT_SAVE_ROOT_PATH,
+                        robot_type=self.robot_type,
+                        task_info=None,
+                    )
+                    restored = len(self.data_manager._segments_meta)
+                    if restored:
+                        self.get_logger().info(
+                            f'Restored {restored} pending segment(s) from '
+                            f'{DataManager.PENDING_ROSBAG_PATH}')
+                except Exception as e:
+                    self.get_logger().warning(
+                        f'Failed to eagerly init DataManager: {e}')
 
             response.success = True
             response.message = f'Robot type set to {self.robot_type}'

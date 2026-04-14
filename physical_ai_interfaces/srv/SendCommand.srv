@@ -22,6 +22,7 @@ uint8 STOP_SEGMENT = 21
 uint8 DISCARD_SEGMENT = 22
 uint8 FINISH_EPISODE = 23
 uint8 MERGE_EPISODE = 24
+uint8 DISCARD_EPISODE = 25
 
 uint8 command
 TaskInfo task_info

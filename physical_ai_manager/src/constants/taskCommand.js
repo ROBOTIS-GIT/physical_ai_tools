@@ -38,6 +38,7 @@ const TaskCommand = {
   DISCARD_SEGMENT: 22,
   FINISH_EPISODE: 23,
   MERGE_EPISODE: 24,
+  DISCARD_EPISODE: 25,
 };
 
 export default TaskCommand;
