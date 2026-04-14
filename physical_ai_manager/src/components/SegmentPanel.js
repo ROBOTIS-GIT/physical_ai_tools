@@ -22,6 +22,7 @@ import {
   MdClose,
   MdDone,
   MdDelete,
+  MdDeleteSweep,
   MdMerge,
 } from 'react-icons/md';
 
@@ -46,6 +47,7 @@ const isInputFocused = () => {
 const SegmentPanel = () => {
   const dispatch = useDispatch();
   const status = useSelector((state) => state.tasks.taskStatus);
+  const taskInfo = useSelector((state) => state.tasks.taskInfo);
   const pendingPrimitive = useSelector((state) => state.tasks.pendingPrimitive);
   const { sendRecordCommand } = useRosServiceCaller();
 
@@ -59,14 +61,23 @@ const SegmentPanel = () => {
   const segmentCount = status.segmentCount || 0;
   const hasSegments = segmentCount > 0;
   const mergeStatus = status.mergeStatus || 'none';
-  const currentEpisode = status.currentEpisodeNumber || 0;
+
+  const taskInfoComplete = Boolean(
+    (taskInfo.taskNum || '').trim() &&
+      (taskInfo.taskName || '').trim() &&
+      (taskInfo.taskInstruction?.[0] || '').trim()
+  );
 
   const canRecord = !isRecording && !isMerging && !!pendingPrimitive;
   const canSave = isRecording;
   const canDiscard = isRecording || (hasSegments && !isMerging);
-  const canFinishEpisode = !isRecording && !isMerging && hasSegments;
+  const canDiscardEpisode = !isRecording && !isMerging && hasSegments;
   const canMerge =
-    !isRecording && !isMerging && hasSegments && mergeStatus !== 'pending';
+    !isRecording &&
+    !isMerging &&
+    hasSegments &&
+    taskInfoComplete &&
+    mergeStatus !== 'pending';
 
   const runCommand = useCallback(
     async (label, cmd, opts = {}) => {
@@ -135,15 +146,16 @@ const SegmentPanel = () => {
     [runCommand]
   );
 
-  const handleFinish = useCallback(() => {
-    if (!canFinishEpisode) return;
-    runCommand('Finish episode', 'finish_episode');
-  }, [canFinishEpisode, runCommand]);
+  const handleDiscardEpisode = useCallback(() => {
+    if (!canDiscardEpisode) return;
+    if (!window.confirm('Discard ALL pending segments?')) return;
+    runCommand('Discard episode', 'discard_episode');
+  }, [canDiscardEpisode, runCommand]);
 
   const handleMerge = useCallback(() => {
     if (!canMerge) return;
-    runCommand('Merge', 'merge_episode', { episodeIndex: currentEpisode });
-  }, [canMerge, runCommand, currentEpisode]);
+    runCommand('Merge', 'merge_episode');
+  }, [canMerge, runCommand]);
 
   // Keyboard shortcuts — matching the legacy RecordControlPanel bindings.
   const handleKeyAction = useCallback(
@@ -413,27 +425,42 @@ const SegmentPanel = () => {
         )}
       </div>
 
-      {/* Finish / Merge */}
+      {/* Discard Episode / Merge */}
       <div className="flex flex-col gap-2">
-        <button
-          onClick={handleFinish}
-          disabled={!canFinishEpisode}
-          className={secondaryBtn(canFinishEpisode, 'green')}
+        <Tooltip
+          position="top"
+          content={
+            canMerge
+              ? 'Merge scratch segments into Task_{num}_{name}_MCAP/{idx}/merged.mcap'
+              : !hasSegments
+              ? 'No segments to merge'
+              : !taskInfoComplete
+              ? 'Enter Task Num, Name, and Instruction in the panel above'
+              : 'Merge in progress'
+          }
+          disabled={false}
+          className="relative"
         >
-          <MdDone size={16} />
-          Finish Episode
-        </button>
+          <button
+            onClick={handleMerge}
+            disabled={!canMerge}
+            className={clsx(secondaryBtn(canMerge, 'indigo'), 'w-full')}
+          >
+            <MdMerge size={16} />
+            Merge to MCAP
+            {mergeStatus && mergeStatus !== 'none' && (
+              <span className="ml-1 text-xs opacity-80">({mergeStatus})</span>
+            )}
+          </button>
+        </Tooltip>
 
         <button
-          onClick={handleMerge}
-          disabled={!canMerge}
-          className={secondaryBtn(canMerge, 'indigo')}
+          onClick={handleDiscardEpisode}
+          disabled={!canDiscardEpisode}
+          className={secondaryBtn(canDiscardEpisode, 'red')}
         >
-          <MdMerge size={16} />
-          Merge to MCAP
-          {mergeStatus && mergeStatus !== 'none' && (
-            <span className="ml-1 text-xs opacity-80">({mergeStatus})</span>
-          )}
+          <MdDeleteSweep size={16} />
+          Discard Episode
         </button>
       </div>
     </div>

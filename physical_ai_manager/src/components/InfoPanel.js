@@ -25,6 +25,16 @@ const InfoPanel = () => {
 
   const info = useSelector((state) => state.tasks.taskInfo);
   const taskStatus = useSelector((state) => state.tasks.taskStatus);
+  const segmentCount = useSelector(
+    (state) => state.tasks.taskStatus.segmentCount || 0
+  );
+  const hasPendingSegments = segmentCount > 0;
+  const taskInfoComplete = Boolean(
+    (info.taskNum || '').trim() &&
+      (info.taskName || '').trim() &&
+      (info.taskInstruction?.[0] || '').trim()
+  );
+  const needsTaskInfo = hasPendingSegments && !taskInfoComplete;
 
   const [isTaskStatusPaused, setIsTaskStatusPaused] = useState(false);
   const [lastTaskStatusUpdate, setLastTaskStatusUpdate] = useState(Date.now());
@@ -83,8 +93,7 @@ const InfoPanel = () => {
 
   const classInfoPanel = clsx(
     'bg-white',
-    'border',
-    'border-gray-200',
+    'border-2',
     'rounded-2xl',
     'shadow-md',
     'p-4',
@@ -92,7 +101,8 @@ const InfoPanel = () => {
     'max-w-[350px]',
     'relative',
     'overflow-y-auto',
-    'scrollbar-thin'
+    'scrollbar-thin',
+    needsTaskInfo ? 'border-amber-400' : 'border-gray-200'
   );
 
   const classTaskNameTextarea = clsx(
@@ -141,6 +151,17 @@ const InfoPanel = () => {
       <div className={clsx('text-lg', 'font-semibold', 'mb-3', 'text-gray-800')}>
         Task Information
       </div>
+
+      {needsTaskInfo && (
+        <div
+          className={clsx(
+            'mb-3 p-2 rounded-md text-sm font-medium',
+            'bg-amber-100 text-amber-800'
+          )}
+        >
+          Required to merge {segmentCount} pending segment(s).
+        </div>
+      )}
 
       {/* Edit mode indicator */}
       <div
