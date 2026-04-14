@@ -1638,16 +1638,16 @@ class PhysicalAIServer(Node):
             else:
                 self.get_logger().warn('Rosbag service not available - prepare skipped')
 
-            # Scratch flow: create DataManager eagerly so restore_pending()
-            # runs and any in-flight segments from a prior session become
-            # visible to the UI without requiring a user action.
+            # Scratch flow: initialize DataManager *and* the collection timer
+            # eagerly. The timer is what drives TaskStatus publishing, so
+            # without it the UI never sees segment_count updates. Going
+            # through init_robot_control_parameters_from_user_task also
+            # runs restore_pending() inside DataManager.__init__.
             if self.data_manager is None:
                 try:
-                    self.data_manager = DataManager(
-                        save_root_path=self.DEFAULT_SAVE_ROOT_PATH,
-                        robot_type=self.robot_type,
-                        task_info=None,
-                    )
+                    self.operation_mode = 'collection'
+                    self.init_robot_control_parameters_from_user_task(
+                        task_info=None)
                     restored = len(self.data_manager._segments_meta)
                     if restored:
                         self.get_logger().info(
