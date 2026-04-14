@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { useSelector, useDispatch } from 'react-redux';
 import clsx from 'clsx';
 import toast from 'react-hot-toast';
@@ -55,13 +55,26 @@ const SegmentPanel = () => {
   const [hovered, setHovered] = useState(null);
   const [pressed, setPressed] = useState(null);
 
+  // Optimistic "recording" flag: flips immediately on Record click so the
+  // button set reflects user intent without waiting for the TaskStatus
+  // round-trip. Reconciled with the server's phase once it echoes back.
+  const [optimisticRecording, setOptimisticRecording] = useState(false);
+  const optimisticRef = useRef(false);
+
   const phase = status.phase;
-  const isRecording = phase === TaskPhase.RECORDING;
+  const serverRecording = phase === TaskPhase.RECORDING;
   const isMerging = phase === TaskPhase.CONVERTING;
+  const isRecording = serverRecording || optimisticRecording;
   const segmentPrimitives = status.segmentPrimitives || [];
   const segmentCount = status.segmentCount || 0;
   const hasSegments = segmentCount > 0;
   const mergeStatus = status.mergeStatus || 'none';
+
+  // Keep local flag in sync whenever the server phase settles.
+  useEffect(() => {
+    optimisticRef.current = serverRecording;
+    setOptimisticRecording(serverRecording);
+  }, [serverRecording]);
 
   const taskInfoComplete = Boolean(
     (taskInfo.taskNum || '').trim() &&
@@ -98,20 +111,31 @@ const SegmentPanel = () => {
     [sendRecordCommand]
   );
 
-  const handleRecord = useCallback(() => {
+  const handleRecord = useCallback(async () => {
     if (!canRecord) return;
     if (!pendingPrimitive) {
       toast.error('Select a primitive first');
       return;
     }
-    runCommand('Record', 'start_segment', {
+    // Optimistic flip — buttons update before the status round-trip.
+    optimisticRef.current = true;
+    setOptimisticRecording(true);
+    const result = await runCommand('Record', 'start_segment', {
       primitiveDescription: pendingPrimitive,
     });
+    if (!result || result.success === false) {
+      optimisticRef.current = false;
+      setOptimisticRecording(false);
+    }
   }, [canRecord, runCommand, pendingPrimitive]);
 
-  const handleSave = useCallback(() => {
+  const handleSave = useCallback(async () => {
     if (!canSave) return;
-    runCommand('Save', 'stop_segment');
+    const result = await runCommand('Save', 'stop_segment');
+    if (result && result.success) {
+      optimisticRef.current = false;
+      setOptimisticRecording(false);
+    }
   }, [canSave, runCommand]);
 
   const handleDiscardAction = useCallback(async () => {
@@ -124,6 +148,8 @@ const SegmentPanel = () => {
         toast.error(`Discard failed at stop: ${stop?.message || ''}`);
         return;
       }
+      optimisticRef.current = false;
+      setOptimisticRecording(false);
       await runCommand('Discard', 'discard_segment', { segmentIndex: cur });
     } else {
       await runCommand('Discard', 'discard_segment', {
