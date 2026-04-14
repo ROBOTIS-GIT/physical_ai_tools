@@ -33,7 +33,7 @@ from huggingface_hub import (
     ModelCard,
     ModelCardData,
 )
-from physical_ai_interfaces.msg import TaskStatus
+from physical_ai_interfaces.msg import TaskInfo, TaskStatus
 from physical_ai_server.data_processing.data_converter import DataConverter
 from physical_ai_server.data_processing.progress_tracker import (
     HuggingFaceProgressTqdm
@@ -762,7 +762,7 @@ class DataManager:
     def get_current_record_status(self):
         current_status = TaskStatus()
         current_status.robot_type = self._robot_type
-        current_status.task_info = self._task_info
+        current_status.task_info = self._task_info or TaskInfo()
 
         # Simplified mode statuses
         if self._status == 'idle':
