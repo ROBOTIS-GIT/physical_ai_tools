@@ -90,6 +90,35 @@ class DataManager:
         self.restore_pending()
 
     @staticmethod
+    def _quarantine_partial_archives(archive_root):
+        """Rename any numeric episode dir that is missing `metadata.yaml`.
+
+        These arise when a previous merge crashed mid-write. Renaming them
+        out of the way keeps `_find_next_episode_number_in` from colliding
+        while preserving the data for manual inspection.
+        """
+        if not os.path.isdir(archive_root):
+            return
+        ts = time.strftime('%Y%m%d_%H%M%S', time.gmtime())
+        try:
+            entries = os.listdir(archive_root)
+        except OSError:
+            return
+        for item in entries:
+            path = os.path.join(archive_root, item)
+            if not os.path.isdir(path) or not item.isdigit():
+                continue
+            if os.path.exists(os.path.join(path, 'metadata.yaml')):
+                continue
+            new_name = f'.partial_{item}_{ts}'
+            try:
+                os.rename(path, os.path.join(archive_root, new_name))
+                print(f'[DataManager] Quarantined partial archive '
+                      f'{item} -> {new_name}')
+            except OSError as e:
+                print(f'[DataManager] Failed to quarantine {path}: {e}')
+
+    @staticmethod
     def _find_next_episode_number_in(rosbag_dir) -> int:
         """Return the smallest unused numeric episode subfolder index."""
         if not os.path.exists(rosbag_dir):
@@ -106,27 +135,58 @@ class DataManager:
         return (max(existing) + 1) if existing else 0
 
     def restore_pending(self):
-        """Rebuild segment state from an existing `_pending/episode_info.json`."""
+        """Rebuild segment state from an existing `_pending/episode_info.json`.
+
+        Also prunes orphan segment directories left over from a crash mid-
+        recording (dirs present on disk but absent from metadata, or missing
+        their `metadata.yaml` — i.e. an incomplete rosbag2).
+        """
         info_path = os.path.join(
             self.PENDING_ROSBAG_PATH, 'episode_info.json')
-        if not os.path.exists(info_path):
+        if os.path.exists(info_path):
+            try:
+                with open(info_path) as f:
+                    data = json.load(f)
+            except Exception as e:
+                print(f'[DataManager] Failed to read pending info: {e}')
+                data = {}
+            segments = data.get('segments', []) or []
+            self._segments_meta = [dict(s) for s in segments]
+            self._current_segment_index = len(self._segments_meta)
+            self._merge_status = data.get('merge_status', 'none') or 'none'
+            self._merged_file = data.get('merged_file', None)
+            self.current_instruction = data.get('task_instruction', '') or ''
+            if self._segments_meta:
+                self._status = 'between_segments'
+            print(f'[DataManager] Restored {len(self._segments_meta)} '
+                  f'pending segment(s) from {self.PENDING_ROSBAG_PATH}')
+        self._prune_orphan_segments()
+
+    def _prune_orphan_segments(self):
+        """Remove scratch segment dirs not reflected in `_segments_meta` or
+        lacking a valid `metadata.yaml` (half-written rosbag2)."""
+        seg_root = os.path.join(self.PENDING_ROSBAG_PATH, 'segments')
+        if not os.path.isdir(seg_root):
             return
+        known = {int(s['segment_index']) for s in self._segments_meta
+                 if 'segment_index' in s}
+        removed = []
         try:
-            with open(info_path) as f:
-                data = json.load(f)
-        except Exception as e:
-            print(f'[DataManager] Failed to read pending info: {e}')
+            entries = os.listdir(seg_root)
+        except OSError:
             return
-        segments = data.get('segments', []) or []
-        self._segments_meta = [dict(s) for s in segments]
-        self._current_segment_index = len(self._segments_meta)
-        self._merge_status = data.get('merge_status', 'none') or 'none'
-        self._merged_file = data.get('merged_file', None)
-        self.current_instruction = data.get('task_instruction', '') or ''
-        if self._segments_meta:
-            self._status = 'between_segments'
-        print(f'[DataManager] Restored {len(self._segments_meta)} pending '
-              f'segment(s) from {self.PENDING_ROSBAG_PATH}')
+        for item in entries:
+            path = os.path.join(seg_root, item)
+            if not os.path.isdir(path) or not item.isdigit():
+                continue
+            idx = int(item)
+            metadata_yaml = os.path.join(path, 'metadata.yaml')
+            if idx not in known or not os.path.exists(metadata_yaml):
+                shutil.rmtree(path, ignore_errors=True)
+                removed.append(idx)
+        if removed:
+            print(f'[DataManager] Pruned orphan segment dir(s): '
+                  f'{sorted(removed)}')
 
     def get_status(self):
         return self._status
@@ -270,6 +330,7 @@ class DataManager:
         repo_name = f'{self._robot_type}_{task_name}'
         archive_root = os.path.join(self.ARCHIVE_ROSBAG_ROOT, repo_name)
         os.makedirs(archive_root, exist_ok=True)
+        self._quarantine_partial_archives(archive_root)
         ep_idx = self._find_next_episode_number_in(archive_root)
         archive_dir = os.path.join(archive_root, str(ep_idx))
         if os.path.exists(archive_dir):
