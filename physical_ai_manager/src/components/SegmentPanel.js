@@ -30,6 +30,7 @@ import TaskPhase from '../constants/taskPhases';
 import PRIMITIVE_DESCRIPTIONS from '../constants/primitiveDescriptions';
 import { setPendingPrimitive } from '../features/tasks/taskSlice';
 import { useRosServiceCaller } from '../hooks/useRosServiceCaller';
+import InfoPanel from './InfoPanel';
 import Tooltip from './Tooltip';
 
 const isInputFocused = () => {
@@ -423,6 +424,17 @@ const SegmentPanel = () => {
             );
           }
         )}
+      </div>
+
+      {/* Task Information block (fills in just before merging) */}
+      <div className="mb-3">
+        <div className="text-sm font-semibold text-gray-700 mb-2">
+          Task Information
+          <span className="ml-1 text-xs font-normal text-gray-400">
+            (required to merge)
+          </span>
+        </div>
+        <InfoPanel variant="embedded" />
       </div>
 
       {/* Discard Episode / Merge */}

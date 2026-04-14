@@ -20,8 +20,9 @@ import clsx from 'clsx';
 import TaskPhase from '../constants/taskPhases';
 import { setTaskInfo } from '../features/tasks/taskSlice';
 
-const InfoPanel = () => {
+const InfoPanel = ({ variant = 'card' }) => {
   const dispatch = useDispatch();
+  const embedded = variant === 'embedded';
 
   const info = useSelector((state) => state.tasks.taskInfo);
   const taskStatus = useSelector((state) => state.tasks.taskStatus);
@@ -91,19 +92,26 @@ const InfoPanel = () => {
 
   const classLabel = clsx('text-sm', 'text-gray-600', 'w-28', 'flex-shrink-0', 'font-medium');
 
-  const classInfoPanel = clsx(
-    'bg-white',
-    'border-2',
-    'rounded-2xl',
-    'shadow-md',
-    'p-4',
-    'w-full',
-    'max-w-[350px]',
-    'relative',
-    'overflow-y-auto',
-    'scrollbar-thin',
-    needsTaskInfo ? 'border-amber-400' : 'border-gray-200'
-  );
+  const classInfoPanel = embedded
+    ? clsx(
+        'rounded-lg',
+        'p-2',
+        'border',
+        needsTaskInfo ? 'border-amber-400 bg-amber-50' : 'border-gray-200'
+      )
+    : clsx(
+        'bg-white',
+        'border-2',
+        'rounded-2xl',
+        'shadow-md',
+        'p-4',
+        'w-full',
+        'max-w-[350px]',
+        'relative',
+        'overflow-y-auto',
+        'scrollbar-thin',
+        needsTaskInfo ? 'border-amber-400' : 'border-gray-200'
+      );
 
   const classTaskNameTextarea = clsx(
     'text-sm',
@@ -148,14 +156,16 @@ const InfoPanel = () => {
 
   return (
     <div className={classInfoPanel}>
-      <div className={clsx('text-lg', 'font-semibold', 'mb-3', 'text-gray-800')}>
-        Task Information
-      </div>
+      {!embedded && (
+        <div className={clsx('text-lg', 'font-semibold', 'mb-3', 'text-gray-800')}>
+          Task Information
+        </div>
+      )}
 
       {needsTaskInfo && (
         <div
           className={clsx(
-            'mb-3 p-2 rounded-md text-sm font-medium',
+            'mb-2 p-2 rounded-md text-xs font-medium',
             'bg-amber-100 text-amber-800'
           )}
         >
@@ -163,22 +173,23 @@ const InfoPanel = () => {
         </div>
       )}
 
-      {/* Edit mode indicator */}
-      <div
-        className={clsx('mb-3', 'p-2', 'rounded-md', 'text-sm', 'font-medium', {
-          'bg-green-100 text-green-800': isEditable,
-          'bg-gray-100 text-gray-600': !isEditable,
-        })}
-      >
-        {isEditable ? (
-          'Edit mode'
-        ) : (
-          <div className="leading-tight">
-            <div>Read only</div>
-            <div className="text-xs mt-1 opacity-80">task is running or robot is not connected</div>
-          </div>
-        )}
-      </div>
+      {!embedded && (
+        <div
+          className={clsx('mb-3', 'p-2', 'rounded-md', 'text-sm', 'font-medium', {
+            'bg-green-100 text-green-800': isEditable,
+            'bg-gray-100 text-gray-600': !isEditable,
+          })}
+        >
+          {isEditable ? (
+            'Edit mode'
+          ) : (
+            <div className="leading-tight">
+              <div>Read only</div>
+              <div className="text-xs mt-1 opacity-80">task is running or robot is not connected</div>
+            </div>
+          )}
+        </div>
+      )}
 
       {/* Task Num */}
       <div className={clsx('flex', 'items-center', 'mb-2.5')}>
@@ -220,10 +231,9 @@ const InfoPanel = () => {
       <div className="flex flex-col items-center text-xs text-gray-500 mt-3 leading-relaxed bg-gray-100 p-2 rounded-md">
         <div>Dataset will be saved as:</div>
         <div className="text-blue-500 font-bold break-all">
-          Task_{info.taskNum}_{info.taskName}_MCAP
+          Task_{info.taskNum || '—'}_{info.taskName || '—'}_MCAP
         </div>
       </div>
-
     </div>
   );
 };
