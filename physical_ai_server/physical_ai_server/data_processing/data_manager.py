@@ -48,24 +48,27 @@ class DataManager:
     # Progress queue for multiprocessing communication
     _progress_queue = None
 
+    # Task-agnostic scratch area. Segments are recorded here first and
+    # moved to `Task_{num}_{name}_MCAP/{ep_idx}/` on merge.
+    PENDING_ROSBAG_PATH = '/workspace/rosbag2/_pending'
+    ARCHIVE_ROSBAG_ROOT = '/workspace/rosbag2'
+
     def __init__(
             self,
             save_root_path,
             robot_type,
-            task_info):
+            task_info=None):
         self._robot_type = robot_type
-        # Folder naming: Task_{task_num}_{task_name}_MCAP. The leading and
-        # trailing parts are constants so empty fields stay obvious in the
-        # resulting path.
-        task_num = getattr(task_info, 'task_num', '') or ''
-        self._save_repo_name = f'Task_{task_num}_{task_info.task_name}_MCAP'
-        self._save_path = save_root_path / self._save_repo_name
-        self._save_rosbag_path = '/workspace/rosbag2/' + self._save_repo_name
-        self._single_task = len(task_info.task_instruction) == 1
+        self._save_path = save_root_path
+        self._save_rosbag_path = self.PENDING_ROSBAG_PATH
+        # task_info kept only for primitive defaults / fps; path is always scratch.
         self._task_info = task_info
+        self._save_repo_name = '_pending'
+        self._single_task = True
 
-        # Find next available episode number from existing folders
-        self._record_episode_count = self._find_next_episode_number()
+        # Scratch hosts a single in-flight episode at a time; episode_index is
+        # only meaningful after merge, so we keep a cached display value.
+        self._record_episode_count = 0
         self._start_time_s = 0
         self._proceed_time = 0
         self._status = 'idle'  # idle | seg_recording | between_segments | merging
@@ -83,41 +86,47 @@ class DataManager:
         self._merge_status = 'none'
         self._merged_file = None
 
-    def _find_next_episode_number(self) -> int:
-        """
-        Find the next available episode number by scanning existing directories.
+        # Try to pick up where a previous process left off.
+        self.restore_pending()
 
-        Checks the rosbag save path for existing episode folders (0, 1, 2, ...)
-        and returns the next available number.
-
-        Returns:
-            Next available episode number (0 if no existing episodes).
-        """
-        rosbag_dir = self._save_rosbag_path
-
+    @staticmethod
+    def _find_next_episode_number_in(rosbag_dir) -> int:
+        """Return the smallest unused numeric episode subfolder index."""
         if not os.path.exists(rosbag_dir):
-            print(f'[DataManager] No existing folder at {rosbag_dir}, starting from episode 0')
             return 0
-
-        # Find all numeric folder names
-        existing_episodes = []
+        existing = []
         try:
             for item in os.listdir(rosbag_dir):
-                item_path = os.path.join(rosbag_dir, item)
-                if os.path.isdir(item_path) and item.isdigit():
-                    existing_episodes.append(int(item))
+                path = os.path.join(rosbag_dir, item)
+                if os.path.isdir(path) and item.isdigit():
+                    existing.append(int(item))
         except OSError as e:
-            print(f'[DataManager] Error scanning directory: {e}, starting from episode 0')
+            print(f'[DataManager] Error scanning {rosbag_dir}: {e}')
             return 0
+        return (max(existing) + 1) if existing else 0
 
-        if not existing_episodes:
-            print(f'[DataManager] No existing episodes in {rosbag_dir}, starting from episode 0')
-            return 0
-
-        next_episode = max(existing_episodes) + 1
-        print(f'[DataManager] Found existing episodes {sorted(existing_episodes)}, '
-              f'starting from episode {next_episode}')
-        return next_episode
+    def restore_pending(self):
+        """Rebuild segment state from an existing `_pending/episode_info.json`."""
+        info_path = os.path.join(
+            self.PENDING_ROSBAG_PATH, 'episode_info.json')
+        if not os.path.exists(info_path):
+            return
+        try:
+            with open(info_path) as f:
+                data = json.load(f)
+        except Exception as e:
+            print(f'[DataManager] Failed to read pending info: {e}')
+            return
+        segments = data.get('segments', []) or []
+        self._segments_meta = [dict(s) for s in segments]
+        self._current_segment_index = len(self._segments_meta)
+        self._merge_status = data.get('merge_status', 'none') or 'none'
+        self._merged_file = data.get('merged_file', None)
+        self.current_instruction = data.get('task_instruction', '') or ''
+        if self._segments_meta:
+            self._status = 'between_segments'
+        print(f'[DataManager] Restored {len(self._segments_meta)} pending '
+              f'segment(s) from {self.PENDING_ROSBAG_PATH}')
 
     def get_status(self):
         return self._status
@@ -141,11 +150,10 @@ class DataManager:
         self._status = 'seg_recording'
         self._segment_start_time_s = time.perf_counter()
         self._start_time_s = self._segment_start_time_s
-        self.current_instruction = self._task_info.task_instruction[0] \
-            if self._task_info.task_instruction else ''
+        if self._task_info and getattr(self._task_info, 'task_instruction', None):
+            self.current_instruction = self._task_info.task_instruction[0]
         print(f'[DataManager] Segment {self._current_segment_index} started '
-              f'(episode {self._record_episode_count}, '
-              f'primitive={primitive_description!r})')
+              f'(primitive={primitive_description!r})')
 
     def stop_segment(self):
         """End the current segment and record its metadata."""
@@ -201,37 +209,118 @@ class DataManager:
         print(f'[DataManager] Segment {idx} discarded. '
               f'Remaining: {len(self._segments_meta)}')
 
-    def finish_episode(self, needs_review: bool = False):
-        """Finalize the current episode and increment episode counter."""
-        if self._status == 'seg_recording':
-            raise RuntimeError('Cannot finish episode while recording segment')
-        if not self._segments_meta:
-            # Nothing to finalize.
-            self._status = 'idle'
-            return
-        self._write_episode_info(needs_review=needs_review)
-        print(f'[DataManager] Episode {self._record_episode_count} finished '
-              f'with {len(self._segments_meta)} segment(s)')
-        self._record_episode_count += 1
+    def discard_episode(self):
+        """Throw away the pending scratch episode entirely."""
+        if self._status not in ('idle', 'between_segments'):
+            raise RuntimeError(
+                f'Cannot discard episode in status {self._status}')
+        if os.path.exists(self.PENDING_ROSBAG_PATH):
+            shutil.rmtree(self.PENDING_ROSBAG_PATH, ignore_errors=True)
         self._segments_meta = []
         self._current_segment_index = 0
         self._merge_status = 'none'
         self._merged_file = None
         self._status = 'idle'
+        print('[DataManager] Pending episode discarded')
+
+    def finalize_to_archive(self, task_info):
+        """Merge pending segments, move them under `Task_{num}_{name}_MCAP/`.
+
+        Returns the archive episode directory on success. Raises on invalid
+        task info, empty pending state, merge failure, or I/O errors. On
+        failure the pending scratch is left intact for retry (it is moved
+        *after* a successful merge).
+        """
+        if self._status != 'between_segments':
+            raise RuntimeError(
+                f'Cannot finalize in status {self._status}')
+        if not self._segments_meta:
+            raise RuntimeError('No pending segments to merge')
+
+        task_num = (getattr(task_info, 'task_num', '') or '').strip()
+        task_name = (getattr(task_info, 'task_name', '') or '').strip()
+        instruction_list = [
+            s for s in (getattr(task_info, 'task_instruction', []) or [])
+            if s and s.strip()
+        ]
+        if not task_num or not task_name or not instruction_list:
+            raise ValueError(
+                'task_num, task_name, and task_instruction are required')
+
+        from physical_ai_server.data_processing.mcap_merger import merge_episode
+
+        self._status = 'merging'
+        self._merge_status = 'pending'
+        try:
+            self._write_episode_info()  # reflect pending status on disk
+        except Exception:
+            pass
+
+        try:
+            merge_episode(Path(self.PENDING_ROSBAG_PATH))
+        except Exception as e:
+            self._merge_status = 'failed'
+            self._status = 'between_segments'
+            try:
+                self._write_episode_info()
+            except Exception:
+                pass
+            raise RuntimeError(f'merge_episode failed: {e}') from e
+
+        repo_name = f'Task_{task_num}_{task_name}_MCAP'
+        archive_root = os.path.join(self.ARCHIVE_ROSBAG_ROOT, repo_name)
+        os.makedirs(archive_root, exist_ok=True)
+        ep_idx = self._find_next_episode_number_in(archive_root)
+        archive_dir = os.path.join(archive_root, str(ep_idx))
+        if os.path.exists(archive_dir):
+            self._merge_status = 'failed'
+            self._status = 'between_segments'
+            raise RuntimeError(
+                f'Archive dir already exists: {archive_dir}')
+
+        try:
+            shutil.move(self.PENDING_ROSBAG_PATH, archive_dir)
+        except Exception as e:
+            self._merge_status = 'failed'
+            self._status = 'between_segments'
+            raise RuntimeError(f'Failed to move scratch to archive: {e}') from e
+
+        self.current_instruction = instruction_list[0]
+        self._task_info = task_info
+        self._merge_status = 'done'
+        self._merged_file = 'merged.mcap'
+        self._record_episode_count = ep_idx + 1
+        try:
+            self._write_episode_info(
+                in_dir=archive_dir,
+                task_info_override=task_info,
+                episode_index=ep_idx,
+            )
+        except Exception as e:
+            print(f'[DataManager] Failed to write final episode_info: {e}')
+
+        self._segments_meta = []
+        self._current_segment_index = 0
+        self._merge_status = 'none'
+        self._merged_file = None
+        self._status = 'idle'
+        print(f'[DataManager] Finalized -> {archive_dir}')
+        return Path(archive_dir)
 
     # ========== Legacy wrappers (single-segment semantics) ==========
 
     def start_recording(self):
         """Legacy: start a single segment using task_info.primitive_description."""
-        primitive = getattr(self._task_info, 'primitive_description', '') or ''
+        primitive = ''
+        if self._task_info is not None:
+            primitive = getattr(
+                self._task_info, 'primitive_description', '') or ''
         self.start_segment(primitive)
 
     def stop_recording(self):
-        """Legacy: stop current segment and finalize episode in one step."""
+        """Legacy: stop the current segment; no auto-finalize under scratch flow."""
         if self._status == 'seg_recording':
             self.stop_segment()
-        if self._status == 'between_segments':
-            self.finish_episode()
         self._start_time_s = 0
 
     def is_recording(self):
@@ -241,12 +330,12 @@ class DataManager:
     # ========== Paths ==========
 
     def get_episode_dir(self, allow_idle: bool = False):
-        """Return absolute path of current episode directory."""
+        """Return absolute path of the scratch episode directory."""
         if self._status == 'idle' and not allow_idle:
             return None
         if self._status == 'warmup':
             return None
-        return self._save_rosbag_path + f'/{self._record_episode_count}'
+        return self.PENDING_ROSBAG_PATH
 
     def get_save_rosbag_path(self, allow_idle: bool = False):
         """Return absolute path of the active segment's rosbag directory."""
@@ -287,13 +376,22 @@ class DataManager:
     def _write_episode_info(self,
                             needs_review: bool = False,
                             merge_status: str = None,
-                            merged_file: str = None):
-        """Persist (or refresh) episode_info.json using current segment state."""
-        episode_dir = self.get_episode_dir(allow_idle=True)
-        if episode_dir is None:
+                            merged_file: str = None,
+                            in_dir: str = None,
+                            task_info_override=None,
+                            episode_index: int = None):
+        """Persist (or refresh) episode_info.json for `in_dir` (default: scratch).
+
+        When `task_info_override` is supplied its fields replace the cached
+        task metadata; otherwise values from `self._task_info` are used (may
+        be empty while recording to scratch).
+        """
+        target_dir = in_dir if in_dir is not None \
+            else self.get_episode_dir(allow_idle=True)
+        if target_dir is None:
             return
-        os.makedirs(episode_dir, exist_ok=True)
-        info_path = os.path.join(episode_dir, 'episode_info.json')
+        os.makedirs(target_dir, exist_ok=True)
+        info_path = os.path.join(target_dir, 'episode_info.json')
 
         existing = {}
         if os.path.exists(info_path):
@@ -308,16 +406,35 @@ class DataManager:
         if merged_file is not None:
             self._merged_file = merged_file
 
+        ti = task_info_override if task_info_override is not None \
+            else self._task_info
+        task_num = ''
+        task_name = ''
+        task_instruction = self.current_instruction
+        if ti is not None:
+            task_num = (getattr(ti, 'task_num', '') or '')
+            task_name = (getattr(ti, 'task_name', '') or '')
+            instr = getattr(ti, 'task_instruction', []) or []
+            if instr and instr[0]:
+                task_instruction = instr[0]
+
         meta = {
-            'episode_index': self._record_episode_count,
-            'task_instruction': self.current_instruction,
+            'episode_index': episode_index
+            if episode_index is not None
+            else existing.get('episode_index', self._record_episode_count),
+            'task_num': task_num or existing.get('task_num', ''),
+            'task_name': task_name or existing.get('task_name', ''),
+            'task_instruction': task_instruction
+            or existing.get('task_instruction', ''),
             'robot_type': self._robot_type,
             'timestamp': time.strftime('%Y-%m-%dT%H:%M:%SZ', time.gmtime()),
-            'fps': getattr(self._task_info, 'fps', 15),
+            'fps': getattr(ti, 'fps', 15) if ti is not None else 15,
             'format_version': 'robotis_v2',
             'device_serial': socket.gethostname(),
             'needs_review': needs_review or existing.get('needs_review', False),
-            'segments': list(self._segments_meta),
+            'segments': list(self._segments_meta)
+            if self._segments_meta
+            else existing.get('segments', []),
             'merge_status': self._merge_status,
             'merged_file': self._merged_file,
         }
