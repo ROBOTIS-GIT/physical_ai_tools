@@ -12,22 +12,45 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import React, { useCallback } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import { useSelector, useDispatch } from 'react-redux';
 import clsx from 'clsx';
 import toast from 'react-hot-toast';
-import { MdDelete, MdPlayArrow, MdStop, MdDone, MdMerge } from 'react-icons/md';
+import {
+  MdFiberManualRecord,
+  MdSave,
+  MdClose,
+  MdDone,
+  MdDelete,
+  MdMerge,
+} from 'react-icons/md';
 
 import TaskPhase from '../constants/taskPhases';
 import PRIMITIVE_DESCRIPTIONS from '../constants/primitiveDescriptions';
 import { setPendingPrimitive } from '../features/tasks/taskSlice';
 import { useRosServiceCaller } from '../hooks/useRosServiceCaller';
+import Tooltip from './Tooltip';
+
+const isInputFocused = () => {
+  const el = document.activeElement;
+  if (!el) return false;
+  const tag = el.tagName.toLowerCase();
+  return (
+    tag === 'input' ||
+    tag === 'textarea' ||
+    tag === 'select' ||
+    el.contentEditable === 'true'
+  );
+};
 
 const SegmentPanel = () => {
   const dispatch = useDispatch();
   const status = useSelector((state) => state.tasks.taskStatus);
   const pendingPrimitive = useSelector((state) => state.tasks.pendingPrimitive);
   const { sendRecordCommand } = useRosServiceCaller();
+
+  const [hovered, setHovered] = useState(null);
+  const [pressed, setPressed] = useState(null);
 
   const phase = status.phase;
   const isRecording = phase === TaskPhase.RECORDING;
@@ -38,12 +61,12 @@ const SegmentPanel = () => {
   const mergeStatus = status.mergeStatus || 'none';
   const currentEpisode = status.currentEpisodeNumber || 0;
 
-  const canAddSegment = !isRecording && !isMerging && !!pendingPrimitive;
-  const canStopSegment = isRecording;
+  const canRecord = !isRecording && !isMerging && !!pendingPrimitive;
+  const canSave = isRecording;
+  const canDiscard = isRecording || (hasSegments && !isMerging);
   const canFinishEpisode = !isRecording && !isMerging && hasSegments;
   const canMerge =
     !isRecording && !isMerging && hasSegments && mergeStatus !== 'pending';
-  const canDiscard = !isRecording && !isMerging;
 
   const runCommand = useCallback(
     async (label, cmd, opts = {}) => {
@@ -63,35 +86,107 @@ const SegmentPanel = () => {
     [sendRecordCommand]
   );
 
-  const handleAdd = useCallback(() => {
-    runCommand('Add segment', 'start_segment', {
+  const handleRecord = useCallback(() => {
+    if (!canRecord) return;
+    if (!pendingPrimitive) {
+      toast.error('Select a primitive first');
+      return;
+    }
+    runCommand('Record', 'start_segment', {
       primitiveDescription: pendingPrimitive,
     });
-  }, [runCommand, pendingPrimitive]);
+  }, [canRecord, runCommand, pendingPrimitive]);
 
-  const handleStop = useCallback(() => {
-    runCommand('Stop segment', 'stop_segment');
-  }, [runCommand]);
+  const handleSave = useCallback(() => {
+    if (!canSave) return;
+    runCommand('Save', 'stop_segment');
+  }, [canSave, runCommand]);
 
-  const handleDiscard = useCallback(
+  const handleDiscardAction = useCallback(async () => {
+    if (!canDiscard) return;
+    if (isRecording) {
+      // Cancel current segment: stop then remove just-finalized segment.
+      const cur = status.currentSegmentIndex || 0;
+      const stop = await sendRecordCommand('stop_segment');
+      if (!stop || stop.success === false) {
+        toast.error(`Discard failed at stop: ${stop?.message || ''}`);
+        return;
+      }
+      await runCommand('Discard', 'discard_segment', { segmentIndex: cur });
+    } else {
+      await runCommand('Discard', 'discard_segment', {
+        segmentIndex: segmentCount - 1,
+      });
+    }
+  }, [
+    canDiscard,
+    isRecording,
+    segmentCount,
+    sendRecordCommand,
+    runCommand,
+    status.currentSegmentIndex,
+  ]);
+
+  const handleDiscardSegment = useCallback(
     (idx) => {
       if (!window.confirm(`Discard segment ${idx}?`)) return;
-      runCommand(`Discard segment ${idx}`, 'discard_segment', {
-        segmentIndex: idx,
-      });
+      runCommand(`Discard #${idx}`, 'discard_segment', { segmentIndex: idx });
     },
     [runCommand]
   );
 
   const handleFinish = useCallback(() => {
+    if (!canFinishEpisode) return;
     runCommand('Finish episode', 'finish_episode');
-  }, [runCommand]);
+  }, [canFinishEpisode, runCommand]);
 
   const handleMerge = useCallback(() => {
-    runCommand('Merge episode', 'merge_episode', {
-      episodeIndex: currentEpisode,
-    });
-  }, [runCommand, currentEpisode]);
+    if (!canMerge) return;
+    runCommand('Merge', 'merge_episode', { episodeIndex: currentEpisode });
+  }, [canMerge, runCommand, currentEpisode]);
+
+  // Keyboard shortcuts — matching the legacy RecordControlPanel bindings.
+  const handleKeyAction = useCallback(
+    (e) => {
+      if (e.key === ' ' || e.key === 'Spacebar' || e.code === 'Space') {
+        if (canRecord) return 'Record';
+      }
+      if (
+        (e.ctrlKey || e.metaKey) &&
+        e.shiftKey &&
+        (e.key === 'x' || e.key === 'X')
+      ) {
+        if (canSave) return 'Save';
+      }
+      if (e.key === 'Escape') {
+        if (canDiscard) return 'Discard';
+      }
+      return null;
+    },
+    [canRecord, canSave, canDiscard]
+  );
+
+  useEffect(() => {
+    const onKeyDown = (e) => {
+      if (e.repeat || isInputFocused()) return;
+      const action = handleKeyAction(e);
+      if (action) setPressed(action);
+    };
+    const onKeyUp = (e) => {
+      setPressed(null);
+      if (isInputFocused()) return;
+      const action = handleKeyAction(e);
+      if (action === 'Record') handleRecord();
+      else if (action === 'Save') handleSave();
+      else if (action === 'Discard') handleDiscardAction();
+    };
+    window.addEventListener('keydown', onKeyDown);
+    window.addEventListener('keyup', onKeyUp);
+    return () => {
+      window.removeEventListener('keydown', onKeyDown);
+      window.removeEventListener('keyup', onKeyUp);
+    };
+  }, [handleKeyAction, handleRecord, handleSave, handleDiscardAction]);
 
   const classPanel = clsx(
     'bg-white',
@@ -117,29 +212,110 @@ const SegmentPanel = () => {
     'border-gray-100'
   );
 
-  const classBtn = (enabled, color = 'blue') =>
+  const classMainBtn = (label, isDisabled) =>
+    clsx(
+      'rounded-lg',
+      'border-none',
+      'cursor-pointer',
+      'px-2',
+      'py-1.5',
+      'flex',
+      'items-center',
+      'justify-center',
+      'gap-1',
+      'bg-gray-100',
+      'transition-all',
+      'duration-150',
+      'font-semibold',
+      'text-sm',
+      'flex-1',
+      {
+        'bg-gray-400': pressed === label && !isDisabled,
+        'bg-gray-200': hovered === label && pressed !== label && !isDisabled,
+        'opacity-30 cursor-not-allowed bg-gray-50': isDisabled,
+      }
+    );
+
+  const secondaryBtn = (enabled, color) =>
     clsx(
       'px-2.5',
-      'py-1',
+      'py-1.5',
       'rounded-md',
       'text-sm',
       'font-semibold',
       'transition-colors',
+      'flex',
+      'items-center',
+      'justify-center',
+      'gap-1',
       {
         [`bg-${color}-500 text-white hover:bg-${color}-600`]: enabled,
         'bg-gray-200 text-gray-400 cursor-not-allowed': !enabled,
       }
     );
 
+  const mainButtons = [
+    {
+      label: 'Record',
+      icon: MdFiberManualRecord,
+      color: '#d32f2f',
+      enabled: canRecord,
+      handler: handleRecord,
+      description: 'Start a new segment',
+      shortcut: 'Space',
+    },
+    {
+      label: 'Save',
+      icon: MdSave,
+      color: '#388e3c',
+      enabled: canSave,
+      handler: handleSave,
+      description: 'Stop current segment and add to list',
+      shortcut: 'Ctrl+Shift+X',
+    },
+    {
+      label: 'Discard',
+      icon: MdClose,
+      color: '#757575',
+      enabled: canDiscard,
+      handler: handleDiscardAction,
+      description: isRecording
+        ? 'Cancel current segment'
+        : 'Discard last segment',
+      shortcut: 'Escape',
+    },
+  ];
+
   return (
     <div className={classPanel}>
       <div className="flex items-center justify-between mb-3">
-        <div className="text-lg font-semibold text-gray-800">
-          Segments
-        </div>
+        <div className="text-lg font-semibold text-gray-800">Segments</div>
         <div className="text-xs text-gray-500">
-          Episode <span className="font-bold text-gray-700">{currentEpisode}</span>
+          Episode{' '}
+          <span className="font-bold text-gray-700">{currentEpisode}</span>
         </div>
+      </div>
+
+      {/* Primitive picker */}
+      <div className="flex items-center gap-2 mb-3">
+        <span className="text-sm text-gray-600 shrink-0">Next primitive</span>
+        <select
+          className={clsx(
+            'flex-1 text-sm p-1.5 border border-gray-300 rounded-md',
+            'focus:outline-none focus:ring-2 focus:ring-blue-500',
+            { 'bg-gray-100 cursor-not-allowed': isRecording || isMerging }
+          )}
+          value={pendingPrimitive}
+          onChange={(e) => dispatch(setPendingPrimitive(e.target.value))}
+          disabled={isRecording || isMerging}
+        >
+          <option value="">-- Select --</option>
+          {PRIMITIVE_DESCRIPTIONS.map((p) => (
+            <option key={p} value={p}>
+              {p}
+            </option>
+          ))}
+        </select>
       </div>
 
       {/* Segment list */}
@@ -151,14 +327,19 @@ const SegmentPanel = () => {
               <span className="text-sm font-mono text-gray-500 shrink-0">
                 #{i}
               </span>
-              <span className="text-sm text-gray-800 truncate">{prim || '—'}</span>
+              <span className="text-sm text-gray-800 truncate">
+                {prim || '—'}
+              </span>
             </div>
             <button
-              onClick={() => handleDiscard(i)}
-              disabled={!canDiscard}
+              onClick={() => handleDiscardSegment(i)}
+              disabled={isRecording || isMerging}
               className={clsx(
                 'p-1 rounded hover:bg-red-50 text-red-500',
-                { 'opacity-30 cursor-not-allowed hover:bg-transparent': !canDiscard }
+                {
+                  'opacity-30 cursor-not-allowed hover:bg-transparent':
+                    isRecording || isMerging,
+                }
               )}
               aria-label={`Discard segment ${i}`}
               title={`Discard segment ${i}`}
@@ -184,82 +365,81 @@ const SegmentPanel = () => {
 
         {!isRecording && !hasSegments && (
           <div className="text-xs text-gray-400 italic px-2 py-1">
-            No segments yet. Select a primitive and click Add Segment.
+            No segments yet. Select a primitive and press Record.
           </div>
         )}
       </div>
 
-      {/* Primitive picker */}
-      <div className="flex items-center gap-2 mb-2">
-        <span className="text-sm text-gray-600 shrink-0">Next primitive</span>
-        <select
-          className={clsx(
-            'flex-1 text-sm p-1.5 border border-gray-300 rounded-md',
-            'focus:outline-none focus:ring-2 focus:ring-blue-500',
-            { 'bg-gray-100 cursor-not-allowed': isRecording || isMerging }
-          )}
-          value={pendingPrimitive}
-          onChange={(e) => dispatch(setPendingPrimitive(e.target.value))}
-          disabled={isRecording || isMerging}
-        >
-          <option value="">-- Select --</option>
-          {PRIMITIVE_DESCRIPTIONS.map((p) => (
-            <option key={p} value={p}>
-              {p}
-            </option>
-          ))}
-        </select>
+      {/* Main Record / Save / Discard buttons (3-button set) */}
+      <div className="flex items-center gap-1.5 mb-3">
+        {mainButtons.map(
+          ({ label, icon: Icon, color, enabled, handler, description, shortcut }) => {
+            const isDisabled = !enabled;
+            return (
+              <Tooltip
+                key={label}
+                position="top"
+                content={
+                  <div className="text-center">
+                    <div className="font-semibold">{description}</div>
+                    {!isDisabled && (
+                      <div className="text-sm mt-1 text-gray-300">
+                        <span className="font-mono bg-gray-700 px-1 rounded">
+                          {shortcut}
+                        </span>
+                      </div>
+                    )}
+                  </div>
+                }
+                disabled={false}
+                className="relative flex-1"
+              >
+                <button
+                  className={classMainBtn(label, isDisabled)}
+                  onClick={() => !isDisabled && handler()}
+                  onMouseEnter={() => !isDisabled && setHovered(label)}
+                  onMouseLeave={() => {
+                    setHovered(null);
+                    setPressed(null);
+                  }}
+                  onMouseDown={() => !isDisabled && setPressed(label)}
+                  onMouseUp={() => setPressed(null)}
+                  disabled={isDisabled}
+                  aria-label={description}
+                >
+                  <Icon
+                    style={{ fontSize: '1.1rem' }}
+                    color={isDisabled ? '#9ca3af' : color}
+                  />
+                  {label}
+                </button>
+              </Tooltip>
+            );
+          }
+        )}
       </div>
 
-      {/* Action buttons */}
-      <div className="grid grid-cols-2 gap-2 mt-2">
-        {!isRecording ? (
-          <button
-            onClick={handleAdd}
-            disabled={!canAddSegment}
-            className={classBtn(canAddSegment, 'blue')}
-          >
-            <div className="flex items-center justify-center gap-1">
-              <MdPlayArrow size={16} />
-              Add Segment
-            </div>
-          </button>
-        ) : (
-          <button
-            onClick={handleStop}
-            disabled={!canStopSegment}
-            className={classBtn(canStopSegment, 'red')}
-          >
-            <div className="flex items-center justify-center gap-1">
-              <MdStop size={16} />
-              Stop Segment
-            </div>
-          </button>
-        )}
-
+      {/* Finish / Merge */}
+      <div className="flex flex-col gap-2">
         <button
           onClick={handleFinish}
           disabled={!canFinishEpisode}
-          className={classBtn(canFinishEpisode, 'green')}
+          className={secondaryBtn(canFinishEpisode, 'green')}
         >
-          <div className="flex items-center justify-center gap-1">
-            <MdDone size={16} />
-            Finish Episode
-          </div>
+          <MdDone size={16} />
+          Finish Episode
         </button>
 
         <button
           onClick={handleMerge}
           disabled={!canMerge}
-          className={clsx(classBtn(canMerge, 'indigo'), 'col-span-2')}
+          className={secondaryBtn(canMerge, 'indigo')}
         >
-          <div className="flex items-center justify-center gap-1">
-            <MdMerge size={16} />
-            Merge to MCAP
-            {mergeStatus && mergeStatus !== 'none' && (
-              <span className="ml-1 text-xs opacity-80">({mergeStatus})</span>
-            )}
-          </div>
+          <MdMerge size={16} />
+          Merge to MCAP
+          {mergeStatus && mergeStatus !== 'none' && (
+            <span className="ml-1 text-xs opacity-80">({mergeStatus})</span>
+          )}
         </button>
       </div>
     </div>
