@@ -83,57 +83,33 @@ export function useRosServiceCaller() {
   );
 
   const sendRecordCommand = useCallback(
-    async (command) => {
+    async (command, options = {}) => {
       try {
-        let command_enum;
-        switch (command) {
-          case 'none':
-            command_enum = TaskCommand.NONE;
-            break;
-          case 'start_record':
-            command_enum = TaskCommand.START_RECORD;
-            break;
-          case 'start_inference':
-            command_enum = TaskCommand.START_INFERENCE;
-            break;
-          case 'stop':
-            command_enum = TaskCommand.STOP;
-            break;
-          case 'next':
-            command_enum = TaskCommand.NEXT;
-            break;
-          case 'skip_task':
-            command_enum = TaskCommand.SKIP_TASK;
-            break;
-          case 'rerecord':
-            command_enum = TaskCommand.RERECORD;
-            break;
-          case 'finish':
-            command_enum = TaskCommand.FINISH;
-            break;
-          case 'cancel':
-            command_enum = TaskCommand.CANCEL;
-            break;
-          case 'convert_mp4':
-            command_enum = TaskCommand.CONVERT_MP4;
-            break;
-          case 'stop_inference':
-            command_enum = TaskCommand.STOP_INFERENCE;
-            break;
-          case 'resume_inference':
-            command_enum = TaskCommand.RESUME_INFERENCE;
-            break;
-          case 'start_inference_record':
-            command_enum = TaskCommand.START_INFERENCE_RECORD;
-            break;
-          case 'stop_inference_record':
-            command_enum = TaskCommand.STOP_INFERENCE_RECORD;
-            break;
-          case 'cancel_inference_record':
-            command_enum = TaskCommand.CANCEL_INFERENCE_RECORD;
-            break;
-          default:
-            throw new Error(`Unknown command: ${command}`);
+        const commandEnumMap = {
+          none: TaskCommand.NONE,
+          start_record: TaskCommand.START_RECORD,
+          start_inference: TaskCommand.START_INFERENCE,
+          stop: TaskCommand.STOP,
+          next: TaskCommand.NEXT,
+          skip_task: TaskCommand.SKIP_TASK,
+          rerecord: TaskCommand.RERECORD,
+          finish: TaskCommand.FINISH,
+          cancel: TaskCommand.CANCEL,
+          convert_mp4: TaskCommand.CONVERT_MP4,
+          stop_inference: TaskCommand.STOP_INFERENCE,
+          resume_inference: TaskCommand.RESUME_INFERENCE,
+          start_inference_record: TaskCommand.START_INFERENCE_RECORD,
+          stop_inference_record: TaskCommand.STOP_INFERENCE_RECORD,
+          cancel_inference_record: TaskCommand.CANCEL_INFERENCE_RECORD,
+          start_segment: TaskCommand.START_SEGMENT,
+          stop_segment: TaskCommand.STOP_SEGMENT,
+          discard_segment: TaskCommand.DISCARD_SEGMENT,
+          finish_episode: TaskCommand.FINISH_EPISODE,
+          merge_episode: TaskCommand.MERGE_EPISODE,
+        };
+        const command_enum = commandEnumMap[command];
+        if (command_enum === undefined) {
+          throw new Error(`Unknown command: ${command}`);
         }
 
         let taskType = '';
@@ -160,19 +136,27 @@ export function useRosServiceCaller() {
           taskInstruction = [taskName];
         }
 
+        const primitiveDescription = String(
+          options.primitiveDescription !== undefined
+            ? options.primitiveDescription
+            : taskInfo.primitiveDescription || ''
+        );
+
         const request = {
           task_info: {
             task_num: String(taskInfo.taskNum || ''),
             task_name: String(taskName),
             task_type: String(taskType),
             task_instruction: taskInstruction,
-            primitive_description: String(taskInfo.primitiveDescription || ''),
+            primitive_description: primitiveDescription,
             policy_path: String(taskInfo.policyPath || ''),
             record_inference_mode: Boolean(taskInfo.recordInferenceMode),
             tags: [],
             control_hz: Number(taskInfo.controlHz || 10),
           },
           command: Number(command_enum),
+          segment_index: Number(options.segmentIndex || 0),
+          episode_index: Number(options.episodeIndex || 0),
         };
 
         console.log('request:', request);

@@ -26,6 +26,7 @@ import InlineSystemStatus from '../components/InlineSystemStatus';
 import ImageGrid from '../components/ImageGrid';
 import RobotViewer3D from '../components/RobotViewer3D';
 import InfoPanel from '../components/InfoPanel';
+import SegmentPanel from '../components/SegmentPanel';
 import RecordTopicMonitor from '../components/RecordTopicMonitor';
 import { setIsFirstLoadFalse } from '../features/ui/uiSlice';
 
@@ -216,6 +217,7 @@ export default function RecordPage({ isActive = true }) {
           <div className={classRightPanel}>
             <div className="w-full min-h-10"></div>
             <InfoPanel />
+            <SegmentPanel />
           </div>
         </div>
       </div>

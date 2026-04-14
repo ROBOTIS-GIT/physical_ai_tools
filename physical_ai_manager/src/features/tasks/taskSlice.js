@@ -25,7 +25,6 @@ const initialState = {
     taskName: '',
     taskType: '',
     taskInstruction: [],
-    primitiveDescription: '',
     policyPath: '',
     recordInferenceMode: false,
   },
@@ -40,6 +39,10 @@ const initialState = {
     currentEpisodeNumber: 0,
     currentScenarioNumber: 0,
     currentTaskInstruction: '',
+    currentSegmentIndex: 0,
+    segmentCount: 0,
+    segmentPrimitives: [],
+    mergeStatus: 'none',
     userId: '',
     usedStorageSize: 0,
     totalStorageSize: 0,
@@ -49,6 +52,8 @@ const initialState = {
     error: '',
     topicReceived: false,
   },
+  // Pending primitive_description for the NEXT segment to be started.
+  pendingPrimitive: '',
   availableRobots: [],
   availableCameras: [],
   policyList: [],
@@ -107,6 +112,9 @@ const taskSlice = createSlice({
     setRecordingMonitor: (state, action) => {
       state.recordingMonitor = action.payload;
     },
+    setPendingPrimitive: (state, action) => {
+      state.pendingPrimitive = action.payload || '';
+    },
   },
 });
 
@@ -124,6 +132,7 @@ export const {
   setLastHeartbeatTime,
   setJoystickMode,
   setRecordingMonitor,
+  setPendingPrimitive,
 } = taskSlice.actions;
 
 export default taskSlice.reducer;
