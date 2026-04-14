@@ -301,7 +301,7 @@ const SegmentPanel = () => {
 
   return (
     <div className={classPanel}>
-      <div className="mb-3 text-lg font-semibold text-gray-800">Segments</div>
+      <div className="mb-3 text-lg font-semibold text-gray-800">Rosbag Recorder</div>
 
       {/* Primitive picker */}
       <div className="flex items-center gap-2 mb-3">
