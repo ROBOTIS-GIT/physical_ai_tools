@@ -360,14 +360,9 @@ class DataManager:
         if urdf_path and os.path.exists(urdf_path):
             urdf_dest = os.path.join(archive_dir, 'robot.urdf')
             try:
-                self._copy_urdf_with_meshes(
-                    urdf_path, urdf_dest, archive_dir)
+                shutil.copy2(urdf_path, urdf_dest)
             except Exception as e:
-                print(f'[DataManager] URDF copy (with meshes) failed: {e}')
-                try:
-                    shutil.copy2(urdf_path, urdf_dest)
-                except Exception as e2:
-                    print(f'[DataManager] URDF copy fallback failed: {e2}')
+                print(f'[DataManager] URDF copy failed: {e}')
 
         self.current_instruction = instruction_list[0]
         self._task_info = task_info
