@@ -275,6 +275,13 @@ const SegmentPanel = () => {
       }
     );
 
+  // NOTE: Tailwind JIT only picks up class names it can see literally in
+  // source, so the enabled-color classes must be written out.
+  const SECONDARY_COLOR_CLASSES = {
+    indigo: 'bg-indigo-500 text-white hover:bg-indigo-600',
+    red: 'bg-red-500 text-white hover:bg-red-600',
+    green: 'bg-green-500 text-white hover:bg-green-600',
+  };
   const secondaryBtn = (enabled, color) =>
     clsx(
       'px-2.5',
@@ -287,10 +294,9 @@ const SegmentPanel = () => {
       'items-center',
       'justify-center',
       'gap-1',
-      {
-        [`bg-${color}-500 text-white hover:bg-${color}-600`]: enabled,
-        'bg-gray-200 text-gray-400 cursor-not-allowed': !enabled,
-      }
+      enabled
+        ? SECONDARY_COLOR_CLASSES[color] || SECONDARY_COLOR_CLASSES.indigo
+        : 'bg-gray-200 text-gray-400 cursor-not-allowed'
     );
 
   const mainButtons = [
