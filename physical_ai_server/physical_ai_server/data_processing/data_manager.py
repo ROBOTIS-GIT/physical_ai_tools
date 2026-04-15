@@ -54,6 +54,25 @@ class DataManager:
     PENDING_ROSBAG_PATH = '/workspace/rosbag2/_pending'
     ARCHIVE_ROSBAG_ROOT = '/workspace/rosbag2'
 
+    # Canonical ordering for primitive descriptions; index of a primitive
+    # in this list is written to episode_info.json as `primitive_index`.
+    # Keep in sync with
+    # physical_ai_manager/src/constants/primitiveDescriptions.js.
+    PRIMITIVE_DESCRIPTIONS = (
+        'move_to',
+        'pick_up',
+        'place',
+        'push_pull',
+        'open',
+        'close',
+        'button_switch',
+        'pour_dispense',
+        'tool_use',
+        'handover_attach',
+    )
+
+    DEFAULT_FPS = 15
+
     def __init__(
             self,
             save_root_path,
@@ -135,6 +154,47 @@ class DataManager:
             return 0
         return (max(existing) + 1) if existing else 0
 
+    @classmethod
+    def _primitive_index_for(cls, description):
+        """Return the canonical index of a primitive description, or -1."""
+        try:
+            return cls.PRIMITIVE_DESCRIPTIONS.index(description)
+        except ValueError:
+            return -1
+
+    def _current_fps(self):
+        """Best-effort fps: task_info.fps, then task_info.control_hz, else 15."""
+        ti = self._task_info
+        for attr in ('fps', 'control_hz'):
+            val = getattr(ti, attr, None) if ti is not None else None
+            if val:
+                return int(val)
+        return self.DEFAULT_FPS
+
+    def _serialize_segments(self):
+        """Convert internal segments_meta (with frame_count) to JSON shape.
+
+        Each output entry has exactly three fields:
+            - primitive_index        (int)
+            - primitive_description  (str)
+            - frame_duration         ([start_frame, end_frame]) cumulative.
+        """
+        out = []
+        cur = 0
+        for seg in self._segments_meta:
+            fc = int(seg.get('frame_count', 0))
+            out.append({
+                'primitive_index': int(seg.get(
+                    'primitive_index',
+                    self._primitive_index_for(
+                        seg.get('primitive_description', '')))),
+                'primitive_description':
+                    seg.get('primitive_description', ''),
+                'frame_duration': [cur, cur + fc],
+            })
+            cur += fc
+        return out
+
     def restore_pending(self):
         """Rebuild segment state from an existing `_pending/episode_info.json`.
 
@@ -152,7 +212,21 @@ class DataManager:
                 print(f'[DataManager] Failed to read pending info: {e}')
                 data = {}
             segments = data.get('segments', []) or []
-            self._segments_meta = [dict(s) for s in segments]
+            # Convert persisted frame_duration -> internal frame_count.
+            restored = []
+            for s in segments:
+                fd = s.get('frame_duration') or [0, 0]
+                fc = max(0, int(fd[1]) - int(fd[0]))
+                desc = s.get('primitive_description', '') or ''
+                prim_idx = s.get('primitive_index')
+                if prim_idx is None:
+                    prim_idx = self._primitive_index_for(desc)
+                restored.append({
+                    'primitive_index': int(prim_idx),
+                    'primitive_description': desc,
+                    'frame_count': fc,
+                })
+            self._segments_meta = restored
             self._current_segment_index = len(self._segments_meta)
             self._merge_status = data.get('merge_status', 'none') or 'none'
             self._merged_file = data.get('merged_file', None)
@@ -169,8 +243,9 @@ class DataManager:
         seg_root = os.path.join(self.PENDING_ROSBAG_PATH, 'segments')
         if not os.path.isdir(seg_root):
             return
-        known = {int(s['segment_index']) for s in self._segments_meta
-                 if 'segment_index' in s}
+        # Segment meta entries occupy contiguous disk indices 0..N-1, so any
+        # disk folder beyond that range is orphan regardless of content.
+        known = set(range(len(self._segments_meta)))
         removed = []
         try:
             entries = os.listdir(seg_root)
@@ -224,14 +299,13 @@ class DataManager:
         now = time.perf_counter()
         duration = now - self._segment_start_time_s \
             if self._segment_start_time_s else 0.0
+        fps = self._current_fps()
+        frame_count = max(0, int(round(duration * fps)))
         seg = {
-            'segment_index': self._current_segment_index,
+            'primitive_index': self._primitive_index_for(
+                self._pending_primitive),
             'primitive_description': self._pending_primitive,
-            'rosbag_path': f'segments/{self._current_segment_index}',
-            'start_timestamp': time.strftime(
-                '%Y-%m-%dT%H:%M:%SZ',
-                time.gmtime(time.time() - duration)),
-            'duration_s': round(duration, 3),
+            'frame_count': frame_count,
         }
         self._segments_meta.append(seg)
         self._current_segment_index += 1
@@ -239,8 +313,8 @@ class DataManager:
         self._start_time_s = 0
         self._segment_start_time_s = 0
         self._pending_primitive = ''
-        print(f'[DataManager] Segment {seg["segment_index"]} stopped '
-              f'({duration:.2f}s)')
+        print(f'[DataManager] Segment {len(self._segments_meta) - 1} stopped '
+              f'({duration:.2f}s, {frame_count} frames @ {fps}Hz)')
 
     def discard_segment(self, idx: int):
         """Remove segment `idx` and renumber trailing segments."""
@@ -260,9 +334,6 @@ class DataManager:
             if os.path.isdir(src):
                 os.rename(src, dst)
         self._segments_meta.pop(idx)
-        for i, seg in enumerate(self._segments_meta):
-            seg['segment_index'] = i
-            seg['rosbag_path'] = f'segments/{i}'
         self._current_segment_index = len(self._segments_meta)
         if not self._segments_meta:
             self._status = 'idle'
@@ -418,7 +489,7 @@ class DataManager:
             # --- segment extensions (ignored by legacy tooling) ---
             'task_num': task_num,
             'task_name': task_name,
-            'segments': list(self._segments_meta),
+            'segments': self._serialize_segments(),
         }
         info_path = os.path.join(archive_dir, 'episode_info.json')
         with open(info_path, 'w') as f:
@@ -550,7 +621,7 @@ class DataManager:
             'format_version': 'robotis_v2',
             'device_serial': socket.gethostname(),
             'needs_review': needs_review or existing.get('needs_review', False),
-            'segments': list(self._segments_meta)
+            'segments': self._serialize_segments()
             if self._segments_meta
             else existing.get('segments', []),
             'merge_status': self._merge_status,
