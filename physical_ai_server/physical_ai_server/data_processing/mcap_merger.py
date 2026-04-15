@@ -28,7 +28,6 @@ from rosbag2_py import (
     SequentialReader,
     SequentialWriter,
     StorageOptions,
-    TopicMetadata,
 )
 
 
@@ -64,34 +63,40 @@ def merge_segments_to(segment_dirs, output_uri) -> Path:
         raise FileNotFoundError('No segment directories to merge')
 
     writer = SequentialWriter()
-    writer.open(
-        StorageOptions(uri=output_uri, storage_id='mcap'),
-        ConverterOptions(
-            input_serialization_format='cdr',
-            output_serialization_format='cdr',
-        ),
-    )
+    try:
+        writer.open(
+            StorageOptions(uri=output_uri, storage_id='mcap'),
+            ConverterOptions(
+                input_serialization_format='cdr',
+                output_serialization_format='cdr',
+            ),
+        )
+    except Exception as e:
+        raise RuntimeError(
+            f'SequentialWriter.open failed for {output_uri}: {e}') from e
 
     registered = set()
     total_messages = 0
     try:
         for seg in seg_list:
             reader = SequentialReader()
-            reader.open(
-                StorageOptions(uri=seg, storage_id='mcap'),
-                ConverterOptions(
-                    input_serialization_format='cdr',
-                    output_serialization_format='cdr',
-                ),
-            )
+            try:
+                reader.open(
+                    StorageOptions(uri=seg, storage_id='mcap'),
+                    ConverterOptions(
+                        input_serialization_format='cdr',
+                        output_serialization_format='cdr',
+                    ),
+                )
+            except Exception as e:
+                raise RuntimeError(
+                    f'SequentialReader.open failed for {seg}: {e}') from e
             for tm in reader.get_all_topics_and_types():
                 if tm.name in registered:
                     continue
-                writer.create_topic(TopicMetadata(
-                    name=tm.name,
-                    type=tm.type,
-                    serialization_format=tm.serialization_format,
-                ))
+                # Pass the reader's TopicMetadata straight through so every
+                # distro-specific field (type_description_hash etc.) is kept.
+                writer.create_topic(tm)
                 registered.add(tm.name)
             while reader.has_next():
                 topic, data, t = reader.read_next()

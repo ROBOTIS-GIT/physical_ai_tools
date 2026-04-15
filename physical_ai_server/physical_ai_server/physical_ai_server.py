@@ -636,7 +636,8 @@ class PhysicalAIServer(Node):
                 self.get_logger().info(
                     f'Finalize complete: {archive_dir}')
             except Exception as e:
-                self.get_logger().error(f'Finalize failed: {e}')
+                self.get_logger().error(
+                    f'Finalize failed: {e}\n{traceback.format_exc()}')
 
         self._merge_thread = threading.Thread(target=_worker, daemon=True)
         self._merge_thread.start()
