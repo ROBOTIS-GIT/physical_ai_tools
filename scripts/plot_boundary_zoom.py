@@ -164,7 +164,7 @@ def plot_boundary(by_topic, b_idx, t_boundary, prev_prim, per_topic_stitch,
         topic_b = per_topic_stitch.get(topic)
         if topic_b is not None:
             ax.axvline((topic_b - t_boundary) / 1e9,
-                       color='#2563eb', linestyle='--',
+                       color='#16a34a', linestyle='--',
                        linewidth=0.9, alpha=0.85,
                        label='per-topic stitch')
         ax.axvline(0, color='red', linestyle=':', linewidth=0.6, alpha=0.5,
