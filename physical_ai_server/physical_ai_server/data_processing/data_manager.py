@@ -415,7 +415,7 @@ class DataManager:
             pass
 
         try:
-            merge_segments_to(seg_paths, archive_dir)
+            _, stitch_times = merge_segments_to(seg_paths, archive_dir)
         except Exception as e:
             # Roll back half-written archive_dir so a retry starts clean.
             shutil.rmtree(archive_dir, ignore_errors=True)
@@ -438,7 +438,8 @@ class DataManager:
         self._task_info = task_info
         try:
             self._write_episode_info_v1(
-                archive_dir, task_info, ep_idx)
+                archive_dir, task_info, ep_idx,
+                stitch_times=stitch_times)
         except Exception as e:
             print(f'[DataManager] Failed to write final episode_info: {e}')
 
@@ -467,7 +468,8 @@ class DataManager:
         with open(dst, 'w', encoding='utf-8') as f:
             f.write(text.strip() + '\n')
 
-    def _write_episode_info_v1(self, archive_dir, task_info, episode_index):
+    def _write_episode_info_v1(self, archive_dir, task_info, episode_index,
+                                stitch_times=None):
         """Write a v1-compatible episode_info.json with segment extensions."""
         task_num = (getattr(task_info, 'task_num', '') or '')
         task_name = (getattr(task_info, 'task_name', '') or '')
@@ -488,6 +490,10 @@ class DataManager:
             'task_num': task_num,
             'task_name': task_name,
             'segments': self._serialize_segments(),
+            # Per-topic stitch points (output ns of each topic's first
+            # message in segments after the first). Visualizers use these
+            # to draw exact per-topic boundary lines without guessing.
+            'stitch_times_ns': stitch_times or {},
         }
         info_path = os.path.join(archive_dir, 'episode_info.json')
         with open(info_path, 'w') as f:

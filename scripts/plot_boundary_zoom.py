@@ -100,6 +100,15 @@ def _collect(episode_dir: Path):
 
 
 def _boundaries(episode_dir: Path, by_topic):
+    """Return list of (boundary_index, fallback_t_ns, prev_primitive,
+    per_topic_stitch_t_ns_dict).
+
+    `per_topic_stitch_t_ns_dict[topic]` is the EXACT timestamp where
+    that topic transitions into segment `boundary_index + 1`. When the
+    merger wrote `stitch_times_ns` in episode_info.json we use those;
+    otherwise we fall back to a linear estimate (less accurate, marked
+    only by the global red line).
+    """
     info = json.loads(
         (episode_dir / 'episode_info.json').read_text())
     segs = info.get('segments', []) or []
@@ -112,14 +121,21 @@ def _boundaries(episode_dir: Path, by_topic):
     t_end = max(all_ts)
     last_end_frame = segs[-1]['frame_duration'][1]
     scale = (t_end - t0) / max(1, last_end_frame)
-    return [
-        (i, t0 + int(seg['frame_duration'][1] * scale),
-         seg.get('primitive_description', ''))
-        for i, seg in enumerate(segs[:-1])
-    ]
+    stitch_times_ns = info.get('stitch_times_ns', {}) or {}
+    out = []
+    for i, seg in enumerate(segs[:-1]):
+        fallback_t = t0 + int(seg['frame_duration'][1] * scale)
+        per_topic = {
+            topic: int(times[i])
+            for topic, times in stitch_times_ns.items()
+            if i < len(times)
+        }
+        out.append(
+            (i, fallback_t, seg.get('primitive_description', ''), per_topic))
+    return out
 
 
-def plot_boundary(by_topic, b_idx, t_boundary, prev_prim,
+def plot_boundary(by_topic, b_idx, t_boundary, prev_prim, per_topic_stitch,
                   window_s, out_path, show):
     window_ns = int(window_s * 1e9)
     lo = t_boundary - window_ns
@@ -143,7 +159,16 @@ def plot_boundary(by_topic, b_idx, t_boundary, prev_prim,
         if xs:
             has_anything = True
             ax.scatter(xs, ys, s=10, alpha=0.8)
-        ax.axvline(0, color='red', linestyle='--', linewidth=0.8, alpha=0.7)
+
+        # Per-topic boundary (preferred). Falls back to global if missing.
+        topic_b = per_topic_stitch.get(topic)
+        if topic_b is not None:
+            ax.axvline((topic_b - t_boundary) / 1e9,
+                       color='#2563eb', linestyle='--',
+                       linewidth=0.9, alpha=0.85,
+                       label='per-topic stitch')
+        ax.axvline(0, color='red', linestyle=':', linewidth=0.6, alpha=0.5,
+                   label='estimated global')
         ax.set_ylabel(topic.split('/')[-1], fontsize=7)
         ax.tick_params(axis='both', labelsize=6)
         ax.grid(True, linestyle=':', alpha=0.4)
@@ -193,10 +218,10 @@ def main(argv):
 
     print(f'Generating {len(boundaries)} boundary zoom plot(s) '
           f'(window ±{args.window}s)')
-    for b_idx, t_b, prev_prim in boundaries:
+    for b_idx, t_b, prev_prim, per_topic in boundaries:
         out = None if args.show else (
             out_dir / f'boundary_{b_idx:02d}.png')
-        plot_boundary(by_topic, b_idx, t_b, prev_prim,
+        plot_boundary(by_topic, b_idx, t_b, prev_prim, per_topic,
                       args.window, out, args.show)
     return 0
 

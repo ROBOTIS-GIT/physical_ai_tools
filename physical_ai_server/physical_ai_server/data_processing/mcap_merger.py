@@ -95,6 +95,10 @@ def merge_segments_to(
     # Per-topic last emitted timestamp and running median stride (in ns).
     last_out_t_per_topic: dict[str, int] = {}
     stride_per_topic: dict[str, int] = {}
+    # Per-topic stitch points: timestamp (ns) of the first message of each
+    # segment after the first. Used by visualizers to draw exact per-topic
+    # boundary lines without having to guess.
+    stitch_times_per_topic: dict[str, list] = {}
     # Globally last emitted timestamp — used as the fallback anchor for
     # topics that appear for the first time in a later segment.
     global_last_out_t = None
@@ -168,9 +172,13 @@ def merge_segments_to(
                 offsets_this_seg[topic] = (
                     last_out_t_per_topic[topic] + stride - first_t)
 
+            stitched_first_seen: set = set()
             for topic, data, t in messages:
                 new_t = t + offsets_this_seg[topic]
                 writer.write(topic, data, new_t)
+                if seg_idx > 0 and topic not in stitched_first_seen:
+                    stitch_times_per_topic.setdefault(topic, []).append(new_t)
+                    stitched_first_seen.add(topic)
                 last_out_t_per_topic[topic] = new_t
                 if global_last_out_t is None or new_t > global_last_out_t:
                     global_last_out_t = new_t
@@ -180,7 +188,7 @@ def merge_segments_to(
 
     print(f'[mcap_merger] Merged {total_messages} messages from '
           f'{len(seg_list)} segment(s) -> {output_uri}')
-    return Path(output_uri)
+    return Path(output_uri), stitch_times_per_topic
 
 
 def merge_episode(episode_dir) -> Path:
@@ -194,4 +202,5 @@ def merge_episode(episode_dir) -> Path:
     if not segs:
         raise FileNotFoundError(
             f'No segments under {episode_dir}/segments')
-    return merge_segments_to(segs, episode_dir / 'merged')
+    out, _ = merge_segments_to(segs, episode_dir / 'merged')
+    return out
