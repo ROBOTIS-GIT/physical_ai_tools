@@ -26,7 +26,12 @@ import json
 import sys
 from pathlib import Path
 
-from mcap.reader import make_reader
+from rosbag2_py import (
+    ConverterOptions,
+    SequentialReader,
+    StorageFilter,
+    StorageOptions,
+)
 
 
 # Camera topics we expect in a ffw_sg2_rev1 recording. Missing topics
@@ -40,15 +45,30 @@ CAMERA_TOPIC_CANDIDATES = (
 )
 
 
-def _collect_camera_frames(mcap_path: Path):
-    """Return { topic_name: [log_time_ns, ...] } for camera topics."""
-    frames: dict[str, list[int]] = {t: [] for t in CAMERA_TOPIC_CANDIDATES}
-    with open(mcap_path, 'rb') as f:
-        reader = make_reader(f)
-        for _schema, channel, message in reader.iter_messages(
-                topics=list(CAMERA_TOPIC_CANDIDATES)):
-            frames[channel.topic].append(message.log_time)
-    # Sort — order isn't guaranteed when iterating across chunks.
+def _collect_camera_frames(episode_dir: Path):
+    """Return { topic_name: [log_time_ns, ...] } for camera topics.
+
+    Uses rosbag2_py.SequentialReader against the whole episode rosbag2
+    directory (metadata.yaml + *.mcap) rather than reading raw MCAP,
+    so no `mcap` pip package is needed — only the ROS 2 runtime.
+    """
+    reader = SequentialReader()
+    reader.open(
+        StorageOptions(uri=str(episode_dir), storage_id='mcap'),
+        ConverterOptions(
+            input_serialization_format='cdr',
+            output_serialization_format='cdr',
+        ),
+    )
+    reader.set_filter(StorageFilter(topics=list(CAMERA_TOPIC_CANDIDATES)))
+
+    frames: dict = {t: [] for t in CAMERA_TOPIC_CANDIDATES}
+    while reader.has_next():
+        topic, _data, t = reader.read_next()
+        if topic in frames:
+            frames[topic].append(t)
+    del reader
+
     for t in frames:
         frames[t].sort()
     return frames
@@ -79,21 +99,17 @@ def verify(episode_dir: Path) -> int:
         print('FAIL: no segments in episode_info.json')
         return 2
 
-    mcaps = list(episode_dir.glob('*.mcap'))
-    if not mcaps:
-        print(f'FAIL: no .mcap in {episode_dir}')
+    metadata_yaml = episode_dir / 'metadata.yaml'
+    if not metadata_yaml.exists():
+        print(f'FAIL: missing {metadata_yaml}')
         return 2
-    if len(mcaps) > 1:
-        print(f'WARN: multiple .mcap files found, using {mcaps[0].name}')
-    mcap_path = mcaps[0]
 
-    frames = _collect_camera_frames(mcap_path)
+    frames = _collect_camera_frames(episode_dir)
     counts = {t: len(ts) for t, ts in frames.items()}
     present = {t: c for t, c in counts.items() if c > 0}
     missing = [t for t, c in counts.items() if c == 0]
 
     print(f'Episode dir : {episode_dir}')
-    print(f'MCAP file   : {mcap_path.name}')
     print(f'FPS (declared): {fps}')
     print(f'Segments    : {len(segments)}')
     print(f'Camera topics found: {len(present)} / {len(CAMERA_TOPIC_CANDIDATES)}')
