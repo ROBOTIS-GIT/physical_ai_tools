@@ -115,11 +115,11 @@ export default function RecordPage({ isActive = true }) {
   );
 
   const classRightPanel = clsx(
-    'h-full',
+    'min-h-full',
     'flex',
     'flex-col',
     'items-center',
-    'overflow-hidden',
+    'pb-4',
     'transition-opacity',
     'duration-300',
     {
