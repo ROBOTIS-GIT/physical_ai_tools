@@ -71,7 +71,10 @@ class DataManager:
         'handover_attach',
     )
 
-    DEFAULT_FPS = 15
+    # Camera frame rate — frame_duration fields in episode_info.json are in
+    # units of camera frames, so segment timing is always converted using
+    # this constant regardless of control loop frequency.
+    CAMERA_FPS = 15
 
     def __init__(
             self,
@@ -163,13 +166,8 @@ class DataManager:
             return -1
 
     def _current_fps(self):
-        """Best-effort fps: task_info.fps, then task_info.control_hz, else 15."""
-        ti = self._task_info
-        for attr in ('fps', 'control_hz'):
-            val = getattr(ti, attr, None) if ti is not None else None
-            if val:
-                return int(val)
-        return self.DEFAULT_FPS
+        """Camera fps used for converting segment durations to frame counts."""
+        return self.CAMERA_FPS
 
     def _serialize_segments(self):
         """Convert internal segments_meta (with frame_count) to JSON shape.
@@ -475,7 +473,7 @@ class DataManager:
         task_name = (getattr(task_info, 'task_name', '') or '')
         instr_list = getattr(task_info, 'task_instruction', []) or []
         task_instruction = instr_list[0] if instr_list else ''
-        fps = getattr(task_info, 'fps', 15)
+        fps = self.CAMERA_FPS
 
         meta = {
             'task_instruction': task_instruction,
