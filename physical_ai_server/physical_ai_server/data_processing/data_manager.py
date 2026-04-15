@@ -20,6 +20,7 @@ import json
 import os
 from pathlib import Path
 import queue
+import re
 import shutil
 import socket
 import threading
@@ -360,7 +361,7 @@ class DataManager:
         if urdf_path and os.path.exists(urdf_path):
             urdf_dest = os.path.join(archive_dir, 'robot.urdf')
             try:
-                shutil.copy2(urdf_path, urdf_dest)
+                self._write_urdf_stripped(urdf_path, urdf_dest)
             except Exception as e:
                 print(f'[DataManager] URDF copy failed: {e}')
 
@@ -382,6 +383,20 @@ class DataManager:
         self._status = 'idle'
         print(f'[DataManager] Finalized -> {archive_dir}')
         return Path(archive_dir)
+
+    @staticmethod
+    def _write_urdf_stripped(src, dst):
+        """Copy a URDF file while dropping XML comments and blank-only lines.
+
+        xacro-generated URDFs include verbose banner comments that add noise
+        to the archived episode; strip them for cleaner storage.
+        """
+        with open(src, 'r', encoding='utf-8') as f:
+            text = f.read()
+        text = re.sub(r'<!--.*?-->', '', text, flags=re.DOTALL)
+        text = re.sub(r'\n\s*\n+', '\n', text)
+        with open(dst, 'w', encoding='utf-8') as f:
+            f.write(text.strip() + '\n')
 
     def _write_episode_info_v1(self, archive_dir, task_info, episode_index):
         """Write a v1-compatible episode_info.json with segment extensions."""
