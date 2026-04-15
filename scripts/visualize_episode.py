@@ -175,8 +175,8 @@ def plot(episode_dir: Path, out_path: Path = None, show: bool = False):
         # Transpose to per-dim traces.
         dims = list(zip(*values)) if values else []
         for d_idx, dim in enumerate(dims):
-            ax.plot(times, dim, linewidth=0.7, alpha=0.85,
-                    label=f'[{d_idx}]')
+            ax.scatter(times, dim, s=4, alpha=0.7,
+                       label=f'[{d_idx}]')
         short = topic.split('/')[-1] or topic
         ax.set_ylabel(short, fontsize=8)
         ax.tick_params(axis='both', labelsize=7)
