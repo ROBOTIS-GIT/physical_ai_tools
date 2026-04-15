@@ -21,6 +21,7 @@ directory contains a standard `metadata.yaml` + `{basename}_0.mcap`,
 identical in layout to a single-shot rosbag2 recording.
 """
 
+import statistics
 from pathlib import Path
 
 from rosbag2_py import (
@@ -91,10 +92,14 @@ def merge_segments_to(
 
     registered = set()
     total_messages = 0
-    offset = 0       # cumulative shift applied to segment-local timestamps
-    last_out_t = None
+    # Per-topic last emitted timestamp and running median stride (in ns).
+    last_out_t_per_topic: dict[str, int] = {}
+    stride_per_topic: dict[str, int] = {}
+    # Globally last emitted timestamp — used as the fallback anchor for
+    # topics that appear for the first time in a later segment.
+    global_last_out_t = None
     try:
-        for seg in seg_list:
+        for seg_idx, seg in enumerate(seg_list):
             reader = SequentialReader()
             try:
                 reader.open(
@@ -110,24 +115,66 @@ def merge_segments_to(
             for tm in reader.get_all_topics_and_types():
                 if tm.name in registered:
                     continue
-                # Pass the reader's TopicMetadata straight through so every
-                # distro-specific field (type_description_hash etc.) is kept.
                 writer.create_topic(tm)
                 registered.add(tm.name)
-            first_in_segment = True
+
+            # Slurp this segment so we can compute per-topic first-time /
+            # strides before writing.
+            messages = []
+            first_t_in_seg: dict[str, int] = {}
+            prev_t_by_topic: dict[str, int] = {}
+            diffs_by_topic: dict[str, list] = {}
             while reader.has_next():
                 topic, data, t = reader.read_next()
-                if close_gaps and first_in_segment:
-                    if last_out_t is not None:
-                        # Align this segment's first message to
-                        # (prev_last + 1 frame).
-                        offset = (last_out_t + frame_interval_ns) - t
-                    first_in_segment = False
-                new_t = t + offset
-                writer.write(topic, data, new_t)
-                last_out_t = new_t
-                total_messages += 1
+                messages.append((topic, data, t))
+                first_t_in_seg.setdefault(topic, t)
+                if topic in prev_t_by_topic:
+                    dt = t - prev_t_by_topic[topic]
+                    if dt > 0:
+                        diffs_by_topic.setdefault(topic, []).append(dt)
+                prev_t_by_topic[topic] = t
             del reader
+
+            # Update running stride estimate per topic (min of any segment's
+            # median — favors tighter natural cadence).
+            for topic, diffs in diffs_by_topic.items():
+                if len(diffs) < 5:
+                    continue
+                med = int(statistics.median(diffs))
+                if med <= 0:
+                    continue
+                existing = stride_per_topic.get(topic)
+                stride_per_topic[topic] = med if existing is None \
+                    else min(existing, med)
+
+            # Segment-level offset (fallback for topics with no prior output).
+            if seg_idx == 0 or not close_gaps or global_last_out_t is None:
+                segment_offset = 0
+            else:
+                globally_first_t = min(first_t_in_seg.values())
+                segment_offset = (global_last_out_t + frame_interval_ns) \
+                    - globally_first_t
+
+            # Per-topic offset: when a topic has been seen before, its first
+            # message in this segment should land exactly `stride` after its
+            # own last emitted timestamp. New topics fall back to
+            # segment_offset so they don't drift arbitrarily.
+            offsets_this_seg: dict[str, int] = {}
+            for topic, first_t in first_t_in_seg.items():
+                if not close_gaps or topic not in last_out_t_per_topic:
+                    offsets_this_seg[topic] = segment_offset
+                    continue
+                stride = stride_per_topic.get(topic, frame_interval_ns)
+                offsets_this_seg[topic] = (
+                    last_out_t_per_topic[topic] + stride - first_t)
+
+            for topic, data, t in messages:
+                new_t = t + offsets_this_seg[topic]
+                writer.write(topic, data, new_t)
+                last_out_t_per_topic[topic] = new_t
+                if global_last_out_t is None or new_t > global_last_out_t:
+                    global_last_out_t = new_t
+                total_messages += 1
     finally:
         del writer
 
