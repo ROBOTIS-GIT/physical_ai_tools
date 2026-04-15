@@ -42,17 +42,30 @@ def _segment_dirs(pending_dir: Path):
     return sorted(dirs, key=lambda d: int(d.name))
 
 
-def merge_segments_to(segment_dirs, output_uri) -> Path:
+def merge_segments_to(
+        segment_dirs,
+        output_uri,
+        close_gaps: bool = True,
+        camera_fps: int = 15) -> Path:
     """Merge rosbag2 segment directories into a single rosbag2 at `output_uri`.
 
     `output_uri` must be a path that does NOT yet exist as a rosbag2
     directory — rosbag2_py will create it and populate `metadata.yaml` +
     `<basename>_0.mcap`.
 
+    When `close_gaps` is True (default) the wall-clock dead time between
+    segments (user setup time between Save and the next Record) is
+    removed: each segment's messages are shifted so the first message of
+    segment `i` lands exactly one camera frame (`1/camera_fps` s) after
+    the last message of segment `i-1`. Without this, playback holds the
+    last image frame for several seconds before the next segment starts.
+
     Args:
         segment_dirs: iterable of rosbag2 segment directories (each must
             contain its own metadata.yaml + .mcap).
         output_uri: target directory for the merged rosbag2.
+        close_gaps: If True, remove inter-segment wall-clock gaps.
+        camera_fps: Camera rate used to size the inter-segment spacing.
 
     Returns:
         Path to the output directory.
@@ -61,6 +74,7 @@ def merge_segments_to(segment_dirs, output_uri) -> Path:
     seg_list = [str(p) for p in segment_dirs]
     if not seg_list:
         raise FileNotFoundError('No segment directories to merge')
+    frame_interval_ns = int(1e9 / max(camera_fps, 1))
 
     writer = SequentialWriter()
     try:
@@ -77,6 +91,8 @@ def merge_segments_to(segment_dirs, output_uri) -> Path:
 
     registered = set()
     total_messages = 0
+    offset = 0       # cumulative shift applied to segment-local timestamps
+    last_out_t = None
     try:
         for seg in seg_list:
             reader = SequentialReader()
@@ -98,9 +114,18 @@ def merge_segments_to(segment_dirs, output_uri) -> Path:
                 # distro-specific field (type_description_hash etc.) is kept.
                 writer.create_topic(tm)
                 registered.add(tm.name)
+            first_in_segment = True
             while reader.has_next():
                 topic, data, t = reader.read_next()
-                writer.write(topic, data, t)
+                if close_gaps and first_in_segment:
+                    if last_out_t is not None:
+                        # Align this segment's first message to
+                        # (prev_last + 1 frame).
+                        offset = (last_out_t + frame_interval_ns) - t
+                    first_in_segment = False
+                new_t = t + offset
+                writer.write(topic, data, new_t)
+                last_out_t = new_t
                 total_messages += 1
             del reader
     finally:
