@@ -44,6 +44,11 @@ physical_ai_server:
         - /tf
         - /odom
         - /cmd_vel
+        # Aggregated joint state (joint_qvel / joint_qeffort for all joints)
+        - /joint_states
+        # End-effector poses (eef_left_pos/quat, eef_right_pos/quat)
+        - /end_effector_pose/left
+        - /end_effector_pose/right
         # CameraInfo for MP4 conversion (must match image frame count)
         - /robot/camera/cam_left_head/image_raw/compressed/camera_info
         - /robot/camera/cam_right_head/image_raw/compressed/camera_info
