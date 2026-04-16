@@ -100,10 +100,8 @@ def merge_segments_to(
     stitch_times_per_topic: dict[str, list] = {}
     # Globally last emitted timestamp — fallback for new-topic offset.
     global_last_out_t = None
-    # Use one full camera frame as epsilon so the first quantized
-    # timestamp of segment N+1 snaps to the NEXT grid point rather
-    # than collapsing back onto segment N's last grid point.
-    EPSILON_NS = frame_interval_ns
+    # 1 ms epsilon to guarantee strict monotonicity at the boundary.
+    EPSILON_NS = 1_000_000
     try:
         for seg_idx, seg in enumerate(seg_list):
             reader = SequentialReader()
@@ -164,17 +162,9 @@ def merge_segments_to(
                 else:
                     segment_offset = 0
 
-            # Quantize every output timestamp to the camera-frame grid so
-            # that all topics within the same ~67ms window share the same
-            # nominal timestamp. This collapses the 40-50ms inter-topic
-            # phase spread to zero at camera-frame resolution — PlotJuggler
-            # and LeRobot see perfectly synchronised transitions.
-            grid_ns = frame_interval_ns  # 1/camera_fps ≈ 66.67 ms
-
             stitched_first_seen: set = set()
             for topic, data, t in messages:
-                shifted_t = t + segment_offset
-                new_t = int(round(shifted_t / grid_ns) * grid_ns)
+                new_t = t + segment_offset
                 writer.write(topic, data, new_t)
                 if seg_idx > 0 and topic not in stitched_first_seen:
                     stitch_times_per_topic.setdefault(
