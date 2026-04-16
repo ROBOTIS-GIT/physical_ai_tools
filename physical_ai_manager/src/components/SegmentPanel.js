@@ -60,6 +60,7 @@ const SegmentPanel = () => {
   // round-trip. Reconciled with the server's phase once it echoes back.
   const [optimisticRecording, setOptimisticRecording] = useState(false);
   const optimisticRef = useRef(false);
+  const [savingInProgress, setSavingInProgress] = useState(false);
 
   const phase = status.phase;
   const serverRecording = phase === TaskPhase.RECORDING;
@@ -82,7 +83,7 @@ const SegmentPanel = () => {
       (taskInfo.taskInstruction?.[0] || '').trim()
   );
 
-  const canRecord = !isRecording && !isMerging && !!pendingPrimitive;
+  const canRecord = !isRecording && !isMerging && !savingInProgress && !!pendingPrimitive;
   const canSave = isRecording;
   const canDiscard = isRecording || (hasSegments && !isMerging);
   const canDiscardEpisode = !isRecording && !isMerging && hasSegments;
@@ -131,10 +132,13 @@ const SegmentPanel = () => {
 
   const handleSave = useCallback(async () => {
     if (!canSave) return;
+    setSavingInProgress(true);
+    optimisticRef.current = false;
+    setOptimisticRecording(false);
     const result = await runCommand('Save', 'stop_segment');
-    if (result && result.success) {
-      optimisticRef.current = false;
-      setOptimisticRecording(false);
+    setSavingInProgress(false);
+    if (!result || result.success === false) {
+      toast.error('Save may have failed — check server logs');
     }
   }, [canSave, runCommand]);
 
@@ -397,6 +401,17 @@ const SegmentPanel = () => {
               </span>
               <span className="text-sm text-gray-800 truncate">
                 {pendingPrimitive || '—'} (recording {status.proceedTime}s)
+              </span>
+            </div>
+          </div>
+        )}
+
+        {savingInProgress && (
+          <div className={clsx(classRow, 'bg-amber-50 border-amber-200')}>
+            <div className="flex items-center gap-2 min-w-0">
+              <span className="h-2 w-2 rounded-full bg-amber-500 animate-pulse shrink-0" />
+              <span className="text-sm text-amber-800 font-medium">
+                Saving segment...
               </span>
             </div>
           </div>

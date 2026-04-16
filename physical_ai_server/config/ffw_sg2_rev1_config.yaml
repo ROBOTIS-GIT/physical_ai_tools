@@ -44,8 +44,6 @@ physical_ai_server:
         - /tf
         - /odom
         - /cmd_vel
-        # Aggregated joint state (joint_qvel / joint_qeffort for all joints)
-        - /joint_states
         # End-effector poses (eef_left_pos/quat, eef_right_pos/quat)
         - /end_effector_pose/left
         - /end_effector_pose/right

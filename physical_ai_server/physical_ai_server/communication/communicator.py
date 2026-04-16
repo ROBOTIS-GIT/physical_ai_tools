@@ -254,7 +254,9 @@ class Communicator:
 
     def stop_rosbag(self):
         self._send_rosbag_command(
-            command=SendCommand.Request.STOP
+            command=SendCommand.Request.STOP,
+            wait_for_response=True,
+            timeout_sec=10.0,
         )
 
     def stop_and_delete_rosbag(self):
