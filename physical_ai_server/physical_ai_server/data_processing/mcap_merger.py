@@ -92,16 +92,16 @@ def merge_segments_to(
 
     registered = set()
     total_messages = 0
-    # Per-topic last emitted timestamp and running median stride (in ns).
+    # Per-topic last emitted timestamp (output ns).
     last_out_t_per_topic: dict[str, int] = {}
-    stride_per_topic: dict[str, int] = {}
-    # Per-topic stitch points: timestamp (ns) of the first message of each
-    # segment after the first. Used by visualizers to draw exact per-topic
-    # boundary lines without having to guess.
+    # Per-topic stitch points: output timestamp (ns) of each topic's first
+    # message in segments after the first. Visualizers use these to draw
+    # per-topic boundary annotations.
     stitch_times_per_topic: dict[str, list] = {}
-    # Globally last emitted timestamp — used as the fallback anchor for
-    # topics that appear for the first time in a later segment.
+    # Globally last emitted timestamp — fallback for new-topic offset.
     global_last_out_t = None
+    # 1 ms epsilon to guarantee strict monotonicity at the boundary.
+    EPSILON_NS = 1_000_000
     try:
         for seg_idx, seg in enumerate(seg_list):
             reader = SequentialReader()
@@ -122,62 +122,53 @@ def merge_segments_to(
                 writer.create_topic(tm)
                 registered.add(tm.name)
 
-            # Slurp this segment so we can compute per-topic first-time /
-            # strides before writing.
+            # Slurp all messages so we can inspect per-topic first times
+            # before deciding on a single segment-wide offset.
             messages = []
             first_t_in_seg: dict[str, int] = {}
-            prev_t_by_topic: dict[str, int] = {}
-            diffs_by_topic: dict[str, list] = {}
             while reader.has_next():
                 topic, data, t = reader.read_next()
                 messages.append((topic, data, t))
                 first_t_in_seg.setdefault(topic, t)
-                if topic in prev_t_by_topic:
-                    dt = t - prev_t_by_topic[topic]
-                    if dt > 0:
-                        diffs_by_topic.setdefault(topic, []).append(dt)
-                prev_t_by_topic[topic] = t
             del reader
 
-            # Update running stride estimate per topic (min of any segment's
-            # median — favors tighter natural cadence).
-            for topic, diffs in diffs_by_topic.items():
-                if len(diffs) < 5:
-                    continue
-                med = int(statistics.median(diffs))
-                if med <= 0:
-                    continue
-                existing = stride_per_topic.get(topic)
-                stride_per_topic[topic] = med if existing is None \
-                    else min(existing, med)
-
-            # Segment-level offset (fallback for topics with no prior output).
-            if seg_idx == 0 or not close_gaps or global_last_out_t is None:
+            # Single global offset: for each topic that existed in the
+            # previous segment we need  C > last_X_out - first_X_orig  to
+            # keep monotonicity. Taking the max across topics gives the
+            # tightest common offset that satisfies every topic. Adding
+            # EPSILON_NS gives strict '>'.
+            #
+            # Result: the "bottleneck" topic (fastest rate, published
+            # closest to segment end) gets a gap ≈ EPSILON, while slower
+            # topics get a gap ≈ their natural stride — because the
+            # wall-clock phase relationship is preserved. All topics
+            # transition at the same global timestamp, so the TF tree
+            # stays coherent across boundaries.
+            if seg_idx == 0 or not close_gaps:
                 segment_offset = 0
             else:
-                globally_first_t = min(first_t_in_seg.values())
-                segment_offset = (global_last_out_t + frame_interval_ns) \
-                    - globally_first_t
-
-            # Per-topic offset: when a topic has been seen before, its first
-            # message in this segment should land exactly `stride` after its
-            # own last emitted timestamp. New topics fall back to
-            # segment_offset so they don't drift arbitrarily.
-            offsets_this_seg: dict[str, int] = {}
-            for topic, first_t in first_t_in_seg.items():
-                if not close_gaps or topic not in last_out_t_per_topic:
-                    offsets_this_seg[topic] = segment_offset
-                    continue
-                stride = stride_per_topic.get(topic, frame_interval_ns)
-                offsets_this_seg[topic] = (
-                    last_out_t_per_topic[topic] + stride - first_t)
+                min_required = []
+                for topic, first_t in first_t_in_seg.items():
+                    if topic in last_out_t_per_topic:
+                        min_required.append(
+                            last_out_t_per_topic[topic] - first_t)
+                if min_required:
+                    segment_offset = max(min_required) + EPSILON_NS
+                elif global_last_out_t is not None:
+                    globally_first_t = min(first_t_in_seg.values())
+                    segment_offset = (
+                        global_last_out_t + frame_interval_ns
+                        - globally_first_t)
+                else:
+                    segment_offset = 0
 
             stitched_first_seen: set = set()
             for topic, data, t in messages:
-                new_t = t + offsets_this_seg[topic]
+                new_t = t + segment_offset
                 writer.write(topic, data, new_t)
                 if seg_idx > 0 and topic not in stitched_first_seen:
-                    stitch_times_per_topic.setdefault(topic, []).append(new_t)
+                    stitch_times_per_topic.setdefault(
+                        topic, []).append(new_t)
                     stitched_first_seen.add(topic)
                 last_out_t_per_topic[topic] = new_t
                 if global_last_out_t is None or new_t > global_last_out_t:
