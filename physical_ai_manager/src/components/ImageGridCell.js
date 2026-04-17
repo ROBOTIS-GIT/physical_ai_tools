@@ -115,10 +115,17 @@ export default function ImageGridCell({
 
       const img = document.createElement('img');
       const timestamp = Date.now();
-      // web_video_server expects base topic (e.g. .../image_raw); use default_transport=compressed to subscribe to CompressedImage
-      // Do not encode slashes: server rejects %2F and expects literal /
-      const streamTopic = topic.endsWith('/compressed') ? topic.slice(0, -11) : topic;
-      img.src = `http://${rosHost}:8085/stream?quality=50&type=ros_compressed&default_transport=compressed&topic=${streamTopic}&t=${timestamp}`;
+      if (topic.startsWith('http://') || topic.startsWith('https://')) {
+        // External MJPEG stream URL (e.g. GoPro on laptop) — use directly
+        const separator = topic.includes('?') ? '&' : '?';
+        img.src = `${topic}${separator}t=${timestamp}`;
+      } else {
+        // ROS topic — build web_video_server URL
+        // web_video_server expects base topic (e.g. .../image_raw); use default_transport=compressed to subscribe to CompressedImage
+        // Do not encode slashes: server rejects %2F and expects literal /
+        const streamTopic = topic.endsWith('/compressed') ? topic.slice(0, -11) : topic;
+        img.src = `http://${rosHost}:8085/stream?quality=50&type=ros_compressed&default_transport=compressed&topic=${streamTopic}&t=${timestamp}`;
+      }
       img.alt = topic;
 
       img.onclick = (e) => e.stopPropagation();

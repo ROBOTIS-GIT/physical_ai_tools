@@ -24,6 +24,12 @@ physical_ai_server:
         - leader_head:/robot/head_leader/joint_states
         - leader_lift:/robot/lift_leader/joint_states
 
+      command_topic_list:
+        - leader_arm_left:/leader/joint_trajectory_command_broadcaster_left/joint_trajectory
+        - leader_arm_right:/leader/joint_trajectory_command_broadcaster_right/joint_trajectory
+        - leader_head:/leader/joystick_controller_left/joint_trajectory
+        - leader_lift:/leader/joystick_controller_right/joint_trajectory
+
       joint_list:
         - leader_arm_left
         - leader_arm_right
@@ -36,6 +42,10 @@ physical_ai_server:
         - /robot/camera/cam_right_head/image_raw/compressed/camera_info
         - /robot/camera/cam_left_wrist/image_raw/compressed/camera_info
         - /robot/camera/cam_right_wrist/image_raw/compressed/camera_info
+        - /zed/zed_node/depth/depth_registered/compressedDepth
+        # - /zed/zed_node/depth/depth_registered
+        - /zed/zed_node/depth/camera_info
+        # - /zed/zed_node/depth/depth_info
 
       joint_order:
         follower_arm_left:

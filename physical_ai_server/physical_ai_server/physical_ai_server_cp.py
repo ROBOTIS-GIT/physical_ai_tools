@@ -45,8 +45,6 @@ from physical_ai_interfaces.srv import (
     GetRobotTypeList,
     GetTrainingInfo,
     GetUserList,
-    HFEndpointList,
-    SelectHFEndpoint,
     SendCommand,
     SendTrainingCommand,
     SetHFUser,
@@ -56,7 +54,6 @@ from physical_ai_interfaces.srv import (
 from physical_ai_server.communication.communicator import Communicator
 from physical_ai_server.data_processing.data_manager import DataManager
 from physical_ai_server.data_processing.hf_api_worker import HfApiWorker
-from physical_ai_server.data_processing.hf_endpoint_store import HFEndpointStore
 from physical_ai_server.data_processing.mp4_conversion_worker import Mp4ConversionWorker
 from physical_ai_server.data_processing.replay_data_handler import ReplayDataHandler
 from physical_ai_server.inference.inference_manager import InferenceManager
@@ -74,7 +71,6 @@ import rclpy
 from rclpy.callback_groups import MutuallyExclusiveCallbackGroup, ReentrantCallbackGroup
 from rclpy.executors import MultiThreadedExecutor
 from rclpy.node import Node
-
 from std_msgs.msg import String
 
 
@@ -107,7 +103,10 @@ class PhysicalAIServer(Node):
         self.total_joint_order = None
         self.on_recording = False
         self.on_inference = False
-        self.operation_mode = 'collection'
+        # ###################################1063 change########################################
+        # Left button mode: 'cancel_topic' = publish /cancel, 'cancel_recording' = original behavior
+        self.left_button_mode = 'cancel_recording'
+        # ###################################1063 change########################################
 
         self.hf_cancel_on_progress = False
 
@@ -141,7 +140,6 @@ class PhysicalAIServer(Node):
         self.inference_manager: Optional[InferenceManager] = None
 
         # Initialize HF API Worker
-        self.hf_endpoint_store = HFEndpointStore()
         self.hf_api_worker: Optional[HfApiWorker] = None
         self.hf_status_timer: Optional[TimerManager] = None
         self._init_hf_api_worker()
@@ -212,7 +210,6 @@ class PhysicalAIServer(Node):
             return
         self.inference_manager.set_task_instruction(msg.data)
 ####################change finish#################
-
     def _init_ros_service(self):
         self.get_logger().info('Initializing ROS services...')
         service_definitions = [
@@ -221,8 +218,6 @@ class PhysicalAIServer(Node):
             ('/set_robot_type', SetRobotType, self.set_robot_type_callback),
             ('/register_hf_user', SetHFUser, self.set_hf_user_callback),
             ('/get_registered_hf_user', GetHFUser, self.get_hf_user_callback),
-            ('/huggingface/list_endpoints', HFEndpointList, self.list_hf_endpoints_callback),
-            ('/huggingface/select_endpoint', SelectHFEndpoint, self.select_hf_endpoint_callback),
             ('/training/command', SendTrainingCommand, self.user_training_interaction_callback),
             ('/training/get_available_policy', GetPolicyList, self.get_available_list_callback),
             ('/training/get_user_list', GetUserList, self.get_user_list_callback),
@@ -405,137 +400,45 @@ class PhysicalAIServer(Node):
         self.joint_order = None
 
     def set_hf_user_callback(self, request, response):
-        """Validate ``token`` against ``endpoint`` and persist on success.
-
-        The previous flow validated against a single global token; this one
-        keeps a per-endpoint store so the user can have one token for the
-        official hub and another for the internal hub at the same time.
-        """
-        endpoint = (request.endpoint or '').strip()
-        label = (request.label or '').strip()
-        token = (request.token or '').strip()
-
-        if not endpoint:
-            response.user_id_list = []
-            response.success = False
-            response.message = 'endpoint is required'
-            return response
-        if not token:
-            response.user_id_list = []
-            response.success = False
-            response.message = 'token is required'
-            return response
-
+        request_hf_token = request.token
         try:
-            user_ids = DataManager.whoami_huggingface(endpoint, token)
-            if not user_ids:
+            if DataManager.register_huggingface_token(request_hf_token):
+                self.get_logger().info('Hugging Face user token registered successfully')
+                response.user_id_list = DataManager.get_huggingface_user_id()
+                response.success = True
+                response.message = 'Hugging Face user token registered successfully'
+            else:
+                self.get_logger().error('Failed to register Hugging Face user token')
                 response.user_id_list = []
                 response.success = False
-                response.message = (
-                    f'Token validation timed out for endpoint {endpoint}'
-                )
-                return response
-
-            primary_user = user_ids[0] if user_ids else ''
-            self.hf_endpoint_store.set(
-                endpoint=endpoint,
-                label=label,
-                token=token,
-                user_id=primary_user,
-            )
-            self.get_logger().info(
-                f'Registered HF token for {endpoint} ({primary_user})'
-            )
-            response.user_id_list = user_ids
-            response.success = True
-            response.message = (
-                f'Token validated and stored for {endpoint} ({primary_user})'
-            )
+                response.message = 'Failed to register token, Please check your token'
         except Exception as e:
             self.get_logger().error(f'Error in set_hf_user_callback: {str(e)}')
             response.user_id_list = []
             response.success = False
-            response.message = f'Error: {str(e)}'
+            response.message = f'Error in set_hf_user_callback:\n{str(e)}'
 
         return response
 
     def get_hf_user_callback(self, request, response):
-        """Return the user list for ``request.endpoint`` (empty = active)."""
-        endpoint = (request.endpoint or '').strip()
         try:
-            entry = self.hf_endpoint_store.resolve(endpoint)
-            if entry is None:
+            user_ids = DataManager.get_huggingface_user_id()
+            if user_ids is not None:
+                response.user_id_list = user_ids
+                self.get_logger().info(f'Hugging Face user IDs: {user_ids}')
+                response.success = True
+                response.message = 'Hugging Face user IDs retrieved successfully'
+            else:
+                self.get_logger().error('Failed to retrieve Hugging Face user ID')
                 response.user_id_list = []
                 response.success = False
-                response.message = (
-                    'No HuggingFace endpoint registered yet — register a token '
-                    'from the UI first.'
-                )
-                return response
-
-            user_ids = DataManager.whoami_huggingface(entry.endpoint, entry.token)
-            if not user_ids:
-                response.user_id_list = []
-                response.success = False
-                response.message = (
-                    f'Token validation timed out for {entry.endpoint}'
-                )
-                return response
-
-            response.user_id_list = user_ids
-            response.success = True
-            response.message = (
-                f'Resolved {len(user_ids)} user id(s) for {entry.endpoint}'
-            )
+                response.message = 'Failed to retrieve Hugging Face user ID'
         except Exception as e:
             self.get_logger().error(f'Error in get_hf_user_callback: {str(e)}')
             response.user_id_list = []
             response.success = False
-            response.message = f'Error: {str(e)}'
+            response.message = f'Failed to retrieve Hugging Face user ID:\n{str(e)}'
 
-        return response
-
-    def list_hf_endpoints_callback(self, request, response):
-        """Return every registered endpoint plus the currently active one."""
-        try:
-            entries = self.hf_endpoint_store.list()
-            active = self.hf_endpoint_store.get_active()
-            response.endpoints = [e.endpoint for e in entries]
-            response.labels = [e.label for e in entries]
-            response.user_ids = [e.user_id for e in entries]
-            response.active = active.endpoint if active else ''
-            response.success = True
-            response.message = f'{len(entries)} endpoint(s) registered'
-        except Exception as e:
-            self.get_logger().error(f'Error in list_hf_endpoints_callback: {str(e)}')
-            response.endpoints = []
-            response.labels = []
-            response.user_ids = []
-            response.active = ''
-            response.success = False
-            response.message = f'Error: {str(e)}'
-        return response
-
-    def select_hf_endpoint_callback(self, request, response):
-        """Set the active endpoint. Empty string clears the selection."""
-        endpoint = (request.endpoint or '').strip()
-        try:
-            ok = self.hf_endpoint_store.set_active(endpoint)
-            if not ok:
-                response.success = False
-                response.message = (
-                    f'Endpoint not registered: {endpoint}. Register a token '
-                    f'for it first.'
-                )
-                return response
-            response.success = True
-            response.message = (
-                f'Active endpoint set to {endpoint or "<none>"}'
-            )
-        except Exception as e:
-            self.get_logger().error(f'Error in select_hf_endpoint_callback: {str(e)}')
-            response.success = False
-            response.message = f'Error: {str(e)}'
         return response
 
     def get_robot_type_list(self):
@@ -617,51 +520,6 @@ class PhysicalAIServer(Node):
             error_msg = f'Error in rosbag recording: {str(e)}'
             self.get_logger().error(traceback.format_exc())
             self.get_logger().error(error_msg)
-
-    def stop_current_segment(self):
-        """Stop the active segment, save its rosbag, refresh episode_info.json."""
-        if self.data_manager is None:
-            return
-        self.communicator.stop_rosbag()
-        self.data_manager.stop_segment()
-        urdf_path = self.params.get('urdf_path', '')
-        if urdf_path:
-            self.data_manager.save_robotis_metadata(urdf_path=urdf_path)
-        else:
-            self.data_manager._write_episode_info()
-        self.previous_data_manager_status = 'idle'
-
-    def finish_current_episode(self, needs_review: bool = False):
-        """Finalize episode (after all segments stopped) and increment counter."""
-        if self.data_manager is None:
-            return
-        self.data_manager.finish_episode(needs_review=needs_review)
-        self.previous_data_manager_status = 'idle'
-
-    def _start_finalize_worker(self, task_info):
-        """Spawn a daemon thread that merges scratch + moves it to archive."""
-        if (getattr(self, '_merge_thread', None) is not None
-                and self._merge_thread.is_alive()):
-            raise RuntimeError('Merge already in progress')
-        if self.data_manager is None:
-            raise RuntimeError('Data manager not initialized')
-
-        urdf_path = ''
-        if self.params:
-            urdf_path = self.params.get('urdf_path', '') or ''
-
-        def _worker():
-            try:
-                archive_dir = self.data_manager.finalize_to_archive(
-                    task_info, urdf_path=urdf_path)
-                self.get_logger().info(
-                    f'Finalize complete: {archive_dir}')
-            except Exception as e:
-                self.get_logger().error(
-                    f'Finalize failed: {e}\n{traceback.format_exc()}')
-
-        self._merge_thread = threading.Thread(target=_worker, daemon=True)
-        self._merge_thread.start()
 
     def stop_recording_and_save(self):
         """Stop recording and save the rosbag (simplified mode)."""
@@ -980,44 +838,30 @@ class PhysicalAIServer(Node):
         - RERECORD: Cancel current recording (discard)
         """
         try:
-            if request.command in (
-                SendCommand.Request.START_RECORD,
-                SendCommand.Request.START_SEGMENT,
-            ):
-                # Scratch flow: task_info is irrelevant at segment-start time;
-                # only primitive_description is consumed from the request.
+            if request.command == SendCommand.Request.START_RECORD:
+                # Initialize data manager only if it doesn't exist or task changed
                 task_info = request.task_info
-                self._last_ui_task_info = task_info
+                task_name = f'{self.robot_type}_{task_info.task_name}'
 
-                if self.data_manager is None:
+                # Check if we need to create a new DataManager
+                need_new_manager = (
+                    self.data_manager is None or
+                    self.data_manager._save_repo_name != task_name
+                )
+
+                if need_new_manager:
                     self.get_logger().info('Initializing new recording session')
                     self.operation_mode = 'collection'
                     self.init_robot_control_parameters_from_user_task(task_info)
                 else:
-                    # Refresh cached task_info so any later finalize can pick up
-                    # the latest user-entered values (though the actual merge
-                    # always overrides with the task_info in the merge request).
-                    self.data_manager._task_info = task_info
-                    self.operation_mode = 'collection'
-                    if self.timer_manager is None:
-                        # Timer not yet created (DataManager was eagerly
-                        # initialized in set_robot_type_callback without
-                        # starting a timer).
-                        control_hz = getattr(task_info, 'control_hz', 0) or 10
-                        self._control_hz = control_hz
-                        self.timer_manager = TimerManager(node=self)
-                        self.timer_manager.set_timer(
-                            timer_name=self.operation_mode,
-                            timer_frequency=control_hz,
-                            callback_function=self.timer_callback_dict[
-                                self.operation_mode],
-                        )
-                    self.timer_manager.start(timer_name=self.operation_mode)
+                    episode = self.data_manager._record_episode_count
+                    self.get_logger().info(
+                        f'Continuing recording session - Episode {episode}')
+                    # Restart timer if it was stopped
+                    if self.timer_manager:
+                        self.timer_manager.start(timer_name=self.operation_mode)
 
-                # Ensure rosbag subscriptions are ready before recording
-                rosbag_topics = self.communicator.get_all_topics()
-                self.communicator.prepare_rosbag(topics=rosbag_topics)
-
+                # Start rosbag first (synchronous), then recording on success
                 self.get_logger().info('Starting recording')
                 rosbag_path = self.data_manager.get_save_rosbag_path(allow_idle=True)
                 if not rosbag_path:
@@ -1032,88 +876,12 @@ class PhysicalAIServer(Node):
                     response.message = f'Failed to start rosbag: {str(e)}'
                     return response
 
-                primitive = getattr(
-                    task_info, 'primitive_description', '') or ''
-                self.data_manager.start_segment(primitive)
+                self.data_manager.start_recording()
                 self.on_recording = True
                 self.start_recording_time = time.perf_counter()
                 self.communicator.publish_action_event('start')
                 response.success = True
-                response.message = (
-                    f'Segment {self.data_manager._current_segment_index - 0} '
-                    f'started'
-                )
-
-            elif request.command == SendCommand.Request.STOP_SEGMENT:
-                if (self.data_manager is None
-                        or not self.data_manager.is_recording()):
-                    response.success = False
-                    response.message = 'Not currently recording a segment'
-                else:
-                    self.get_logger().info('Stopping current segment')
-                    self.stop_current_segment()
-                    self.on_recording = False
-                    self.communicator.publish_action_event('finish')
-                    response.success = True
-                    response.message = (
-                        f'Segment stopped. Total segments: '
-                        f'{len(self.data_manager._segments_meta)}'
-                    )
-
-            elif request.command == SendCommand.Request.DISCARD_SEGMENT:
-                if self.data_manager is None:
-                    response.success = False
-                    response.message = 'Data manager not initialized'
-                else:
-                    try:
-                        self.data_manager.discard_segment(
-                            int(request.segment_index))
-                        response.success = True
-                        response.message = (
-                            f'Segment {request.segment_index} discarded'
-                        )
-                    except Exception as e:
-                        response.success = False
-                        response.message = f'Discard failed: {e}'
-
-            elif request.command == SendCommand.Request.FINISH_EPISODE:
-                # Deprecated in scratch flow. Kept for backward-compatibility;
-                # responds OK without mutating state.
-                response.success = True
-                response.message = (
-                    'FINISH_EPISODE is deprecated; use MERGE_EPISODE '
-                    'or DISCARD_EPISODE'
-                )
-                return response
-
-            elif request.command == SendCommand.Request.DISCARD_EPISODE:
-                if self.data_manager is None:
-                    response.success = False
-                    response.message = 'Data manager not initialized'
-                else:
-                    try:
-                        if self.data_manager.is_recording():
-                            self.stop_current_segment()
-                            self.on_recording = False
-                        self.data_manager.discard_episode()
-                        response.success = True
-                        response.message = 'Pending episode discarded'
-                    except Exception as e:
-                        response.success = False
-                        response.message = f'Discard episode failed: {e}'
-
-            elif request.command == SendCommand.Request.MERGE_EPISODE:
-                if self.data_manager is None:
-                    response.success = False
-                    response.message = 'Data manager not initialized'
-                else:
-                    try:
-                        self._start_finalize_worker(request.task_info)
-                        response.success = True
-                        response.message = 'Merge started'
-                    except Exception as e:
-                        response.success = False
-                        response.message = f'Merge failed to start: {e}'
+                response.message = 'Recording started'
 
             elif request.command == SendCommand.Request.START_INFERENCE:
                 self.operation_mode = 'inference'
@@ -1657,6 +1425,7 @@ class PhysicalAIServer(Node):
     def set_robot_type_callback(self, request, response):
         try:
             self.get_logger().info(f'Setting robot type to: {request.robot_type}')
+            self.operation_mode = 'collection'
             self.robot_type = request.robot_type
             self.clear_parameters()
             self.init_ros_params(self.robot_type)
@@ -1671,30 +1440,6 @@ class PhysicalAIServer(Node):
                     f'Rosbag prepared with {topic_count} topics - ready for recording')
             else:
                 self.get_logger().warn('Rosbag service not available - prepare skipped')
-
-            # Eagerly create DataManager so restore_pending() picks up
-            # leftover segments and the UI can query segment_count.
-            # Do NOT start the collection timer here — it would
-            # continuously publish TaskStatus with the DataManager's
-            # recording phase (e.g. STOPPED for between_segments),
-            # which disables the Inference Start button on the frontend.
-            # The timer will be started later when the user actually
-            # begins recording or inference.
-            if self.data_manager is None:
-                try:
-                    self.data_manager = DataManager(
-                        save_root_path=self.DEFAULT_SAVE_ROOT_PATH,
-                        robot_type=self.robot_type,
-                        task_info=None,
-                    )
-                    restored = len(self.data_manager._segments_meta)
-                    if restored:
-                        self.get_logger().info(
-                            f'Restored {restored} pending segment(s) from '
-                            f'{DataManager.PENDING_ROSBAG_PATH}')
-                except Exception as e:
-                    self.get_logger().warning(
-                        f'Failed to eagerly init DataManager: {e}')
 
             response.success = True
             response.message = f'Robot type set to {self.robot_type}'
@@ -1786,7 +1531,6 @@ class PhysicalAIServer(Node):
             local_dir = request.local_dir
             repo_type = request.repo_type
             author = request.author
-            request_endpoint = (getattr(request, 'endpoint', '') or '').strip()
 
             if self.hf_cancel_on_progress:
                 response.success = False
@@ -1806,19 +1550,6 @@ class PhysicalAIServer(Node):
                     self.hf_cancel_on_progress = False
                     return response
 
-            # Resolve which endpoint+token to use for this request. ``endpoint``
-            # field on the request takes precedence; otherwise we fall back to
-            # the active endpoint stored on disk.
-            entry = self.hf_endpoint_store.resolve(request_endpoint)
-            if entry is None:
-                response.success = False
-                response.message = (
-                    f'No HuggingFace endpoint registered '
-                    f'(requested: {request_endpoint or "<active>"}). '
-                    f'Register a token from the UI first.'
-                )
-                return response
-
             # Restart HF API Worker if it does not exist or is not running
             if self.hf_api_worker is None or not self.hf_api_worker.is_alive():
                 self.get_logger().info('HF API Worker not running, restarting...')
@@ -1829,27 +1560,19 @@ class PhysicalAIServer(Node):
                 response.success = False
                 response.message = 'HF API Worker is currently busy with another task'
                 return response
-            # Prepare request data for the worker. The endpoint and token
-            # travel with the request so the worker process never has to
-            # consult global state.
+            # Prepare request data for the worker
             request_data = {
                 'mode': mode,
                 'repo_id': repo_id,
                 'local_dir': local_dir,
                 'repo_type': repo_type,
-                'author': author,
-                'endpoint': entry.endpoint,
-                'token': entry.token,
+                'author': author
             }
             # Send request to HF API Worker
             if self.hf_api_worker.send_request(request_data):
-                self.get_logger().info(
-                    f'HF API request sent: {mode} {repo_id} via {entry.endpoint}'
-                )
+                self.get_logger().info(f'HF API request sent successfully: {mode} for {repo_id}')
                 response.success = True
-                response.message = (
-                    f'HF API request started: {mode} for {repo_id} via {entry.endpoint}'
-                )
+                response.message = f'HF API request started: {mode} for {repo_id}'
             else:
                 self.get_logger().error('Failed to send request to HF API Worker')
                 response.success = False
@@ -2059,19 +1782,19 @@ class PhysicalAIServer(Node):
                 self.get_logger().info(
                     'Right button: No session exists, auto-creating...')
                 if not self._auto_create_recording_session():
+                    # Failed to create session (e.g., robot_type not set)
                     return
-                # Start rosbag, then recording
+                ###################################1063 change########################################
+                # Start rosbag first, then recording
                 rosbag_path = self.data_manager.get_save_rosbag_path(allow_idle=True)
-                if not rosbag_path:
-                    self.get_logger().error('Failed to resolve rosbag path')
-                    return
-                try:
-                    self.communicator.start_rosbag(rosbag_uri=rosbag_path)
-                except Exception as e:
-                    self.get_logger().error(f'Failed to start rosbag: {e}')
-                    return
+                if rosbag_path:
+                    try:
+                        self.communicator.start_rosbag(rosbag_uri=rosbag_path)
+                    except Exception as e:
+                        self.get_logger().error(f'Failed to start rosbag: {e}')
+                        return
+                ###################################1063 change########################################
                 self.data_manager.start_recording()
-                self.on_recording = True
                 self.start_recording_time = time.perf_counter()
                 self.communicator.publish_action_event('start')
             elif self.data_manager.is_recording():
@@ -2082,81 +1805,103 @@ class PhysicalAIServer(Node):
             else:
                 # Not recording -> Start recording
                 self.get_logger().info('Right button: Starting recording')
+                ###################################1063 change########################################
+                # Start rosbag first, then recording
+                rosbag_path = self.data_manager.get_save_rosbag_path(allow_idle=True)
+                if rosbag_path:
+                    try:
+                        self.communicator.start_rosbag(rosbag_uri=rosbag_path)
+                    except Exception as e:
+                        self.get_logger().error(f'Failed to start rosbag: {e}')
+                        return
+                ###################################1063 change########################################
+                # Restart timer if it was stopped (e.g., by UI Finish command)
                 if self.timer_manager:
                     self.timer_manager.start(timer_name=self.operation_mode)
-                rosbag_path = self.data_manager.get_save_rosbag_path(allow_idle=True)
-                if not rosbag_path:
-                    self.get_logger().error('Failed to resolve rosbag path')
-                    return
-                try:
-                    self.communicator.start_rosbag(rosbag_uri=rosbag_path)
-                except Exception as e:
-                    self.get_logger().error(f'Failed to start rosbag: {e}')
-                    return
                 self.on_recording = True
                 self.data_manager.start_recording()
                 self.start_recording_time = time.perf_counter()
                 self.communicator.publish_action_event('start')
 
         elif joystick_mode == 'left':
-            # Cancel during recording, or mark previous episode in idle
-            if self.data_manager is None:
-                self.get_logger().info('Left button ignored - no session')
-            elif self.data_manager.is_recording():
-                self.get_logger().info('Left button: Cancelling recording')
-                self.cancel_current_recording()
-                self.communicator.publish_action_event('cancel')
+            # ###################################1063 change########################################
+            if self.left_button_mode == 'cancel_topic':
+                self.get_logger().info('Left button [cancel_topic mode]: Publishing /point/cancel=True')
+                self.communicator.publish_cancel(True)
+                self.communicator.publish_action_event('point')
             else:
-                # Idle state: toggle previous episode's needs_review
-                result = self.data_manager.toggle_previous_episode_needs_review()
-                if result is not None:
-                    event = 'review_on' if result else 'review_off'
-                    self.communicator.publish_action_event(event)
+                # Original cancel behavior
+                if self.data_manager is None:
+                    self.get_logger().info('Left button ignored - no session')
+                elif self.data_manager.is_recording():
+                    self.get_logger().info('Left button [cancel_recording mode]: Cancelling recording')
+                    self.cancel_current_recording()
+                    self.communicator.publish_action_event('cancel')
                 else:
-                    self.get_logger().info(
-                        'Left button: No previous episode to toggle')
+                    # Idle state: toggle previous episode's needs_review
+                    result = self.data_manager.toggle_previous_episode_needs_review()
+                    if result is not None:
+                        event = 'review_on' if result else 'review_off'
+                        self.communicator.publish_action_event(event)
+                    else:
+                        self.get_logger().info(
+                            'Left button: No previous episode to toggle')
+            # ###################################1063 change########################################
 
         elif joystick_mode == 'right_long_time':
             self.get_logger().info('Right long press - reserved for future use')
 
         elif joystick_mode == 'left_long_time':
-            self.get_logger().info('Left long press - reserved for future use')
+            # ###################################1063 change########################################
+            if self.left_button_mode == 'cancel_topic':
+                self.left_button_mode = 'cancel_recording'
+            else:
+                self.left_button_mode = 'cancel_topic'
+            self.get_logger().info(
+                f'Left long press: mode changed to [{self.left_button_mode}]')
+            # ###################################1063 change########################################
 
         else:
             self.get_logger().info(f'Unknown joystick trigger: {joystick_mode}')
 
     def _auto_create_recording_session(self) -> bool:
         """
-        Auto-create a recording session. If the UI has already sent a
-        START_RECORD with task_info (cached in ``_last_ui_task_info``),
-        reuse that so the folder name matches what the user typed
-        (Task_{num}_{name}_MCAP). Otherwise fall back to a
-        timestamp-based name.
+        Auto-create a recording session with timestamp-based task name.
+
+        Task name format: task_YYMMDDHHMMSS (e.g., task_260204181101)
 
         Returns:
             bool: True if session created successfully, False otherwise
         """
+        # Check if robot_type is set
         if not hasattr(self, 'robot_type') or self.robot_type is None:
             self.get_logger().error(
                 'Cannot auto-create session: robot_type is not set. '
                 'Please set robot type from UI first.')
             return False
 
-        cached = getattr(self, '_last_ui_task_info', None)
-        if cached is not None and cached.task_name:
-            task_info = cached
-            self.get_logger().info(
-                f'Joystick: reusing UI task_info (task_name={task_info.task_name})')
-        else:
-            self.get_logger().error(
-                'Cannot start recording from joystick: '
-                'please start the first episode from the UI so task info '
-                '(Task Num / Task Name) is set.')
-            return False
+        # Generate timestamp-based task name
+        timestamp = datetime.now().strftime('%y%m%d%H%M%S')
+        task_name = f'task_{timestamp}'
 
+        self.get_logger().info(f'Auto-creating recording session: {task_name}')
+
+        # Create TaskInfo with timestamp-based values
+        task_info = TaskInfo()
+        task_info.task_name = task_name
+        task_info.task_type = ''
+        task_info.task_instruction = [task_name]
+        task_info.policy_path = ''
+        task_info.tags = []
+        task_info.record_inference_mode = False
+
+        # Initialize recording session
         self.operation_mode = 'collection'
         self.init_robot_control_parameters_from_user_task(task_info)
         self.on_recording = True
+
+        self.get_logger().info(
+            f'Auto-created recording session: {task_name}')
         return True
 
     def _cleanup_hf_api_worker_with_threading(self):

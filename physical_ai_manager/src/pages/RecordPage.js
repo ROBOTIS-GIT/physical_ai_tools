@@ -18,13 +18,12 @@ import React, { useState, useEffect } from 'react';
 import { useSelector, useDispatch } from 'react-redux';
 import clsx from 'clsx';
 import toast, { useToasterStore } from 'react-hot-toast';
-import { MdKeyboardDoubleArrowLeft, MdKeyboardDoubleArrowRight, MdViewInAr } from 'react-icons/md';
+import { MdKeyboardDoubleArrowLeft, MdKeyboardDoubleArrowRight } from 'react-icons/md';
 
 import RecordControlPanel from '../components/RecordControlPanel';
 import HeartbeatStatus from '../components/HeartbeatStatus';
 import InlineSystemStatus from '../components/InlineSystemStatus';
-import ImageGrid from '../components/ImageGrid';
-import RobotViewer3D from '../components/RobotViewer3D';
+import ImageGrid, { RECORD_LAYOUT } from '../components/ImageGrid';
 import SegmentPanel from '../components/SegmentPanel';
 import RecordTopicMonitor from '../components/RecordTopicMonitor';
 import { setIsFirstLoadFalse } from '../features/ui/uiSlice';
@@ -40,7 +39,7 @@ export default function RecordPage({ isActive = true }) {
   const TOAST_LIMIT = 3;
 
   const [isRightPanelCollapsed, setIsRightPanelCollapsed] = useState(false);
-  const [show3DViewer, setShow3DViewer] = useState(true);
+  const [isMonitorPanelCollapsed, setIsMonitorPanelCollapsed] = useState(true);
 
   const isFirstLoad = useSelector((state) => state.ui.isFirstLoad.record);
 
@@ -68,8 +67,10 @@ export default function RecordPage({ isActive = true }) {
     'overflow-hidden',
     'm-2',
     {
-      'flex-[12]': isRightPanelCollapsed,
-      'flex-[10]': !isRightPanelCollapsed,
+      'flex-[12]': isRightPanelCollapsed && isMonitorPanelCollapsed,
+      'flex-[10]': (isRightPanelCollapsed && !isMonitorPanelCollapsed) ||
+                   (!isRightPanelCollapsed && isMonitorPanelCollapsed),
+      'flex-[8]': !isRightPanelCollapsed && !isMonitorPanelCollapsed,
     }
   );
 
@@ -130,6 +131,64 @@ export default function RecordPage({ isActive = true }) {
     }
   );
 
+  const classMonitorPanelArea = clsx(
+    'h-full',
+    'w-full',
+    'transition-all',
+    'duration-300',
+    'ease-in-out',
+    'relative',
+    'overflow-y-auto',
+    {
+      'flex-[0_0_40px]': isMonitorPanelCollapsed,
+      'flex-[1]': !isMonitorPanelCollapsed,
+      'min-w-[60px]': isMonitorPanelCollapsed,
+      'min-w-[350px]': !isMonitorPanelCollapsed,
+      'max-w-[60px]': isMonitorPanelCollapsed,
+      'max-w-[350px]': !isMonitorPanelCollapsed,
+    }
+  );
+
+  const classMonitorHideButton = clsx(
+    'absolute',
+    'top-3',
+    'bg-white',
+    'border',
+    'border-gray-300',
+    'rounded-full',
+    'w-12',
+    'h-12',
+    'flex',
+    'items-center',
+    'justify-center',
+    'shadow-md',
+    'hover:bg-gray-50',
+    'transition-all',
+    'duration-200',
+    'z-10',
+    {
+      'left-2': isMonitorPanelCollapsed,
+      'left-[10px]': !isMonitorPanelCollapsed,
+    }
+  );
+
+  const classMonitorPanel = clsx(
+    'min-h-full',
+    'w-full',
+    'flex',
+    'flex-col',
+    'items-center',
+    'pb-4',
+    'transition-opacity',
+    'duration-300',
+    {
+      'opacity-0': isMonitorPanelCollapsed,
+      'opacity-100': !isMonitorPanelCollapsed,
+      'pointer-events-none': isMonitorPanelCollapsed,
+      'pointer-events-auto': !isMonitorPanelCollapsed,
+    }
+  );
+
   const classTopBar = clsx(
     'absolute', 'top-4', 'left-4', 'right-4', 'z-20',
     'flex', 'items-center', 'gap-4'
@@ -147,13 +206,11 @@ export default function RecordPage({ isActive = true }) {
     'whitespace-nowrap'
   );
 
-  const classHeartbeatStatus = clsx('absolute', 'top-[4.5rem]', 'left-5', 'z-10');
-
   return (
     <div className={classMainContainer}>
       <div className={classContentsArea}>
         <div className={classLeftArea}>
-          <div className="relative flex-[5] min-h-0 overflow-hidden pt-20">
+          <div className="relative flex-1 min-h-0 overflow-hidden pt-20">
             <div className={classTopBar}>
               <div className={classRobotTypeContainer}>
                 <div className={classRobotType}>Robot Type</div>
@@ -168,35 +225,30 @@ export default function RecordPage({ isActive = true }) {
                 </div>
               )}
               <InlineSystemStatus />
+              <HeartbeatStatus />
               <div className="flex-grow" />
               <RecordControlPanel />
             </div>
-            <div className={classHeartbeatStatus}>
-              <HeartbeatStatus />
-            </div>
-            <ImageGrid isActive={isActive} />
+            <ImageGrid isActive={isActive} layout={RECORD_LAYOUT} />
           </div>
-          <div className="flex-[4] min-h-[120px] flex flex-row items-center justify-center mx-1 gap-2 h-full relative">
-            {show3DViewer && (
-              <div className="h-[85%] rounded-2xl overflow-hidden relative" style={{ aspectRatio: '4/3' }}>
-                <RobotViewer3D mode="live" />
-              </div>
-            )}
-            <div className="h-[85%]" style={{ aspectRatio: '4/3' }}>
-              <RecordTopicMonitor />
-            </div>
-            <button
-              onClick={() => setShow3DViewer(!show3DViewer)}
-              className={clsx(
-                'absolute top-2 left-2 z-10 flex items-center gap-1.5 px-3 py-1.5 rounded-full text-sm font-medium transition-colors shadow-md border',
-                show3DViewer
-                  ? 'bg-indigo-500/90 text-white border-indigo-400 backdrop-blur-sm'
-                  : 'bg-white/90 text-gray-600 border-gray-100 backdrop-blur-sm hover:bg-gray-50'
+        </div>
+        <div className={classMonitorPanelArea}>
+          <button
+            onClick={() => setIsMonitorPanelCollapsed(!isMonitorPanelCollapsed)}
+            className={classMonitorHideButton}
+            title="Topic Monitor"
+          >
+            <span className="text-gray-600 text-3xl transition-transform duration-200">
+              {isMonitorPanelCollapsed ? (
+                <MdKeyboardDoubleArrowLeft />
+              ) : (
+                <MdKeyboardDoubleArrowRight />
               )}
-            >
-              <MdViewInAr size={18} />
-              3D
-            </button>
+            </span>
+          </button>
+          <div className={classMonitorPanel}>
+            <div className="w-full min-h-10"></div>
+            <RecordTopicMonitor />
           </div>
         </div>
         <div className={classRightPanelArea}>

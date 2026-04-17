@@ -1,0 +1,125 @@
+# FFW BG2 Rev4 Robot Configuration
+# Generated from actual rosbag test data topics
+robot_name: "FFW BG2 Rev4"
+total_dof: 19
+
+cameras:
+  cam_left_head:
+    topic: "/robot/camera/cam_left_head/image_raw/compressed"
+    msg_type: "sensor_msgs/msg/CompressedImage"
+
+  cam_right_head:
+    topic: "/robot/camera/cam_right_head/image_raw/compressed"
+    msg_type: "sensor_msgs/msg/CompressedImage"
+
+  cam_left_wrist:
+    topic: "/robot/camera/cam_left_wrist/image_raw/compressed"
+    msg_type: "sensor_msgs/msg/CompressedImage"
+    rotation_deg: 270
+
+  cam_right_wrist:
+    topic: "/robot/camera/cam_right_wrist/image_raw/compressed"
+    msg_type: "sensor_msgs/msg/CompressedImage"
+    rotation_deg: 270
+
+joint_groups:
+  leader_arm_left:
+    topic: "/robot/arm_left_leader/joint_states"
+    msg_type: "sensor_msgs/msg/JointState"
+    role: "leader"
+    joint_names:
+      - arm_l_joint1
+      - arm_l_joint2
+      - arm_l_joint3
+      - arm_l_joint4
+      - arm_l_joint5
+      - arm_l_joint6
+      - arm_l_joint7
+      - gripper_l_joint1
+    dof: 8
+
+  leader_arm_right:
+    topic: "/robot/arm_right_leader/joint_states"
+    msg_type: "sensor_msgs/msg/JointState"
+    role: "leader"
+    joint_names:
+      - arm_r_joint1
+      - arm_r_joint2
+      - arm_r_joint3
+      - arm_r_joint4
+      - arm_r_joint5
+      - arm_r_joint6
+      - arm_r_joint7
+      - gripper_r_joint1
+    dof: 8
+
+  follower_arm_left:
+    topic: "/robot/arm_left_follower/joint_states"
+    msg_type: "sensor_msgs/msg/JointState"
+    role: "follower"
+    joint_names:
+      - arm_l_joint1
+      - arm_l_joint2
+      - arm_l_joint3
+      - arm_l_joint4
+      - arm_l_joint5
+      - arm_l_joint6
+      - arm_l_joint7
+      - gripper_l_joint1
+    dof: 8
+
+  follower_arm_right:
+    topic: "/robot/arm_right_follower/joint_states"
+    msg_type: "sensor_msgs/msg/JointState"
+    role: "follower"
+    joint_names:
+      - arm_r_joint1
+      - arm_r_joint2
+      - arm_r_joint3
+      - arm_r_joint4
+      - arm_r_joint5
+      - arm_r_joint6
+      - arm_r_joint7
+      - gripper_r_joint1
+    dof: 8
+
+  leader_head:
+    topic: "/robot/head_leader/joint_states"
+    msg_type: "sensor_msgs/msg/JointState"
+    role: "leader"
+    joint_names:
+      - head_joint1
+      - head_joint2
+    dof: 2
+
+  follower_head:
+    topic: "/robot/head_follower/joint_states"
+    msg_type: "sensor_msgs/msg/JointState"
+    role: "follower"
+    joint_names:
+      - head_joint1
+      - head_joint2
+    dof: 2
+
+  leader_lift:
+    topic: "/robot/lift_leader/joint_states"
+    msg_type: "sensor_msgs/msg/JointState"
+    role: "leader"
+    joint_names:
+      - lift_joint
+    dof: 1
+
+  follower_lift:
+    topic: "/robot/lift_follower/joint_states"
+    msg_type: "sensor_msgs/msg/JointState"
+    role: "follower"
+    joint_names:
+      - lift_joint
+    dof: 1
+
+rosbag_extra_topics:
+  - "/tf"
+  - "/robot/camera/cam_left_head/image_raw/compressed/camera_info"
+  - "/robot/camera/cam_right_head/image_raw/compressed/camera_info"
+  - "/robot/camera/cam_left_wrist/image_raw/compressed/camera_info"
+  - "/robot/camera/cam_right_wrist/image_raw/compressed/camera_info"
