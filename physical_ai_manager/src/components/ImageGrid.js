@@ -22,6 +22,7 @@ import { useRosServiceCaller } from '../hooks/useRosServiceCaller';
 import ImageGridCell from './ImageGridCell';
 import ImageTopicSelectModal from './ImageTopicSelectModal';
 import { setImageTopicList, setAssignedImageTopics } from '../features/ros/rosSlice';
+import { displayLabelForTopic } from '../utils/browserCameraLabels';
 
 // [left(idx 0), center(idx 1), right(idx 2), extra(idx 3)]
 // rotate: true = wrist camera (landscape stream displayed as portrait)
@@ -301,7 +302,7 @@ export default function ImageGrid({ isActive = true, layout: layoutProp }) {
         onPlusClick={handlePlusClick}
         isActive={isActive}
       />
-      <div className={classTopicLabel}>{asignedImageTopicList[idx] || ''}</div>
+      <div className={classTopicLabel}>{displayLabelForTopic(asignedImageTopicList[idx])}</div>
     </div>
   );
 

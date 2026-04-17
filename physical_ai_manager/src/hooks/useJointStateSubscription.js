@@ -18,6 +18,7 @@ const THROTTLE_MS = 33;
 
 export default function useJointStateSubscription(setJointValues, setActionChunk, enabled = true) {
   const rosHost = useSelector((state) => state.ros.rosHost);
+  const rosbridgeUrl = useSelector((state) => state.ros.rosbridgeUrl);
   const subscribersRef = useRef([]);
   const lastJointUpdateRef = useRef(0);
 
@@ -51,7 +52,7 @@ export default function useJointStateSubscription(setJointValues, setActionChunk
   useEffect(() => {
     if (!enabled || !rosHost) return;
 
-    const ros = new ROSLIB.Ros({ url: `ws://${rosHost}:9090` });
+    const ros = new ROSLIB.Ros({ url: rosbridgeUrl || `ws://${rosHost}:9090` });
     const subs = [];
 
     ros.on('connection', () => {
@@ -92,5 +93,5 @@ export default function useJointStateSubscription(setJointValues, setActionChunk
         ros.close();
       } catch (_e) { /* ignore */ }
     };
-  }, [enabled, rosHost, handleJointState, handleActionChunk]);
+  }, [enabled, rosHost, rosbridgeUrl, handleJointState, handleActionChunk]);
 }

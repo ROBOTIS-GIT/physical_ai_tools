@@ -23,11 +23,21 @@ import { createSlice } from '@reduxjs/toolkit';
 // instead of waiting for an effect-time dispatch.
 const defaultRosHost = typeof window !== 'undefined' ? window.location.hostname : '';
 
+// On HTTPS pages, plain ws:// is blocked as mixed content. Route through the
+// same-origin nginx /ws/ proxy so the browser sees wss:// → nginx → ws://localhost:9090.
+const buildDefaultRosbridgeUrl = (host) => {
+  if (!host) return '';
+  if (typeof window !== 'undefined' && window.location.protocol === 'https:') {
+    return `wss://${window.location.host}/ws/`;
+  }
+  return `ws://${host}:9090`;
+};
+
 const initialState = {
   connected: false,
   connecting: false,
   rosHost: defaultRosHost,
-  rosbridgeUrl: defaultRosHost ? `ws://${defaultRosHost}:9090` : '',
+  rosbridgeUrl: buildDefaultRosbridgeUrl(defaultRosHost),
   imageTopicList: [],
   /** Persisted camera topic assignment [left, center, right] so it survives ImageGrid remounts */
   assignedImageTopics: [],
@@ -46,7 +56,7 @@ const rosSlice = createSlice({
     },
     setRosHost: (state, action) => {
       state.rosHost = action.payload;
-      state.rosbridgeUrl = `ws://${action.payload}:9090`;
+      state.rosbridgeUrl = buildDefaultRosbridgeUrl(action.payload);
     },
     setRosbridgeUrl: (state, action) => {
       state.rosbridgeUrl = action.payload;
