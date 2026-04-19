@@ -354,16 +354,19 @@ class DataManager:
         print('[DataManager] Pending episode discarded')
 
     def finalize_to_archive(self, task_info, urdf_path: str = None):
-        """Merge pending rosbag2 segments into a standard rosbag2 episode dir.
+        """Archive pending segments as a multi-file rosbag2 episode.
 
-        Produces a layout compatible with ROBOTIS legacy single-shot
-        recordings:
+        Each segment's mcap is copied byte-for-byte (no timestamp
+        modification) and a unified ``metadata.yaml`` is generated so
+        ``ros2 bag play/info`` treat the episode as a single bag:
 
             {robot_type}_{task_name}/{ep_idx}/
-                {ep_idx}_0.mcap       (rosbag2_py)
-                metadata.yaml         (rosbag2_py)
-                robot.urdf            (copied from `urdf_path`)
-                episode_info.json     (v1 schema + task_num/task_name/segments)
+                {ep_idx}_0.mcap       (segment 0, original timestamps)
+                {ep_idx}_1.mcap       (segment 1)
+                ...
+                metadata.yaml         (multi-file reference)
+                robot.urdf
+                episode_info.json
 
         On failure the scratch is preserved so the user can retry.
         """
@@ -371,7 +374,7 @@ class DataManager:
             raise RuntimeError(
                 f'Cannot finalize in status {self._status}')
         if not self._segments_meta:
-            raise RuntimeError('No pending segments to merge')
+            raise RuntimeError('No pending segments to archive')
 
         task_num = (getattr(task_info, 'task_num', '') or '').strip()
         task_name = (getattr(task_info, 'task_name', '') or '').strip()
@@ -384,7 +387,7 @@ class DataManager:
                 'task_num, task_name, and task_instruction are required')
 
         from physical_ai_server.data_processing.mcap_merger import (
-            merge_segments_to,
+            archive_segments,
         )
 
         pending_segments_root = os.path.join(
@@ -415,9 +418,9 @@ class DataManager:
             pass
 
         try:
-            _, stitch_times = merge_segments_to(seg_paths, archive_dir)
+            os.makedirs(archive_dir)
+            archive_segments(seg_paths, archive_dir, ep_idx=ep_idx)
         except Exception as e:
-            # Roll back half-written archive_dir so a retry starts clean.
             shutil.rmtree(archive_dir, ignore_errors=True)
             self._merge_status = 'failed'
             self._status = 'between_segments'
@@ -425,7 +428,8 @@ class DataManager:
                 self._write_episode_info()
             except Exception:
                 pass
-            raise RuntimeError(f'merge_segments_to failed: {e}') from e
+            raise RuntimeError(
+                f'archive_segments failed: {e}') from e
 
         if urdf_path and os.path.exists(urdf_path):
             urdf_dest = os.path.join(archive_dir, 'robot.urdf')
@@ -438,8 +442,7 @@ class DataManager:
         self._task_info = task_info
         try:
             self._write_episode_info_v1(
-                archive_dir, task_info, ep_idx,
-                stitch_times=stitch_times)
+                archive_dir, task_info, ep_idx)
         except Exception as e:
             print(f'[DataManager] Failed to write final episode_info: {e}')
 
@@ -468,8 +471,7 @@ class DataManager:
         with open(dst, 'w', encoding='utf-8') as f:
             f.write(text.strip() + '\n')
 
-    def _write_episode_info_v1(self, archive_dir, task_info, episode_index,
-                                stitch_times=None):
+    def _write_episode_info_v1(self, archive_dir, task_info, episode_index):
         """Write a v1-compatible episode_info.json with segment extensions."""
         task_num = (getattr(task_info, 'task_num', '') or '')
         task_name = (getattr(task_info, 'task_name', '') or '')
@@ -490,10 +492,6 @@ class DataManager:
             'task_num': task_num,
             'task_name': task_name,
             'segments': self._serialize_segments(),
-            # Per-topic stitch points (output ns of each topic's first
-            # message in segments after the first). Visualizers use these
-            # to draw exact per-topic boundary lines without guessing.
-            'stitch_times_ns': stitch_times or {},
         }
         info_path = os.path.join(archive_dir, 'episode_info.json')
         with open(info_path, 'w') as f:
