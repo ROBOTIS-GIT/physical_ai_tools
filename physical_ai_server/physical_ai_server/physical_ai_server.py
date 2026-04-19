@@ -623,7 +623,8 @@ class PhysicalAIServer(Node):
         return archive_dir
 
     def stop_recording_and_save(self):
-        """Stop recording and save the rosbag (simplified mode)."""
+        """Joystick / legacy flow: stop the current segment AND finalize
+        the episode in one step (one right-button press == one episode)."""
         if self.data_manager is None:
             return
 
@@ -631,49 +632,36 @@ class PhysicalAIServer(Node):
             f'Stopping recording: episode={self.data_manager._record_episode_count}, '
             f'status={self.data_manager.get_status()}')
 
-        # Save metadata before stopping
-        urdf_path = self.params.get('urdf_path', '')
-        if urdf_path:
-            self.data_manager.save_robotis_metadata(urdf_path=urdf_path)
+        if self.data_manager.is_recording():
+            self.communicator.stop_rosbag()
+            self.data_manager.stop_segment()
 
-        # Stop rosbag
-        self.communicator.stop_rosbag()
+        try:
+            self.finish_current_episode()
+        except Exception as e:
+            self.get_logger().error(f'Finish episode failed: {e}')
 
-        # Update data manager state
-        self.data_manager.stop_recording()
-
-        # IMPORTANT: Update previous status to 'idle' so next recording can detect transition
-        # This is needed because timer might be stopped before callback can update it
         self.previous_data_manager_status = 'idle'
-
         self.get_logger().info(
-            f'Recording stopped and saved: next_episode={self.data_manager._record_episode_count}')
+            f'Recording stopped and saved: '
+            f'next_episode={self.data_manager._record_episode_count}')
 
     def cancel_current_recording(self):
-        """Cancel recording and save with review flag (simplified mode).
-
-        Data is saved instead of deleted, with needs_review=True in metadata.
-        This allows partially useful data to be reviewed later.
-        """
+        """Joystick cancel: drop the in-progress segment and episode."""
         if self.data_manager is None:
             return
 
-        # Save metadata with review flag BEFORE stopping (status must be 'recording')
-        urdf_path = self.params.get('urdf_path', '')
-        if urdf_path:
-            self.data_manager.save_robotis_metadata(
-                urdf_path=urdf_path, needs_review=True)
+        if self.data_manager.is_recording():
+            self.communicator.stop_rosbag()
+            self.data_manager.stop_segment()
 
-        # Stop rosbag (save, not delete)
-        self.communicator.stop_rosbag()
+        try:
+            self.data_manager.discard_episode()
+        except Exception as e:
+            self.get_logger().error(f'Discard episode failed: {e}')
 
-        # Update data manager state (increment episode since data is saved)
-        self.data_manager.stop_recording()
-
-        # IMPORTANT: Update previous status to 'idle' so next recording can detect transition
         self.previous_data_manager_status = 'idle'
-
-        self.get_logger().info('Recording cancelled - data saved with review flag')
+        self.get_logger().info('Recording cancelled - episode discarded')
 
     def _data_collection_timer_callback(self):
         """
