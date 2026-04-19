@@ -49,10 +49,7 @@ class DataManager:
     # Progress queue for multiprocessing communication
     _progress_queue = None
 
-    # Task-agnostic scratch area. Segments are recorded here first and
-    # moved to `Task_{num}_{name}_MCAP/{ep_idx}/` on merge.
-    PENDING_ROSBAG_PATH = '/workspace/rosbag2/_pending'
-    ARCHIVE_ROSBAG_ROOT = '/workspace/rosbag2'
+    ROSBAG_ROOT = '/workspace/rosbag2'
 
     # Canonical ordering for primitive descriptions; index of a primitive
     # in this list is written to episode_info.json as `primitive_index`.
@@ -80,66 +77,36 @@ class DataManager:
             self,
             save_root_path,
             robot_type,
-            task_info=None):
+            task_info):
         self._robot_type = robot_type
         self._save_path = save_root_path
-        self._save_rosbag_path = self.PENDING_ROSBAG_PATH
-        # task_info kept only for primitive defaults / fps; path is always scratch.
         self._task_info = task_info
-        self._save_repo_name = '_pending'
-        self._single_task = True
 
-        # Scratch hosts a single in-flight episode at a time; episode_index is
-        # only meaningful after merge, so we keep a cached display value.
-        self._record_episode_count = 0
+        # Archive path: /workspace/rosbag2/{robot_type}_{task_name}
+        task_name = (getattr(task_info, 'task_name', '') or '').strip()
+        self._save_repo_name = f'{robot_type}_{task_name}'
+        self._save_rosbag_path = os.path.join(
+            self.ROSBAG_ROOT, self._save_repo_name)
+
+        self._record_episode_count = self._find_next_episode_number_in(
+            self._save_rosbag_path)
         self._start_time_s = 0
         self._proceed_time = 0
-        self._status = 'idle'  # idle | seg_recording | between_segments | merging
+        self._status = 'idle'  # idle | seg_recording | between_segments
         self._cpu_checker = CPUChecker()
         self.data_converter = DataConverter()
-        self.current_instruction = ''
+        self.current_instruction = (
+            task_info.task_instruction[0]
+            if task_info.task_instruction else '')
         self._init_task_limits()
         self._current_scenario_number = 0
+        self._single_task = len(task_info.task_instruction) <= 1
 
-        # Segmented episode state (v2)
+        # Segmented episode state
         self._current_segment_index = 0
-        self._segments_meta = []  # list of dicts (see _write_episode_info)
+        self._segments_meta = []
         self._pending_primitive = ''
         self._segment_start_time_s = 0
-        self._merge_status = 'none'
-        self._merged_file = None
-
-        # Try to pick up where a previous process left off.
-        self.restore_pending()
-
-    @staticmethod
-    def _quarantine_partial_archives(archive_root):
-        """Rename any numeric episode dir that is missing `metadata.yaml`.
-
-        These arise when a previous merge crashed mid-write. Renaming them
-        out of the way keeps `_find_next_episode_number_in` from colliding
-        while preserving the data for manual inspection.
-        """
-        if not os.path.isdir(archive_root):
-            return
-        ts = time.strftime('%Y%m%d_%H%M%S', time.gmtime())
-        try:
-            entries = os.listdir(archive_root)
-        except OSError:
-            return
-        for item in entries:
-            path = os.path.join(archive_root, item)
-            if not os.path.isdir(path) or not item.isdigit():
-                continue
-            if os.path.exists(os.path.join(path, 'metadata.yaml')):
-                continue
-            new_name = f'.partial_{item}_{ts}'
-            try:
-                os.rename(path, os.path.join(archive_root, new_name))
-                print(f'[DataManager] Quarantined partial archive '
-                      f'{item} -> {new_name}')
-            except OSError as e:
-                print(f'[DataManager] Failed to quarantine {path}: {e}')
 
     @staticmethod
     def _find_next_episode_number_in(rosbag_dir) -> int:
@@ -193,74 +160,7 @@ class DataManager:
             cur += fc
         return out
 
-    def restore_pending(self):
-        """Rebuild segment state from an existing `_pending/episode_info.json`.
-
-        Also prunes orphan segment directories left over from a crash mid-
-        recording (dirs present on disk but absent from metadata, or missing
-        their `metadata.yaml` — i.e. an incomplete rosbag2).
-        """
-        info_path = os.path.join(
-            self.PENDING_ROSBAG_PATH, 'episode_info.json')
-        if os.path.exists(info_path):
-            try:
-                with open(info_path) as f:
-                    data = json.load(f)
-            except Exception as e:
-                print(f'[DataManager] Failed to read pending info: {e}')
-                data = {}
-            segments = data.get('segments', []) or []
-            # Convert persisted frame_duration -> internal frame_count.
-            restored = []
-            for s in segments:
-                fd = s.get('frame_duration') or [0, 0]
-                fc = max(0, int(fd[1]) - int(fd[0]))
-                desc = s.get('primitive_description', '') or ''
-                prim_idx = s.get('primitive_index')
-                if prim_idx is None:
-                    prim_idx = self._primitive_index_for(desc)
-                restored.append({
-                    'primitive_index': int(prim_idx),
-                    'primitive_description': desc,
-                    'frame_count': fc,
-                })
-            self._segments_meta = restored
-            self._current_segment_index = len(self._segments_meta)
-            self._merge_status = data.get('merge_status', 'none') or 'none'
-            self._merged_file = data.get('merged_file', None)
-            self.current_instruction = data.get('task_instruction', '') or ''
-            if self._segments_meta:
-                self._status = 'between_segments'
-            print(f'[DataManager] Restored {len(self._segments_meta)} '
-                  f'pending segment(s) from {self.PENDING_ROSBAG_PATH}')
-        self._prune_orphan_segments()
-
-    def _prune_orphan_segments(self):
-        """Remove scratch segment dirs not reflected in `_segments_meta` or
-        lacking a valid `metadata.yaml` (half-written rosbag2)."""
-        seg_root = os.path.join(self.PENDING_ROSBAG_PATH, 'segments')
-        if not os.path.isdir(seg_root):
-            return
-        # Segment meta entries occupy contiguous disk indices 0..N-1, so any
-        # disk folder beyond that range is orphan regardless of content.
-        known = set(range(len(self._segments_meta)))
-        removed = []
-        try:
-            entries = os.listdir(seg_root)
-        except OSError:
-            return
-        for item in entries:
-            path = os.path.join(seg_root, item)
-            if not os.path.isdir(path) or not item.isdigit():
-                continue
-            idx = int(item)
-            metadata_yaml = os.path.join(path, 'metadata.yaml')
-            if idx not in known or not os.path.exists(metadata_yaml):
-                shutil.rmtree(path, ignore_errors=True)
-                removed.append(idx)
-        if removed:
-            print(f'[DataManager] Pruned orphan segment dir(s): '
-                  f'{sorted(removed)}')
+    # (restore_pending / _prune_orphan_segments removed — no scratch flow)
 
     def get_status(self):
         return self._status
@@ -275,11 +175,8 @@ class DataManager:
             raise RuntimeError(
                 f'Cannot start segment in status {self._status}')
         if self._status == 'idle':
-            # Fresh episode: reset segment bookkeeping.
             self._segments_meta = []
             self._current_segment_index = 0
-            self._merge_status = 'none'
-            self._merged_file = None
         self._pending_primitive = primitive_description or ''
         self._status = 'seg_recording'
         self._segment_start_time_s = time.perf_counter()
@@ -315,14 +212,14 @@ class DataManager:
               f'({duration:.2f}s, {frame_count} frames @ {fps}Hz)')
 
     def discard_segment(self, idx: int):
-        """Remove segment `idx` and renumber trailing segments."""
+        """Remove segment `idx` from the current (in-progress) episode dir
+        and renumber trailing segments."""
         if self._status != 'between_segments':
             raise RuntimeError(
                 f'Cannot discard segment in status {self._status}')
         if not (0 <= idx < len(self._segments_meta)):
             raise ValueError(f'Invalid segment index {idx}')
-        seg_root = os.path.join(self.get_episode_dir(allow_idle=True),
-                                'segments')
+        seg_root = os.path.join(self.get_episode_dir(), 'segments')
         target = os.path.join(seg_root, str(idx))
         if os.path.isdir(target):
             shutil.rmtree(target)
@@ -335,127 +232,85 @@ class DataManager:
         self._current_segment_index = len(self._segments_meta)
         if not self._segments_meta:
             self._status = 'idle'
-        self._write_episode_info()
+            # Nothing left — remove the empty episode dir so we don't leave
+            # an orphaned slot.
+            ep_dir = self.get_episode_dir()
+            try:
+                if os.path.isdir(ep_dir):
+                    shutil.rmtree(ep_dir)
+            except OSError:
+                pass
         print(f'[DataManager] Segment {idx} discarded. '
               f'Remaining: {len(self._segments_meta)}')
 
     def discard_episode(self):
-        """Throw away the pending scratch episode entirely."""
+        """Throw away all segments of the in-progress episode."""
         if self._status not in ('idle', 'between_segments'):
             raise RuntimeError(
                 f'Cannot discard episode in status {self._status}')
-        if os.path.exists(self.PENDING_ROSBAG_PATH):
-            shutil.rmtree(self.PENDING_ROSBAG_PATH, ignore_errors=True)
+        ep_dir = self._episode_dir(self._record_episode_count)
+        if os.path.exists(ep_dir):
+            shutil.rmtree(ep_dir, ignore_errors=True)
         self._segments_meta = []
         self._current_segment_index = 0
-        self._merge_status = 'none'
-        self._merged_file = None
         self._status = 'idle'
-        print('[DataManager] Pending episode discarded')
+        print('[DataManager] Episode discarded')
 
-    def finalize_to_archive(self, task_info, urdf_path: str = None):
-        """Archive pending segments as a multi-file rosbag2 episode.
+    def finish_episode(self, urdf_path: str = None):
+        """Finalise the in-progress episode: consolidate mcaps, write
+        ``metadata.yaml`` + ``episode_info.json`` + ``robot.urdf``, and
+        advance the episode counter.
 
-        Each segment's mcap is copied byte-for-byte (no timestamp
-        modification) and a unified ``metadata.yaml`` is generated so
-        ``ros2 bag play/info`` treat the episode as a single bag:
-
-            {robot_type}_{task_name}/{ep_idx}/
-                {ep_idx}_0.mcap       (segment 0, original timestamps)
-                {ep_idx}_1.mcap       (segment 1)
-                ...
-                metadata.yaml         (multi-file reference)
-                robot.urdf
-                episode_info.json
-
-        On failure the scratch is preserved so the user can retry.
+        Segments were recorded directly under ``{ep_dir}/segments/{idx}/``;
+        this method copies each segment's mcap to ``{ep_idx}_{seg}.mcap``
+        in the episode root, writes the unified ``metadata.yaml``, and
+        removes the temporary ``segments/`` subdir.
         """
         if self._status != 'between_segments':
             raise RuntimeError(
-                f'Cannot finalize in status {self._status}')
+                f'Cannot finish episode in status {self._status}')
         if not self._segments_meta:
-            raise RuntimeError('No pending segments to archive')
-
-        task_num = (getattr(task_info, 'task_num', '') or '').strip()
-        task_name = (getattr(task_info, 'task_name', '') or '').strip()
-        instruction_list = [
-            s for s in (getattr(task_info, 'task_instruction', []) or [])
-            if s and s.strip()
-        ]
-        if not task_num or not task_name or not instruction_list:
-            raise ValueError(
-                'task_num, task_name, and task_instruction are required')
+            raise RuntimeError('No segments recorded for this episode')
 
         from physical_ai_server.data_processing.mcap_merger import (
             archive_segments,
         )
 
-        pending_segments_root = os.path.join(
-            self.PENDING_ROSBAG_PATH, 'segments')
+        ep_idx = self._record_episode_count
+        ep_dir = self._episode_dir(ep_idx)
+        seg_root = os.path.join(ep_dir, 'segments')
         seg_names = sorted(
-            (d for d in os.listdir(pending_segments_root) if d.isdigit()),
+            (d for d in os.listdir(seg_root) if d.isdigit()),
             key=int,
         )
-        seg_paths = [
-            os.path.join(pending_segments_root, d) for d in seg_names
-        ]
-
-        repo_name = f'{self._robot_type}_{task_name}'
-        archive_root = os.path.join(self.ARCHIVE_ROSBAG_ROOT, repo_name)
-        os.makedirs(archive_root, exist_ok=True)
-        self._quarantine_partial_archives(archive_root)
-        ep_idx = self._find_next_episode_number_in(archive_root)
-        archive_dir = os.path.join(archive_root, str(ep_idx))
-        if os.path.exists(archive_dir):
-            raise RuntimeError(
-                f'Archive dir already exists: {archive_dir}')
-
-        self._status = 'merging'
-        self._merge_status = 'pending'
-        try:
-            self._write_episode_info()
-        except Exception:
-            pass
+        seg_paths = [os.path.join(seg_root, d) for d in seg_names]
 
         try:
-            os.makedirs(archive_dir)
-            archive_segments(seg_paths, archive_dir, ep_idx=ep_idx)
+            archive_segments(seg_paths, ep_dir, ep_idx=ep_idx)
         except Exception as e:
-            shutil.rmtree(archive_dir, ignore_errors=True)
-            self._merge_status = 'failed'
-            self._status = 'between_segments'
-            try:
-                self._write_episode_info()
-            except Exception:
-                pass
-            raise RuntimeError(
-                f'archive_segments failed: {e}') from e
+            raise RuntimeError(f'archive_segments failed: {e}') from e
 
         if urdf_path and os.path.exists(urdf_path):
-            urdf_dest = os.path.join(archive_dir, 'robot.urdf')
+            urdf_dest = os.path.join(ep_dir, 'robot.urdf')
             try:
                 self._write_urdf_stripped(urdf_path, urdf_dest)
             except Exception as e:
                 print(f'[DataManager] URDF copy failed: {e}')
 
-        self.current_instruction = instruction_list[0]
-        self._task_info = task_info
         try:
-            self._write_episode_info_v1(
-                archive_dir, task_info, ep_idx)
+            self._write_episode_info_v1(ep_dir, self._task_info, ep_idx)
         except Exception as e:
-            print(f'[DataManager] Failed to write final episode_info: {e}')
+            print(f'[DataManager] Failed to write episode_info: {e}')
 
-        shutil.rmtree(self.PENDING_ROSBAG_PATH, ignore_errors=True)
+        # Clean up the segments/ working area.
+        shutil.rmtree(seg_root, ignore_errors=True)
 
         self._segments_meta = []
         self._current_segment_index = 0
-        self._merge_status = 'none'
-        self._merged_file = None
         self._record_episode_count = ep_idx + 1
         self._status = 'idle'
-        print(f'[DataManager] Finalized -> {archive_dir}')
-        return Path(archive_dir)
+        print(f'[DataManager] Episode {ep_idx} finished -> {ep_dir}')
+        return Path(ep_dir)
 
     @staticmethod
     def _write_urdf_stripped(src, dst):
@@ -520,122 +375,32 @@ class DataManager:
 
     # ========== Paths ==========
 
-    def get_episode_dir(self, allow_idle: bool = False):
-        """Return absolute path of the scratch episode directory."""
-        if self._status == 'idle' and not allow_idle:
-            return None
-        if self._status == 'warmup':
-            return None
-        return self.PENDING_ROSBAG_PATH
+    def _episode_dir(self, ep_idx):
+        return os.path.join(self._save_rosbag_path, str(ep_idx))
+
+    def get_episode_dir(self):
+        """Absolute path of the in-progress episode directory."""
+        return self._episode_dir(self._record_episode_count)
 
     def get_save_rosbag_path(self, allow_idle: bool = False):
-        """Return absolute path of the active segment's rosbag directory."""
-        ep_dir = self.get_episode_dir(allow_idle=allow_idle)
-        if ep_dir is None:
+        """Absolute path of the current segment's rosbag directory.
+
+        Segments are recorded directly under the final episode dir:
+            {archive}/{ep_idx}/segments/{seg_idx}
+        """
+        if self._status == 'idle' and not allow_idle:
             return None
-        return f'{ep_dir}/segments/{self._current_segment_index}'
+        return os.path.join(
+            self.get_episode_dir(),
+            'segments',
+            str(self._current_segment_index),
+        )
 
     def save_robotis_metadata(self, urdf_path: str = None, needs_review: bool = False):
-        """
-        Copy URDF+meshes into the episode directory and refresh episode_info.json.
-
-        Called after each segment stop and on episode finish/discard.
-        """
-        episode_dir = self.get_episode_dir(allow_idle=True)
-        if episode_dir is None:
-            return
-
-        os.makedirs(episode_dir, exist_ok=True)
-
-        if urdf_path and os.path.exists(urdf_path):
-            urdf_dest = os.path.join(episode_dir, 'robot.urdf')
-            if not os.path.exists(urdf_dest):
-                try:
-                    self._copy_urdf_with_meshes(
-                        urdf_path, urdf_dest, episode_dir)
-                    print(f'[ROBOTIS] URDF and meshes copied to: {episode_dir}')
-                except Exception as e:
-                    print(f'[ROBOTIS] Failed to copy URDF/meshes: {e}')
-                    try:
-                        shutil.copy2(urdf_path, urdf_dest)
-                        print(f'[ROBOTIS] URDF copied (no meshes): {urdf_dest}')
-                    except Exception as e2:
-                        print(f'[ROBOTIS] Failed to copy URDF: {e2}')
-
-        self._write_episode_info(needs_review=needs_review)
-
-    def _write_episode_info(self,
-                            needs_review: bool = False,
-                            merge_status: str = None,
-                            merged_file: str = None,
-                            in_dir: str = None,
-                            task_info_override=None,
-                            episode_index: int = None):
-        """Persist (or refresh) episode_info.json for `in_dir` (default: scratch).
-
-        When `task_info_override` is supplied its fields replace the cached
-        task metadata; otherwise values from `self._task_info` are used (may
-        be empty while recording to scratch).
-        """
-        target_dir = in_dir if in_dir is not None \
-            else self.get_episode_dir(allow_idle=True)
-        if target_dir is None:
-            return
-        os.makedirs(target_dir, exist_ok=True)
-        info_path = os.path.join(target_dir, 'episode_info.json')
-
-        existing = {}
-        if os.path.exists(info_path):
-            try:
-                with open(info_path) as f:
-                    existing = json.load(f)
-            except Exception:
-                existing = {}
-
-        if merge_status is not None:
-            self._merge_status = merge_status
-        if merged_file is not None:
-            self._merged_file = merged_file
-
-        ti = task_info_override if task_info_override is not None \
-            else self._task_info
-        task_num = ''
-        task_name = ''
-        task_instruction = self.current_instruction
-        if ti is not None:
-            task_num = (getattr(ti, 'task_num', '') or '')
-            task_name = (getattr(ti, 'task_name', '') or '')
-            instr = getattr(ti, 'task_instruction', []) or []
-            if instr and instr[0]:
-                task_instruction = instr[0]
-
-        meta = {
-            'episode_index': episode_index
-            if episode_index is not None
-            else existing.get('episode_index', self._record_episode_count),
-            'task_num': task_num or existing.get('task_num', ''),
-            'task_name': task_name or existing.get('task_name', ''),
-            'task_instruction': task_instruction
-            or existing.get('task_instruction', ''),
-            'robot_type': self._robot_type,
-            'timestamp': time.strftime('%Y-%m-%dT%H:%M:%SZ', time.gmtime()),
-            'fps': getattr(ti, 'fps', 15) if ti is not None else 15,
-            'format_version': 'robotis_v2',
-            'device_serial': socket.gethostname(),
-            'needs_review': needs_review or existing.get('needs_review', False),
-            'segments': self._serialize_segments()
-            if self._segments_meta
-            else existing.get('segments', []),
-            'merge_status': self._merge_status,
-            'merged_file': self._merged_file,
-        }
-
-        try:
-            with open(info_path, 'w') as f:
-                json.dump(meta, f, indent=2)
-            print(f'[ROBOTIS] Metadata saved to: {info_path}')
-        except Exception as e:
-            print(f'[ROBOTIS] Failed to save metadata: {e}')
+        """No-op under the direct-record flow (metadata is written on
+        finish_episode). Kept for backward compatibility with legacy
+        callers."""
+        return
 
     def toggle_previous_episode_needs_review(self):
         """Toggle the previous episode's needs_review flag.
@@ -903,7 +668,7 @@ class DataManager:
         current_status.segment_primitives = [
             s.get('primitive_description', '') for s in self._segments_meta
         ]
-        current_status.merge_status = self._merge_status
+        current_status.merge_status = 'none'
 
         total_storage, used_storage = StorageChecker.get_storage_gb('/')
         current_status.used_storage_size = float(used_storage)

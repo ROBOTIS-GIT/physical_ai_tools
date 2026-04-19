@@ -23,7 +23,6 @@ import {
   MdDone,
   MdDelete,
   MdDeleteSweep,
-  MdMerge,
 } from 'react-icons/md';
 
 import TaskPhase from '../constants/taskPhases';
@@ -64,12 +63,10 @@ const SegmentPanel = () => {
 
   const phase = status.phase;
   const serverRecording = phase === TaskPhase.RECORDING;
-  const isMerging = phase === TaskPhase.CONVERTING;
   const isRecording = serverRecording || optimisticRecording;
   const segmentPrimitives = status.segmentPrimitives || [];
   const segmentCount = status.segmentCount || 0;
   const hasSegments = segmentCount > 0;
-  const mergeStatus = status.mergeStatus || 'none';
 
   // Keep local flag in sync whenever the server phase settles.
   useEffect(() => {
@@ -83,16 +80,15 @@ const SegmentPanel = () => {
       (taskInfo.taskInstruction?.[0] || '').trim()
   );
 
-  const canRecord = !isRecording && !isMerging && !savingInProgress && !!pendingPrimitive;
-  const canSave = isRecording;
-  const canDiscard = isRecording || (hasSegments && !isMerging);
-  const canDiscardEpisode = !isRecording && !isMerging && hasSegments;
-  const canMerge =
+  const canRecord =
     !isRecording &&
-    !isMerging &&
-    hasSegments &&
-    taskInfoComplete &&
-    mergeStatus !== 'pending';
+    !savingInProgress &&
+    !!pendingPrimitive &&
+    taskInfoComplete;
+  const canSave = isRecording;
+  const canDiscard = isRecording || hasSegments;
+  const canFinishEpisode = !isRecording && !savingInProgress && hasSegments;
+  const canDiscardEpisode = !isRecording && hasSegments;
 
   const runCommand = useCallback(
     async (label, cmd, opts = {}) => {
@@ -183,10 +179,10 @@ const SegmentPanel = () => {
     runCommand('Discard episode', 'discard_episode');
   }, [canDiscardEpisode, runCommand]);
 
-  const handleMerge = useCallback(() => {
-    if (!canMerge) return;
-    runCommand('Merge', 'merge_episode');
-  }, [canMerge, runCommand]);
+  const handleFinish = useCallback(() => {
+    if (!canFinishEpisode) return;
+    runCommand('Finish episode', 'finish_episode');
+  }, [canFinishEpisode, runCommand]);
 
   // Keyboard shortcuts — matching the legacy RecordControlPanel bindings.
   const handleKeyAction = useCallback(
@@ -339,6 +335,17 @@ const SegmentPanel = () => {
     <div className={classPanel}>
       <div className="mb-3 text-lg font-semibold text-gray-800">Rosbag Recorder</div>
 
+      {/* Task Information block (fill first, then record) */}
+      <div className="mb-3">
+        <div className="text-sm font-semibold text-gray-700 mb-2">
+          Task Information
+          <span className="ml-1 text-xs font-normal text-gray-400">
+            (required before recording)
+          </span>
+        </div>
+        <InfoPanel variant="embedded" />
+      </div>
+
       {/* Primitive picker */}
       <div className="flex items-center gap-2 mb-3">
         <span className="text-sm text-gray-600 shrink-0">Next primitive</span>
@@ -346,11 +353,11 @@ const SegmentPanel = () => {
           className={clsx(
             'flex-1 text-sm p-1.5 border border-gray-300 rounded-md',
             'focus:outline-none focus:ring-2 focus:ring-blue-500',
-            { 'bg-gray-100 cursor-not-allowed': isRecording || isMerging }
+            { 'bg-gray-100 cursor-not-allowed': isRecording }
           )}
           value={pendingPrimitive}
           onChange={(e) => dispatch(setPendingPrimitive(e.target.value))}
-          disabled={isRecording || isMerging}
+          disabled={isRecording}
         >
           <option value="">-- Select --</option>
           {PRIMITIVE_DESCRIPTIONS.map((p) => (
@@ -376,12 +383,12 @@ const SegmentPanel = () => {
             </div>
             <button
               onClick={() => handleDiscardSegment(i)}
-              disabled={isRecording || isMerging}
+              disabled={isRecording}
               className={clsx(
                 'p-1 rounded hover:bg-red-50 text-red-500',
                 {
                   'opacity-30 cursor-not-allowed hover:bg-transparent':
-                    isRecording || isMerging,
+                    isRecording,
                 }
               )}
               aria-label={`Discard segment ${i}`}
@@ -473,45 +480,16 @@ const SegmentPanel = () => {
         )}
       </div>
 
-      {/* Task Information block (fills in just before merging) */}
-      <div className="mb-3">
-        <div className="text-sm font-semibold text-gray-700 mb-2">
-          Task Information
-          <span className="ml-1 text-xs font-normal text-gray-400">
-            (required to merge)
-          </span>
-        </div>
-        <InfoPanel variant="embedded" />
-      </div>
-
-      {/* Discard Episode / Merge */}
+      {/* Finish Episode / Discard Episode */}
       <div className="flex flex-col gap-2">
-        <Tooltip
-          position="top"
-          content={
-            canMerge
-              ? 'Merge scratch segments into Task_{num}_{name}_MCAP/{idx}/merged.mcap'
-              : !hasSegments
-              ? 'No segments to merge'
-              : !taskInfoComplete
-              ? 'Enter Task Num, Name, and Instruction in the panel above'
-              : 'Merge in progress'
-          }
-          disabled={false}
-          className="relative"
+        <button
+          onClick={handleFinish}
+          disabled={!canFinishEpisode}
+          className={clsx(secondaryBtn(canFinishEpisode, 'indigo'), 'w-full')}
         >
-          <button
-            onClick={handleMerge}
-            disabled={!canMerge}
-            className={clsx(secondaryBtn(canMerge, 'indigo'), 'w-full')}
-          >
-            <MdMerge size={16} />
-            Merge to MCAP
-            {mergeStatus && mergeStatus !== 'none' && (
-              <span className="ml-1 text-xs opacity-80">({mergeStatus})</span>
-            )}
-          </button>
-        </Tooltip>
+          <MdDone size={16} />
+          Finish Episode
+        </button>
 
         <button
           onClick={handleDiscardEpisode}
