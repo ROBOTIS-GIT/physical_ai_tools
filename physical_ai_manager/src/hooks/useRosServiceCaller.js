@@ -107,6 +107,7 @@ export function useRosServiceCaller() {
           finish_episode: TaskCommand.FINISH_EPISODE,
           merge_episode: TaskCommand.MERGE_EPISODE,
           discard_episode: TaskCommand.DISCARD_EPISODE,
+          set_task_info: TaskCommand.SET_TASK_INFO,
         };
         const command_enum = commandEnumMap[command];
         if (command_enum === undefined) {

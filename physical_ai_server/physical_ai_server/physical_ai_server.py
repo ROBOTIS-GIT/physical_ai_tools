@@ -623,45 +623,43 @@ class PhysicalAIServer(Node):
         return archive_dir
 
     def stop_recording_and_save(self):
-        """Joystick / legacy flow: stop the current segment AND finalize
-        the episode in one step (one right-button press == one episode)."""
+        """Joystick right while recording: stop the current segment and
+        add it to the in-progress episode's segment list. The episode is
+        NOT finalized here — that happens via FINISH_EPISODE (UI button)
+        so segments accumulate as {ep}/0_0.mcap, {ep}/0_1.mcap, ...
+        inside the same episode folder."""
         if self.data_manager is None:
             return
+        if not self.data_manager.is_recording():
+            return
 
-        self.get_logger().info(
-            f'Stopping recording: episode={self.data_manager._record_episode_count}, '
-            f'status={self.data_manager.get_status()}')
-
-        if self.data_manager.is_recording():
-            self.communicator.stop_rosbag()
-            self.data_manager.stop_segment()
-
-        try:
-            self.finish_current_episode()
-        except Exception as e:
-            self.get_logger().error(f'Finish episode failed: {e}')
-
+        self.communicator.stop_rosbag()
+        self.data_manager.stop_segment()
         self.previous_data_manager_status = 'idle'
         self.get_logger().info(
-            f'Recording stopped and saved: '
-            f'next_episode={self.data_manager._record_episode_count}')
+            f'Segment saved. Episode {self.data_manager._record_episode_count} '
+            f'now has {len(self.data_manager._segments_meta)} segment(s)')
 
     def cancel_current_recording(self):
-        """Joystick cancel: drop the in-progress segment and episode."""
+        """Joystick left while recording: drop the in-progress segment.
+        Trailing segments already saved to this episode are kept."""
         if self.data_manager is None:
             return
+        if not self.data_manager.is_recording():
+            return
 
-        if self.data_manager.is_recording():
-            self.communicator.stop_rosbag()
-            self.data_manager.stop_segment()
-
+        self.communicator.stop_rosbag()
+        # Mark the segment as stopped, then immediately discard it so the
+        # aborted rosbag dir doesn't leak into episode_info.
+        self.data_manager.stop_segment()
         try:
-            self.data_manager.discard_episode()
+            last_idx = len(self.data_manager._segments_meta) - 1
+            if last_idx >= 0:
+                self.data_manager.discard_segment(last_idx)
         except Exception as e:
-            self.get_logger().error(f'Discard episode failed: {e}')
-
+            self.get_logger().warning(f'Failed to drop aborted segment: {e}')
         self.previous_data_manager_status = 'idle'
-        self.get_logger().info('Recording cancelled - episode discarded')
+        self.get_logger().info('Current segment discarded')
 
     def _data_collection_timer_callback(self):
         """
@@ -1056,6 +1054,13 @@ class PhysicalAIServer(Node):
                 response.success = True
                 response.message = (
                     'MERGE_EPISODE is deprecated; use FINISH_EPISODE')
+
+            elif request.command == SendCommand.Request.SET_TASK_INFO:
+                # Cache task info from the UI so the joystick flow can
+                # reuse it even before the user presses Record.
+                self._last_ui_task_info = request.task_info
+                response.success = True
+                response.message = 'task_info cached'
 
             elif request.command == SendCommand.Request.START_INFERENCE:
                 self.operation_mode = 'inference'

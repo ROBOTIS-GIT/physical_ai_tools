@@ -19,10 +19,12 @@ import { useSelector, useDispatch } from 'react-redux';
 import clsx from 'clsx';
 import TaskPhase from '../constants/taskPhases';
 import { setTaskInfo } from '../features/tasks/taskSlice';
+import { useRosServiceCaller } from '../hooks/useRosServiceCaller';
 
 const InfoPanel = ({ variant = 'card' }) => {
   const dispatch = useDispatch();
   const embedded = variant === 'embedded';
+  const { sendRecordCommand } = useRosServiceCaller();
 
   const info = useSelector((state) => state.tasks.taskInfo);
   const taskStatus = useSelector((state) => state.tasks.taskStatus);
@@ -36,6 +38,23 @@ const InfoPanel = ({ variant = 'card' }) => {
       (info.taskInstruction?.[0] || '').trim()
   );
   const needsTaskInfo = hasPendingSegments && !taskInfoComplete;
+
+  // Debounce-push the latest task_info to the backend so the joystick
+  // flow can start recording with the same folder name even before the
+  // UI's Record button has been clicked.
+  useEffect(() => {
+    if (!taskInfoComplete) return;
+    const handle = setTimeout(() => {
+      sendRecordCommand('set_task_info').catch(() => {});
+    }, 400);
+    return () => clearTimeout(handle);
+  }, [
+    info.taskNum,
+    info.taskName,
+    info.taskInstruction,
+    taskInfoComplete,
+    sendRecordCommand,
+  ]);
 
   const [isTaskStatusPaused, setIsTaskStatusPaused] = useState(false);
   const [lastTaskStatusUpdate, setLastTaskStatusUpdate] = useState(Date.now());
