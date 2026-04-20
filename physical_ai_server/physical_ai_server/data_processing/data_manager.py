@@ -98,9 +98,9 @@ class DataManager:
         self.current_instruction = (
             task_info.task_instruction[0]
             if task_info.task_instruction else '')
-        self._init_task_limits()
         self._current_scenario_number = 0
         self._single_task = len(task_info.task_instruction) <= 1
+        self._init_task_limits()
 
         # Segmented episode state
         self._current_segment_index = 0
