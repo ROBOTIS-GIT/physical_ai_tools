@@ -2046,14 +2046,15 @@ class PhysicalAIServer(Node):
 
     def _auto_create_recording_session(self) -> bool:
         """
-        Auto-create a recording session. If the UI has already sent a
-        START_RECORD with task_info (cached in ``_last_ui_task_info``),
-        reuse that so the folder name matches what the user typed
-        (Task_{num}_{name}_MCAP). Otherwise fall back to a
-        timestamp-based name.
+        Auto-create a recording session for the joystick flow.
+
+        Prefers the most recent UI-provided task_info (cached in
+        ``_last_ui_task_info``) so the archive folder matches what the
+        user typed. Falls back to a timestamp-based name so the
+        joystick always works even if the UI never sent a START.
 
         Returns:
-            bool: True if session created successfully, False otherwise
+            bool: True if session created successfully, False otherwise.
         """
         if not hasattr(self, 'robot_type') or self.robot_type is None:
             self.get_logger().error(
@@ -2062,19 +2063,27 @@ class PhysicalAIServer(Node):
             return False
 
         cached = getattr(self, '_last_ui_task_info', None)
-        if cached is not None and cached.task_name:
+        if cached is not None and (cached.task_name or '').strip():
             task_info = cached
             self.get_logger().info(
-                f'Joystick: reusing UI task_info (task_name={task_info.task_name})')
+                f'Joystick: reusing UI task_info '
+                f'(task_name={task_info.task_name})')
         else:
-            self.get_logger().error(
-                'Cannot start recording from joystick: '
-                'please start the first episode from the UI so task info '
-                '(Task Num / Task Name) is set.')
-            return False
+            # Timestamp-based fallback so the joystick is usable without
+            # the UI. Format: task_YYMMDDHHMM.
+            now = time.strftime('%y%m%d%H%M', time.localtime())
+            task_info = TaskInfo()
+            task_info.task_num = now
+            task_info.task_name = f'task_{now}'
+            task_info.task_instruction = [f'task_{now}']
+            task_info.control_hz = 10
+            self.get_logger().info(
+                f'Joystick: auto-generated task_info '
+                f'(task_name={task_info.task_name})')
 
         self.operation_mode = 'collection'
         self.init_robot_control_parameters_from_user_task(task_info)
+        self._last_ui_task_info = task_info
         self.on_recording = True
         return True
 
