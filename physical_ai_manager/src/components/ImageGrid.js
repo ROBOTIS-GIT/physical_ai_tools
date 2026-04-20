@@ -24,13 +24,12 @@ import ImageTopicSelectModal from './ImageTopicSelectModal';
 import { setImageTopicList, setAssignedImageTopics } from '../features/ros/rosSlice';
 import { displayLabelForTopic } from '../utils/browserCameraLabels';
 
-// [left(idx 0), center(idx 1), right(idx 2), extra(idx 3)]
+// [left(idx 0), center(idx 1), right(idx 2)]
 // rotate: true = wrist camera (landscape stream displayed as portrait)
 const DEFAULT_LAYOUT = [
   { aspect: '3/4', rotate: true },
   { aspect: '16/9', rotate: false },
   { aspect: '3/4', rotate: true },
-  { aspect: '16/9', rotate: false },
 ];
 
 // Record page layout: row 0 has 3 existing cameras, row 1 has 2 additional slots
