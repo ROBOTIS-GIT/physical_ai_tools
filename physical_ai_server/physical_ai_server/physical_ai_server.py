@@ -1998,7 +1998,7 @@ class PhysicalAIServer(Node):
                 except Exception as e:
                     self.get_logger().error(f'Failed to start rosbag: {e}')
                     return
-                self.data_manager.start_recording()
+                self._start_segment_with_latest_primitive()
                 self.on_recording = True
                 self.start_recording_time = time.perf_counter()
                 self.communicator.publish_action_event('start')
@@ -2022,7 +2022,7 @@ class PhysicalAIServer(Node):
                     self.get_logger().error(f'Failed to start rosbag: {e}')
                     return
                 self.on_recording = True
-                self.data_manager.start_recording()
+                self._start_segment_with_latest_primitive()
                 self.start_recording_time = time.perf_counter()
                 self.communicator.publish_action_event('start')
 
@@ -2052,6 +2052,21 @@ class PhysicalAIServer(Node):
 
         else:
             self.get_logger().info(f'Unknown joystick trigger: {joystick_mode}')
+
+    def _start_segment_with_latest_primitive(self):
+        """Start a segment using the most recent primitive from the UI.
+
+        The joystick has no primitive selector of its own, so it pulls the
+        latest ``pendingPrimitive`` that the UI pushed via SET_TASK_INFO
+        (cached in ``_last_ui_task_info``). This avoids stale primitives
+        from when the DataManager was first constructed.
+        """
+        primitive = ''
+        cached = getattr(self, '_last_ui_task_info', None)
+        if cached is not None:
+            primitive = (
+                getattr(cached, 'primitive_description', '') or '')
+        self.data_manager.start_segment(primitive)
 
     def _auto_create_recording_session(self) -> bool:
         """
