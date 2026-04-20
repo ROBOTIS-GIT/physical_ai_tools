@@ -1059,6 +1059,10 @@ class PhysicalAIServer(Node):
                 # Cache task info from the UI so the joystick flow can
                 # reuse it even before the user presses Record.
                 self._last_ui_task_info = request.task_info
+                self.get_logger().info(
+                    f'SET_TASK_INFO cached: '
+                    f'task_num={request.task_info.task_num!r}, '
+                    f'task_name={request.task_info.task_name!r}')
                 response.success = True
                 response.message = 'task_info cached'
 
