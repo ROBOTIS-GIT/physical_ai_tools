@@ -26,6 +26,7 @@ import { DEFAULT_PATHS } from '../constants/paths';
 
 export function useRosServiceCaller() {
   const taskInfo = useSelector((state) => state.tasks.taskInfo);
+  const pendingPrimitive = useSelector((state) => state.tasks.pendingPrimitive);
   const trainingInfo = useSelector((state) => state.training.trainingInfo);
   const trainingResumePolicyPath = useSelector((state) => state.training.resumePolicyPath);
   const editDatasetInfo = useSelector((state) => state.editDataset);
@@ -141,7 +142,7 @@ export function useRosServiceCaller() {
         const primitiveDescription = String(
           options.primitiveDescription !== undefined
             ? options.primitiveDescription
-            : taskInfo.primitiveDescription || ''
+            : pendingPrimitive || taskInfo.primitiveDescription || ''
         );
 
         const request = {
@@ -178,7 +179,7 @@ export function useRosServiceCaller() {
         throw new Error(`${error.message || error}`);
       }
     },
-    [callService, taskInfo, page]
+    [callService, taskInfo, pendingPrimitive, page]
   );
 
   const getImageTopicList = useCallback(async () => {
