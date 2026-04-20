@@ -84,12 +84,17 @@ export default function BTManagerPage({ isActive = true }) {
     if (!item || !item.full_path) return;
 
     try {
-      // Extract host from rosbridgeUrl (ws://host:9090 -> host)
-      const urlMatch = rosbridgeUrl.match(/ws:\/\/([^:]+):/);
-      const host = urlMatch ? urlMatch[1] : 'localhost';
-      const videoServerPort = 8082;
-
-      const fileUrl = `http://${host}:${videoServerPort}${item.full_path}`;
+      // On HTTPS the same-origin /api/ nginx proxy reaches the backend without
+      // mixed-content issues; on HTTP keep the direct :8082 URL for backward compat.
+      const useProxy =
+        typeof window !== 'undefined' && window.location.protocol === 'https:';
+      const fileUrl = useProxy
+        ? `${window.location.origin}/api${item.full_path}`
+        : (() => {
+            const urlMatch = rosbridgeUrl.match(/wss?:\/\/([^:/]+)/);
+            const host = urlMatch ? urlMatch[1] : 'localhost';
+            return `http://${host}:8082${item.full_path}`;
+          })();
       const response = await fetch(fileUrl);
 
       if (!response.ok) {
@@ -114,7 +119,10 @@ export default function BTManagerPage({ isActive = true }) {
 
   // Helper: get HTTP server base URL from rosbridgeUrl
   const getHttpBaseUrl = useCallback(() => {
-    const urlMatch = rosbridgeUrl.match(/ws:\/\/([^:]+):/);
+    if (typeof window !== 'undefined' && window.location.protocol === 'https:') {
+      return `${window.location.origin}/api`;
+    }
+    const urlMatch = rosbridgeUrl.match(/wss?:\/\/([^:/]+)/);
     const host = urlMatch ? urlMatch[1] : 'localhost';
     return `http://${host}:8082`;
   }, [rosbridgeUrl]);

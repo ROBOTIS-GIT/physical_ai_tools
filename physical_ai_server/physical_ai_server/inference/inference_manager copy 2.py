@@ -126,18 +126,7 @@ class InferenceManager:
 
         # Task instruction for language-conditioned policies
         self._task_instruction: str = ""
-################1063 change#############3
-    def set_task_instruction(self, task_instruction: str):
-        """Update the task instruction in-place.
 
-        The new value will be used by the next /get_action_chunk call,
-        without interrupting the running inference loop.
-        """
-        self._task_instruction = task_instruction
-        logger.info(
-            f'task_instruction updated -> "{task_instruction}"'
-        )
-#########################1063 finish#############
     @property
     def is_loading(self) -> bool:
         return self._loading
@@ -295,10 +284,6 @@ class InferenceManager:
                     return
 
                 t0 = time.perf_counter()
-                logger.info(
-                    f'requesting chunk with instruction='
-                    f'"{self._task_instruction}"'
-                )
                 response = self._client.get_action_chunk(
                     task_instruction=self._task_instruction
                 )
