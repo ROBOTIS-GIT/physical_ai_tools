@@ -12,9 +12,11 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import React from 'react';
+import React, { useState } from 'react';
 import clsx from 'clsx';
 import { useSelector } from 'react-redux';
+import { MdRefresh } from 'react-icons/md';
+import { useRosServiceCaller } from '../hooks/useRosServiceCaller';
 
 const STATUS_OK = 0;
 const STATUS_SLOW = 1;
@@ -40,6 +42,21 @@ const shortenTopic = (name) => {
 
 export default function RecordTopicMonitor() {
   const monitor = useSelector((state) => state.tasks.recordingMonitor);
+  const { sendRecordCommand } = useRosServiceCaller();
+  const [isRefreshing, setIsRefreshing] = useState(false);
+
+  const handleRefresh = async () => {
+    if (isRefreshing) return;
+    setIsRefreshing(true);
+    try {
+      await sendRecordCommand('refresh_topics');
+    } catch (_) {
+      // ignore; spinner will clear
+    } finally {
+      // Small delay so the spinner is visible and users see the reset.
+      setTimeout(() => setIsRefreshing(false), 400);
+    }
+  };
 
   if (!monitor?.topics?.length) return null;
 
@@ -58,6 +75,18 @@ export default function RecordTopicMonitor() {
             ? `${problemCount} issue(s)`
             : `All ${monitor.topics.length} OK`}
         </span>
+        <button
+          type="button"
+          onClick={handleRefresh}
+          disabled={isRefreshing}
+          title="Reset topic subscriptions"
+          className={clsx(
+            'p-1 rounded-md text-gray-500 hover:bg-gray-100 hover:text-gray-700',
+            'disabled:text-gray-300 disabled:cursor-not-allowed'
+          )}
+        >
+          <MdRefresh className={clsx('w-4 h-4', isRefreshing && 'animate-spin')} />
+        </button>
       </div>
       <table className="w-full text-xs">
         <thead>

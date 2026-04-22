@@ -33,6 +33,7 @@ const TaskCommand = {
   START_INFERENCE_RECORD: 12,
   STOP_INFERENCE_RECORD: 13,
   CANCEL_INFERENCE_RECORD: 14,
+  REFRESH_TOPICS: 15,
 };
 
 export default TaskCommand;

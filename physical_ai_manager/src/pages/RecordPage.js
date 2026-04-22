@@ -28,9 +28,11 @@ import RobotViewer3D from '../components/RobotViewer3D';
 import InfoPanel from '../components/InfoPanel';
 import RecordTopicMonitor from '../components/RecordTopicMonitor';
 import { setIsFirstLoadFalse } from '../features/ui/uiSlice';
+import { useRosServiceCaller } from '../hooks/useRosServiceCaller';
 
 export default function RecordPage({ isActive = true }) {
   const dispatch = useDispatch();
+  const { sendRecordCommand } = useRosServiceCaller();
 
   const taskStatus = useSelector((state) => state.tasks.taskStatus);
   const joystickMode = useSelector((state) => state.tasks.joystickMode);
@@ -54,6 +56,14 @@ export default function RecordPage({ isActive = true }) {
   useEffect(() => {
     dispatch(setIsFirstLoadFalse('record'));
   }, [dispatch, isFirstLoad]);
+
+  // Refresh topic subscriptions when entering the page so the topic
+  // monitor picks up topics that appeared after robot-type setup.
+  useEffect(() => {
+    if (isActive) {
+      sendRecordCommand('refresh_topics').catch(() => {});
+    }
+  }, [isActive, sendRecordCommand]);
 
   const classMainContainer = 'h-full flex flex-col overflow-hidden';
   const classContentsArea = 'flex-1 flex min-h-0 pt-0 px-0 justify-center items-start';

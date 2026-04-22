@@ -920,7 +920,22 @@ class PhysicalAIServer(Node):
         - RERECORD: Cancel current recording (discard)
         """
         try:
-            if request.command == SendCommand.Request.START_RECORD:
+            if request.command == SendCommand.Request.REFRESH_TOPICS:
+                # Re-run prepare so the topic monitor picks up topics that
+                # appeared after the initial robot-type setup (e.g. robot
+                # started after type was selected).
+                if (self.communicator is not None
+                        and self.communicator.rosbag_service_available):
+                    rosbag_topics = self.communicator.get_all_topics()
+                    self.communicator.prepare_rosbag(topics=rosbag_topics)
+                    response.success = True
+                    response.message = f'Topics refreshed ({len(rosbag_topics)} topics)'
+                else:
+                    response.success = False
+                    response.message = 'Communicator not initialized'
+                return response
+
+            elif request.command == SendCommand.Request.START_RECORD:
                 # Initialize data manager only if it doesn't exist or task changed
                 task_info = request.task_info
                 # Cache so the joystick path can reuse what the user entered.

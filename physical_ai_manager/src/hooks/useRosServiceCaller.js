@@ -132,6 +132,9 @@ export function useRosServiceCaller() {
           case 'cancel_inference_record':
             command_enum = TaskCommand.CANCEL_INFERENCE_RECORD;
             break;
+          case 'refresh_topics':
+            command_enum = TaskCommand.REFRESH_TOPICS;
+            break;
           default:
             throw new Error(`Unknown command: ${command}`);
         }
