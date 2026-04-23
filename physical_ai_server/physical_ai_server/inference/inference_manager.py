@@ -45,6 +45,7 @@ from typing import Optional
 import numpy as np
 from rclpy.node import Node
 from trajectory_msgs.msg import JointTrajectory, JointTrajectoryPoint
+from geometry_msgs.msg import Twist
 
 from physical_ai_server.communication.container_service_client import ContainerServiceClient
 
@@ -58,7 +59,7 @@ class InferenceManager:
     via the service_prefix parameter.
     """
 
-    INFERENCE_HZ = 15.0   # Model output rate
+    DEFAULT_INFERENCE_HZ = 15.0   # Default model output rate (overridable per call)
     BLEND_DURATION_S = 0.2  # Blend duration in seconds at chunk boundaries
     REFILL_MARGIN_S = 0.1  # Fixed time margin added to adaptive refill threshold
     EMA_ALPHA = 0.3        # EMA smoothing factor for chunk fetch time
@@ -71,6 +72,8 @@ class InferenceManager:
         service_prefix: str = "/groot",
         on_chunk_received: callable = None,
         control_hz: float = 100.0,
+        inference_hz: float = 15.0,
+        chunk_align_window_s: float = 0.3,
         client_cb_group=None,
     ):
         """
@@ -96,8 +99,16 @@ class InferenceManager:
         self._action_joint_map: dict = {}
         self._client_cb_group = client_cb_group
 
-        # Interpolation and buffer parameters derived from control_hz
+        # Interpolation and buffer parameters derived from control_hz.
+        # inference_hz = rate of model output waypoints (must match training
+        # data rate); control_hz = rate of interpolated commands to the robot.
         self._control_hz = float(control_hz)
+        self._inference_hz = float(inference_hz) if inference_hz else self.DEFAULT_INFERENCE_HZ
+        # L2 alignment is restricted to the first few raw waypoints of a new
+        # chunk (chunk_align_window_s × inference_hz). This prevents jumping
+        # to a "closer" later waypoint when the trajectory revisits points
+        # (e.g. A→B→C→B→A would otherwise get stuck at the second B).
+        self._chunk_align_window_s = max(0.0, float(chunk_align_window_s))
         self._blend_steps = max(1, int(self.BLEND_DURATION_S * self._control_hz))
 
         # Adaptive refill: threshold updated based on measured chunk fetch time
@@ -337,19 +348,19 @@ class InferenceManager:
             self._requesting = False
 
     def _interpolate_chunk(self, chunk: np.ndarray) -> np.ndarray:
-        """Linear interpolation from INFERENCE_HZ to CONTROL_HZ.
+        """Linear interpolation from inference_hz to control_hz.
 
         Args:
-            chunk: shape (T, D), T waypoints at INFERENCE_HZ
+            chunk: shape (T, D), T waypoints at self._inference_hz
         Returns:
-            shape (T_interp, D), interpolated waypoints at CONTROL_HZ
+            shape (T_interp, D), interpolated waypoints at self._control_hz
         """
         T, D = chunk.shape
         if T < 2:
             return chunk
 
-        t_original = np.arange(T) / self.INFERENCE_HZ
-        duration = (T - 1) / self.INFERENCE_HZ
+        t_original = np.arange(T) / self._inference_hz
+        duration = (T - 1) / self._inference_hz
         n_interp = int(round(duration * self._control_hz)) + 1
         t_interp = np.linspace(0, duration, n_interp)
 
@@ -368,10 +379,20 @@ class InferenceManager:
         3. Linear blend at chunk boundary from last_action
         """
         with self._buffer_lock:
-            # L2 alignment on raw 15Hz waypoints
+            # L2 alignment on raw 15Hz waypoints, restricted to the first
+            # chunk_align_window_s worth of waypoints so loop trajectories
+            # (e.g. A→B→C→B→A) don't jump ahead to a later "closer" point.
             if self._last_action is not None and len(chunk) > 1:
-                distances = np.linalg.norm(chunk - self._last_action, axis=1)
-                start_idx = int(np.argmin(distances)) + 1
+                search_n = int(round(self._chunk_align_window_s * self._inference_hz))
+                search_n = max(1, min(search_n, len(chunk)))
+                distances = np.linalg.norm(chunk[:search_n] - self._last_action, axis=1)
+                best_idx = int(np.argmin(distances))
+                logger.info(
+                    f"L2 align: search={search_n}/{len(chunk)}, "
+                    f"best_idx={best_idx}, min_dist={distances[best_idx]:.4f}, "
+                    f"window={self._chunk_align_window_s:.2f}s"
+                )
+                start_idx = best_idx + 1
                 if start_idx < len(chunk):
                     chunk = chunk[start_idx:]
 
@@ -457,13 +478,23 @@ class InferenceManager:
             values = action[offset:offset + n_joints]
             offset += n_joints
 
-            msg = JointTrajectory()
-            msg.joint_names = list(joint_names)
-            point = JointTrajectoryPoint()
-            point.positions = [float(v) for v in values]
-            msg.points = [point]
             # Strip "joint_order." prefix to match communicator publisher keys
             publisher_key = leader_group.removeprefix("joint_order.")
+
+            if 'mobile' in publisher_key.lower():
+                # Mobile action → Twist on /cmd_vel (publisher is created as
+                # Twist in communicator.init_publishers).
+                msg = Twist()
+                msg.linear.x = float(values[0]) if len(values) > 0 else 0.0
+                msg.linear.y = float(values[1]) if len(values) > 1 else 0.0
+                msg.angular.z = float(values[2]) if len(values) > 2 else 0.0
+            else:
+                msg = JointTrajectory()
+                msg.joint_names = list(joint_names)
+                point = JointTrajectoryPoint()
+                point.positions = [float(v) for v in values]
+                msg.points = [point]
+
             joint_msg_datas[publisher_key] = msg
 
         return joint_msg_datas

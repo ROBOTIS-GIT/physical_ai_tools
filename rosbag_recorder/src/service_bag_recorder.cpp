@@ -185,22 +185,11 @@ void ServiceBagRecorder::handle_prepare(const std::vector<std::string> & topics)
     }
   }
 
-  // If subscriptions already exist for the same topic set, skip re-creation
-  // to preserve EMA baselines across episodes.
-  if (!generic_subscriptions_.empty() && deduped.size() == topics_to_record_.size()) {
-    bool same = true;
-    std::unordered_set<std::string> existing(topics_to_record_.begin(), topics_to_record_.end());
-    for (const auto & t : deduped) {
-      if (existing.count(t) == 0) { same = false; break; }
-    }
-    if (same) {
-      RCLCPP_INFO(this->get_logger(),
-        "Prepare skipped: %zu subscriptions already active for same topics",
-        generic_subscriptions_.size());
-      return;
-    }
-  }
-
+  // Always recreate subscriptions on prepare. The previous skip-when-same
+  // optimization preserved EMA baselines across episodes but also kept
+  // broken subscriptions alive (e.g. QoS mismatch, late-appearing publisher),
+  // so a user refresh could not recover them. Warmup (monitor_warmup_ms_)
+  // suppresses false alarms during the first few seconds after recreation.
   topics_to_record_ = deduped;
 
   // Clean up any previous subscriptions / state.

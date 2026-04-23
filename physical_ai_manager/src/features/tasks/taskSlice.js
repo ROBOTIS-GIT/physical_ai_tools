@@ -27,6 +27,9 @@ const initialState = {
     taskInstruction: [],
     policyPath: '',
     recordInferenceMode: false,
+    controlHz: 100,
+    inferenceHz: 15,
+    chunkAlignWindowS: 0.3,
   },
   taskStatus: {
     robotType: '',

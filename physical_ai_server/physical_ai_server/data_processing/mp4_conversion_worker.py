@@ -396,6 +396,49 @@ class Mp4ConversionWorker:
                             output_queue.put(('error', f'[Stage 3/3 LeRobot v3.0] {message}'))
                             continue
 
+                        # Cleanup intermediate Stage 1 outputs ({episode}_converted).
+                        try:
+                            import shutil as _shutil
+                            removed = 0
+                            for d in Path(dataset_path).iterdir():
+                                if d.is_dir() and d.name.endswith('_converted'):
+                                    _shutil.rmtree(str(d))
+                                    removed += 1
+                            if removed:
+                                logger.info(
+                                    f'Cleaned up {removed} *_converted '
+                                    f'intermediate folder(s) under {dataset_path}'
+                                )
+                        except Exception as cleanup_err:
+                            logger.warning(
+                                f'Failed to remove *_converted folders: {cleanup_err}'
+                            )
+
+                        # Make the lerobot outputs world-readable. The v3.0
+                        # converter runs inside the lerobot container as root
+                        # with a restrictive umask (0o077), which leaves files
+                        # unreadable from the host filesystem (e.g. VSCode).
+                        try:
+                            import os as _os
+                            v21_dir = Path(str(dataset_path) + '_lerobot_v21')
+                            v30_dir = Path(str(dataset_path) + '_lerobot_v30')
+                            for root_dir in (v21_dir, v30_dir):
+                                if not root_dir.exists():
+                                    continue
+                                for p in root_dir.rglob('*'):
+                                    try:
+                                        if p.is_dir():
+                                            _os.chmod(p, 0o755)
+                                        else:
+                                            _os.chmod(p, 0o644)
+                                    except Exception:
+                                        pass
+                                _os.chmod(root_dir, 0o755)
+                        except Exception as chmod_err:
+                            logger.warning(
+                                f'Failed to relax permissions on outputs: {chmod_err}'
+                            )
+
                         logger.info(f'All stages completed for: {dataset_path}')
                         output_queue.put(('success', 'All stages completed successfully'))
 

@@ -20,6 +20,7 @@ from typing import Any, Callable, Dict, List, Optional
 import threading
 
 from geometry_msgs.msg import Twist
+from sensor_msgs.msg import JointState
 from physical_ai_interfaces.msg import (
     BrowserItem,
     DatasetInfo,
@@ -99,6 +100,10 @@ class Communicator:
 
         # Initialize joint publishers (for inference mode)
         self.joint_publishers = {}
+        # Mirror JointState publishers on leader joint_states topics so that
+        # rosbag can record the model's commands during inference (when the
+        # human-leader hardware isn't publishing those topics).
+        self.state_mirror_publishers = {}
 
         # Log topic information
         node.get_logger().info(f'Parsed camera topics: {self.camera_topics}')
@@ -165,6 +170,22 @@ class Communicator:
                     topic_name,
                     self.PUB_QOS_SIZE
                 )
+
+        # Mirror JointState publishers — same positions, broadcast on the
+        # leader joint_states topic so rosbag (which already subscribes
+        # there) captures the model's commanded state during inference.
+        # For 'mobile', the command topic and state topic are the same
+        # (/cmd_vel), so no mirror is needed — skip it.
+        for name, state_topic in self.joint_topics.items():
+            if 'mobile' in name.lower():
+                continue
+            if name not in self.joint_publishers:
+                continue  # no command publisher → nothing to mirror
+            self.state_mirror_publishers[name] = self.node.create_publisher(
+                JointState,
+                state_topic,
+                self.PUB_QOS_SIZE
+            )
 
         # Status publisher
         self.status_publisher = self.node.create_publisher(
@@ -319,9 +340,27 @@ class Communicator:
     # ========== Publishers ==========
 
     def publish_action(self, joint_msg_datas: Dict[str, Any]):
-        """Publish joint commands (for inference mode)."""
+        """Publish joint commands (for inference mode).
+
+        Also mirrors JointTrajectory positions as a JointState on the
+        corresponding leader joint_states topic so rosbag captures the
+        model's commands while recording during inference.
+        """
+        now = self.node.get_clock().now().to_msg()
         for name, joint_msg in joint_msg_datas.items():
             self.joint_publishers[name].publish(joint_msg)
+
+            # Mirror only JointTrajectory (Twist on /cmd_vel is already on
+            # the recorded topic, no mirror needed).
+            mirror_pub = self.state_mirror_publishers.get(name)
+            if mirror_pub is None or not isinstance(joint_msg, JointTrajectory):
+                continue
+            state_msg = JointState()
+            state_msg.header.stamp = now
+            state_msg.name = list(joint_msg.joint_names)
+            if joint_msg.points:
+                state_msg.position = [float(p) for p in joint_msg.points[0].positions]
+            mirror_pub.publish(state_msg)
 
     def publish_action_chunk(self, msg: JointTrajectory):
         """Publish full action chunk for 3D trajectory visualization."""

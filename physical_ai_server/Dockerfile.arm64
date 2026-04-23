@@ -24,6 +24,7 @@ RUN apt-get update && apt-get install -y \
     nano \
     ros-${ROS_DISTRO}-rmw-zenoh-cpp \
     python3-pip \
+    docker.io \
     && rm -rf /var/lib/apt/lists/*
 
 ENV COLCON_WS=/root/ros2_ws
@@ -64,7 +65,7 @@ RUN bash -c "source /opt/ros/${ROS_DISTRO}/setup.bash && \
 
 # Install Python utilities (add PyPI as extra index for packages not on Jetson index)
 # numpy<2 required: base image OpenCV is compiled against NumPy 1.x
-RUN pip install psutil matplotlib pandas huggingface_hub --extra-index-url https://pypi.org/simple && \
+RUN pip install psutil matplotlib pandas huggingface_hub mcap mcap-ros2-support pyarrow --extra-index-url https://pypi.org/simple && \
     pip install "numpy<2" --extra-index-url https://pypi.org/simple
 
 # Setup bashrc

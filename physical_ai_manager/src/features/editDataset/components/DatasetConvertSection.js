@@ -52,6 +52,7 @@ export default function DatasetConvertSection({ isEditable = true }) {
   const [hasSeenConverting, setHasSeenConverting] = useState(false);
   const [convertError, setConvertError] = useState('');
   const [pendingMergeConvert, setPendingMergeConvert] = useState(false);
+  const [pendingSingleConvert, setPendingSingleConvert] = useState(false);
 
   // ----- isConverting tracks the backend phase ----------------------------
   useEffect(() => {
@@ -69,7 +70,11 @@ export default function DatasetConvertSection({ isEditable = true }) {
   }, [taskStatus.phase, isConverting, hasSeenConverting]);
 
   // ----- single convert ---------------------------------------------------
-  const handleConvertMp4 = useCallback(async () => {
+  // Same two-step pattern as merge: dispatch taskInfo first, then fire
+  // sendRecordCommand from a useEffect once Redux has propagated the update
+  // (sendRecordCommand reads taskInfo via closure, so it must see the new
+  // value before being invoked).
+  const handleConvertMp4 = useCallback(() => {
     if (!singleTaskName) {
       setConvertError('Please pick a task folder to convert');
       return;
@@ -77,10 +82,6 @@ export default function DatasetConvertSection({ isEditable = true }) {
     setConvertError('');
     setIsConverting(true);
 
-    // The backend reads task_info.task_name from the request, so we have to
-    // populate Redux taskInfo before invoking sendRecordCommand. We restore
-    // taskInstruction to a single-element list so the backend takes the
-    // single-convert branch (>= 2 source folders means merge & convert).
     dispatch(
       setTaskInfo({
         ...info,
@@ -88,18 +89,28 @@ export default function DatasetConvertSection({ isEditable = true }) {
         taskInstruction: [singleTaskName],
       })
     );
+    setPendingSingleConvert(true);
+  }, [singleTaskName, info, dispatch]);
 
-    try {
-      const result = await sendRecordCommand('convert_mp4');
-      if (!result?.success) {
-        setConvertError(result?.message || 'Conversion failed');
+  useEffect(() => {
+    if (!pendingSingleConvert) return;
+    if (info.taskName !== singleTaskName) return;
+    setPendingSingleConvert(false);
+
+    const fire = async () => {
+      try {
+        const result = await sendRecordCommand('convert_mp4');
+        if (!result?.success) {
+          setConvertError(result?.message || 'Conversion failed');
+          setIsConverting(false);
+        }
+      } catch (error) {
+        setConvertError(error.message || 'Failed to start conversion');
         setIsConverting(false);
       }
-    } catch (error) {
-      setConvertError(error.message || 'Failed to start conversion');
-      setIsConverting(false);
-    }
-  }, [singleTaskName, info, dispatch, sendRecordCommand]);
+    };
+    fire();
+  }, [pendingSingleConvert, info.taskName, singleTaskName, sendRecordCommand]);
 
   // ----- merge & convert --------------------------------------------------
   // Same two-step pattern as the original InfoPanel.js handler: dispatch

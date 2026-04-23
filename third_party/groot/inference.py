@@ -290,6 +290,16 @@ class GR00TInference:
             if modality_key in self.policy_info["state"]:
                 joints[modality_key] = group
         self.robot_info["joints"] = joints
+
+        # Sensor-backed state modalities. The training pipeline stores mobile
+        # as a joint-like 3-dim modality, but robot_client keeps odom/cmd_vel
+        # as sensors (semantically correct — they aren't joints). Bridge here.
+        sensor_states = {}
+        sensors_cfg = self.robot._config.get("sensors", {})
+        if "mobile" in self.policy_info["state"] and "odom" in sensors_cfg:
+            sensor_states["mobile"] = "odom"
+        self.robot_info["sensor_states"] = sensor_states
+
         self.logger.info("Robot info: %s", self.robot_info)
 
     def get_action_chunk(self, request) -> dict:
@@ -334,6 +344,21 @@ class GR00TInference:
             if positions is None or len(positions) == 0:
                 return self.fail(f"Missing joint group: {modality_key}")
             state_obs[modality_key] = positions[np.newaxis, np.newaxis, :]  # (1,1,D)
+
+        # Sensor-backed state modalities (e.g. mobile ← odom).
+        for modality_key, sensor_name in self.robot_info.get("sensor_states", {}).items():
+            if sensor_name == "odom":
+                odom = self.robot.get_odom()
+                if odom is None:
+                    return self.fail(f"Missing sensor: {sensor_name}")
+                vec = np.array([
+                    float(odom["linear_velocity"][0]),
+                    float(odom["linear_velocity"][1]),
+                    float(odom["angular_velocity"][2]),
+                ], dtype=np.float32)
+                state_obs[modality_key] = vec[np.newaxis, np.newaxis, :]  # (1,1,3)
+            else:
+                return self.fail(f"Unsupported sensor modality: {sensor_name}")
 
         language_obs = {key: [[task]] for key in self.policy_info["language"]}
 

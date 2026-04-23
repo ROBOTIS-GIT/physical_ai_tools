@@ -27,9 +27,11 @@ import RobotViewer3D from '../components/RobotViewer3D';
 import InferencePanel from '../components/InferencePanel';
 import RecordTopicMonitor from '../components/RecordTopicMonitor';
 import { setIsFirstLoadFalse } from '../features/ui/uiSlice';
+import { useRosServiceCaller } from '../hooks/useRosServiceCaller';
 
 export default function InferencePage({ isActive = true }) {
   const dispatch = useDispatch();
+  const { sendRecordCommand } = useRosServiceCaller();
 
   // Toast limit implementation using useToasterStore
   const { toasts } = useToasterStore();
@@ -53,6 +55,13 @@ export default function InferencePage({ isActive = true }) {
   useEffect(() => {
     dispatch(setIsFirstLoadFalse('inference'));
   }, [dispatch, isFirstLoad]);
+
+  // Refresh topic subscriptions when entering the page.
+  useEffect(() => {
+    if (isActive) {
+      sendRecordCommand('refresh_topics').catch(() => {});
+    }
+  }, [isActive, sendRecordCommand]);
 
   const classMainContainer = 'h-full flex flex-col overflow-hidden';
   const classContentsArea = 'flex-1 flex min-h-0 pt-0 px-0 justify-center items-start';

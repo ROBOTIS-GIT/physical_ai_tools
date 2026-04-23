@@ -198,7 +198,7 @@ export default function InferenceControlPanel() {
   const startEnabled = isIdle || isPaused;
   const stopEnabled = isInferencing;
   const clearEnabled = isModelLoaded;
-  const recordEnabled = isModelLoaded && !isRecording;
+  const recordEnabled = isModelLoaded && !isRecording && !!taskInfo.recordInferenceMode;
 
   const handleKeyAction = useCallback(
     (e) => {

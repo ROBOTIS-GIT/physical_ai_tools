@@ -367,7 +367,19 @@ class RosbagToLerobotConverter:
                 set(m.get("instruction", "default_task") for m in task_markers)
             )
         else:
-            episode_data.tasks = ["default_task"]
+            # Fall back to episode_info.json which records the
+            # task_instruction from the recording session.
+            episode_info_path = bag_path / "episode_info.json"
+            instruction = ""
+            if episode_info_path.exists():
+                try:
+                    import json as _json
+                    with open(episode_info_path) as f:
+                        info = _json.load(f)
+                    instruction = str(info.get("task_instruction", "") or "")
+                except Exception as e:
+                    self._log_warning(f"Failed to read {episode_info_path}: {e}")
+            episode_data.tasks = [instruction or "default_task"]
 
         return episode_data
 

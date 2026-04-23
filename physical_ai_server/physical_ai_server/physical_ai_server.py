@@ -346,8 +346,14 @@ class PhysicalAIServer(Node):
             task_info=task_info
         )
 
-        control_hz = getattr(task_info, 'control_hz', 0) or 10
+        control_hz = getattr(task_info, 'control_hz', 0) or 100
+        inference_hz = getattr(task_info, 'inference_hz', 0) or 15
+        chunk_align_window_s = getattr(task_info, 'chunk_align_window_s', 0.0)
+        if chunk_align_window_s <= 0.0:
+            chunk_align_window_s = 0.3
         self._control_hz = control_hz
+        self._inference_hz = inference_hz
+        self._chunk_align_window_s = chunk_align_window_s
 
         # Stop previous timer before creating a new one
         if hasattr(self, 'timer_manager') and self.timer_manager is not None:
@@ -925,7 +931,22 @@ class PhysicalAIServer(Node):
         - RERECORD: Cancel current recording (discard)
         """
         try:
-            if request.command in (
+            if request.command == SendCommand.Request.REFRESH_TOPICS:
+                # Re-run prepare so the topic monitor picks up topics that
+                # appeared after the initial robot-type setup (e.g. robot
+                # started after type was selected).
+                if (self.communicator is not None
+                        and self.communicator.rosbag_service_available):
+                    rosbag_topics = self.communicator.get_all_topics()
+                    self.communicator.prepare_rosbag(topics=rosbag_topics)
+                    response.success = True
+                    response.message = f'Topics refreshed ({len(rosbag_topics)} topics)'
+                else:
+                    response.success = False
+                    response.message = 'Communicator not initialized'
+                return response
+
+            elif request.command in (
                 SendCommand.Request.START_RECORD,
                 SendCommand.Request.START_SEGMENT,
             ):
@@ -1107,6 +1128,8 @@ class PhysicalAIServer(Node):
                         service_prefix=service_prefix,
                         on_chunk_received=self.communicator.publish_action_chunk,
                         control_hz=self._control_hz,
+                        inference_hz=self._inference_hz,
+                        chunk_align_window_s=self._chunk_align_window_s,
                         client_cb_group=self._client_cb_group,
                     )
 
@@ -1129,9 +1152,11 @@ class PhysicalAIServer(Node):
                 self.start_recording_time = time.perf_counter()
 
             elif request.command == SendCommand.Request.CONVERT_MP4:
-                # Handle MP4 conversion command
+                # Handle MP4 conversion command. Folder names under rosbag2
+                # are stored as-is (e.g. "Task_1_1_MCAP") without a
+                # {robot_type}_ prefix, so use task_info.task_name directly.
                 task_info = request.task_info
-                task_name = f'{self.robot_type}_{task_info.task_name}'
+                task_name = task_info.task_name
                 source_folders = [s for s in task_info.task_instruction if s.strip()]
 
                 base_path = Path('/workspace/rosbag2')
@@ -1154,16 +1179,13 @@ class PhysicalAIServer(Node):
                     # === Merge & Convert mode (requires at least 2 sources) ===
                     dataset_path = base_path / task_name
 
-                    # Validate source folders
+                    # Validate source folders (raw folder names under rosbag2).
                     source_paths = []
                     for folder_name in source_folders:
                         if folder_name.startswith('/'):
                             src = Path(folder_name)
                         else:
-                            # Try with robot_type prefix first, then raw name
-                            src = base_path / f'{self.robot_type}_{folder_name}'
-                            if not src.exists():
-                                src = base_path / folder_name
+                            src = base_path / folder_name
                         if not src.exists():
                             response.success = False
                             response.message = f'Source folder not found: {src}'

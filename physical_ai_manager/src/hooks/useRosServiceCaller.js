@@ -109,6 +109,7 @@ export function useRosServiceCaller() {
           merge_episode: TaskCommand.MERGE_EPISODE,
           discard_episode: TaskCommand.DISCARD_EPISODE,
           set_task_info: TaskCommand.SET_TASK_INFO,
+          refresh_topics: TaskCommand.REFRESH_TOPICS,
         };
         const command_enum = commandEnumMap[command];
         if (command_enum === undefined) {
@@ -155,7 +156,13 @@ export function useRosServiceCaller() {
             policy_path: String(taskInfo.policyPath || ''),
             record_inference_mode: Boolean(taskInfo.recordInferenceMode),
             tags: [],
-            control_hz: Number(taskInfo.controlHz || 10),
+            control_hz: Number(taskInfo.controlHz || 100),
+            inference_hz: Number(taskInfo.inferenceHz || 15),
+            chunk_align_window_s: Number(
+              taskInfo.chunkAlignWindowS !== '' && taskInfo.chunkAlignWindowS != null
+                ? taskInfo.chunkAlignWindowS
+                : 0.3
+            ),
           },
           command: Number(command_enum),
           segment_index: Number(options.segmentIndex || 0),

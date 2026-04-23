@@ -19,6 +19,7 @@ RUN apt-get update && apt-get install -y \
     nano \
     ros-${ROS_DISTRO}-rmw-zenoh-cpp \
     python3-pip \
+    docker.io \
     && rm -rf /var/lib/apt/lists/*
 
 ENV COLCON_WS=/root/ros2_ws

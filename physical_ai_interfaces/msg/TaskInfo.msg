@@ -7,3 +7,5 @@ string policy_path
 string[] tags
 bool record_inference_mode
 uint16 control_hz
+uint16 inference_hz
+float32 chunk_align_window_s

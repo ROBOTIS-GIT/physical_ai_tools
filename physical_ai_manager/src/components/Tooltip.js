@@ -14,32 +14,49 @@
 //
 // Author: Kiwoong Park
 
-import React, { useState } from 'react';
+import React, { useState, useRef, useLayoutEffect } from 'react';
+import { createPortal } from 'react-dom';
 import clsx from 'clsx';
 
 const Tooltip = ({ children, content, disabled = false, className, position = 'top' }) => {
   const [isVisible, setIsVisible] = useState(false);
+  const [coords, setCoords] = useState({ left: 0, top: 0 });
+  const anchorRef = useRef(null);
+
+  const isBottom = position === 'bottom';
+
+  // Reposition on show to follow the anchor element. Rendered via portal
+  // into body so that ancestor overflow:auto/hidden does not clip it.
+  useLayoutEffect(() => {
+    if (!isVisible || !anchorRef.current) return;
+    const rect = anchorRef.current.getBoundingClientRect();
+    setCoords({
+      left: rect.left + rect.width / 2,
+      top: isBottom ? rect.bottom + 8 : rect.top - 8,
+    });
+  }, [isVisible, isBottom]);
 
   if (disabled) {
     return <div className={className}>{children}</div>;
   }
 
-  const isBottom = position === 'bottom';
-
   return (
-    <div
-      className={clsx('relative', className)}
-      onMouseEnter={() => setIsVisible(true)}
-      onMouseLeave={() => setIsVisible(false)}
-    >
-      {children}
-      {isVisible && (
+    <>
+      <div
+        ref={anchorRef}
+        className={clsx('inline-flex', className)}
+        onMouseEnter={() => setIsVisible(true)}
+        onMouseLeave={() => setIsVisible(false)}
+      >
+        {children}
+      </div>
+      {isVisible && createPortal(
         <div
           className={clsx(
-            'absolute z-50 px-3 py-2 text-sm font-medium text-white bg-gray-900 rounded-lg shadow-lg left-1/2 transform -translate-x-1/2 transition-opacity duration-200 opacity-100 whitespace-nowrap max-w-xs',
-            isBottom ? 'top-full mt-2' : 'bottom-full mb-2'
+            'fixed z-[9999] px-3 py-2 text-sm font-medium text-white bg-gray-900 rounded-lg shadow-lg max-w-xs break-words',
+            isBottom ? 'transform -translate-x-1/2' : 'transform -translate-x-1/2 -translate-y-full'
           )}
-          style={{ pointerEvents: 'none' }}
+          style={{ left: coords.left, top: coords.top, pointerEvents: 'none' }}
         >
           {content}
           <div
@@ -50,9 +67,10 @@ const Tooltip = ({ children, content, disabled = false, className, position = 't
                 : 'top-full border-t-4 border-t-gray-900'
             )}
           />
-        </div>
+        </div>,
+        document.body
       )}
-    </div>
+    </>
   );
 };
 
