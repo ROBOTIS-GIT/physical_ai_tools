@@ -104,7 +104,6 @@ class PhysicalAIServer(Node):
         self._client_cb_group = ReentrantCallbackGroup()
 
         self.params = None
-        self.total_joint_order = None
         self.on_recording = False
         self.on_inference = False
         self.operation_mode = 'collection'
@@ -126,8 +125,6 @@ class PhysicalAIServer(Node):
         self._setup_timer_callbacks()
 
         self.previous_data_manager_status = None
-
-        self.goal_repo_id = None
 
     def _init_core_components(self):
         self.communicator: Optional[Communicator] = None
@@ -304,10 +301,6 @@ class PhysicalAIServer(Node):
             param_names=self.joint_order_list
         )
 
-        self.total_joint_order = []
-        for joint_list in self.joint_order.values():
-            self.total_joint_order.extend(joint_list)
-
         # Log loaded parameters
         log_parameters(self, self.params)
         log_parameters(self, self.joint_order)
@@ -407,7 +400,6 @@ class PhysicalAIServer(Node):
             self.training_timer = None
 
         self.params = None
-        self.total_joint_order = None
         self.joint_order = None
 
     def set_hf_user_callback(self, request, response):
@@ -1697,23 +1689,8 @@ class PhysicalAIServer(Node):
             # continuously publish TaskStatus with the DataManager's
             # recording phase (e.g. STOPPED for between_segments),
             # which disables the Inference Start button on the frontend.
-            # The timer will be started later when the user actually
-            # begins recording or inference.
-            if self.data_manager is None:
-                try:
-                    self.data_manager = DataManager(
-                        save_root_path=self.DEFAULT_SAVE_ROOT_PATH,
-                        robot_type=self.robot_type,
-                        task_info=None,
-                    )
-                    restored = len(self.data_manager._segments_meta)
-                    if restored:
-                        self.get_logger().info(
-                            f'Restored {restored} pending segment(s) from '
-                            f'{DataManager.PENDING_ROSBAG_PATH}')
-                except Exception as e:
-                    self.get_logger().warning(
-                        f'Failed to eagerly init DataManager: {e}')
+            # DataManager is created on demand by START_SEGMENT once the
+            # user supplies a task_name.
 
             response.success = True
             response.message = f'Robot type set to {self.robot_type}'
@@ -2210,9 +2187,6 @@ class PhysicalAIServer(Node):
         _cleanup_hf_api_worker method, preventing the main process.
         from blocking during shutdown.
         """
-        import threading
-        import time
-
         def cleanup_worker_thread():
             """Worker thread to run _cleanup_hf_api_worker."""
             try:

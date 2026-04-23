@@ -143,7 +143,7 @@ export function useRosServiceCaller() {
         const primitiveDescription = String(
           options.primitiveDescription !== undefined
             ? options.primitiveDescription
-            : pendingPrimitive || taskInfo.primitiveDescription || ''
+            : pendingPrimitive || ''
         );
 
         const request = {

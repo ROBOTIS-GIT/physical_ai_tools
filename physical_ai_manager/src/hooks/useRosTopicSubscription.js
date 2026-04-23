@@ -323,7 +323,6 @@ export function useRosTopicSubscription() {
             currentSegmentIndex: msg.current_segment_index || 0,
             segmentCount: msg.segment_count || 0,
             segmentPrimitives: msg.segment_primitives || [],
-            mergeStatus: msg.merge_status || 'none',
             userId: msg.task_info?.user_id || '',
             usedStorageSize: msg.used_storage_size || 0,
             totalStorageSize: msg.total_storage_size || 0,

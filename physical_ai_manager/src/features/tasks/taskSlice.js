@@ -45,7 +45,6 @@ const initialState = {
     currentSegmentIndex: 0,
     segmentCount: 0,
     segmentPrimitives: [],
-    mergeStatus: 'none',
     userId: '',
     usedStorageSize: 0,
     totalStorageSize: 0,
