@@ -2,29 +2,28 @@
 # Constants
 ########################################
 # command
-uint8 IDLE = 0
-uint8 START_RECORD = 1
-uint8 START_INFERENCE = 2
-uint8 STOP = 3
-uint8 MOVE_TO_NEXT = 4
-uint8 RERECORD = 5
-uint8 FINISH = 6
-uint8 SKIP_TASK = 7
-uint8 CANCEL = 8
-uint8 CONVERT_MP4 = 9
-uint8 STOP_INFERENCE = 10
-uint8 RESUME_INFERENCE = 11
-uint8 START_INFERENCE_RECORD = 12
-uint8 STOP_INFERENCE_RECORD = 13
-uint8 CANCEL_INFERENCE_RECORD = 14
-uint8 START_SEGMENT = 20
-uint8 STOP_SEGMENT = 21
-uint8 DISCARD_SEGMENT = 22
-uint8 FINISH_EPISODE = 23
-uint8 MERGE_EPISODE = 24
-uint8 DISCARD_EPISODE = 25
-uint8 SET_TASK_INFO = 26
-uint8 REFRESH_TOPICS = 15
+uint8 IDLE                        = 0
+uint8 START_RECORD                = 1
+uint8 START_INFERENCE             = 2
+uint8 STOP                        = 3
+uint8 MOVE_TO_NEXT                = 4
+uint8 RERECORD                    = 5
+uint8 FINISH                      = 6
+uint8 SKIP_TASK                   = 7
+uint8 CANCEL                      = 8
+uint8 CONVERT_MP4                 = 9
+uint8 STOP_INFERENCE              = 10
+uint8 RESUME_INFERENCE            = 11
+uint8 START_INFERENCE_RECORD      = 12
+uint8 STOP_INFERENCE_RECORD       = 13
+uint8 CANCEL_INFERENCE_RECORD     = 14
+uint8 REFRESH_TOPICS              = 15
+uint8 START_SEGMENT               = 16
+uint8 STOP_SEGMENT                = 17
+uint8 DISCARD_SEGMENT             = 18
+uint8 FINISH_EPISODE              = 19
+uint8 DISCARD_EPISODE             = 20
+uint8 SET_TASK_INFO               = 21
 
 uint8 command
 TaskInfo task_info

@@ -603,9 +603,7 @@ class PhysicalAIServer(Node):
                     self.communicator.start_rosbag(rosbag_uri=rosbag_path)
 
             elif current == 'save' and previous == 'run':
-                urdf_path = self.params.get('urdf_path', '')
-                if urdf_path:
-                    self.data_manager.save_robotis_metadata(urdf_path=urdf_path)
+                # Legacy state transition (retained for backward compat).
                 self.communicator.stop_rosbag()
 
             elif current == 'stop' and previous == 'run':
@@ -625,16 +623,12 @@ class PhysicalAIServer(Node):
             self.get_logger().error(error_msg)
 
     def stop_current_segment(self):
-        """Stop the active segment, save its rosbag, refresh episode_info.json."""
+        """Stop the active segment and flush the rosbag. Metadata is not
+        written here — it's consolidated on finish_episode."""
         if self.data_manager is None:
             return
         self.communicator.stop_rosbag()
         self.data_manager.stop_segment()
-        urdf_path = self.params.get('urdf_path', '')
-        if urdf_path:
-            self.data_manager.save_robotis_metadata(urdf_path=urdf_path)
-        else:
-            self.data_manager._write_episode_info()
         self.previous_data_manager_status = 'idle'
 
     def finish_current_episode(self):
@@ -1103,12 +1097,6 @@ class PhysicalAIServer(Node):
                     except Exception as e:
                         response.success = False
                         response.message = f'Discard episode failed: {e}'
-
-            elif request.command == SendCommand.Request.MERGE_EPISODE:
-                # Deprecated — flow no longer has a merge step.
-                response.success = True
-                response.message = (
-                    'MERGE_EPISODE is deprecated; use FINISH_EPISODE')
 
             elif request.command == SendCommand.Request.SET_TASK_INFO:
                 # Cache task info from the UI so the joystick flow can

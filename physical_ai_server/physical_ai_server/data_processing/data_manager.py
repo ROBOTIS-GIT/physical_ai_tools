@@ -396,12 +396,6 @@ class DataManager:
             str(self._current_segment_index),
         )
 
-    def save_robotis_metadata(self, urdf_path: str = None, needs_review: bool = False):
-        """No-op under the direct-record flow (metadata is written on
-        finish_episode). Kept for backward compatibility with legacy
-        callers."""
-        return
-
     def toggle_previous_episode_needs_review(self):
         """Toggle the previous episode's needs_review flag.
 

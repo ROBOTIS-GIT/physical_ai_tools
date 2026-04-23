@@ -106,7 +106,6 @@ export function useRosServiceCaller() {
           stop_segment: TaskCommand.STOP_SEGMENT,
           discard_segment: TaskCommand.DISCARD_SEGMENT,
           finish_episode: TaskCommand.FINISH_EPISODE,
-          merge_episode: TaskCommand.MERGE_EPISODE,
           discard_episode: TaskCommand.DISCARD_EPISODE,
           set_task_info: TaskCommand.SET_TASK_INFO,
           refresh_topics: TaskCommand.REFRESH_TOPICS,
