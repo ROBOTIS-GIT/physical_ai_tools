@@ -27,6 +27,10 @@ import threading
 import time
 import xml.etree.ElementTree as ET
 
+from rclpy.logging import get_logger
+
+_LOGGER = get_logger('data_manager')
+
 from huggingface_hub import (
     DatasetCard,
     DatasetCardData,
@@ -120,7 +124,7 @@ class DataManager:
                 if os.path.isdir(path) and item.isdigit():
                     existing.append(int(item))
         except OSError as e:
-            print(f'[DataManager] Error scanning {rosbag_dir}: {e}')
+            _LOGGER.error(f'Error scanning {rosbag_dir}: {e}')
             return 0
         return (max(existing) + 1) if existing else 0
 
@@ -160,8 +164,6 @@ class DataManager:
             cur += fc
         return out
 
-    # (restore_pending / _prune_orphan_segments removed — no scratch flow)
-
     def get_status(self):
         return self._status
 
@@ -183,7 +185,7 @@ class DataManager:
         self._start_time_s = self._segment_start_time_s
         if self._task_info and getattr(self._task_info, 'task_instruction', None):
             self.current_instruction = self._task_info.task_instruction[0]
-        print(f'[DataManager] Segment {self._current_segment_index} started '
+        _LOGGER.info(f'Segment {self._current_segment_index} started '
               f'(primitive={primitive_description!r})')
 
     def stop_segment(self):
@@ -208,7 +210,7 @@ class DataManager:
         self._start_time_s = 0
         self._segment_start_time_s = 0
         self._pending_primitive = ''
-        print(f'[DataManager] Segment {len(self._segments_meta) - 1} stopped '
+        _LOGGER.info(f'Segment {len(self._segments_meta) - 1} stopped '
               f'({duration:.2f}s, {frame_count} frames @ {fps}Hz)')
 
     def discard_segment(self, idx: int):
@@ -240,7 +242,7 @@ class DataManager:
                     shutil.rmtree(ep_dir)
             except OSError:
                 pass
-        print(f'[DataManager] Segment {idx} discarded. '
+        _LOGGER.info(f'Segment {idx} discarded. '
               f'Remaining: {len(self._segments_meta)}')
 
     def discard_episode(self):
@@ -254,7 +256,7 @@ class DataManager:
         self._segments_meta = []
         self._current_segment_index = 0
         self._status = 'idle'
-        print('[DataManager] Episode discarded')
+        _LOGGER.info('Episode discarded')
 
     def finish_episode(self, urdf_path: str = None):
         """Finalise the in-progress episode: consolidate mcaps, write
@@ -295,12 +297,12 @@ class DataManager:
             try:
                 self._write_urdf_stripped(urdf_path, urdf_dest)
             except Exception as e:
-                print(f'[DataManager] URDF copy failed: {e}')
+                _LOGGER.error(f'URDF copy failed: {e}')
 
         try:
             self._write_episode_info_v1(ep_dir, self._task_info, ep_idx)
         except Exception as e:
-            print(f'[DataManager] Failed to write episode_info: {e}')
+            _LOGGER.error(f'Failed to write episode_info: {e}')
 
         # Clean up the segments/ working area.
         shutil.rmtree(seg_root, ignore_errors=True)
@@ -309,7 +311,7 @@ class DataManager:
         self._current_segment_index = 0
         self._record_episode_count = ep_idx + 1
         self._status = 'idle'
-        print(f'[DataManager] Episode {ep_idx} finished -> {ep_dir}')
+        _LOGGER.info(f'Episode {ep_idx} finished -> {ep_dir}')
         return Path(ep_dir)
 
     @staticmethod
@@ -351,7 +353,7 @@ class DataManager:
         info_path = os.path.join(archive_dir, 'episode_info.json')
         with open(info_path, 'w') as f:
             json.dump(meta, f, indent=2)
-        print(f'[ROBOTIS] episode_info.json written: {info_path}')
+        _LOGGER.info(f'episode_info.json written: {info_path}')
 
     # ========== Legacy wrappers (single-segment semantics) ==========
 
@@ -407,7 +409,7 @@ class DataManager:
         """
         prev_episode = self._record_episode_count - 1
         if prev_episode < 0:
-            print('[DataManager] No previous episode to toggle')
+            _LOGGER.info('No previous episode to toggle')
             return None
 
         episode_path = self._save_rosbag_path + f'/{prev_episode}'
@@ -419,7 +421,7 @@ class DataManager:
             if os.path.exists(legacy_path):
                 meta_data_path = legacy_path
             else:
-                print(f'[DataManager] No episode_info.json at: {meta_data_path}')
+                _LOGGER.warning(f'No episode_info.json at: {meta_data_path}')
                 return None
 
         try:
@@ -432,11 +434,11 @@ class DataManager:
             with open(meta_data_path, 'w') as f:
                 json.dump(meta_data, f, indent=2)
 
-            print(f'[DataManager] Episode {prev_episode} '
+            _LOGGER.info(f'Episode {prev_episode} '
                   f'needs_review: {current} -> {not current}')
             return not current
         except Exception as e:
-            print(f'[DataManager] Failed to toggle episode {prev_episode}: {e}')
+            _LOGGER.error(f'Failed to toggle episode {prev_episode}: {e}')
             return None
 
     def _copy_urdf_with_meshes(
@@ -491,7 +493,7 @@ class DataManager:
             # Resolve the actual file path
             actual_path = self._resolve_mesh_path(filename, ros_pkg_paths)
             if actual_path is None or not os.path.exists(actual_path):
-                print(f'[ROBOTIS] Warning: Mesh not found: {filename}')
+                _LOGGER.warning(f'Warning: Mesh not found: {filename}')
                 continue
 
             # Check if already copied
@@ -512,7 +514,7 @@ class DataManager:
                 shutil.copy2(actual_path, dest_mesh_path)
                 mesh_count += 1
             except Exception as e:
-                print(f'[ROBOTIS] Warning: Failed to copy mesh {actual_path}: {e}')
+                _LOGGER.warning(f'Warning: Failed to copy mesh {actual_path}: {e}')
                 continue
 
             # Update URDF reference to relative path
@@ -522,7 +524,7 @@ class DataManager:
 
         # Write modified URDF
         tree.write(urdf_dest, encoding='unicode', xml_declaration=True)
-        print(f'[ROBOTIS] Copied {mesh_count} mesh files')
+        _LOGGER.info(f'Copied {mesh_count} mesh files')
 
     def _resolve_mesh_path(self, filename: str, search_paths: list) -> str:
         """
@@ -733,7 +735,7 @@ class DataManager:
         try:
             status, data = result_queue.get(timeout=timeout_s)
         except queue.Empty:
-            print(f'Token validation timed out after {timeout_s}s '
+            _LOGGER.error(f'Token validation timed out after {timeout_s}s '
                   f'for endpoint {endpoint}')
             return None
 
@@ -796,7 +798,7 @@ class DataManager:
             '--repo-type', repo_type,
             '--local-dir', str(save_dir),
         ]
-        print(
+        _LOGGER.info(
             f'Starting download of {repo_id} ({repo_type}) from '
             f'{endpoint or "<default endpoint>"} via hf CLI'
         )
@@ -869,7 +871,7 @@ class DataManager:
                     line = ansi_re.sub('', raw.decode('utf-8', errors='replace')).strip()
                     if not line:
                         continue
-                    print(f'[hf cli] {line}')
+                    _LOGGER.info(f'[hf cli] {line}')
         finally:
             try:
                 os.close(master_fd)
@@ -878,10 +880,10 @@ class DataManager:
 
         return_code = proc.wait()
         if return_code == 0:
-            print(f'Download completed: {repo_id}')
+            _LOGGER.info(f'Download completed: {repo_id}')
             return str(save_dir)
 
-        print(f'Error downloading HuggingFace repo (exit={return_code}): {repo_id}')
+        _LOGGER.error(f'Error downloading HuggingFace repo (exit={return_code}): {repo_id}')
         return False
 
     @classmethod
@@ -947,7 +949,7 @@ class DataManager:
             license='apache-2.0',
         )
         card.save(str(readme_path))
-        print('Dataset README.md created using HuggingFace Hub')
+        _LOGGER.info('Dataset README.md created using HuggingFace Hub')
 
     @staticmethod
     def _create_model_card(local_dir, readme_path):
@@ -974,10 +976,10 @@ class DataManager:
                 try:
                     with open(config_path, 'r', encoding='utf-8') as f:
                         train_config = json.load(f)
-                    print(f'Found train_config.json at {config_path}')
+                    _LOGGER.info(f'Found train_config.json at {config_path}')
                     break
                 except Exception as e:
-                    print(f'Error reading {config_path}: {e}')
+                    _LOGGER.error(f'Error reading {config_path}: {e}')
                     continue
 
         # If not found, search recursively (slower fallback)
@@ -986,14 +988,14 @@ class DataManager:
                 try:
                     with open(config_path, 'r', encoding='utf-8') as f:
                         train_config = json.load(f)
-                    print(f'Found train_config.json at {config_path}')
+                    _LOGGER.info(f'Found train_config.json at {config_path}')
                     break
                 except Exception as e:
-                    print(f'Error reading {config_path}: {e}')
+                    _LOGGER.error(f'Error reading {config_path}: {e}')
                     continue
 
         if train_config is None:
-            print(f'train_config.json not found in {local_dir}')
+            _LOGGER.info(f'train_config.json not found in {local_dir}')
 
         dataset_repo = ''
         if train_config:
@@ -1025,7 +1027,7 @@ class DataManager:
             template_path=template_path,
         )
         card.save(str(readme_path))
-        print('Model README.md created using HuggingFace Hub')
+        _LOGGER.info('Model README.md created using HuggingFace Hub')
 
     @staticmethod
     def _create_readme_if_not_exists(local_dir, repo_type):
@@ -1038,18 +1040,18 @@ class DataManager:
         readme_path = Path(local_dir) / 'README.md'
 
         if readme_path.exists():
-            print(f'README.md already exists in {local_dir}')
+            _LOGGER.info(f'README.md already exists in {local_dir}')
             return
 
-        print(f'Creating README.md in {local_dir}')
+        _LOGGER.info(f'Creating README.md in {local_dir}')
 
         try:
             if repo_type == 'dataset':
                 DataManager._create_dataset_card(local_dir, readme_path)
         except Exception as e:
-            print(f'Warning: Failed to create README.md: {e}')
+            _LOGGER.info(f'Warning: Failed to create README.md: {e}')
             import traceback
-            print(f'Traceback: {traceback.format_exc()}')
+            _LOGGER.info(f'Traceback: {traceback.format_exc()}')
 
     @staticmethod
     def upload_huggingface_repo(
@@ -1065,27 +1067,27 @@ class DataManager:
             # Verify authentication first
             try:
                 user_info = api.whoami()
-                print(
+                _LOGGER.info(
                     f'Authenticated as: {user_info["name"]} '
                     f'({endpoint or "<default endpoint>"})'
                 )
             except Exception as auth_e:
-                print(f'Authentication failed: {auth_e}')
-                print(
+                _LOGGER.info(f'Authentication failed: {auth_e}')
+                _LOGGER.info(
                     'Please make sure a valid token is registered for this '
                     f'endpoint: {endpoint or "<default>"}'
                 )
                 return False
 
             # Create repository
-            print(f'Creating HuggingFace repository: {repo_id}')
+            _LOGGER.info(f'Creating HuggingFace repository: {repo_id}')
             url = api.create_repo(
                 repo_id,
                 repo_type=repo_type,
                 private=False,
                 exist_ok=True,
             )
-            print(f'Repository created/verified: {url}')
+            _LOGGER.info(f'Repository created/verified: {url}')
 
             # Delete .cache folder before upload
             DataManager._delete_dot_cache_folder_before_upload(local_dir)
@@ -1095,7 +1097,7 @@ class DataManager:
                 local_dir, repo_type
             )
 
-            print(f'Uploading folder {local_dir} to repository {repo_id}')
+            _LOGGER.info(f'Uploading folder {local_dir} to repository {repo_id}')
 
             # Capture stdout for logging
             from contextlib import redirect_stdout
@@ -1118,19 +1120,19 @@ class DataManager:
             # Create tag
             if repo_type == 'dataset':
                 try:
-                    print(f'Creating tag for {repo_id} ({repo_type})')
+                    _LOGGER.info(f'Creating tag for {repo_id} ({repo_type})')
                     api.create_tag(repo_id=repo_id, tag='v2.1', repo_type=repo_type)
-                    print(f'Tag "v2.1" created successfully for {repo_id}')
+                    _LOGGER.info(f'Tag "v2.1" created successfully for {repo_id}')
                 except Exception as e:
-                    print(f'Warning: Failed to create tag for {repo_id} ({repo_type}): {e}')
+                    _LOGGER.info(f'Warning: Failed to create tag for {repo_id} ({repo_type}): {e}')
                     # Don't fail the entire upload just because tag creation failed
 
             return True
         except Exception as e:
-            print(f'Error Uploading HuggingFace repo: {e}')
+            _LOGGER.info(f'Error Uploading HuggingFace repo: {e}')
             # Print more detailed error information
             import traceback
-            print(f'Detailed error traceback:\n{traceback.format_exc()}')
+            _LOGGER.info(f'Detailed error traceback:\n{traceback.format_exc()}')
             return False
 
     @staticmethod
@@ -1138,7 +1140,7 @@ class DataManager:
         dot_cache_path = Path(local_dir) / '.cache'
         if dot_cache_path.exists():
             shutil.rmtree(dot_cache_path)
-            print(f'Deleted {local_dir}/.cache folder before upload')
+            _LOGGER.info(f'Deleted {local_dir}/.cache folder before upload')
 
     @staticmethod
     def delete_huggingface_repo(
@@ -1151,7 +1153,7 @@ class DataManager:
             api = HfApi(endpoint=endpoint, token=token)
             return api.delete_repo(repo_id, repo_type=repo_type)
         except Exception as e:
-            print(f'Error deleting HuggingFace repo: {e}')
+            _LOGGER.info(f'Error deleting HuggingFace repo: {e}')
             return False
 
     @staticmethod
