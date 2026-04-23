@@ -1197,7 +1197,7 @@ class PhysicalAIServer(Node):
                 task_name = task_info.task_name
                 source_folders = [s for s in task_info.task_instruction if s.strip()]
 
-                base_path = Path('/workspace/rosbag2')
+                base_path = Path(DataManager.ROSBAG_ROOT)
 
                 # Initialize MP4 conversion worker if needed
                 if self.mp4_conversion_worker is None or not self.mp4_conversion_worker.is_alive():

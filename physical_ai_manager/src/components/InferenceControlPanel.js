@@ -30,6 +30,7 @@ import { useRosServiceCaller } from '../hooks/useRosServiceCaller';
 import Tooltip from './Tooltip';
 import TaskPhase from '../constants/taskPhases';
 import { setTaskStatus } from '../features/tasks/taskSlice';
+import { TOAST_LIMIT } from '../constants/ui';
 
 const phaseGuideMessages = {
   [TaskPhase.READY]: 'Ready to start',
@@ -62,7 +63,6 @@ export default function InferenceControlPanel() {
   const { sendRecordCommand } = useRosServiceCaller();
 
   const { toasts } = useToasterStore();
-  const TOAST_LIMIT = 3;
 
   const phase = taskStatus.phase;
   const isIdle = phase === TaskPhase.READY || phase === TaskPhase.IDLE;

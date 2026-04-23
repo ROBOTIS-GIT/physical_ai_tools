@@ -28,6 +28,7 @@ import SegmentPanel from '../components/SegmentPanel';
 import RecordTopicMonitor from '../components/RecordTopicMonitor';
 import { setIsFirstLoadFalse } from '../features/ui/uiSlice';
 import { useRosServiceCaller } from '../hooks/useRosServiceCaller';
+import { TOAST_LIMIT } from '../constants/ui';
 
 export default function RecordPage({ isActive = true }) {
   const dispatch = useDispatch();
@@ -38,7 +39,6 @@ export default function RecordPage({ isActive = true }) {
 
   // Toast limit implementation using useToasterStore
   const { toasts } = useToasterStore();
-  const TOAST_LIMIT = 3;
 
   const [isRightPanelCollapsed, setIsRightPanelCollapsed] = useState(false);
   const [isMonitorPanelCollapsed, setIsMonitorPanelCollapsed] = useState(true);

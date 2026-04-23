@@ -29,9 +29,7 @@ import HuggingfaceSection from '../features/editDataset/components/DatasetHuggin
 import MergeSection from '../features/editDataset/components/DatasetMergeSection';
 import DeleteSection from '../features/editDataset/components/DatasetDeleteSection';
 import ConvertSection from '../features/editDataset/components/DatasetConvertSection';
-
-// Constants
-const TOAST_LIMIT = 3;
+import { TOAST_LIMIT } from '../constants/ui';
 
 const SECTION_TYPES = {
   HUGGINGFACE: 'huggingface',

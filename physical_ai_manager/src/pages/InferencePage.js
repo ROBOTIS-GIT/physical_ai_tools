@@ -28,6 +28,7 @@ import InferencePanel from '../components/InferencePanel';
 import RecordTopicMonitor from '../components/RecordTopicMonitor';
 import { setIsFirstLoadFalse } from '../features/ui/uiSlice';
 import { useRosServiceCaller } from '../hooks/useRosServiceCaller';
+import { TOAST_LIMIT } from '../constants/ui';
 
 export default function InferencePage({ isActive = true }) {
   const dispatch = useDispatch();
@@ -35,7 +36,6 @@ export default function InferencePage({ isActive = true }) {
 
   // Toast limit implementation using useToasterStore
   const { toasts } = useToasterStore();
-  const TOAST_LIMIT = 3;
 
   const taskStatus = useSelector((state) => state.tasks.taskStatus);
   const joystickMode = useSelector((state) => state.tasks.joystickMode);
