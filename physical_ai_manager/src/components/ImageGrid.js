@@ -22,6 +22,7 @@ import { useRosServiceCaller } from '../hooks/useRosServiceCaller';
 import ImageGridCell from './ImageGridCell';
 import ImageTopicSelectModal from './ImageTopicSelectModal';
 import { setImageTopicList, setAssignedImageTopics } from '../features/ros/rosSlice';
+import { displayLabelForTopic } from '../utils/browserCameraLabels';
 
 // [left(idx 0), center(idx 1), right(idx 2)]
 // rotate: true = wrist camera (landscape stream displayed as portrait)
@@ -31,21 +32,37 @@ const DEFAULT_LAYOUT = [
   { aspect: '3/4', rotate: true },
 ];
 
-// Robot-type specific camera topic assignments: [left, center, right]
+// Record page layout: row 0 has 3 existing cameras, row 1 has 2 additional slots
+// Row 0: existing cameras (wrist_L, head, wrist_R)
+// Row 1: 2 additional camera slots
+export const RECORD_LAYOUT = [
+  { aspect: '3/4', rotate: true, row: 0 },
+  { aspect: '16/9', rotate: false, row: 0 },
+  { aspect: '3/4', rotate: true, row: 0 },
+  { aspect: '16/9', rotate: false, row: 1 },
+  { aspect: '16/9', rotate: false, row: 1 },
+];
+
+// Robot-type specific camera topic assignments
+// Length must match the longest layout (RECORD_LAYOUT = 5); shorter layouts are trimmed automatically.
 const ROBOT_CAMERA_PRESETS = {
   ffw_sg2_rev1: [
     '/robot/camera/cam_left_wrist/image_raw/compressed',
     '/robot/camera/cam_left_head/image_raw/compressed',
     '/robot/camera/cam_right_wrist/image_raw/compressed',
+    null,
+    null,
   ],
   ffw_bg2_rev4: [
     '/robot/camera/cam_left_wrist/image_raw/compressed',
     '/robot/camera/cam_left_head/image_raw/compressed',
     '/robot/camera/cam_right_wrist/image_raw/compressed',
+    null,
+    null,
   ],
 };
 
-export default function ImageGrid({ isActive = true }) {
+export default function ImageGrid({ isActive = true, layout: layoutProp }) {
   const dispatch = useDispatch();
   const store = useStore();
   const imageTopicList = useSelector((state) => state.ros.imageTopicList);
@@ -80,7 +97,7 @@ export default function ImageGrid({ isActive = true }) {
 
   const { getImageTopicList } = useRosServiceCaller();
 
-  const layout = DEFAULT_LAYOUT;
+  const layout = layoutProp || DEFAULT_LAYOUT;
 
   const rotationDegrees = useMemo(
     () => layout.map((cell, idx) => rotationOverrides[idx] ?? (cell.rotate ? -90 : 0)),
@@ -122,7 +139,7 @@ export default function ImageGrid({ isActive = true }) {
   const autoAssignTopics = useCallback((imageTopics, isRefresh = false) => {
     if (imageTopics.length > 0) {
       const autoTopics = Array(layout.length).fill(null);
-      const assignmentOrder = [1, 0, 2];
+      const assignmentOrder = [1, 0, 2, ...Array.from({ length: Math.max(0, layout.length - 3) }, (_, i) => i + 3)];
 
       for (let i = 0; i < Math.min(imageTopics.length, assignmentOrder.length); i++) {
         autoTopics[assignmentOrder[i]] = imageTopics[i];
@@ -131,7 +148,7 @@ export default function ImageGrid({ isActive = true }) {
       console.log(`${isRefresh ? 'Re-assigned' : 'Auto-assigned'} topics:`, autoTopics);
       setAsignedImageTopicList(autoTopics);
       toast.success(
-        `${isRefresh ? 'Re-a' : 'Auto-a'}ssigned ${Math.min(imageTopics.length, 3)} topics to grid`
+        `${isRefresh ? 'Re-a' : 'Auto-a'}ssigned ${Math.min(imageTopics.length, layout.length)} topics to grid`
       );
     }
   }, [layout.length]);
@@ -231,40 +248,74 @@ export default function ImageGrid({ isActive = true }) {
     setAsignedImageTopicList(asignedImageTopicList.map((t, i) => (i === idx ? null : t)));
   };
 
+  // Check if layout uses multiple rows
+  const hasMultipleRows = layout.some((cell) => (cell.row || 0) > 0);
+
   const classImageGridArea = clsx(
-    'flex', 'flex-row', 'justify-center', 'items-center',
-    'gap-[0.5vw]', 'w-full', 'h-full', 'max-w-full', 'max-h-full', 'overflow-hidden'
+    'flex', 'justify-center', 'items-center',
+    'gap-[0.5vw]', 'w-full', 'h-full', 'max-w-full', 'max-h-full', 'overflow-hidden',
+    hasMultipleRows ? 'flex-col' : 'flex-row'
   );
 
-  const classImageGridCell = (idx) =>
-    clsx('min-w-0', 'min-h-0', 'flex', 'items-center', 'justify-center', 'relative', {
-      'flex-[7_1_0]': idx === 1,
-      'flex-[3_1_0]': idx !== 1,
+  const classImageGridRow = clsx(
+    'flex', 'flex-row', 'justify-center', 'items-center',
+    'gap-[0.5vw]', 'w-full', 'flex-1', 'min-h-0', 'max-h-full', 'overflow-hidden'
+  );
+
+  const classImageGridCell = (idx) => {
+    const row = layout[idx]?.row || 0;
+    return clsx('min-w-0', 'min-h-0', 'flex', 'items-center', 'justify-center', 'relative', {
+      'flex-[7_1_0]': row === 0 && idx === 1,
+      'flex-[3_1_0]': row === 0 && idx !== 1,
+      'flex-[1_1_0]': row > 0,
     });
+  };
 
   const classTopicLabel = clsx(
     'absolute', 'bottom-2', 'left-2', 'text-xs', 'text-white',
     'bg-black', 'bg-opacity-50', 'px-2', 'py-1', 'rounded', 'z-10'
   );
 
+  // Group cells by row for multi-row rendering
+  const rowGroups = useMemo(() => {
+    const groups = {};
+    layout.forEach((cell, idx) => {
+      const row = cell.row || 0;
+      if (!groups[row]) groups[row] = [];
+      groups[row].push({ cell, idx });
+    });
+    return Object.keys(groups)
+      .sort((a, b) => Number(a) - Number(b))
+      .map((key) => groups[key]);
+  }, [layout]);
+
+  const renderCell = (cell, idx) => (
+    <div key={idx} className={classImageGridCell(idx)} data-cell-idx={idx}>
+      <ImageGridCell
+        topic={asignedImageTopicList[idx]}
+        aspect={cell.aspect}
+        rotationDegrees={rotationDegrees[idx]}
+        onRotateClick={handleRotateClick}
+        idx={idx}
+        onClose={handleCellClose}
+        onPlusClick={handlePlusClick}
+        isActive={isActive}
+      />
+      <div className={classTopicLabel}>{displayLabelForTopic(asignedImageTopicList[idx])}</div>
+    </div>
+  );
+
   return (
     <div className="w-full h-full overflow-hidden">
       <div className={classImageGridArea}>
-        {layout.map((cell, idx) => (
-          <div key={idx} className={classImageGridCell(idx)} data-cell-idx={idx}>
-            <ImageGridCell
-              topic={asignedImageTopicList[idx]}
-              aspect={cell.aspect}
-              rotationDegrees={rotationDegrees[idx]}
-              onRotateClick={handleRotateClick}
-              idx={idx}
-              onClose={handleCellClose}
-              onPlusClick={handlePlusClick}
-              isActive={isActive}
-            />
-            <div className={classTopicLabel}>{asignedImageTopicList[idx] || ''}</div>
-          </div>
-        ))}
+        {hasMultipleRows
+          ? rowGroups.map((group, rowIdx) => (
+              <div key={rowIdx} className={classImageGridRow}>
+                {group.map(({ cell, idx }) => renderCell(cell, idx))}
+              </div>
+            ))
+          : layout.map((cell, idx) => renderCell(cell, idx))
+        }
         {modalOpen && (
           <ImageTopicSelectModal
             topicList={imageTopicList}

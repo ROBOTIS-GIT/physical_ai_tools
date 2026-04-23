@@ -59,6 +59,7 @@ export function useRosTopicSubscription() {
   const actionEventTopicRef = useRef(null);
   const recordingMonitorTopicRef = useRef(null);
   const joystickModeTopicRef = useRef(null);
+  const isInitializingRef = useRef(false);
   // One-shot guard so the backend's task_info echo only seeds redux on the
   // first message; subsequent echoes would clobber whatever the user is
   // currently typing in InfoPanel.
@@ -445,31 +446,6 @@ export function useRosTopicSubscription() {
     }
   }, [dispatch, rosbridgeUrl]);
 
-  // Start connection and subscription
-  useEffect(() => {
-    if (!rosbridgeUrl) return;
-
-    const initializeSubscriptions = async () => {
-      // Cleanup previous subscriptions before creating new ones
-      cleanup();
-
-      try {
-        await subscribeToTaskStatus();
-        await subscribeToHeartbeat();
-        await subscribeToActionEvent();
-        await subscribeToTrainingStatus();
-        await subscribeHFStatus();
-      } catch (error) {
-        console.error('Failed to initialize ROS subscriptions:', error);
-      }
-    };
-
-    initializeSubscriptions();
-
-    return cleanup;
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [rosbridgeUrl]); // Only rosbridgeUrl as dependency to prevent unnecessary re-subscriptions
-
   // Helper function to get phase name
   const getPhaseName = useCallback((phase) => {
     const phaseNames = {
@@ -712,6 +688,13 @@ export function useRosTopicSubscription() {
       return;
     }
 
+    if (isInitializingRef.current) {
+      console.log('ROS subscriptions initialization already in progress, skipping...');
+      return;
+    }
+
+    isInitializingRef.current = true;
+
     console.log('Manually initializing ROS subscriptions...');
 
     // Cleanup previous subscriptions before creating new ones
@@ -728,6 +711,8 @@ export function useRosTopicSubscription() {
       console.log('ROS subscriptions initialized successfully');
     } catch (error) {
       console.error('Failed to initialize ROS subscriptions:', error);
+    } finally {
+      isInitializingRef.current = false;
     }
   }, [
     rosbridgeUrl,

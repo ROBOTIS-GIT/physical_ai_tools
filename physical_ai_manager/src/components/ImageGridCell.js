@@ -18,6 +18,10 @@ import React, { useCallback, useEffect, useRef } from 'react';
 import clsx from 'clsx';
 import { MdClose, MdScreenRotation } from 'react-icons/md';
 import { useSelector } from 'react-redux';
+import {
+  isBrowserCameraTopic,
+  getBrowserCameraDeviceId,
+} from '../utils/browserCameraLabels';
 
 const classCell = (topic) =>
   clsx(
@@ -68,6 +72,7 @@ export default function ImageGridCell({
   const rosHost = useSelector((state) => state.ros.rosHost);
   const containerRef = useRef(null);
   const currentImgRef = useRef(null);
+  const streamRef = useRef(null);
   const isCreatingRef = useRef(false);
   const cancelRef = useRef(false);
   const retryTimerRef = useRef(null);
@@ -81,6 +86,12 @@ export default function ImageGridCell({
       clearTimeout(retryTimerRef.current);
       retryTimerRef.current = null;
     }
+    if (streamRef.current) {
+      streamRef.current.getTracks().forEach((t) => {
+        try { t.stop(); } catch (_) { /* ignore */ }
+      });
+      streamRef.current = null;
+    }
     if (currentImgRef.current) {
       const el = currentImgRef.current;
       const img = el.tagName === 'IMG' ? el : el.querySelector('img');
@@ -90,6 +101,11 @@ export default function ImageGridCell({
         img.onerror = null;
         img.onload = null;
         img.src = '';
+      }
+      const video = el.tagName === 'VIDEO' ? el : el.querySelector('video');
+      if (video) {
+        try { video.pause(); } catch (_) { /* ignore */ }
+        video.srcObject = null;
       }
       if (el.parentNode) el.parentNode.removeChild(el);
       currentImgRef.current = null;
@@ -113,12 +129,80 @@ export default function ImageGridCell({
 
       if (cancelRef.current || !topic || !topic.trim() || !isActive || !containerRef.current) return;
 
+      // Browser-attached camera via getUserMedia → use <video> instead of <img>
+      if (isBrowserCameraTopic(topic)) {
+        const deviceId = getBrowserCameraDeviceId(topic);
+        let stream;
+        try {
+          stream = await navigator.mediaDevices.getUserMedia({
+            video: deviceId ? { deviceId: { exact: deviceId } } : true,
+            audio: false,
+          });
+        } catch (err) {
+          console.error(`getUserMedia failed for idx ${idx}:`, err);
+          return;
+        }
+        if (cancelRef.current || !isActive || !containerRef.current) {
+          stream.getTracks().forEach((t) => { try { t.stop(); } catch (_) { /* ignore */ } });
+          return;
+        }
+        streamRef.current = stream;
+
+        const video = document.createElement('video');
+        video.autoplay = true;
+        video.playsInline = true;
+        video.muted = true;
+        video.srcObject = stream;
+        video.onclick = (e) => e.stopPropagation();
+
+        if (rotate) {
+          const wrapper = document.createElement('div');
+          wrapper.style.position = 'absolute';
+          wrapper.style.width = '133.33%';
+          wrapper.style.height = '75%';
+          wrapper.style.top = '50%';
+          wrapper.style.left = '50%';
+          wrapper.style.transform = `translate(-50%, -50%) rotate(${rotationDegrees}deg)`;
+          wrapper.style.transformOrigin = 'center center';
+          wrapper.style.overflow = 'hidden';
+          video.style.width = '100%';
+          video.style.height = '100%';
+          video.style.objectFit = 'cover';
+          video.style.display = 'block';
+          wrapper.appendChild(video);
+          if (containerRef.current && !cancelRef.current) {
+            containerRef.current.appendChild(wrapper);
+            currentImgRef.current = wrapper;
+          }
+        } else {
+          video.className = 'w-full h-full object-cover bg-gray-100';
+          if (containerRef.current && !cancelRef.current) {
+            containerRef.current.appendChild(video);
+            currentImgRef.current = video;
+          }
+        }
+        return;
+      }
+
       const img = document.createElement('img');
       const timestamp = Date.now();
-      // web_video_server expects base topic (e.g. .../image_raw); use default_transport=compressed to subscribe to CompressedImage
-      // Do not encode slashes: server rejects %2F and expects literal /
-      const streamTopic = topic.endsWith('/compressed') ? topic.slice(0, -11) : topic;
-      img.src = `http://${rosHost}:8085/stream?quality=50&type=ros_compressed&default_transport=compressed&topic=${streamTopic}&t=${timestamp}`;
+      if (topic.startsWith('http://') || topic.startsWith('https://')) {
+        // External MJPEG stream URL (e.g. GoPro on laptop) — use directly
+        const separator = topic.includes('?') ? '&' : '?';
+        img.src = `${topic}${separator}t=${timestamp}`;
+      } else {
+        // ROS topic — build web_video_server URL
+        // web_video_server expects base topic (e.g. .../image_raw); use default_transport=compressed to subscribe to CompressedImage
+        // Do not encode slashes: server rejects %2F and expects literal /
+        const streamTopic = topic.endsWith('/compressed') ? topic.slice(0, -11) : topic;
+        // On HTTPS pages, http://host:8085 would be blocked as mixed content.
+        // Same-origin /ros_stream/ is proxied by nginx to 127.0.0.1:8085.
+        const base =
+          typeof window !== 'undefined' && window.location.protocol === 'https:'
+            ? `${window.location.origin}/ros_stream`
+            : `http://${rosHost}:8085`;
+        img.src = `${base}/stream?quality=50&type=ros_compressed&default_transport=compressed&topic=${streamTopic}&t=${timestamp}`;
+      }
       img.alt = topic;
 
       img.onclick = (e) => e.stopPropagation();
