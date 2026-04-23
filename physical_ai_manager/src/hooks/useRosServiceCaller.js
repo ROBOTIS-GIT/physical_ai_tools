@@ -36,7 +36,6 @@ export function useRosServiceCaller() {
   const callService = useCallback(
     async (serviceName, serviceType, request, timeoutMs = 10000) => {
       try {
-        console.log(`Attempting to call service: ${serviceName}`);
         const ros = await rosConnectionManager.getConnection(rosbridgeUrl);
 
         // Additional check for connection health
@@ -61,7 +60,6 @@ export function useRosServiceCaller() {
             req,
             (result) => {
               clearTimeout(serviceTimeout);
-              console.log('Service call successful:', result);
               resolve(result);
             },
             (error) => {
@@ -169,16 +167,13 @@ export function useRosServiceCaller() {
           episode_index: Number(options.episodeIndex || 0),
         };
 
-        console.log('request:', request);
 
-        console.log(`Sending command '${command}' (${command_enum}) to service`);
         const result = await callService(
           '/task/command',
           'physical_ai_interfaces/srv/SendCommand',
           request
         );
 
-        console.log(`Service response for command '${command}':`, result);
         return result;
       } catch (error) {
         console.error(`Error in sendRecordCommand for '${command}':`, error);
@@ -220,8 +215,6 @@ export function useRosServiceCaller() {
   const setRobotType = useCallback(
     async (robot_type) => {
       try {
-        console.log('setRobotType called with:', robot_type);
-        console.log('Calling service /set_robot_type with request:', { robot_type: robot_type });
 
         const result = await callService(
           '/set_robot_type',
@@ -229,7 +222,6 @@ export function useRosServiceCaller() {
           { robot_type: robot_type }
         );
 
-        console.log('setRobotType service response:', result);
         return result;
       } catch (error) {
         console.error('Failed to set robot type:', error);
@@ -257,7 +249,6 @@ export function useRosServiceCaller() {
           { endpoint: endpoint || '', label: label || '', token: token || '' }
         );
 
-        console.log('registerHFUser service response:', result);
         return result;
       } catch (error) {
         console.error('Failed to register HF user:', error);
@@ -283,7 +274,6 @@ export function useRosServiceCaller() {
           3000
         );
 
-        console.log('getRegisteredHFUser service response:', result);
         return result;
       } catch (error) {
         console.error('Failed to get registered HF user:', error);
@@ -302,7 +292,6 @@ export function useRosServiceCaller() {
         {},
         3000
       );
-      console.log('listHFEndpoints service response:', result);
       return result;
     } catch (error) {
       console.error('Failed to list HF endpoints:', error);
@@ -319,7 +308,6 @@ export function useRosServiceCaller() {
           'physical_ai_interfaces/srv/SelectHFEndpoint',
           { endpoint: endpoint || '' }
         );
-        console.log('selectHFEndpoint service response:', result);
         return result;
       } catch (error) {
         console.error('Failed to select HF endpoint:', error);
@@ -331,7 +319,6 @@ export function useRosServiceCaller() {
 
   const getUserList = useCallback(async () => {
     try {
-      console.log('Calling service /training/get_user_list with request:', {});
 
       const result = await callService(
         '/training/get_user_list',
@@ -339,7 +326,6 @@ export function useRosServiceCaller() {
         {}
       );
 
-      console.log('getUserList service response:', result);
       return result;
     } catch (error) {
       console.error('Failed to get user list:', error);
@@ -360,7 +346,6 @@ export function useRosServiceCaller() {
           { user_id: user_id }
         );
 
-        console.log('getDatasetList service response:', result);
         return result;
       } catch (error) {
         console.error('Failed to get dataset list:', error);
@@ -372,7 +357,6 @@ export function useRosServiceCaller() {
 
   const getPolicyList = useCallback(async () => {
     try {
-      console.log('Calling service /training/get_policy_list with request:', {});
 
       const result = await callService(
         '/training/get_available_policy',
@@ -380,7 +364,6 @@ export function useRosServiceCaller() {
         {}
       );
 
-      console.log('getPolicyList service response:', result);
       return result;
     } catch (error) {
       console.error('Failed to get policy list:', error);
@@ -390,7 +373,6 @@ export function useRosServiceCaller() {
 
   const getModelWeightList = useCallback(async () => {
     try {
-      console.log('Calling service /training/get_model_weight_list with request:', {});
 
       const result = await callService(
         '/training/get_model_weight_list',
@@ -398,7 +380,6 @@ export function useRosServiceCaller() {
         {}
       );
 
-      console.log('getModelWeightList service response:', result);
       return result;
     } catch (error) {
       console.error('Failed to get model weight list:', error);
@@ -454,7 +435,6 @@ export function useRosServiceCaller() {
           resume_model_path: command === 'resume' ? getRelativePath(trainingResumePolicyPath) : '',
         };
 
-        console.log('Calling service /training/send_training_command with request:', request);
 
         const result = await callService(
           '/training/command',
@@ -462,7 +442,6 @@ export function useRosServiceCaller() {
           request
         );
 
-        console.log('sendTrainingCommand service response:', result);
         return result;
       } catch (error) {
         console.error('Failed to send training command:', error);
@@ -501,7 +480,6 @@ export function useRosServiceCaller() {
           requestData
         );
 
-        console.log('browseFile service response:', result);
         return result;
       } catch (error) {
         console.error('Failed to browse file:', error);
@@ -531,7 +509,6 @@ export function useRosServiceCaller() {
             throw new Error(`Unknown command: ${command}`);
         }
 
-        console.log('editDatasetInfo:', editDatasetInfo);
 
         // Build merge_output_task_dir from mergeOutputPath + mergeOutputFolderName.
         let mergeOutputPath = editDatasetInfo.mergeOutputPath || '';
@@ -560,7 +537,6 @@ export function useRosServiceCaller() {
           }
         );
 
-        console.log('sendEditDatasetCommand service response:', result);
         return result;
       } catch (error) {
         console.error('Failed to send edit dataset command:', error);
@@ -578,7 +554,6 @@ export function useRosServiceCaller() {
           'physical_ai_interfaces/srv/GetDatasetInfo',
           { dataset_path: datasetPath }
         );
-        console.log('getDatasetInfo service response:', result);
         return result;
       } catch (error) {
         console.error('Failed to get dataset info:', error);
@@ -617,7 +592,6 @@ export function useRosServiceCaller() {
           request
         );
 
-        console.log('controlHfServer service response:', result);
         return result;
       } catch (error) {
         console.error('Failed to control HF server:', error);
@@ -639,7 +613,6 @@ export function useRosServiceCaller() {
           'physical_ai_interfaces/srv/GetTrainingInfo',
           { train_config_path: trainConfigPath }
         );
-        console.log('getTrainingInfo service response:', result);
         return result;
       } catch (error) {
         console.error('Failed to get training info:', error);
@@ -653,7 +626,6 @@ export function useRosServiceCaller() {
     async (bagPath) => {
       try {
         const apiUrl = `/api/replay-data${bagPath}`;
-        console.log('Fetching replay data from HTTP API:', apiUrl);
 
         const response = await fetch(apiUrl);
 
@@ -662,7 +634,6 @@ export function useRosServiceCaller() {
         }
 
         const result = await response.json();
-        console.log('getReplayData HTTP response:', result);
 
         // Transform to match the expected format from ROS service
         return {
@@ -709,7 +680,6 @@ export function useRosServiceCaller() {
     async (folderPath) => {
       try {
         const apiUrl = `/api/rosbag-list${folderPath}`;
-        console.log('Fetching rosbag list from HTTP API:', apiUrl);
 
         const response = await fetch(apiUrl);
 
@@ -718,7 +688,6 @@ export function useRosServiceCaller() {
         }
 
         const result = await response.json();
-        console.log('getRosbagList HTTP response:', result);
 
         return result;
       } catch (error) {
