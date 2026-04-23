@@ -1065,6 +1065,30 @@ class PhysicalAIServer(Node):
                         response.success = False
                         response.message = f'Discard failed: {e}'
 
+            elif request.command == SendCommand.Request.CANCEL_SEGMENT:
+                # Atomic cancel-during-recording: stop the rosbag, drop the
+                # just-saved segment, and emit a single 'deleted' event so
+                # the UI/voice don't flash "Recording finished" first.
+                if (self.data_manager is None
+                        or not self.data_manager.is_recording()):
+                    response.success = False
+                    response.message = 'Not currently recording a segment'
+                else:
+                    try:
+                        self.communicator.stop_rosbag()
+                        self.data_manager.stop_segment()
+                        last_idx = len(
+                            self.data_manager._segments_meta) - 1
+                        if last_idx >= 0:
+                            self.data_manager.discard_segment(last_idx)
+                        self.on_recording = False
+                        self.communicator.publish_action_event('deleted')
+                        response.success = True
+                        response.message = 'Segment cancelled'
+                    except Exception as e:
+                        response.success = False
+                        response.message = f'Discard failed: {e}'
+
             elif request.command == SendCommand.Request.FINISH_EPISODE:
                 if self.data_manager is None:
                     response.success = False

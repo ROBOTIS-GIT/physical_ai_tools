@@ -24,6 +24,7 @@ uint8 DISCARD_SEGMENT             = 18
 uint8 FINISH_EPISODE              = 19
 uint8 DISCARD_EPISODE             = 20
 uint8 SET_TASK_INFO               = 21
+uint8 CANCEL_SEGMENT              = 22
 
 uint8 command
 TaskInfo task_info

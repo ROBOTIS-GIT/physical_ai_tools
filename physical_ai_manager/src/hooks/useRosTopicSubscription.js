@@ -382,6 +382,7 @@ export function useRosTopicSubscription() {
         start: 'Recording started',
         finish: 'Recording finished',
         cancel: 'Cancelled',
+        deleted: 'Recording deleted',
         review_on: 'Previous data needs review',
         review_off: 'Previous data review cleared',
       };

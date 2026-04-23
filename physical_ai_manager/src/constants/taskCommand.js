@@ -40,6 +40,7 @@ const TaskCommand = {
   FINISH_EPISODE: 19,
   DISCARD_EPISODE: 20,
   SET_TASK_INFO: 21,
+  CANCEL_SEGMENT: 22,
 };
 
 export default TaskCommand;

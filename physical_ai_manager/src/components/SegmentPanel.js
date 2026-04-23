@@ -141,16 +141,11 @@ const SegmentPanel = () => {
   const handleDiscardAction = useCallback(async () => {
     if (!canDiscard) return;
     if (isRecording) {
-      // Cancel current segment: stop then remove just-finalized segment.
-      const cur = status.currentSegmentIndex || 0;
-      const stop = await sendRecordCommand('stop_segment');
-      if (!stop || stop.success === false) {
-        toast.error(`Discard failed at stop: ${stop?.message || ''}`);
-        return;
-      }
+      // Atomic cancel on the backend so only a single 'deleted' event
+      // fires (no flash of 'finish' before the discard).
       optimisticRef.current = false;
       setOptimisticRecording(false);
-      await runCommand('Discard', 'discard_segment', { segmentIndex: cur });
+      await runCommand('Discard', 'cancel_segment');
     } else {
       await runCommand('Discard', 'discard_segment', {
         segmentIndex: segmentCount - 1,
@@ -160,9 +155,7 @@ const SegmentPanel = () => {
     canDiscard,
     isRecording,
     segmentCount,
-    sendRecordCommand,
     runCommand,
-    status.currentSegmentIndex,
   ]);
 
   const handleDiscardSegment = useCallback(
