@@ -69,11 +69,11 @@ RUN echo "source /opt/ros/${ROS_DISTRO}/setup.bash" >> ~/.bashrc  && \
 RUN mkdir -p /var/run/agent && \
     chmod 777 /var/run/agent
 
-RUN git clone -b main https://github.com/ROBOTIS-GIT/talos_system_manager.git /opt/talos_system_manager
+RUN git clone -b main https://github.com/ROBOTIS-GIT/cyclo_manager.git /opt/cyclo_manager
 
-ENV PYTHONPATH=/opt/talos_system_manager:${PYTHONPATH}
+ENV PYTHONPATH=/opt/cyclo_manager:${PYTHONPATH}
 
-RUN pip install --no-cache-dir -r /opt/talos_system_manager/requirements.txt
+RUN pip install --no-cache-dir -r /opt/cyclo_manager/requirements.txt
 
 # s6-rc services: s6-agent, physical_ai_server (longrun + log pipeline)
 COPY docker/s6-agent /etc/s6-overlay/s6-rc.d/s6-agent
