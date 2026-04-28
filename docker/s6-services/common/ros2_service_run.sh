@@ -56,5 +56,4 @@ fi
 # Using 'exec' ensures the command becomes PID 1 of this service,
 # which allows s6 to properly signal it and its children
 # Note: stdout/stderr are automatically piped to ${SERVICE_NAME}-log via producer-for/consumer-for
-exec bash -c "${ROS2_CMD}"
-
+exec bash -i -c "${ROS2_CMD}"
