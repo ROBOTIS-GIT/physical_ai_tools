@@ -1,4 +1,4 @@
-FROM robotis/ros:jazzy-ros-base-torch2.7.0-cuda12.8.0 AS physical-ai-tools
+FROM robotis/ros:jazzy-ros-base-torch2.7.0-cuda12.8.0-v3 AS physical-ai-tools
 
 ARG S6_OVERLAY_VERSION=3.2.1.0
 
