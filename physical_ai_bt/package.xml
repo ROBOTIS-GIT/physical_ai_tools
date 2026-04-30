@@ -2,7 +2,7 @@
 <?xml-model href="http://download.ros.org/schema/package_format3.xsd" schematypens="http://www.w3.org/2001/XMLSchema"?>
 <package format="3">
   <name>physical_ai_bt</name>
-  <version>0.8.2</version>
+  <version>0.8.3</version>
   <description>
     Python-based Behavior Tree for Physical AI
   </description>

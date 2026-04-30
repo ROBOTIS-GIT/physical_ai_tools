@@ -2,6 +2,11 @@
 Changelog for package physical_ai_server
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
+0.8.3 (2026-04-27)
+------------------
+* Changed repository url in Dockerfile for cyclo_manager
+* Contributors: Hyungyu Kim
+
 0.8.2 (2026-03-12)
 ------------------
 * Changed talos repository name and url in Dockerfile
