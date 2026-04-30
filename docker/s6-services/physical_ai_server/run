@@ -13,7 +13,7 @@ if [ -f "${COMMON_SCRIPT}" ]; then
     export ROS2_COMMAND="${ROS2_COMMAND}"
     # Use env to explicitly pass variables to the script
     # The with-contenv wrapper will preserve these variables
-    exec /command/with-contenv env SERVICE_NAME="${SERVICE_NAME}" ROS2_COMMAND="${ROS2_COMMAND}" bash "${COMMON_SCRIPT}"
+    exec /command/with-contenv env SERVICE_NAME="${SERVICE_NAME}" ROS2_COMMAND="${ROS2_COMMAND}" bash -i -c "${COMMON_SCRIPT}"
 else
     # Fallback if common script not available
     echo "Error: Common script not found at ${COMMON_SCRIPT}" >&2
