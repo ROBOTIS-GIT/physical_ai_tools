@@ -270,7 +270,7 @@ class Communicator:
             command=SendCommand.Request.START,
             uri=rosbag_uri,
             wait_for_response=True,
-            timeout_sec=5.0,
+            timeout_sec=10.0,
         )
 
     def stop_rosbag(self):

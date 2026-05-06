@@ -159,7 +159,7 @@ def verify(episode_dir: Path) -> int:
         take = min(expected, max(0, len(ref_ts) - cur))
         actual = take  # because ref_ts is contiguous after gap-closure
         line = (f'seg {i:2d} [{a:5d}..{b:5d}]  '
-                f'primitive={seg.get("primitive_description", ""):<16} '
+                f'sub_task={seg.get("sub_task_description", ""):<16} '
                 f'expected={expected:4d}  actual={actual:4d}')
         if actual != expected:
             print('FAIL: ' + line)

@@ -26,7 +26,7 @@ import { DEFAULT_PATHS } from '../constants/paths';
 
 export function useRosServiceCaller() {
   const taskInfo = useSelector((state) => state.tasks.taskInfo);
-  const pendingPrimitive = useSelector((state) => state.tasks.pendingPrimitive);
+  const pendingSubTask = useSelector((state) => state.tasks.pendingSubTask);
   const trainingInfo = useSelector((state) => state.training.trainingInfo);
   const trainingResumePolicyPath = useSelector((state) => state.training.resumePolicyPath);
   const editDatasetInfo = useSelector((state) => state.editDataset);
@@ -138,10 +138,17 @@ export function useRosServiceCaller() {
           taskInstruction = [taskName];
         }
 
-        const primitiveDescription = String(
-          options.primitiveDescription !== undefined
-            ? options.primitiveDescription
-            : pendingPrimitive || ''
+        // primitive_description is no longer set from the UI — the legacy
+        // primitive dropdown was replaced by a free-text Korean sub_task
+        // input. Keep the field on the wire (TaskInfo.msg still has it for
+        // backwards compatibility) but always send '' so a future
+        // post-processing pass owns assigning the canonical primitive.
+        const primitiveDescription = '';
+
+        const subTask = String(
+          options.subTask !== undefined
+            ? options.subTask
+            : pendingSubTask || ''
         );
 
         const request = {
@@ -151,6 +158,7 @@ export function useRosServiceCaller() {
             task_type: String(taskType),
             task_instruction: taskInstruction,
             primitive_description: primitiveDescription,
+            sub_task: subTask,
             policy_path: String(taskInfo.policyPath || ''),
             record_inference_mode: Boolean(taskInfo.recordInferenceMode),
             tags: [],
@@ -181,7 +189,7 @@ export function useRosServiceCaller() {
         throw new Error(`${error.message || error}`);
       }
     },
-    [callService, taskInfo, pendingPrimitive, page]
+    [callService, taskInfo, pendingSubTask, page]
   );
 
   const getImageTopicList = useCallback(async () => {

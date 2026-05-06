@@ -95,4 +95,4 @@ physical_ai_server:
         leader_lift:
           - lift_joint
 
-      urdf_path: /root/main_ws/ai_worker/ffw_description/urdf/ffw_bg2_rev4_follower/ffw_bg2_follower.urdf
+      urdf_path: /root/ros2_ws/src/physical_ai_tools/rosbag_recorder/config/urdf/ffw_bg2_follower.urdf

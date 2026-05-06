@@ -12,25 +12,27 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import React, { useCallback, useEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { useSelector, useDispatch } from 'react-redux';
 import clsx from 'clsx';
 import toast from 'react-hot-toast';
 import {
+  MdArrowDropDown,
+  MdArrowDropUp,
   MdFiberManualRecord,
   MdSave,
-  MdClose,
   MdDone,
   MdDelete,
   MdDeleteSweep,
 } from 'react-icons/md';
 
 import TaskPhase from '../constants/taskPhases';
-import PRIMITIVE_DESCRIPTIONS from '../constants/primitiveDescriptions';
-import { setPendingPrimitive } from '../features/tasks/taskSlice';
+import { setPendingSubTask } from '../features/tasks/taskSlice';
 import { useRosServiceCaller } from '../hooks/useRosServiceCaller';
 import InfoPanel from './InfoPanel';
 import Tooltip from './Tooltip';
+
+const MAX_PLANNED_SLOTS = 50;
 
 const isInputFocused = () => {
   const el = document.activeElement;
@@ -48,29 +50,31 @@ const SegmentPanel = () => {
   const dispatch = useDispatch();
   const status = useSelector((state) => state.tasks.taskStatus);
   const taskInfo = useSelector((state) => state.tasks.taskInfo);
-  const pendingPrimitive = useSelector((state) => state.tasks.pendingPrimitive);
   const { sendRecordCommand } = useRosServiceCaller();
-
-  const [hovered, setHovered] = useState(null);
-  const [pressed, setPressed] = useState(null);
 
   // Optimistic "recording" flag: flips immediately on Record click so the
   // button set reflects user intent without waiting for the TaskStatus
   // round-trip. Reconciled with the server's phase once it echoes back.
   const [optimisticRecording, setOptimisticRecording] = useState(false);
-  const optimisticRef = useRef(false);
   const [savingInProgress, setSavingInProgress] = useState(false);
+
+  // Plan-mode state — pre-decide slot count and sub_tasks for an episode.
+  // Slots are added one-by-one via the + Add SubTask button. plannedCount === 0
+  // means no plan yet.
+  const [plannedCount, setPlannedCount] = useState(0);
+  const [plannedSubTasks, setPlannedSubTasks] = useState([]);
+  // -1 means slot not yet recorded; otherwise it is the backend segment idx.
+  const [slotToServerIdx, setSlotToServerIdx] = useState([]);
+  const [activeSlotIndex, setActiveSlotIndex] = useState(0);
 
   const phase = status.phase;
   const serverRecording = phase === TaskPhase.RECORDING;
   const isRecording = serverRecording || optimisticRecording;
-  const segmentPrimitives = status.segmentPrimitives || [];
   const segmentCount = status.segmentCount || 0;
   const hasSegments = segmentCount > 0;
 
   // Keep local flag in sync whenever the server phase settles.
   useEffect(() => {
-    optimisticRef.current = serverRecording;
     setOptimisticRecording(serverRecording);
   }, [serverRecording]);
 
@@ -80,15 +84,55 @@ const SegmentPanel = () => {
       (taskInfo.taskInstruction?.[0] || '').trim()
   );
 
-  const canRecord =
+  const isPlanMode = plannedCount > 0;
+  const firstPendingSlot = useMemo(
+    () => slotToServerIdx.findIndex((v) => v === -1),
+    [slotToServerIdx]
+  );
+  const planComplete = isPlanMode && firstPendingSlot === -1;
+  const numSavedInPlan = useMemo(
+    () => slotToServerIdx.filter((v) => v >= 0).length,
+    [slotToServerIdx]
+  );
+  const allSubTasksFilled = useMemo(
+    () =>
+      isPlanMode &&
+      plannedSubTasks.length === plannedCount &&
+      plannedSubTasks.every((s) => !!(s && s.trim())),
+    [isPlanMode, plannedSubTasks, plannedCount]
+  );
+
+  const canStartRecord =
+    isPlanMode &&
     !isRecording &&
     !savingInProgress &&
-    !!pendingPrimitive &&
+    allSubTasksFilled &&
+    !planComplete &&
+    activeSlotIndex >= 0 &&
+    activeSlotIndex < plannedCount &&
     taskInfoComplete;
-  const canSave = isRecording;
-  const canDiscard = isRecording || hasSegments;
+
   const canFinishEpisode = !isRecording && !savingInProgress && hasSegments;
-  const canDiscardEpisode = !isRecording && hasSegments;
+  const canDiscardEpisode = !isRecording && !savingInProgress && hasSegments;
+  const canResetPlan =
+    isPlanMode && !isRecording && !savingInProgress && numSavedInPlan === 0;
+
+  // Sync redux pendingSubTask so InfoPanel's debounced set_task_info push
+  // carries the right sub_task for the slot we are about to record.
+  useEffect(() => {
+    if (isPlanMode && !planComplete && activeSlotIndex < plannedCount) {
+      dispatch(setPendingSubTask(plannedSubTasks[activeSlotIndex] || ''));
+    } else if (!isPlanMode) {
+      dispatch(setPendingSubTask(''));
+    }
+  }, [
+    isPlanMode,
+    planComplete,
+    activeSlotIndex,
+    plannedCount,
+    plannedSubTasks,
+    dispatch,
+  ]);
 
   const runCommand = useCallback(
     async (label, cmd, opts = {}) => {
@@ -108,117 +152,263 @@ const SegmentPanel = () => {
     [sendRecordCommand]
   );
 
-  const handleRecord = useCallback(async () => {
-    if (!canRecord) return;
-    if (!pendingPrimitive) {
-      toast.error('Select a primitive first');
-      return;
-    }
-    // Optimistic flip — buttons update before the status round-trip.
-    optimisticRef.current = true;
-    setOptimisticRecording(true);
-    const result = await runCommand('Record', 'start_segment', {
-      primitiveDescription: pendingPrimitive,
-    });
-    if (!result || result.success === false) {
-      optimisticRef.current = false;
-      setOptimisticRecording(false);
-    }
-  }, [canRecord, runCommand, pendingPrimitive]);
+  // Full plan reset — clears slot count, sub_tasks, and progress. Used by
+  // the Reset button.
+  const resetPlanState = useCallback(() => {
+    setPlannedCount(0);
+    setPlannedSubTasks([]);
+    setSlotToServerIdx([]);
+    setActiveSlotIndex(0);
+  }, []);
 
-  const handleSave = useCallback(async () => {
-    if (!canSave) return;
-    setSavingInProgress(true);
-    optimisticRef.current = false;
-    setOptimisticRecording(false);
-    const result = await runCommand('Save', 'stop_segment');
-    setSavingInProgress(false);
-    if (!result || result.success === false) {
-      toast.error('Save may have failed — check server logs');
-    }
-  }, [canSave, runCommand]);
+  // Episode-progress reset — keeps the planned slots and sub_tasks, just
+  // marks all slots as not-yet-recorded so the same plan can be re-used for
+  // the next episode. Used after Finish/Discard Episode.
+  const resetEpisodeProgress = useCallback(() => {
+    setSlotToServerIdx((prev) => prev.map(() => -1));
+    setActiveSlotIndex(0);
+  }, []);
 
-  const handleDiscardAction = useCallback(async () => {
-    if (!canDiscard) return;
-    if (isRecording) {
-      // Atomic cancel on the backend so only a single 'deleted' event
-      // fires (no flash of 'finish' before the discard).
-      optimisticRef.current = false;
-      setOptimisticRecording(false);
-      await runCommand('Discard', 'cancel_segment');
-    } else {
-      await runCommand('Discard', 'discard_segment', {
-        segmentIndex: segmentCount - 1,
-      });
+  // Highest plan-slot index that already has a saved server segment. The
+  // count cannot shrink below highestSavedIdx + 1 without orphaning recorded
+  // data on the backend.
+  const minAllowedCount = useMemo(() => {
+    let highest = -1;
+    for (let i = 0; i < slotToServerIdx.length; i++) {
+      if (slotToServerIdx[i] >= 0) highest = i;
     }
-  }, [
-    canDiscard,
-    isRecording,
-    segmentCount,
-    runCommand,
-  ]);
+    return highest + 1;
+  }, [slotToServerIdx]);
 
-  const handleDiscardSegment = useCallback(
-    (idx) => {
-      if (!window.confirm(`Discard segment ${idx}?`)) return;
-      runCommand(`Discard #${idx}`, 'discard_segment', { segmentIndex: idx });
+  // Live-resize the plan to `n` slots. Appends empty slots when growing;
+  // truncates trailing pending slots when shrinking. Caller is expected to
+  // have validated against minAllowedCount.
+  const applyPlanCount = useCallback(
+    (n) => {
+      if (n === plannedCount) return;
+      let nextSubTasks;
+      let nextSlotMap;
+      if (n > plannedCount) {
+        const add = n - plannedCount;
+        nextSubTasks = [...plannedSubTasks, ...Array(add).fill('')];
+        nextSlotMap = [...slotToServerIdx, ...Array(add).fill(-1)];
+      } else {
+        nextSubTasks = plannedSubTasks.slice(0, n);
+        nextSlotMap = slotToServerIdx.slice(0, n);
+      }
+      setPlannedCount(n);
+      setPlannedSubTasks(nextSubTasks);
+      setSlotToServerIdx(nextSlotMap);
+      const firstPending = nextSlotMap.findIndex((v) => v === -1);
+      setActiveSlotIndex(
+        firstPending >= 0 ? firstPending : Math.max(0, n - 1)
+      );
     },
-    [runCommand]
+    [plannedCount, plannedSubTasks, slotToServerIdx]
   );
 
-  const handleDiscardEpisode = useCallback(() => {
+  const handlePlanCountInput = useCallback(
+    (rawValue) => {
+      if (isRecording || savingInProgress) return;
+      const n = parseInt(rawValue, 10);
+      if (!Number.isFinite(n) || n < 0) return;
+      if (n > MAX_PLANNED_SLOTS) {
+        toast.error(`Max ${MAX_PLANNED_SLOTS} subtasks per episode`);
+        applyPlanCount(MAX_PLANNED_SLOTS);
+        return;
+      }
+      if (n < minAllowedCount) {
+        toast.error(
+          `Cannot reduce below ${minAllowedCount} — segments are already saved`
+        );
+        applyPlanCount(minAllowedCount);
+        return;
+      }
+      applyPlanCount(n);
+    },
+    [isRecording, savingInProgress, minAllowedCount, applyPlanCount]
+  );
+
+  const stepPlanCount = useCallback(
+    (delta) => {
+      handlePlanCountInput(plannedCount + delta);
+    },
+    [plannedCount, handlePlanCountInput]
+  );
+
+  const handleResetPlan = useCallback(() => {
+    if (!canResetPlan) return;
+    resetPlanState();
+  }, [canResetPlan, resetPlanState]);
+
+  const updatePlannedSubTask = useCallback((idx, value) => {
+    setPlannedSubTasks((prev) => {
+      const next = [...prev];
+      next[idx] = value;
+      return next;
+    });
+  }, []);
+
+  const startRecordingSlot = useCallback(
+    async (slotIdx) => {
+      const subTask = (plannedSubTasks[slotIdx] || '').trim();
+      if (!subTask) return null;
+      setOptimisticRecording(true);
+      const result = await runCommand('Record', 'start_segment', {
+        subTask,
+      });
+      if (!result || result.success === false) {
+        setOptimisticRecording(false);
+      }
+      return result;
+    },
+    [plannedSubTasks, runCommand]
+  );
+
+  const handleRecordStart = useCallback(async () => {
+    if (!canStartRecord) return;
+    await startRecordingSlot(activeSlotIndex);
+  }, [canStartRecord, startRecordingSlot, activeSlotIndex]);
+
+  const handleSlotSave = useCallback(
+    async (slotIdx) => {
+      if (slotIdx !== activeSlotIndex) return;
+      if (!isRecording || savingInProgress) return;
+      setSavingInProgress(true);
+      setOptimisticRecording(false);
+      const result = await runCommand('Save', 'stop_segment');
+      if (!result || result.success === false) {
+        setSavingInProgress(false);
+        return;
+      }
+
+      // Map this plan slot to the new server segment index.
+      const assignedServerIdx = slotToServerIdx.filter((v) => v >= 0).length;
+      const updatedSlotMap = slotToServerIdx.map((v, i) =>
+        i === slotIdx ? assignedServerIdx : v
+      );
+      setSlotToServerIdx(updatedSlotMap);
+
+      const nextPending = updatedSlotMap.findIndex((v) => v === -1);
+      if (nextPending >= 0) {
+        setActiveSlotIndex(nextPending);
+        await startRecordingSlot(nextPending);
+      }
+      // If no pending slot remains, plan is complete; user presses Finish
+      // Episode (or Discard Episode) manually — we don't auto-finalize.
+      setSavingInProgress(false);
+    },
+    [
+      activeSlotIndex,
+      isRecording,
+      savingInProgress,
+      runCommand,
+      slotToServerIdx,
+      startRecordingSlot,
+    ]
+  );
+
+  // Per-row trash: cancels the segment if this slot is currently recording,
+  // otherwise discards the saved segment for this slot. No-op for pending
+  // slots that have nothing to throw away.
+  const handleSlotTrash = useCallback(
+    async (slotIdx) => {
+      if (savingInProgress) return;
+      const isActiveRecording =
+        slotIdx === activeSlotIndex && isRecording;
+      const serverIdx = slotToServerIdx[slotIdx];
+
+      if (isActiveRecording) {
+        setOptimisticRecording(false);
+        await runCommand('Discard', 'cancel_segment');
+        return;
+      }
+
+      if (serverIdx < 0) return;
+      if (!window.confirm(`Discard segment ${slotIdx + 1}?`)) return;
+      const result = await runCommand(
+        `Discard #${slotIdx + 1}`,
+        'discard_segment',
+        { segmentIndex: serverIdx }
+      );
+      if (!result || result.success === false) return;
+      const updated = slotToServerIdx.map((v, i) => {
+        if (i === slotIdx) return -1;
+        if (v > serverIdx) return v - 1;
+        return v;
+      });
+      setSlotToServerIdx(updated);
+      const nextPending = updated.findIndex((v) => v === -1);
+      setActiveSlotIndex(nextPending >= 0 ? nextPending : 0);
+    },
+    [
+      savingInProgress,
+      activeSlotIndex,
+      isRecording,
+      slotToServerIdx,
+      runCommand,
+    ]
+  );
+
+  const handleFinish = useCallback(async () => {
+    if (!canFinishEpisode) return;
+    const result = await runCommand('Finish episode', 'finish_episode');
+    if (result && result.success) {
+      resetEpisodeProgress();
+    }
+  }, [canFinishEpisode, runCommand, resetEpisodeProgress]);
+
+  const handleDiscardEpisode = useCallback(async () => {
     if (!canDiscardEpisode) return;
     if (!window.confirm('Discard ALL pending segments?')) return;
-    runCommand('Discard episode', 'discard_episode');
-  }, [canDiscardEpisode, runCommand]);
+    const result = await runCommand('Discard episode', 'discard_episode');
+    if (result && result.success) {
+      resetEpisodeProgress();
+    }
+  }, [canDiscardEpisode, runCommand, resetEpisodeProgress]);
 
-  const handleFinish = useCallback(() => {
-    if (!canFinishEpisode) return;
-    runCommand('Finish episode', 'finish_episode');
-  }, [canFinishEpisode, runCommand]);
-
-  // Keyboard shortcuts — matching the legacy RecordControlPanel bindings.
+  // Keyboard shortcuts — adapted to plan-mode flow.
+  // Space → Record Start, Ctrl+Shift+X → Save active slot,
+  // Esc → cancel/discard via the active slot's trash.
   const handleKeyAction = useCallback(
     (e) => {
       if (e.key === ' ' || e.key === 'Spacebar' || e.code === 'Space') {
-        if (canRecord) return 'Record';
+        if (canStartRecord) return 'RecordStart';
       }
       if (
         (e.ctrlKey || e.metaKey) &&
         e.shiftKey &&
         (e.key === 'x' || e.key === 'X')
       ) {
-        if (canSave) return 'Save';
+        if (isRecording && !savingInProgress) return 'Save';
       }
       if (e.key === 'Escape') {
-        if (canDiscard) return 'Discard';
+        if (isRecording && !savingInProgress) return 'CancelActive';
       }
       return null;
     },
-    [canRecord, canSave, canDiscard]
+    [canStartRecord, isRecording, savingInProgress]
   );
 
   useEffect(() => {
-    const onKeyDown = (e) => {
-      if (e.repeat || isInputFocused()) return;
-      const action = handleKeyAction(e);
-      if (action) setPressed(action);
-    };
     const onKeyUp = (e) => {
-      setPressed(null);
       if (isInputFocused()) return;
       const action = handleKeyAction(e);
-      if (action === 'Record') handleRecord();
-      else if (action === 'Save') handleSave();
-      else if (action === 'Discard') handleDiscardAction();
+      if (action === 'RecordStart') handleRecordStart();
+      else if (action === 'Save') handleSlotSave(activeSlotIndex);
+      else if (action === 'CancelActive') handleSlotTrash(activeSlotIndex);
     };
-    window.addEventListener('keydown', onKeyDown);
     window.addEventListener('keyup', onKeyUp);
     return () => {
-      window.removeEventListener('keydown', onKeyDown);
       window.removeEventListener('keyup', onKeyUp);
     };
-  }, [handleKeyAction, handleRecord, handleSave, handleDiscardAction]);
+  }, [
+    handleKeyAction,
+    handleRecordStart,
+    handleSlotSave,
+    handleSlotTrash,
+    activeSlotIndex,
+  ]);
 
   const classPanel = clsx(
     'bg-white',
@@ -232,44 +422,6 @@ const SegmentPanel = () => {
     'mt-3'
   );
 
-  const classRow = clsx(
-    'flex',
-    'items-center',
-    'justify-between',
-    'gap-2',
-    'px-2',
-    'py-1.5',
-    'rounded-md',
-    'border',
-    'border-gray-100'
-  );
-
-  const classMainBtn = (label, isDisabled) =>
-    clsx(
-      'rounded-lg',
-      'border-none',
-      'cursor-pointer',
-      'px-2',
-      'py-1.5',
-      'flex',
-      'items-center',
-      'justify-center',
-      'gap-1',
-      'bg-gray-100',
-      'transition-all',
-      'duration-150',
-      'font-semibold',
-      'text-sm',
-      'flex-1',
-      {
-        'bg-gray-400': pressed === label && !isDisabled,
-        'bg-gray-200': hovered === label && pressed !== label && !isDisabled,
-        'opacity-30 cursor-not-allowed bg-gray-50': isDisabled,
-      }
-    );
-
-  // NOTE: Tailwind JIT only picks up class names it can see literally in
-  // source, so the enabled-color classes must be written out.
   const SECONDARY_COLOR_CLASSES = {
     indigo: 'bg-indigo-500 text-white hover:bg-indigo-600',
     red: 'bg-red-500 text-white hover:bg-red-600',
@@ -292,37 +444,97 @@ const SegmentPanel = () => {
         : 'bg-gray-200 text-gray-400 cursor-not-allowed'
     );
 
-  const mainButtons = [
-    {
-      label: 'Record',
-      icon: MdFiberManualRecord,
-      color: '#d32f2f',
-      enabled: canRecord,
-      handler: handleRecord,
-      description: 'Start a new segment',
-      shortcut: 'Space',
-    },
-    {
-      label: 'Save',
-      icon: MdSave,
-      color: '#388e3c',
-      enabled: canSave,
-      handler: handleSave,
-      description: 'Stop current segment and add to list',
-      shortcut: 'Ctrl+Shift+X',
-    },
-    {
-      label: 'Discard',
-      icon: MdClose,
-      color: '#757575',
-      enabled: canDiscard,
-      handler: handleDiscardAction,
-      description: isRecording
-        ? 'Cancel current segment'
-        : 'Discard last segment',
-      shortcut: 'Escape',
-    },
-  ];
+  const renderSlotRow = (i) => {
+    const serverIdx = slotToServerIdx[i];
+    const isSaved = serverIdx >= 0;
+    const isActive = i === activeSlotIndex && !planComplete;
+    const isCurrentlyRecording = isActive && isRecording;
+    const dropdownDisabled = isSaved || isRecording || savingInProgress;
+    const saveEnabled = isCurrentlyRecording && !savingInProgress;
+    // Trash cancels the in-progress recording for the active slot, or wipes
+    // out the saved segment for a saved slot. Disabled for pending slots
+    // and during the brief save/transition window. A saved slot's trash is
+    // only available when nothing else is recording — discard_segment must
+    // not race with an active recording on the backend.
+    const trashEnabled =
+      !savingInProgress &&
+      (isCurrentlyRecording || (isSaved && !isRecording));
+    const trashTitle = isCurrentlyRecording
+      ? 'Cancel current recording'
+      : isSaved
+      ? `Discard segment ${i + 1}`
+      : 'Nothing to discard';
+
+    return (
+      <div
+        key={`slot-${i}`}
+        className={clsx(
+          'flex items-center gap-2 px-2 py-1.5 rounded-md border',
+          {
+            'border-gray-100 opacity-60 bg-gray-50': isSaved,
+            'border-red-300 bg-red-50': isCurrentlyRecording,
+            'border-blue-200 bg-blue-50': isActive && !isCurrentlyRecording,
+            'border-gray-100': !isSaved && !isActive,
+          }
+        )}
+      >
+        <span
+          className={clsx(
+            'text-xs font-mono w-6 shrink-0 text-center rounded flex items-center justify-center',
+            {
+              'bg-green-100 text-green-700': isSaved,
+              'text-blue-700 font-bold': isActive && !isSaved,
+              'text-gray-500': !isSaved && !isActive,
+            }
+          )}
+        >
+          {isSaved ? <MdDone size={14} /> : `#${i + 1}`}
+        </span>
+        <input
+          type="text"
+          lang="ko"
+          className={clsx(
+            'flex-1 text-sm p-1 border border-gray-300 rounded-md min-w-0',
+            'focus:outline-none focus:ring-2 focus:ring-blue-500',
+            { 'bg-gray-100 cursor-not-allowed text-gray-500': dropdownDisabled }
+          )}
+          value={plannedSubTasks[i] || ''}
+          placeholder="sub_task 입력"
+          onChange={(e) => updatePlannedSubTask(i, e.target.value)}
+          disabled={dropdownDisabled}
+        />
+        <button
+          onClick={() => handleSlotSave(i)}
+          disabled={!saveEnabled}
+          className={clsx(
+            'px-2 py-1 rounded-md text-xs font-semibold flex items-center gap-1',
+            saveEnabled
+              ? 'bg-green-500 text-white hover:bg-green-600'
+              : 'bg-gray-200 text-gray-400 cursor-not-allowed'
+          )}
+          aria-label={`Save segment ${i + 1}`}
+          title="Save this segment"
+        >
+          <MdSave size={14} />
+          Save
+        </button>
+        <button
+          onClick={() => handleSlotTrash(i)}
+          disabled={!trashEnabled}
+          className={clsx(
+            'p-1 rounded',
+            trashEnabled
+              ? 'hover:bg-red-50 text-red-500'
+              : 'text-gray-300 cursor-not-allowed'
+          )}
+          aria-label={trashTitle}
+          title={trashTitle}
+        >
+          <MdDelete size={16} />
+        </button>
+      </div>
+    );
+  };
 
   return (
     <div className={classPanel}>
@@ -339,137 +551,172 @@ const SegmentPanel = () => {
         <InfoPanel variant="embedded" />
       </div>
 
-      {/* Primitive picker */}
-      <div className="flex items-center gap-2 mb-3">
-        <span className="text-sm text-gray-600 shrink-0">Next primitive</span>
-        <select
-          className={clsx(
-            'flex-1 text-sm p-1.5 border border-gray-300 rounded-md',
-            'focus:outline-none focus:ring-2 focus:ring-blue-500',
-            { 'bg-gray-100 cursor-not-allowed': isRecording }
-          )}
-          value={pendingPrimitive}
-          onChange={(e) => dispatch(setPendingPrimitive(e.target.value))}
-          disabled={isRecording}
-        >
-          <option value="">-- Select --</option>
-          {PRIMITIVE_DESCRIPTIONS.map((p) => (
-            <option key={p} value={p}>
-              {p}
-            </option>
-          ))}
-        </select>
-      </div>
-
-      {/* Segment list */}
-      <div className="flex flex-col gap-1.5 mb-3">
-        {segmentPrimitives.map((prim, i) => (
-          <div key={`seg-${i}`} className={classRow}>
-            <div className="flex items-center gap-2 min-w-0">
-              <MdDone className="text-green-500 shrink-0" />
-              <span className="text-sm font-mono text-gray-500 shrink-0">
-                #{i}
-              </span>
-              <span className="text-sm text-gray-800 truncate">
-                {prim || '—'}
-              </span>
+      {/* Record Start — single big button that drives the whole episode */}
+      <Tooltip
+        position="top"
+        content={
+          <div className="text-center">
+            <div className="font-semibold">
+              {isPlanMode
+                ? 'Start recording from the next pending slot'
+                : 'Set the number of subtasks below first'}
             </div>
-            <button
-              onClick={() => handleDiscardSegment(i)}
-              disabled={isRecording}
+            {canStartRecord && (
+              <div className="text-sm mt-1 text-gray-300">
+                <span className="font-mono bg-gray-700 px-1 rounded">Space</span>
+              </div>
+            )}
+          </div>
+        }
+        disabled={false}
+        className="block w-full"
+      >
+        <button
+          onClick={handleRecordStart}
+          disabled={!canStartRecord}
+          className={clsx(
+            'w-full mb-3 px-3 py-2.5 rounded-lg font-semibold text-sm',
+            'flex items-center justify-center gap-2 transition-colors',
+            canStartRecord
+              ? 'bg-red-500 text-white hover:bg-red-600'
+              : 'bg-gray-200 text-gray-400 cursor-not-allowed'
+          )}
+        >
+          <MdFiberManualRecord size={18} />
+          Record Start
+        </button>
+      </Tooltip>
+
+      {/* SubTask count setup */}
+      <div className="mb-3">
+        <div className="text-sm font-semibold text-gray-700 mb-2">
+          Number of SubTasks
+          <span className="ml-1 text-xs font-normal text-gray-400">
+            (plan sub_tasks in advance)
+          </span>
+        </div>
+        <div className="flex items-center gap-2">
+          <div
+            className={clsx(
+              'flex flex-1 items-stretch border border-gray-300 rounded-md overflow-hidden',
+              {
+                'bg-gray-100': isRecording || savingInProgress,
+              }
+            )}
+          >
+            <input
+              type="number"
+              min={minAllowedCount}
+              max={MAX_PLANNED_SLOTS}
+              value={plannedCount}
+              onChange={(e) => handlePlanCountInput(e.target.value)}
+              disabled={isRecording || savingInProgress}
               className={clsx(
-                'p-1 rounded hover:bg-red-50 text-red-500',
+                'flex-1 text-sm p-1.5 outline-none focus:ring-2 focus:ring-blue-500',
+                '[appearance:textfield]',
+                '[&::-webkit-outer-spin-button]:appearance-none',
+                '[&::-webkit-inner-spin-button]:appearance-none',
+                '[&::-webkit-inner-spin-button]:m-0',
                 {
-                  'opacity-30 cursor-not-allowed hover:bg-transparent':
-                    isRecording,
+                  'bg-gray-100 cursor-not-allowed text-gray-500':
+                    isRecording || savingInProgress,
                 }
               )}
-              aria-label={`Discard segment ${i}`}
-              title={`Discard segment ${i}`}
-            >
-              <MdDelete size={18} />
-            </button>
-          </div>
-        ))}
-
-        {isRecording && (
-          <div className={clsx(classRow, 'bg-red-50 border-red-200')}>
-            <div className="flex items-center gap-2 min-w-0">
-              <span className="h-2 w-2 rounded-full bg-red-500 animate-pulse shrink-0" />
-              <span className="text-sm font-mono text-gray-500 shrink-0">
-                #{status.currentSegmentIndex}
-              </span>
-              <span className="text-sm text-gray-800 truncate">
-                {pendingPrimitive || '—'} (recording {status.proceedTime}s)
-              </span>
+            />
+            <div className="flex flex-col border-l border-gray-300">
+              <button
+                type="button"
+                onClick={() => stepPlanCount(1)}
+                disabled={
+                  isRecording ||
+                  savingInProgress ||
+                  plannedCount >= MAX_PLANNED_SLOTS
+                }
+                className={clsx(
+                  'flex-1 px-1 flex items-center justify-center',
+                  'border-b border-gray-300 transition-colors',
+                  isRecording ||
+                    savingInProgress ||
+                    plannedCount >= MAX_PLANNED_SLOTS
+                    ? 'text-gray-300 cursor-not-allowed'
+                    : 'text-gray-600 hover:bg-gray-100'
+                )}
+                aria-label="Increase subtask count"
+                title="Add a slot"
+              >
+                <MdArrowDropUp size={18} />
+              </button>
+              <button
+                type="button"
+                onClick={() => stepPlanCount(-1)}
+                disabled={
+                  isRecording ||
+                  savingInProgress ||
+                  plannedCount <= minAllowedCount
+                }
+                className={clsx(
+                  'flex-1 px-1 flex items-center justify-center',
+                  'transition-colors',
+                  isRecording ||
+                    savingInProgress ||
+                    plannedCount <= minAllowedCount
+                    ? 'text-gray-300 cursor-not-allowed'
+                    : 'text-gray-600 hover:bg-gray-100'
+                )}
+                aria-label="Decrease subtask count"
+                title={
+                  plannedCount <= minAllowedCount
+                    ? 'Cannot drop below the number of saved segments'
+                    : 'Remove the last slot'
+                }
+              >
+                <MdArrowDropDown size={18} />
+              </button>
             </div>
           </div>
-        )}
-
-        {savingInProgress && (
-          <div className={clsx(classRow, 'bg-amber-50 border-amber-200')}>
-            <div className="flex items-center gap-2 min-w-0">
-              <span className="h-2 w-2 rounded-full bg-amber-500 animate-pulse shrink-0" />
-              <span className="text-sm text-amber-800 font-medium">
-                Saving segment...
-              </span>
-            </div>
-          </div>
-        )}
-
-        {!isRecording && !hasSegments && (
-          <div className="text-xs text-gray-400 italic px-2 py-1">
-            No segments yet. Select a primitive and press Record.
-          </div>
-        )}
+          <button
+            onClick={handleResetPlan}
+            disabled={!canResetPlan}
+            className={clsx(
+              'px-3 py-1.5 rounded-md text-sm font-semibold transition-colors',
+              canResetPlan
+                ? 'bg-gray-300 text-gray-800 hover:bg-gray-400'
+                : 'bg-gray-200 text-gray-400 cursor-not-allowed'
+            )}
+            title={
+              numSavedInPlan > 0
+                ? 'Cannot reset while segments are saved — discard them first'
+                : 'Reset planned subtasks'
+            }
+          >
+            Reset
+          </button>
+        </div>
       </div>
 
-      {/* Main Record / Save / Discard buttons (3-button set) */}
-      <div className="flex items-center gap-1.5 mb-3">
-        {mainButtons.map(
-          ({ label, icon: Icon, color, enabled, handler, description, shortcut }) => {
-            const isDisabled = !enabled;
-            return (
-              <Tooltip
-                key={label}
-                position="top"
-                content={
-                  <div className="text-center">
-                    <div className="font-semibold">{description}</div>
-                    {!isDisabled && (
-                      <div className="text-sm mt-1 text-gray-300">
-                        <span className="font-mono bg-gray-700 px-1 rounded">
-                          {shortcut}
-                        </span>
-                      </div>
-                    )}
-                  </div>
-                }
-                disabled={false}
-                className="relative flex-1"
-              >
-                <button
-                  className={classMainBtn(label, isDisabled)}
-                  onClick={() => !isDisabled && handler()}
-                  onMouseEnter={() => !isDisabled && setHovered(label)}
-                  onMouseLeave={() => {
-                    setHovered(null);
-                    setPressed(null);
-                  }}
-                  onMouseDown={() => !isDisabled && setPressed(label)}
-                  onMouseUp={() => setPressed(null)}
-                  disabled={isDisabled}
-                  aria-label={description}
-                >
-                  <Icon
-                    style={{ fontSize: '1.1rem' }}
-                    color={isDisabled ? '#9ca3af' : color}
-                  />
-                  {label}
-                </button>
-              </Tooltip>
-            );
-          }
+      {/* Slot rows */}
+      <div className="flex flex-col gap-1.5 mb-3">
+        {Array.from({ length: plannedCount }, (_, i) => renderSlotRow(i))}
+
+        {isRecording && activeSlotIndex < plannedCount && (
+          <div className="text-xs text-red-600 font-mono px-2">
+            Recording slot #{activeSlotIndex + 1}: {plannedSubTasks[activeSlotIndex] || '—'} ({status.proceedTime}s)
+          </div>
+        )}
+        {savingInProgress && (
+          <div className="text-xs text-amber-700 font-mono px-2">
+            Saving / advancing…
+          </div>
+        )}
+        {planComplete && (
+          <div className="text-xs text-indigo-700 font-mono px-2">
+            All planned segments saved — press Finish Episode to finalize.
+          </div>
+        )}
+        {!isPlanMode && (
+          <div className="text-xs text-gray-400 italic px-2">
+            Press “Add SubTask” to start planning your episode.
+          </div>
         )}
       </div>
 

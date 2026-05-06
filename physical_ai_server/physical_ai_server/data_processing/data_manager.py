@@ -56,7 +56,7 @@ class DataManager:
     ROSBAG_ROOT = '/workspace/rosbag2'
 
     # Canonical ordering for primitive descriptions; index of a primitive
-    # in this list is written to episode_info.json as `primitive_index`.
+    # in this list is written to episode_info.json as `sub_task_index`.
     # Keep in sync with
     # physical_ai_manager/src/constants/primitiveDescriptions.js.
     PRIMITIVE_DESCRIPTIONS = (
@@ -86,9 +86,12 @@ class DataManager:
         self._save_path = save_root_path
         self._task_info = task_info
 
-        # Archive path: /workspace/rosbag2/{robot_type}_{task_name}
+        # Archive path: /workspace/rosbag2/Task_{task_num}_{task_name}_MCAP
+        # — must match the dataset preview rendered by the InfoPanel UI
+        # (Task_<num>_<name>_MCAP) so users see exactly where data lands.
+        task_num = (getattr(task_info, 'task_num', '') or '').strip()
         task_name = (getattr(task_info, 'task_name', '') or '').strip()
-        self._save_repo_name = f'{robot_type}_{task_name}'
+        self._save_repo_name = f'Task_{task_num}_{task_name}_MCAP'
         self._save_rosbag_path = os.path.join(
             self.ROSBAG_ROOT, self._save_repo_name)
 
@@ -110,6 +113,7 @@ class DataManager:
         self._current_segment_index = 0
         self._segments_meta = []
         self._pending_primitive = ''
+        self._pending_sub_task = ''
         self._segment_start_time_s = 0
 
     @staticmethod
@@ -143,9 +147,12 @@ class DataManager:
     def _serialize_segments(self):
         """Convert internal segments_meta (with frame_count) to JSON shape.
 
-        Each output entry has exactly three fields:
-            - primitive_index        (int)
-            - primitive_description  (str)
+        Each output entry has these fields:
+            - sub_task_index         (int) — -1 sentinel until a post-process
+                                              pass matches sub_task_instruction
+                                              to a canonical primitive.
+            - sub_task_description   (str) — always empty for the same reason.
+            - sub_task_instruction   (str) — Korean free-text the user typed.
             - frame_duration         ([start_frame, end_frame]) cumulative.
         """
         out = []
@@ -153,12 +160,9 @@ class DataManager:
         for seg in self._segments_meta:
             fc = int(seg.get('frame_count', 0))
             out.append({
-                'primitive_index': int(seg.get(
-                    'primitive_index',
-                    self._primitive_index_for(
-                        seg.get('primitive_description', '')))),
-                'primitive_description':
-                    seg.get('primitive_description', ''),
+                'sub_task_index': -1,
+                'sub_task_description': '',
+                'sub_task_instruction': seg.get('sub_task_instruction', ''),
                 'frame_duration': [cur, cur + fc],
             })
             cur += fc
@@ -171,7 +175,10 @@ class DataManager:
 
     # ========== Segment-based recording (v2) ==========
 
-    def start_segment(self, primitive_description: str = ''):
+    def start_segment(
+            self,
+            primitive_description: str = '',
+            sub_task: str = ''):
         """Begin a new segment within the current episode."""
         if self._status not in ('idle', 'between_segments'):
             raise RuntimeError(
@@ -180,13 +187,14 @@ class DataManager:
             self._segments_meta = []
             self._current_segment_index = 0
         self._pending_primitive = primitive_description or ''
+        self._pending_sub_task = sub_task or ''
         self._status = 'seg_recording'
         self._segment_start_time_s = time.perf_counter()
         self._start_time_s = self._segment_start_time_s
         if self._task_info and getattr(self._task_info, 'task_instruction', None):
             self.current_instruction = self._task_info.task_instruction[0]
         _LOGGER.info(f'Segment {self._current_segment_index} started '
-              f'(primitive={primitive_description!r})')
+              f'(sub_task={sub_task!r})')
 
     def stop_segment(self):
         """End the current segment and record its metadata."""
@@ -199,9 +207,9 @@ class DataManager:
         fps = self._current_fps()
         frame_count = max(0, int(round(duration * fps)))
         seg = {
-            'primitive_index': self._primitive_index_for(
-                self._pending_primitive),
-            'primitive_description': self._pending_primitive,
+            'sub_task_index': -1,
+            'sub_task_description': '',
+            'sub_task_instruction': self._pending_sub_task,
             'frame_count': frame_count,
         }
         self._segments_meta.append(seg)
@@ -210,6 +218,7 @@ class DataManager:
         self._start_time_s = 0
         self._segment_start_time_s = 0
         self._pending_primitive = ''
+        self._pending_sub_task = ''
         _LOGGER.info(f'Segment {len(self._segments_meta) - 1} stopped '
               f'({duration:.2f}s, {frame_count} frames @ {fps}Hz)')
 
@@ -351,8 +360,8 @@ class DataManager:
             'segments': self._serialize_segments(),
         }
         info_path = os.path.join(archive_dir, 'episode_info.json')
-        with open(info_path, 'w') as f:
-            json.dump(meta, f, indent=2)
+        with open(info_path, 'w', encoding='utf-8') as f:
+            json.dump(meta, f, indent=2, ensure_ascii=False)
         _LOGGER.info(f'episode_info.json written: {info_path}')
 
     # ========== Legacy wrappers (single-segment semantics) ==========
@@ -662,7 +671,7 @@ class DataManager:
         current_status.current_segment_index = int(self._current_segment_index)
         current_status.segment_count = int(len(self._segments_meta))
         current_status.segment_primitives = [
-            s.get('primitive_description', '') for s in self._segments_meta
+            s.get('sub_task_description', '') for s in self._segments_meta
         ]
         current_status.merge_status = 'none'
 

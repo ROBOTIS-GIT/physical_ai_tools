@@ -116,7 +116,7 @@ def _segment_boundaries(info, total_duration_s):
     for seg in segs[:-1]:
         end_frame = seg['frame_duration'][1]
         boundaries.append((end_frame * scale,
-                           seg.get('primitive_description', '')))
+                           seg.get('sub_task_description', '')))
     return boundaries
 
 

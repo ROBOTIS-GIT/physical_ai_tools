@@ -27,7 +27,7 @@ const InfoPanel = ({ variant = 'card' }) => {
   const { sendRecordCommand } = useRosServiceCaller();
 
   const info = useSelector((state) => state.tasks.taskInfo);
-  const pendingPrimitive = useSelector((state) => state.tasks.pendingPrimitive);
+  const pendingSubTask = useSelector((state) => state.tasks.pendingSubTask);
   const taskStatus = useSelector((state) => state.tasks.taskStatus);
   const segmentCount = useSelector(
     (state) => state.tasks.taskStatus.segmentCount || 0
@@ -40,9 +40,9 @@ const InfoPanel = ({ variant = 'card' }) => {
   );
   const needsTaskInfo = hasPendingSegments && !taskInfoComplete;
 
-  // Debounce-push the latest task_info (incl. pendingPrimitive) to the
+  // Debounce-push the latest task_info (incl. pendingSubTask) to the
   // backend so the joystick flow can start recording with the same
-  // folder name / primitive even before the UI's Record button is
+  // folder name / sub_task even before the UI's Record button is
   // clicked.
   useEffect(() => {
     if (!taskInfoComplete) return;
@@ -54,7 +54,7 @@ const InfoPanel = ({ variant = 'card' }) => {
     info.taskNum,
     info.taskName,
     info.taskInstruction,
-    pendingPrimitive,
+    pendingSubTask,
     taskInfoComplete,
     sendRecordCommand,
   ]);

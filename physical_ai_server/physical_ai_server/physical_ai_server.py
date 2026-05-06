@@ -960,14 +960,22 @@ class PhysicalAIServer(Node):
                 task_info = request.task_info
                 self._last_ui_task_info = task_info
 
+                task_num = (getattr(task_info, 'task_num', '') or '').strip()
                 task_name = (getattr(task_info, 'task_name', '') or '').strip()
                 if not task_name:
                     response.success = False
                     response.message = (
                         'task_name required before recording')
                     return response
+                if not task_num:
+                    response.success = False
+                    response.message = (
+                        'task_num required before recording')
+                    return response
 
-                repo_name = f'{self.robot_type}_{task_name}'
+                # Must match DataManager._save_repo_name and the UI preview
+                # (InfoPanel.js: "Task_<num>_<name>_MCAP").
+                repo_name = f'Task_{task_num}_{task_name}_MCAP'
                 need_new_manager = (
                     self.data_manager is None
                     or self.data_manager._save_repo_name != repo_name
@@ -1015,7 +1023,8 @@ class PhysicalAIServer(Node):
 
                 primitive = getattr(
                     task_info, 'primitive_description', '') or ''
-                self.data_manager.start_segment(primitive)
+                sub_task = getattr(task_info, 'sub_task', '') or ''
+                self.data_manager.start_segment(primitive, sub_task)
                 self.on_recording = True
                 self.start_recording_time = time.perf_counter()
                 self.communicator.publish_action_event('start')
@@ -2122,19 +2131,23 @@ class PhysicalAIServer(Node):
             self.get_logger().info(f'Unknown joystick trigger: {joystick_mode}')
 
     def _start_segment_with_latest_primitive(self):
-        """Start a segment using the most recent primitive from the UI.
+        """Start a segment using the most recent primitive/sub_task from the
+        UI.
 
-        The joystick has no primitive selector of its own, so it pulls the
-        latest ``pendingPrimitive`` that the UI pushed via SET_TASK_INFO
-        (cached in ``_last_ui_task_info``). This avoids stale primitives
-        from when the DataManager was first constructed.
+        The joystick has no UI of its own, so it pulls the latest
+        ``pendingSubTask`` that the UI pushed via SET_TASK_INFO (cached in
+        ``_last_ui_task_info``). This avoids stale values from when the
+        DataManager was first constructed.
         """
         primitive = ''
+        sub_task = ''
         cached = getattr(self, '_last_ui_task_info', None)
         if cached is not None:
             primitive = (
                 getattr(cached, 'primitive_description', '') or '')
-        self.data_manager.start_segment(primitive)
+            sub_task = (
+                getattr(cached, 'sub_task', '') or '')
+        self.data_manager.start_segment(primitive, sub_task)
 
     def _auto_create_recording_session(self) -> bool:
         """

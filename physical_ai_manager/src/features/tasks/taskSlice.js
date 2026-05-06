@@ -55,7 +55,11 @@ const initialState = {
     topicReceived: false,
   },
   // Pending primitive_description for the NEXT segment to be started.
+  // Always pushed as '' now — the legacy primitive selection UI was
+  // replaced by a free-text Korean sub_task field.
   pendingPrimitive: '',
+  // Pending Korean sub_task text for the NEXT segment to be started.
+  pendingSubTask: '',
   availableRobots: [],
   availableCameras: [],
   policyList: [],
@@ -117,6 +121,9 @@ const taskSlice = createSlice({
     setPendingPrimitive: (state, action) => {
       state.pendingPrimitive = action.payload || '';
     },
+    setPendingSubTask: (state, action) => {
+      state.pendingSubTask = action.payload || '';
+    },
   },
 });
 
@@ -135,6 +142,7 @@ export const {
   setJoystickMode,
   setRecordingMonitor,
   setPendingPrimitive,
+  setPendingSubTask,
 } = taskSlice.actions;
 
 export default taskSlice.reducer;
