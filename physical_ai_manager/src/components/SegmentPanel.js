@@ -27,7 +27,15 @@ import {
 } from 'react-icons/md';
 
 import TaskPhase from '../constants/taskPhases';
-import { setPendingSubTask } from '../features/tasks/taskSlice';
+import {
+  setPendingSubTask,
+  setPlannedCount,
+  setPlannedSubTasks,
+  setPlannedSubTaskAt,
+  setSlotToServerIdx,
+  setActiveSlotIndex,
+  resetSegmentPlan,
+} from '../features/tasks/taskSlice';
 import { useRosServiceCaller } from '../hooks/useRosServiceCaller';
 import InfoPanel from './InfoPanel';
 import Tooltip from './Tooltip';
@@ -58,14 +66,15 @@ const SegmentPanel = () => {
   const [optimisticRecording, setOptimisticRecording] = useState(false);
   const [savingInProgress, setSavingInProgress] = useState(false);
 
-  // Plan-mode state — pre-decide slot count and sub_tasks for an episode.
-  // Slots are added one-by-one via the + Add SubTask button. plannedCount === 0
-  // means no plan yet.
-  const [plannedCount, setPlannedCount] = useState(0);
-  const [plannedSubTasks, setPlannedSubTasks] = useState([]);
-  // -1 means slot not yet recorded; otherwise it is the backend segment idx.
-  const [slotToServerIdx, setSlotToServerIdx] = useState([]);
-  const [activeSlotIndex, setActiveSlotIndex] = useState(0);
+  // Plan-mode state — pre-decided slot count and sub_tasks for an episode.
+  // Lives in Redux so it survives navigating away from the recorder panel
+  // (e.g. Home → Record), matching how taskInfo persists. plannedCount === 0
+  // means no plan yet. -1 in slotToServerIdx means the slot has not been
+  // recorded yet; otherwise the value is the backend segment idx.
+  const plannedCount = useSelector((state) => state.tasks.plannedCount);
+  const plannedSubTasks = useSelector((state) => state.tasks.plannedSubTasks);
+  const slotToServerIdx = useSelector((state) => state.tasks.slotToServerIdx);
+  const activeSlotIndex = useSelector((state) => state.tasks.activeSlotIndex);
 
   const phase = status.phase;
   const serverRecording = phase === TaskPhase.RECORDING;
@@ -155,19 +164,16 @@ const SegmentPanel = () => {
   // Full plan reset — clears slot count, sub_tasks, and progress. Used by
   // the Reset button.
   const resetPlanState = useCallback(() => {
-    setPlannedCount(0);
-    setPlannedSubTasks([]);
-    setSlotToServerIdx([]);
-    setActiveSlotIndex(0);
-  }, []);
+    dispatch(resetSegmentPlan());
+  }, [dispatch]);
 
   // Episode-progress reset — keeps the planned slots and sub_tasks, just
   // marks all slots as not-yet-recorded so the same plan can be re-used for
   // the next episode. Used after Finish/Discard Episode.
   const resetEpisodeProgress = useCallback(() => {
-    setSlotToServerIdx((prev) => prev.map(() => -1));
-    setActiveSlotIndex(0);
-  }, []);
+    dispatch(setSlotToServerIdx(slotToServerIdx.map(() => -1)));
+    dispatch(setActiveSlotIndex(0));
+  }, [dispatch, slotToServerIdx]);
 
   // Highest plan-slot index that already has a saved server segment. The
   // count cannot shrink below highestSavedIdx + 1 without orphaning recorded
@@ -196,15 +202,15 @@ const SegmentPanel = () => {
         nextSubTasks = plannedSubTasks.slice(0, n);
         nextSlotMap = slotToServerIdx.slice(0, n);
       }
-      setPlannedCount(n);
-      setPlannedSubTasks(nextSubTasks);
-      setSlotToServerIdx(nextSlotMap);
+      dispatch(setPlannedCount(n));
+      dispatch(setPlannedSubTasks(nextSubTasks));
+      dispatch(setSlotToServerIdx(nextSlotMap));
       const firstPending = nextSlotMap.findIndex((v) => v === -1);
-      setActiveSlotIndex(
+      dispatch(setActiveSlotIndex(
         firstPending >= 0 ? firstPending : Math.max(0, n - 1)
-      );
+      ));
     },
-    [plannedCount, plannedSubTasks, slotToServerIdx]
+    [dispatch, plannedCount, plannedSubTasks, slotToServerIdx]
   );
 
   const handlePlanCountInput = useCallback(
@@ -241,13 +247,12 @@ const SegmentPanel = () => {
     resetPlanState();
   }, [canResetPlan, resetPlanState]);
 
-  const updatePlannedSubTask = useCallback((idx, value) => {
-    setPlannedSubTasks((prev) => {
-      const next = [...prev];
-      next[idx] = value;
-      return next;
-    });
-  }, []);
+  const updatePlannedSubTask = useCallback(
+    (idx, value) => {
+      dispatch(setPlannedSubTaskAt({ index: idx, value }));
+    },
+    [dispatch]
+  );
 
   const startRecordingSlot = useCallback(
     async (slotIdx) => {
@@ -287,11 +292,11 @@ const SegmentPanel = () => {
       const updatedSlotMap = slotToServerIdx.map((v, i) =>
         i === slotIdx ? assignedServerIdx : v
       );
-      setSlotToServerIdx(updatedSlotMap);
+      dispatch(setSlotToServerIdx(updatedSlotMap));
 
       const nextPending = updatedSlotMap.findIndex((v) => v === -1);
       if (nextPending >= 0) {
-        setActiveSlotIndex(nextPending);
+        dispatch(setActiveSlotIndex(nextPending));
         await startRecordingSlot(nextPending);
       }
       // If no pending slot remains, plan is complete; user presses Finish
@@ -299,6 +304,7 @@ const SegmentPanel = () => {
       setSavingInProgress(false);
     },
     [
+      dispatch,
       activeSlotIndex,
       isRecording,
       savingInProgress,
@@ -337,11 +343,12 @@ const SegmentPanel = () => {
         if (v > serverIdx) return v - 1;
         return v;
       });
-      setSlotToServerIdx(updated);
+      dispatch(setSlotToServerIdx(updated));
       const nextPending = updated.findIndex((v) => v === -1);
-      setActiveSlotIndex(nextPending >= 0 ? nextPending : 0);
+      dispatch(setActiveSlotIndex(nextPending >= 0 ? nextPending : 0));
     },
     [
+      dispatch,
       savingInProgress,
       activeSlotIndex,
       isRecording,

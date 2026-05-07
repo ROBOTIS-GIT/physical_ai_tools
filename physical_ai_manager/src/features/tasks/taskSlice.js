@@ -60,6 +60,13 @@ const initialState = {
   pendingPrimitive: '',
   // Pending Korean sub_task text for the NEXT segment to be started.
   pendingSubTask: '',
+  // Sub-task plan for the current/next episode. Held in Redux — not local
+  // component state — so the plan survives navigating away from the recorder
+  // panel and back, matching how taskInfo persists.
+  plannedCount: 0,
+  plannedSubTasks: [],
+  slotToServerIdx: [],
+  activeSlotIndex: 0,
   availableRobots: [],
   availableCameras: [],
   policyList: [],
@@ -124,6 +131,30 @@ const taskSlice = createSlice({
     setPendingSubTask: (state, action) => {
       state.pendingSubTask = action.payload || '';
     },
+    setPlannedCount: (state, action) => {
+      state.plannedCount = action.payload;
+    },
+    setPlannedSubTasks: (state, action) => {
+      state.plannedSubTasks = action.payload;
+    },
+    setPlannedSubTaskAt: (state, action) => {
+      const { index, value } = action.payload;
+      if (index >= 0 && index < state.plannedSubTasks.length) {
+        state.plannedSubTasks[index] = value;
+      }
+    },
+    setSlotToServerIdx: (state, action) => {
+      state.slotToServerIdx = action.payload;
+    },
+    setActiveSlotIndex: (state, action) => {
+      state.activeSlotIndex = action.payload;
+    },
+    resetSegmentPlan: (state) => {
+      state.plannedCount = 0;
+      state.plannedSubTasks = [];
+      state.slotToServerIdx = [];
+      state.activeSlotIndex = 0;
+    },
   },
 });
 
@@ -143,6 +174,12 @@ export const {
   setRecordingMonitor,
   setPendingPrimitive,
   setPendingSubTask,
+  setPlannedCount,
+  setPlannedSubTasks,
+  setPlannedSubTaskAt,
+  setSlotToServerIdx,
+  setActiveSlotIndex,
+  resetSegmentPlan,
 } = taskSlice.actions;
 
 export default taskSlice.reducer;
