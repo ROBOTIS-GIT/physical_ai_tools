@@ -114,6 +114,7 @@ private:
   std::string current_bag_uri_;
   std::vector<std::string> topics_to_record_ {};
   std::mutex mutex_;
+  std::mutex metrics_mutex_;
 
   // Preflight: verify each topic is actually publishing before recording starts
   std::atomic<bool> preflight_active_{false};

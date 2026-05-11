@@ -190,12 +190,15 @@ void ServiceBagRecorder::handle_prepare(const std::vector<std::string> & topics)
   // broken subscriptions alive (e.g. QoS mismatch, late-appearing publisher),
   // so a user refresh could not recover them. Warmup (monitor_warmup_ms_)
   // suppresses false alarms during the first few seconds after recreation.
-  topics_to_record_ = deduped;
-
-  // Clean up any previous subscriptions / state.
-  type_for_topic_.clear();
-  camera_topics_.clear();
-  joint_topics_.clear();
+  // Hold metrics_mutex_ so monitor_tick / message callbacks don't observe a
+  // half-cleared state.
+  {
+    std::scoped_lock<std::mutex> mlock(metrics_mutex_);
+    topics_to_record_ = deduped;
+    type_for_topic_.clear();
+    camera_topics_.clear();
+    joint_topics_.clear();
+  }
   generic_subscriptions_.clear();
   messages_received_ = 0;
   messages_written_ = 0;
@@ -217,42 +220,50 @@ void ServiceBagRecorder::handle_prepare(const std::vector<std::string> & topics)
   }
 
   // Categorize topics and populate type_for_topic_ (only available ones).
-  for (const auto & topic : topics_to_record_) {
-    auto it = names_and_types.find(topic);
-    if (it != names_and_types.end() && !it->second.empty()) {
-      const std::string & type = it->second.front();
-      type_for_topic_[topic] = type;
+  // Hold metrics_mutex_ for the same reason as the clear above.
+  {
+    std::scoped_lock<std::mutex> mlock(metrics_mutex_);
+    for (const auto & topic : topics_to_record_) {
+      auto it = names_and_types.find(topic);
+      if (it != names_and_types.end() && !it->second.empty()) {
+        const std::string & type = it->second.front();
+        type_for_topic_[topic] = type;
 
-      if (topic.find("image") != std::string::npos ||
-        topic.find("camera") != std::string::npos)
-      {
-        camera_topics_.insert(topic);
-      } else if (topic.find("joint") != std::string::npos ||
-        topic.find("arm") != std::string::npos ||
-        topic.find("head") != std::string::npos ||
-        topic.find("lift") != std::string::npos)
-      {
-        joint_topics_.insert(topic);
+        if (topic.find("image") != std::string::npos ||
+          topic.find("camera") != std::string::npos)
+        {
+          camera_topics_.insert(topic);
+        } else if (topic.find("joint") != std::string::npos ||
+          topic.find("arm") != std::string::npos ||
+          topic.find("head") != std::string::npos ||
+          topic.find("lift") != std::string::npos)
+        {
+          joint_topics_.insert(topic);
+        }
       }
     }
   }
 
   // Create subscriptions — messages start flowing immediately so the
   // monitor can show live Hz before the user presses record.
+  // Note: create_subscriptions reads type_for_topic_ but is only ever invoked
+  // here (and from handle_start); both call sites hold mutex_ via the service
+  // callback, so no other writer can race.
   create_subscriptions();
 
   // Seed one fresh metric per topic with subscribe timestamp.
   const auto now_ns = static_cast<uint64_t>(
     std::chrono::steady_clock::now().time_since_epoch().count());
-  per_topic_metrics_.clear();
-  for (const auto & topic : topics_to_record_) {
-    auto m = std::make_unique<TopicMetric>();
-    m->subscribe_start_ns = now_ns;
-    per_topic_metrics_.emplace(topic, std::move(m));
+  {
+    std::scoped_lock<std::mutex> mlock(metrics_mutex_);
+    per_topic_metrics_.clear();
+    for (const auto & topic : topics_to_record_) {
+      auto m = std::make_unique<TopicMetric>();
+      m->subscribe_start_ns = now_ns;
+      per_topic_metrics_.emplace(topic, std::move(m));
+    }
+    monitor_start_ns_ = now_ns;
   }
-
-  // Mark monitor warmup start so status checks have a grace period.
-  monitor_start_ns_ = now_ns;
 
   RCLCPP_INFO(
     this->get_logger(),
@@ -286,26 +297,29 @@ void ServiceBagRecorder::handle_start(const std::string & uri)
     auto names_and_types = this->get_topic_names_and_types();
     {
       bool added_new = false;
-      for (const auto & topic : topics_to_record_) {
-        if (type_for_topic_.count(topic) > 0) {
-          continue;  // already subscribed
-        }
-        auto it = names_and_types.find(topic);
-        if (it != names_and_types.end() && !it->second.empty()) {
-          const std::string & type = it->second.front();
-          type_for_topic_[topic] = type;
-          if (topic.find("image") != std::string::npos ||
-            topic.find("camera") != std::string::npos) {
-            camera_topics_.insert(topic);
-          } else if (topic.find("joint") != std::string::npos ||
-            topic.find("arm") != std::string::npos ||
-            topic.find("head") != std::string::npos ||
-            topic.find("lift") != std::string::npos) {
-            joint_topics_.insert(topic);
+      {
+        std::scoped_lock<std::mutex> mlock(metrics_mutex_);
+        for (const auto & topic : topics_to_record_) {
+          if (type_for_topic_.count(topic) > 0) {
+            continue;  // already subscribed
           }
-          added_new = true;
-          RCLCPP_INFO(this->get_logger(), "Late-discovered topic: %s [%s]",
-            topic.c_str(), type.c_str());
+          auto it = names_and_types.find(topic);
+          if (it != names_and_types.end() && !it->second.empty()) {
+            const std::string & type = it->second.front();
+            type_for_topic_[topic] = type;
+            if (topic.find("image") != std::string::npos ||
+              topic.find("camera") != std::string::npos) {
+              camera_topics_.insert(topic);
+            } else if (topic.find("joint") != std::string::npos ||
+              topic.find("arm") != std::string::npos ||
+              topic.find("head") != std::string::npos ||
+              topic.find("lift") != std::string::npos) {
+              joint_topics_.insert(topic);
+            }
+            added_new = true;
+            RCLCPP_INFO(this->get_logger(), "Late-discovered topic: %s [%s]",
+              topic.c_str(), type.c_str());
+          }
         }
       }
       if (added_new) {
@@ -314,6 +328,7 @@ void ServiceBagRecorder::handle_start(const std::string & uri)
         // Seed metrics for new topics.
         const auto now_ns = static_cast<uint64_t>(
           std::chrono::steady_clock::now().time_since_epoch().count());
+        std::scoped_lock<std::mutex> mlock(metrics_mutex_);
         for (const auto & topic : topics_to_record_) {
           if (per_topic_metrics_.count(topic) == 0) {
             auto m = std::make_unique<TopicMetric>();
@@ -654,6 +669,7 @@ void ServiceBagRecorder::log_statistics()
 
   // Per-topic forensic dump so failed episodes leave a trail of which
   // topics actually produced data and which were silent.
+  std::scoped_lock<std::mutex> mlock(metrics_mutex_);
   for (const auto & topic : topics_to_record_) {
     auto it = per_topic_metrics_.find(topic);
     const uint64_t cnt = (it != per_topic_metrics_.end())
@@ -668,119 +684,129 @@ void ServiceBagRecorder::log_statistics()
 
 void ServiceBagRecorder::monitor_tick()
 {
-  // Publish whenever per-topic metrics exist (i.e. after PREPARE), even when
-  // not actively recording — so the operator can see topic health before
-  // pressing record.
-  if (per_topic_metrics_.empty()) {
-    return;
-  }
-
-  const auto now_ns = static_cast<uint64_t>(
-    std::chrono::steady_clock::now().time_since_epoch().count());
-
-  const uint64_t warmup_ns =
-    static_cast<uint64_t>(monitor_warmup_ms_) * 1000000ULL;
-  const bool in_warmup =
-    (monitor_start_ns_ != 0) &&
-    (now_ns - monitor_start_ns_) < warmup_ns;
-
   rosbag_recorder::msg::RecordingMonitor msg;
-  msg.topic_names.reserve(topics_to_record_.size());
-  msg.rates_hz.reserve(topics_to_record_.size());
-  msg.baseline_hz.reserve(topics_to_record_.size());
-  msg.seconds_since_last.reserve(topics_to_record_.size());
-  msg.status.reserve(topics_to_record_.size());
 
-  const uint64_t stall_window_ns =
-    static_cast<uint64_t>(monitor_stall_window_ms_) * 1000000ULL;
+  // Lock the metric maps for the entire iteration phase. handle_prepare() may
+  // concurrently clear()/emplace() per_topic_metrics_ and topics_to_record_;
+  // without this lock we would dereference a freed unique_ptr<TopicMetric> and
+  // SIGSEGV. Using metrics_mutex_ (not mutex_) keeps this independent of the
+  // writer lock so callbacks can keep delivering messages during long writes.
+  {
+    std::scoped_lock<std::mutex> lock(metrics_mutex_);
 
-  for (const auto & topic : topics_to_record_) {
-    auto it = per_topic_metrics_.find(topic);
-    if (it == per_topic_metrics_.end()) {
-      continue;
+    // Publish whenever per-topic metrics exist (i.e. after PREPARE), even when
+    // not actively recording — so the operator can see topic health before
+    // pressing record.
+    if (per_topic_metrics_.empty()) {
+      return;
     }
-    auto & m = *it->second;
 
-    const uint64_t count_now = m.message_count.load(std::memory_order_relaxed);
-    const uint64_t last_recv_ns = m.last_recv_ns.load(std::memory_order_relaxed);
+    const auto now_ns = static_cast<uint64_t>(
+      std::chrono::steady_clock::now().time_since_epoch().count());
 
-    // Compute instantaneous rate over [last_tick, now]. First tick after a
-    // PREPARE has last_tick_ns == 0, so we just seed it.
-    double rate_hz = 0.0;
-    if (m.last_tick_ns != 0 && now_ns > m.last_tick_ns) {
-      const double dt_s =
-        static_cast<double>(now_ns - m.last_tick_ns) / 1e9;
-      if (dt_s > 0.0) {
-        const uint64_t delta = count_now - m.last_count_snapshot;
-        rate_hz = static_cast<double>(delta) / dt_s;
+    const uint64_t warmup_ns =
+      static_cast<uint64_t>(monitor_warmup_ms_) * 1000000ULL;
+    const bool in_warmup =
+      (monitor_start_ns_ != 0) &&
+      (now_ns - monitor_start_ns_) < warmup_ns;
+
+    msg.topic_names.reserve(topics_to_record_.size());
+    msg.rates_hz.reserve(topics_to_record_.size());
+    msg.baseline_hz.reserve(topics_to_record_.size());
+    msg.seconds_since_last.reserve(topics_to_record_.size());
+    msg.status.reserve(topics_to_record_.size());
+
+    const uint64_t stall_window_ns =
+      static_cast<uint64_t>(monitor_stall_window_ms_) * 1000000ULL;
+
+    for (const auto & topic : topics_to_record_) {
+      auto it = per_topic_metrics_.find(topic);
+      if (it == per_topic_metrics_.end()) {
+        continue;
       }
-    }
-    m.last_tick_ns = now_ns;
-    m.last_count_snapshot = count_now;
+      auto & m = *it->second;
 
-    // If last_recv_ns > 0, check against last received timestamp.
-    // If last_recv_ns == 0 (never received), check against subscribe time —
-    // if we've waited longer than the stall window with zero messages, it's stalled.
-    bool no_recent_msg = false;
-    if (last_recv_ns != 0) {
-      no_recent_msg = (now_ns > last_recv_ns) &&
-        ((now_ns - last_recv_ns) > stall_window_ns);
-    } else if (m.subscribe_start_ns != 0) {
-      no_recent_msg = (now_ns > m.subscribe_start_ns) &&
-        ((now_ns - m.subscribe_start_ns) > stall_window_ns);
-    }
+      const uint64_t count_now = m.message_count.load(std::memory_order_relaxed);
+      const uint64_t last_recv_ns = m.last_recv_ns.load(std::memory_order_relaxed);
 
-    bool stalled = false;
-    bool slow = false;
+      // Compute instantaneous rate over [last_tick, now]. First tick after a
+      // PREPARE has last_tick_ns == 0, so we just seed it.
+      double rate_hz = 0.0;
+      if (m.last_tick_ns != 0 && now_ns > m.last_tick_ns) {
+        const double dt_s =
+          static_cast<double>(now_ns - m.last_tick_ns) / 1e9;
+        if (dt_s > 0.0) {
+          const uint64_t delta = count_now - m.last_count_snapshot;
+          rate_hz = static_cast<double>(delta) / dt_s;
+        }
+      }
+      m.last_tick_ns = now_ns;
+      m.last_count_snapshot = count_now;
 
-    if (!in_warmup) {
-      const double effective_baseline =
-        (m.ema_hz > monitor_min_baseline_hz_) ? m.ema_hz : 0.0;
+      // If last_recv_ns > 0, check against last received timestamp.
+      // If last_recv_ns == 0 (never received), check against subscribe time —
+      // if we've waited longer than the stall window with zero messages, it's stalled.
+      bool no_recent_msg = false;
+      if (last_recv_ns != 0) {
+        no_recent_msg = (now_ns > last_recv_ns) &&
+          ((now_ns - last_recv_ns) > stall_window_ns);
+      } else if (m.subscribe_start_ns != 0) {
+        no_recent_msg = (now_ns > m.subscribe_start_ns) &&
+          ((now_ns - m.subscribe_start_ns) > stall_window_ns);
+      }
 
-      if (no_recent_msg) {
-        stalled = true;
-      } else if (effective_baseline > 0.0) {
-        if (rate_hz < effective_baseline * monitor_stall_ratio_) {
+      bool stalled = false;
+      bool slow = false;
+
+      if (!in_warmup) {
+        const double effective_baseline =
+          (m.ema_hz > monitor_min_baseline_hz_) ? m.ema_hz : 0.0;
+
+        if (no_recent_msg) {
           stalled = true;
-        } else if (rate_hz < effective_baseline * monitor_slow_ratio_) {
-          slow = true;
+        } else if (effective_baseline > 0.0) {
+          if (rate_hz < effective_baseline * monitor_stall_ratio_) {
+            stalled = true;
+          } else if (rate_hz < effective_baseline * monitor_slow_ratio_) {
+            slow = true;
+          }
+        }
+
+        // EMA only advances on healthy ticks.
+        if (!stalled && !slow && rate_hz > 0.0) {
+          if (!m.ema_initialised) {
+            m.ema_hz = rate_hz;
+            m.ema_initialised = true;
+          } else {
+            m.ema_hz = (monitor_ema_alpha_ * rate_hz) +
+              ((1.0 - monitor_ema_alpha_) * m.ema_hz);
+          }
         }
       }
+      m.stalled = stalled;
 
-      // EMA only advances on healthy ticks.
-      if (!stalled && !slow && rate_hz > 0.0) {
-        if (!m.ema_initialised) {
-          m.ema_hz = rate_hz;
-          m.ema_initialised = true;
-        } else {
-          m.ema_hz = (monitor_ema_alpha_ * rate_hz) +
-            ((1.0 - monitor_ema_alpha_) * m.ema_hz);
-        }
+      uint8_t status_byte = 0;
+      if (stalled) {
+        status_byte = 2;
+      } else if (slow) {
+        status_byte = 1;
       }
+
+      const float seconds_since_last = (last_recv_ns == 0)
+        ? -1.0f
+        : static_cast<float>(
+            static_cast<double>(now_ns - last_recv_ns) / 1e9);
+
+      msg.topic_names.push_back(topic);
+      msg.rates_hz.push_back(static_cast<float>(rate_hz));
+      msg.baseline_hz.push_back(static_cast<float>(m.ema_hz));
+      msg.seconds_since_last.push_back(seconds_since_last);
+      msg.status.push_back(status_byte);
     }
-    m.stalled = stalled;
 
-    uint8_t status_byte = 0;
-    if (stalled) {
-      status_byte = 2;
-    } else if (slow) {
-      status_byte = 1;
-    }
-
-    const float seconds_since_last = (last_recv_ns == 0)
-      ? -1.0f
-      : static_cast<float>(
-          static_cast<double>(now_ns - last_recv_ns) / 1e9);
-
-    msg.topic_names.push_back(topic);
-    msg.rates_hz.push_back(static_cast<float>(rate_hz));
-    msg.baseline_hz.push_back(static_cast<float>(m.ema_hz));
-    msg.seconds_since_last.push_back(seconds_since_last);
-    msg.status.push_back(status_byte);
-  }
-
-  msg.total_received = messages_received_.load(std::memory_order_relaxed);
-  msg.total_written = messages_written_.load(std::memory_order_relaxed);
+    msg.total_received = messages_received_.load(std::memory_order_relaxed);
+    msg.total_written = messages_written_.load(std::memory_order_relaxed);
+  }  // release metrics_mutex_ before DDS publish
 
   if (monitor_pub_) {
     monitor_pub_->publish(std::move(msg));
@@ -804,44 +830,54 @@ void ServiceBagRecorder::handle_serialized_message(
     }
   }
 
-  // Per-topic monitor counter — runs even when not recording so the
-  // operator can see topic health before pressing record.
-  if (!per_topic_metrics_.empty()) {
-    const auto metric_it = per_topic_metrics_.find(topic);
-    if (metric_it != per_topic_metrics_.end()) {
-      metric_it->second->message_count.fetch_add(1, std::memory_order_relaxed);
-      const auto now_ns = std::chrono::steady_clock::now().time_since_epoch().count();
-      metric_it->second->last_recv_ns.store(
-        static_cast<uint64_t>(now_ns), std::memory_order_relaxed);
+  // Per-topic monitor counter + type lookup under metrics_mutex_ (separate from
+  // writer's mutex_). handle_prepare() holds metrics_mutex_ while clearing and
+  // repopulating these maps; without this lock we would dereference a freed
+  // unique_ptr<TopicMetric> entry. Using a dedicated mutex keeps callbacks
+  // unblocked during handle_start()'s preflight wait, which holds mutex_ but
+  // not metrics_mutex_.
+  std::string type;
+  bool have_type = false;
+  {
+    std::scoped_lock<std::mutex> mlock(metrics_mutex_);
+
+    if (!per_topic_metrics_.empty()) {
+      const auto metric_it = per_topic_metrics_.find(topic);
+      if (metric_it != per_topic_metrics_.end()) {
+        metric_it->second->message_count.fetch_add(1, std::memory_order_relaxed);
+        const auto now_ns = std::chrono::steady_clock::now().time_since_epoch().count();
+        metric_it->second->last_recv_ns.store(
+          static_cast<uint64_t>(now_ns), std::memory_order_relaxed);
+      }
+    }
+
+    const auto it = type_for_topic_.find(topic);
+    if (it != type_for_topic_.end()) {
+      type = it->second;
+      have_type = true;
     }
   }
 
-  // Fast path for when not recording
   if (!is_recording_.load(std::memory_order_acquire)) {
     return;
   }
 
   messages_received_++;
 
-  const auto it = type_for_topic_.find(topic);
-  if (it == type_for_topic_.end()) {
+  if (!have_type) {
     return;
   }
-  const std::string & type = it->second;
 
   // Get timestamps from RMW
   const auto & rmw_info = message_info.get_rmw_message_info();
-
-  // Use source_timestamp (when message was published) for rosbag timeline
   rclcpp::Time source_timestamp(rmw_info.source_timestamp, RCL_ROS_TIME);
 
-  // Note: received_timestamp is also available via rmw_info.received_timestamp
-  // MCAP format stores both: publishTime (source) and logTime (received)
-
-  // Write to bag with lock - double-check writer_ inside lock to prevent race condition
+  // Write to bag with mutex_ — protects writer_ and serializes write() calls.
+  // Lock order is always metrics_mutex_ -> mutex_ here; handle_send_command takes
+  // mutex_ -> metrics_mutex_ inside handle_prepare/handle_start. Since neither
+  // path holds both locks simultaneously across this boundary, no deadlock.
   {
     std::scoped_lock<std::mutex> lock(mutex_);
-    // Second check inside lock - writer_ may have been reset by handle_stop()
     if (!writer_) {
       return;
     }
