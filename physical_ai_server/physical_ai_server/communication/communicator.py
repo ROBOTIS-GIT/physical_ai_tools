@@ -47,7 +47,7 @@ from rclpy.qos import (
     ReliabilityPolicy
 )
 from rosbag_recorder.srv import SendCommand
-from std_msgs.msg import Empty, String
+from std_msgs.msg import Bool, Empty, String
 from trajectory_msgs.msg import JointTrajectory
 
 
@@ -128,6 +128,8 @@ class Communicator:
             'mode': None
         }
 
+        self.middle_pedal_held: bool = False
+
         # Joystick handler callback for immediate processing
         self._joystick_handler: Optional[Callable[[str], None]] = None
 
@@ -148,6 +150,12 @@ class Communicator:
             String,
             '/leader/joystick_controller/tact_trigger',
             self.joystick_trigger_callback,
+            10
+        )
+        self.middle_pedal_subscriber = self.node.create_subscription(
+            Bool,
+            '/leader/foot_switch/middle_pedal',
+            self.middle_pedal_callback,
             10
         )
         self.node.get_logger().info('Joystick trigger subscriber initialized')
@@ -198,6 +206,13 @@ class Communicator:
         self.action_event_publisher = self.node.create_publisher(
             String,
             '/task/action_event',
+            self.PUB_QOS_SIZE
+        )
+
+        # Foot switch command publisher (forwarded to UI for record control)
+        self.foot_switch_command_publisher = self.node.create_publisher(
+            String,
+            '/task/foot_switch_command',
             self.PUB_QOS_SIZE
         )
 
@@ -370,6 +385,11 @@ class Communicator:
         """Publish task status."""
         self.status_publisher.publish(status)
 
+    def publish_foot_switch_command(self, command: str):
+        msg = String()
+        msg.data = command
+        self.foot_switch_command_publisher.publish(msg)
+
     def publish_action_event(self, event: str):
         """Publish action event for voice feedback (start/finish/cancel)."""
         msg = String()
@@ -411,6 +431,12 @@ class Communicator:
             self._joystick_handler(msg.data)
             # Mark as processed to prevent duplicate handling in timer callback
             self.joystick_state['updated'] = False
+
+    def middle_pedal_callback(self, msg: Bool):
+        """Track foot switch middle pedal state."""
+        self.middle_pedal_held = msg.data
+        self.node.get_logger().debug(
+            f'Middle pedal: {"held" if msg.data else "released"}')
 
     def heartbeat_timer_callback(self):
         """Publish heartbeat."""
@@ -639,6 +665,10 @@ class Communicator:
            self.joystick_trigger_subscriber is not None:
             self.node.destroy_subscription(self.joystick_trigger_subscriber)
             self.joystick_trigger_subscriber = None
+        if hasattr(self, 'middle_pedal_subscriber') and \
+           self.middle_pedal_subscriber is not None:
+            self.node.destroy_subscription(self.middle_pedal_subscriber)
+            self.middle_pedal_subscriber = None
 
     def _cleanup_services(self):
         service_names = [

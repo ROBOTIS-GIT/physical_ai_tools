@@ -2058,68 +2058,26 @@ class PhysicalAIServer(Node):
         self.get_logger().info(f'Joystick trigger: {joystick_mode}')
 
         if joystick_mode == 'right':
-            # Toggle Start/Finish
-            if self.data_manager is None:
-                # Auto-create recording session with timestamp-based task name
-                self.get_logger().info(
-                    'Right button: No session exists, auto-creating...')
-                if not self._auto_create_recording_session():
-                    return
-                # Start rosbag, then recording
-                rosbag_path = self.data_manager.get_save_rosbag_path(allow_idle=True)
-                if not rosbag_path:
-                    self.get_logger().error('Failed to resolve rosbag path')
-                    return
-                try:
-                    self.communicator.start_rosbag(rosbag_uri=rosbag_path)
-                except Exception as e:
-                    self.get_logger().error(f'Failed to start rosbag: {e}')
-                    return
-                self._start_segment_with_latest_primitive()
-                self.on_recording = True
-                self.start_recording_time = time.perf_counter()
-                self.communicator.publish_action_event('start')
-            elif self.data_manager.is_recording():
-                # Currently recording -> Finish and save
-                self.get_logger().info('Right button: Finishing recording')
-                self.stop_recording_and_save()
-                self.communicator.publish_action_event('finish')
-            else:
-                # Not recording -> Start recording
-                self.get_logger().info('Right button: Starting recording')
-                if self.timer_manager:
-                    self.timer_manager.start(timer_name=self.operation_mode)
-                rosbag_path = self.data_manager.get_save_rosbag_path(allow_idle=True)
-                if not rosbag_path:
-                    self.get_logger().error('Failed to resolve rosbag path')
-                    return
-                try:
-                    self.communicator.start_rosbag(rosbag_uri=rosbag_path)
-                except Exception as e:
-                    self.get_logger().error(f'Failed to start rosbag: {e}')
-                    return
-                self.on_recording = True
-                self._start_segment_with_latest_primitive()
-                self.start_recording_time = time.perf_counter()
-                self.communicator.publish_action_event('start')
+            if self.communicator is not None and \
+               not self.communicator.middle_pedal_held:
+                self.get_logger().debug(
+                    'Right tact ignored: middle foot pedal not held')
+                return
+            self.get_logger().info('Right tact + middle pedal: record_toggle → UI')
+            self.communicator.publish_foot_switch_command('record_toggle')
 
         elif joystick_mode == 'left':
-            # Cancel during recording, or mark previous episode in idle
-            if self.data_manager is None:
-                self.get_logger().info('Left button ignored - no session')
-            elif self.data_manager.is_recording():
-                self.get_logger().info('Left button: Cancelling recording')
-                self.cancel_current_recording()
-                self.communicator.publish_action_event('cancel')
-            else:
-                # Idle state: toggle previous episode's needs_review
-                result = self.data_manager.toggle_previous_episode_needs_review()
-                if result is not None:
-                    event = 'review_on' if result else 'review_off'
-                    self.communicator.publish_action_event(event)
-                else:
-                    self.get_logger().info(
-                        'Left button: No previous episode to toggle')
+            if self.communicator is not None and \
+               not self.communicator.middle_pedal_held:
+                self.get_logger().debug(
+                    'Left tact ignored: middle foot pedal not held')
+                return
+            self.get_logger().info('Left tact + middle pedal: record_cancel → UI')
+            self.communicator.publish_foot_switch_command('record_cancel')
+
+        elif joystick_mode == 'right_long_time_middle':
+            self.get_logger().info('Middle + Right long press: finish_episode → UI')
+            self.communicator.publish_foot_switch_command('finish_episode')
 
         elif joystick_mode == 'right_long_time':
             self.get_logger().info('Right long press - reserved for future use')

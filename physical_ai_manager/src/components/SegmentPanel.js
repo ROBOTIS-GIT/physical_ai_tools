@@ -12,10 +12,12 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useSelector, useDispatch } from 'react-redux';
+import ROSLIB from 'roslib';
 import clsx from 'clsx';
 import toast from 'react-hot-toast';
+import rosConnectionManager from '../utils/rosConnectionManager';
 import {
   MdArrowDropDown,
   MdArrowDropUp,
@@ -58,7 +60,9 @@ const SegmentPanel = () => {
   const dispatch = useDispatch();
   const status = useSelector((state) => state.tasks.taskStatus);
   const taskInfo = useSelector((state) => state.tasks.taskInfo);
+  const rosbridgeUrl = useSelector((state) => state.ros.rosbridgeUrl);
   const { sendRecordCommand } = useRosServiceCaller();
+  const footSwitchTopicRef = useRef(null);
 
   // Optimistic "recording" flag: flips immediately on Record click so the
   // button set reflects user intent without waiting for the TaskStatus
@@ -364,6 +368,52 @@ const SegmentPanel = () => {
       resetEpisodeProgress();
     }
   }, [canFinishEpisode, runCommand, resetEpisodeProgress]);
+
+  // Keep a ref to latest handlers so the subscription callback (created once)
+  // always sees current state without needing to re-subscribe on every render.
+  const footSwitchHandlersRef = useRef({});
+  footSwitchHandlersRef.current = {
+    isRecording,
+    activeSlotIndex,
+    handleRecordStart,
+    handleSlotSave,
+    handleSlotTrash,
+    handleFinish,
+  };
+
+  // Foot switch command subscription — created once per rosbridgeUrl
+  useEffect(() => {
+    rosConnectionManager.getConnection(rosbridgeUrl).then((ros) => {
+      if (!ros) return;
+      const topic = new ROSLIB.Topic({
+        ros,
+        name: '/task/foot_switch_command',
+        messageType: 'std_msgs/msg/String',
+      });
+      topic.subscribe((msg) => {
+        const { isRecording: rec, activeSlotIndex: slot,
+          handleRecordStart: onStart, handleSlotSave: onSave,
+          handleSlotTrash: onCancel, handleFinish: onFinish,
+        } = footSwitchHandlersRef.current;
+        const cmd = msg.data;
+        if (cmd === 'record_toggle') {
+          if (rec) onSave(slot);
+          else onStart();
+        } else if (cmd === 'record_cancel') {
+          onCancel(slot);
+        } else if (cmd === 'finish_episode') {
+          onFinish();
+        }
+      });
+      footSwitchTopicRef.current = topic;
+    });
+    return () => {
+      if (footSwitchTopicRef.current) {
+        footSwitchTopicRef.current.unsubscribe();
+        footSwitchTopicRef.current = null;
+      }
+    };
+  }, [rosbridgeUrl]);
 
   const handleDiscardEpisode = useCallback(async () => {
     if (!canDiscardEpisode) return;

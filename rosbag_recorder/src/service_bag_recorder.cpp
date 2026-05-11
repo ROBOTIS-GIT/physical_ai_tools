@@ -873,9 +873,9 @@ void ServiceBagRecorder::handle_serialized_message(
   rclcpp::Time source_timestamp(rmw_info.source_timestamp, RCL_ROS_TIME);
 
   // Write to bag with mutex_ — protects writer_ and serializes write() calls.
-  // Lock order is always metrics_mutex_ -> mutex_ here; handle_send_command takes
-  // mutex_ -> metrics_mutex_ inside handle_prepare/handle_start. Since neither
-  // path holds both locks simultaneously across this boundary, no deadlock.
+  // metrics_mutex_ was already released above; mutex_ is acquired here separately.
+  // The two locks are never held simultaneously in this path, so there is no
+  // deadlock risk with handle_prepare's mutex_ → metrics_mutex_ nesting.
   {
     std::scoped_lock<std::mutex> lock(mutex_);
     if (!writer_) {
