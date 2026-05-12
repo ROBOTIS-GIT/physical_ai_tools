@@ -1100,6 +1100,7 @@ class PhysicalAIServer(Node):
                             self.stop_current_segment()
                             self.on_recording = False
                         archive_dir = self.finish_current_episode()
+                        self.communicator.publish_action_event('finish_episode')
                         response.success = True
                         response.message = (
                             f'Episode finished: {archive_dir}')

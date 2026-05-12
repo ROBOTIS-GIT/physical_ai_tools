@@ -384,6 +384,7 @@ export function useRosTopicSubscription() {
         deleted: 'Recording deleted',
         review_on: 'Previous data needs review',
         review_off: 'Previous data review cleared',
+        finish_episode: 'Episode finished',
       };
 
       const ros = await rosConnectionManager.getConnection(rosbridgeUrl);
