@@ -2,6 +2,12 @@
 Changelog for package physical_ai_tools
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
+1.0.0 (2026-06-24)
+------------------
+* Set rmw_zenoh_cpp as the default RMW in Docker images
+* Added migration notice in container.sh on start and enter
+* Contributors: Hyungyu Kim
+
 0.8.3 (2026-04-27)
 ------------------
 * Changed repository url in Dockerfile for cyclo_manager
