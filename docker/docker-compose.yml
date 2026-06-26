@@ -1,7 +1,7 @@
 services:
   physical_ai_manager:
     container_name: physical_ai_manager
-    image: robotis/physical-ai-manager:0.8.3
+    image: robotis/physical-ai-manager:1.0.0
     build:
       context: ../physical_ai_manager
       dockerfile: Dockerfile
@@ -9,7 +9,7 @@ services:
     restart: unless-stopped
   physical_ai_server:
     container_name: physical_ai_server
-    image: robotis/physical-ai-server:0.8.3
+    image: robotis/physical-ai-server:1.0.0
     tty: true
     restart: always
     cap_add:

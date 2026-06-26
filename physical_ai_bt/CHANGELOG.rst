@@ -2,6 +2,11 @@
 Changelog for package physical_ai_bt
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
+1.0.0 (2026-06-24)
+------------------
+* Set rmw_zenoh_cpp as the default RMW in Docker images
+* Contributors: Hyungyu Kim
+
 0.8.3 (2026-04-27)
 ------------------
 * None
