@@ -32,6 +32,10 @@ start_container() {
 
     echo "Starting physical_ai_server container..."
 
+    ### rmw_zenoh notice (remove later)
+    print_rmw_zenoh_notice
+    ### rmw_zenoh notice (remove later)
+
     # Pull the latest images
     docker compose -f "${SCRIPT_DIR}/docker-compose.yml" pull
 
@@ -53,8 +57,30 @@ enter_container() {
         echo "Error: Container is not running"
         exit 1
     fi
+
+    ### rmw_zenoh notice (remove later)
+    print_rmw_zenoh_notice
+    ### rmw_zenoh notice (remove later)
+
     docker exec -it "$CONTAINER_NAME" bash
 }
+
+### rmw_zenoh notice (remove later)
+print_rmw_zenoh_notice() {
+    W=52
+    BAR=$(printf '%*s' $W '' | tr ' ' '=')
+    LINE1="Since v1.0.0, rmw_zenoh_cpp is the default RMW."
+    LINE2="RMW_IMPLEMENTATION is set in ~/.bashrc inside the"
+    LINE3="container."
+    echo ""
+    echo "  +${BAR}+"
+    printf "  |  %-$((W-2))s|\n" "$LINE1"
+    printf "  |  %-$((W-2))s|\n" "$LINE2"
+    printf "  |  %-$((W-2))s|\n" "$LINE3"
+    echo "  +${BAR}+"
+    echo ""
+}
+### rmw_zenoh notice (remove later)
 
 # Function to stop the container
 stop_container() {
