@@ -16,3 +16,36 @@ jobs:
     with:
       source_branch: main
       target_branch: jazzy
+
+  publish-manager:
+    needs: release
+    if: needs.release.outputs.published == 'true'
+    permissions:
+      contents: read
+    uses: ROBOTIS-GIT/github_workflows/.github/workflows/docker-publish.yml@main
+    with:
+      image: robotis/physical-ai-manager
+      version: ${{ needs.release.outputs.version }}
+      checkout_ref: jazzy
+      context: ./physical_ai_manager
+      dockerfile: ./physical_ai_manager/Dockerfile
+    secrets:
+      DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
+      DOCKERHUB_TOKEN: ${{ secrets.DOCKERHUB_TOKEN }}
+
+  publish-server:
+    needs: release
+    if: needs.release.outputs.published == 'true'
+    permissions:
+      contents: read
+    uses: ROBOTIS-GIT/github_workflows/.github/workflows/docker-publish.yml@main
+    with:
+      image: robotis/physical-ai-server
+      version: ${{ needs.release.outputs.version }}
+      checkout_ref: jazzy
+      context: .
+      dockerfile_amd64: ./physical_ai_server/Dockerfile.amd64
+      dockerfile_arm64: ./physical_ai_server/Dockerfile.arm64
+    secrets:
+      DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
+      DOCKERHUB_TOKEN: ${{ secrets.DOCKERHUB_TOKEN }}
