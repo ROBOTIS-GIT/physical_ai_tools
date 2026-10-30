@@ -1,0 +1,38 @@
+name: Publish Docker image
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: Existing published release version (X.Y.Z)
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  publish-manager:
+    uses: ROBOTIS-GIT/github_workflows/.github/workflows/docker-publish.yml@main
+    with:
+      image: robotis/physical-ai-manager
+      version: ${{ inputs.version }}
+      checkout_ref: jazzy
+      context: ./physical_ai_manager
+      dockerfile: ./physical_ai_manager/Dockerfile
+    secrets:
+      DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
+      DOCKERHUB_TOKEN: ${{ secrets.DOCKERHUB_TOKEN }}
+
+  publish-server:
+    uses: ROBOTIS-GIT/github_workflows/.github/workflows/docker-publish.yml@main
+    with:
+      image: robotis/physical-ai-server
+      version: ${{ inputs.version }}
+      checkout_ref: jazzy
+      context: .
+      dockerfile_amd64: ./physical_ai_server/Dockerfile.amd64
+      dockerfile_arm64: ./physical_ai_server/Dockerfile.arm64
+    secrets:
+      DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
+      DOCKERHUB_TOKEN: ${{ secrets.DOCKERHUB_TOKEN }}
