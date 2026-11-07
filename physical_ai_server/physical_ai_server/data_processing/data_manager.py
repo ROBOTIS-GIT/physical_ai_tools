@@ -242,8 +242,8 @@ class DataManager:
         frame = {}
         for camera_name, image in images.items():
             frame[f'observation.images.{camera_name}'] = image
-        frame['observation.state'] = np.array(state)
-        frame['action'] = np.array(action)
+        frame['observation.state'] = np.asarray(state, dtype=np.float32)
+        frame['action'] = np.asarray(action, dtype=np.float32)
         self.current_instruction = self._task_info.task_instruction[
             self._current_task % len(self._task_info.task_instruction)
         ]
